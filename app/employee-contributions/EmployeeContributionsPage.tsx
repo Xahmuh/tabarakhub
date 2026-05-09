@@ -111,7 +111,7 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
             <div className="w-12 h-12 bg-brand/10 rounded-2xl flex items-center justify-center text-brand">
               <Lightbulb className="w-6 h-6" />
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Employee Contributions</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Team Contributions</h1>
           </div>
           <p className="text-slate-500 font-medium max-w-2xl">
             Shared tools, automations, projects, and useful resources created by employees across all branches.

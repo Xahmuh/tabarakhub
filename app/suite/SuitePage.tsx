@@ -345,7 +345,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
                 <span className="px-2.5 py-1 bg-white/20 text-white text-[9px] font-bold uppercase tracking-widest rounded-lg ring-1 ring-white/20">Knowledge Share</span>
               </div>
               <div className="relative z-10">
-                <h3 className="text-xl font-black text-white tracking-tight">Employee Contributions</h3>
+                <h3 className="text-xl font-black text-white tracking-tight">Team Contributions</h3>
                 <p className="text-white/70 font-medium text-sm leading-relaxed mt-1.5">Discover tools, automations, and projects shared by the team.</p>
               </div>
               <div className="flex items-center space-x-3 relative z-10">
