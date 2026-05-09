@@ -325,6 +325,7 @@ export interface EmployeeContribution {
   thumbnail?: string;
   isPinned: boolean;
   isArchived: boolean;
+  filePath?: string;
   createdAt: string;
 }
 

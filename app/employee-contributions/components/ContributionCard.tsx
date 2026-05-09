@@ -3,7 +3,7 @@ import {
   Pin, Edit2, Trash2, ExternalLink, Calendar, User, 
   MapPin, Tag, Wrench, Layout, Link as LinkIcon, 
   BookOpen, FileText, Cpu, Sparkles, MessageSquare, 
-  CheckCircle2, Clock, MoreVertical
+  CheckCircle2, Clock, MoreVertical, Download
 } from 'lucide-react';
 import { EmployeeContribution, ContributionType } from '../../../types';
 
@@ -116,17 +116,32 @@ export const ContributionCard: React.FC<Props> = ({
           </div>
         </div>
 
-        {contribution.url && (
-          <a 
-            href={contribution.url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center space-x-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg shadow-slate-900/10 hover:bg-brand transition-all active:scale-95 group/btn"
-          >
-            <span>Open Tool</span>
-            <ExternalLink className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-          </a>
-        )}
+        <div className="flex items-center space-x-2">
+          {contribution.filePath && (
+            <a 
+              href={contribution.filePath} 
+              download
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all active:scale-95 group/dl"
+            >
+              <span>Download</span>
+              <Download className="w-3.5 h-3.5 group-hover/dl:translate-y-0.5 transition-transform" />
+            </a>
+          )}
+
+          {contribution.url && (
+            <a 
+              href={contribution.url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-lg shadow-slate-900/10 hover:bg-brand transition-all active:scale-95 group/btn"
+            >
+              <span>Open Tool</span>
+              <ExternalLink className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );

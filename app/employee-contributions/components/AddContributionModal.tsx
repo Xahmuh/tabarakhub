@@ -36,6 +36,7 @@ export const AddContributionModal: React.FC<Props> = ({
 
   const [tagInput, setTagInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (editingContribution) {
@@ -65,7 +66,15 @@ export const AddContributionModal: React.FC<Props> = ({
 
     setIsSubmitting(true);
     try {
-      await contributionService.upsert(formData);
+      let finalData = { ...formData };
+      
+      // Handle file upload if present
+      if (selectedFile) {
+        const fileUrl = await contributionService.uploadFile(selectedFile);
+        finalData.filePath = fileUrl;
+      }
+
+      await contributionService.upsert(finalData);
       Swal.fire({
         title: editingContribution ? 'Updated!' : 'Created!',
         text: editingContribution ? 'Contribution has been updated.' : 'New contribution added successfully.',
@@ -77,7 +86,7 @@ export const AddContributionModal: React.FC<Props> = ({
       onClose();
     } catch (err) {
       console.error('Error saving contribution:', err);
-      Swal.fire('Error', 'Failed to save contribution. Please check your database connection.', 'error');
+      Swal.fire('Error', 'Failed to save contribution. Please check your database connection and storage policies.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -172,6 +181,41 @@ export const AddContributionModal: React.FC<Props> = ({
                 onChange={(e) => setFormData({...formData, url: e.target.value})}
                 className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:border-brand transition-all"
               />
+            </div>
+
+            {/* File Upload */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center">
+                Upload File (.exe, .pdf, .zip, etc.) <Plus className="w-3 h-3 ml-2 text-slate-400" />
+              </label>
+              <div className="relative group">
+                <input 
+                  type="file" 
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="contribution-file"
+                />
+                <label 
+                  htmlFor="contribution-file"
+                  className="w-full flex items-center justify-between px-5 py-3 bg-slate-50 border border-slate-200 border-dashed rounded-2xl text-sm font-medium cursor-pointer hover:border-brand hover:bg-brand/[0.02] transition-all"
+                >
+                  <span className="text-slate-500 truncate max-w-[200px]">
+                    {selectedFile ? selectedFile.name : (formData.filePath ? 'Change existing file' : 'Select file to upload...')}
+                  </span>
+                  <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-400 uppercase tracking-wider group-hover:text-brand group-hover:border-brand/20 transition-all">
+                    Browse
+                  </div>
+                </label>
+                {selectedFile && (
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedFile(null)}
+                    className="absolute -right-2 -top-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

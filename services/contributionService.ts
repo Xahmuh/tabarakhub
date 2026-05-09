@@ -1,5 +1,6 @@
 import { supabaseClient } from '../lib/supabase';
 import { EmployeeContribution, ContributionType } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export const contributionService = {
   list: async (): Promise<EmployeeContribution[]> => {
@@ -26,6 +27,7 @@ export const contributionService = {
       thumbnail: d.thumbnail,
       isPinned: d.is_pinned,
       isArchived: d.is_archived,
+      filePath: d.file_path,
       createdAt: d.created_at
     }));
   },
@@ -42,6 +44,7 @@ export const contributionService = {
       thumbnail: contribution.thumbnail,
       is_pinned: contribution.isPinned ?? false,
       is_archived: contribution.isArchived ?? false,
+      file_path: contribution.filePath,
     };
 
     if (contribution.id) {
@@ -93,5 +96,26 @@ export const contributionService = {
       .eq('id', id);
     if (error) throw error;
     return true;
+  },
+
+  uploadFile: async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${generateUUID()}.${fileExt}`;
+    const filePath = `files/${fileName}`;
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from('contributions')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError);
+      throw uploadError;
+    }
+
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('contributions')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
   }
 };
