@@ -1,0 +1,81 @@
+/* ====================================
+   Dashboard Page - CSS Module
+   تنظيم الأنماط الديناميكية للوحة التحكم
+   ==================================== */
+
+/* Progress Bars - أشرطة التقدم */
+.progressBar {
+    height: 100%;
+    width: var(--progress-width, 0%);
+    transition: width 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 9999px;
+}
+
+.progressBarAlt {
+    height: 100%;
+    background-color: rgb(16 185 129);
+    /* emerald-500 */
+    width: var(--progress-width, 0%);
+    transition: width 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 9999px;
+}
+
+.progressBarTransfer {
+    height: 100%;
+    background-color: rgb(16 185 129);
+    /* emerald-500 */
+    width: var(--progress-width, 0%);
+    transition: width 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 9999px;
+}
+
+.progressBarBranch {
+    height: 100%;
+    background-color: rgb(15 23 42);
+    /* slate-900 */
+    box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+    width: var(--progress-width, 0%);
+    transition: width 1500ms cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 9999px;
+}
+
+/* Heatmap Cell - خلية الخريطة الحرارية */
+.heatmapCell {
+    width: 100%;
+    height: 100%;
+    border-radius: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-width: 1px;
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 500ms;
+    cursor: pointer;
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    background-color: var(--cell-bg, rgba(255, 255, 255, 0.02));
+}
+
+.heatmapCell:hover {
+    transform: scale(1.05);
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+}
+
+.heatmapCell:active {
+    transform: scale(0.95);
+}
+
+/* Utility classes for common patterns */
+.transitionAll {
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transitionWidth {
+    transition: width 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transitionWidthSlow {
+    transition: width 1500ms cubic-bezier(0.4, 0, 0.2, 1);
+}

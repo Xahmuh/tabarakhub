@@ -1,0 +1,7 @@
+{
+  "name": "Tabarak Hub - Lost Sales Tracker",
+  "description": "A high-performance POS-style system for pharmacy chains to log and analyze missed sales opportunities, featuring branch-level tracking and AI-driven inventory insights.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

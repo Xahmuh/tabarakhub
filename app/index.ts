@@ -1,0 +1,17 @@
+// App Module - All page exports
+export { LoginPage } from './login';
+export { SelectPharmacistPage } from './select-pharmacist';
+export { POSPage } from './pos';
+export { DashboardPage, HRRequestsSection, PharmacistActivitySection } from './dashboard';
+export { HRPortalPage, VacationRequestFlow } from './hr';
+export { WorkforcePage, useStaffingCalculator } from './workforce';
+export { SuitePage } from './suite';
+export * from './spin-win';
+export * from './corporate-codex';
+export * from './project-settings';
+export * from './shared';
+export * from './block-analyzer';
+export * from './cash-flow';
+export { FeedbackForm } from './modules/quality-feedback/pages/FeedbackForm';
+export { AdminDashboard as QualityFeedbackAdmin } from './modules/quality-feedback/pages/AdminDashboard';
+
