@@ -102,8 +102,16 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
     setIsModalOpen(true);
   };
 
+  const handleDownload = async (url: string, title: string) => {
+    try {
+      await contributionService.downloadFile(url, title);
+    } catch (err) {
+      Swal.fire('Error', 'Failed to download file', 'error');
+    }
+  };
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-32">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
@@ -180,13 +188,13 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
 
       {/* Content Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="h-64 bg-slate-100 rounded-3xl animate-pulse"></div>
           ))}
         </div>
       ) : filteredContributions.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           {filteredContributions.map(contribution => (
             <ContributionCard 
               key={contribution.id} 
@@ -195,6 +203,7 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
               onEdit={() => handleEdit(contribution)}
               onDelete={() => handleDelete(contribution.id)}
               onTogglePin={() => handleTogglePin(contribution.id, contribution.isPinned)}
+              onDownload={handleDownload}
             />
           ))}
         </div>

@@ -100,7 +100,8 @@ export const contributionService = {
 
   uploadFile: async (file: File): Promise<string> => {
     const fileExt = file.name.split('.').pop();
-    const fileName = `${generateUUID()}.${fileExt}`;
+    const safeOriginalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `${generateUUID()}_${safeOriginalName}`;
     const filePath = `files/${fileName}`;
 
     const { error: uploadError } = await supabaseClient.storage
@@ -117,5 +118,40 @@ export const contributionService = {
       .getPublicUrl(filePath);
 
     return publicUrl;
+  },
+
+  downloadFile: async (url: string, title: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Extract original filename or create one from title
+      const urlParts = url.split('/');
+      let fileName = urlParts[urlParts.length - 1];
+      
+      // If it's our new format (UUID_OriginalName), extract the original part
+      if (fileName && fileName.includes('_') && fileName.length > 36) {
+        const parts = fileName.split('_');
+        // Check if the first part looks like a UUID (approximate check)
+        if (parts[0].length === 36) {
+          fileName = parts.slice(1).join('_');
+        }
+      }
+      
+      if (!fileName) fileName = title.replace(/\s+/g, '_');
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      // Fallback: open in new tab if blob download fails
+      window.open(url, '_blank');
+    }
   }
 };

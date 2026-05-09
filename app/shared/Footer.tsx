@@ -77,7 +77,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, permissions = [], us
     }
 
     return (
-        <footer className="w-full bg-slate-950 relative overflow-hidden mt-auto">
+        <footer className="w-full bg-slate-950 relative overflow-hidden mt-20">
             {/* Ambient background effects */}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute top-0 left-1/4 w-[600px] h-[300px] bg-brand/[0.04] rounded-full blur-[100px]"></div>
