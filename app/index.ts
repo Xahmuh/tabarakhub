@@ -14,4 +14,5 @@ export * from './block-analyzer';
 export * from './cash-flow';
 export { FeedbackForm } from './modules/quality-feedback/pages/FeedbackForm';
 export { AdminDashboard as QualityFeedbackAdmin } from './modules/quality-feedback/pages/AdminDashboard';
+export * from './employee-contributions';
 

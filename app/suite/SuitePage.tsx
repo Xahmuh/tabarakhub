@@ -1,5 +1,6 @@
+import React from 'react';
 import { 
-  Activity, Users, FileText, Landmark, Wallet, BookOpen, Settings, LogOut, ShieldCheck, QrCode, MessageSquare, PieChart
+  Activity, Users, FileText, Landmark, Wallet, BookOpen, Settings, LogOut, ShieldCheck, QrCode, MessageSquare, PieChart, Lightbulb
 } from 'lucide-react';
 import { AuthState } from '../../types';
 import { Footer } from '../shared';
@@ -326,6 +327,30 @@ export const SuitePage: React.FC<SuitePageProps> = ({
               <div className="flex items-center space-x-3 relative z-10">
                 <div className="h-px bg-slate-800/60 w-6 group-hover:w-12 transition-all duration-400"></div>
                 <span className="text-slate-800 font-bold text-[10px] uppercase tracking-widest">Open Module</span>
+              </div>
+            </button>
+          )}
+
+          {/* 10. Employee Contributions */}
+          {checkPermission('employee_contributions') && (
+            <button
+              onClick={() => handleTabChange('employee-contributions')}
+              className={`group p-7 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 border border-red-400/20 hover:border-white/30 shadow-lg hover:shadow-xl hover:shadow-red-500/20 transition-all duration-300 text-left flex flex-col justify-between h-[280px] active:scale-[0.98] relative overflow-hidden card-hover ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -mr-24 -mt-24 blur-2xl"></div>
+              <div className="flex items-start justify-between relative z-10">
+                <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center text-white group-hover:bg-white group-hover:text-red-500 transition-all duration-400 ring-1 ring-white/20 shadow-sm">
+                  <Lightbulb className="w-6 h-6" />
+                </div>
+                <span className="px-2.5 py-1 bg-white/20 text-white text-[9px] font-bold uppercase tracking-widest rounded-lg ring-1 ring-white/20">Knowledge Share</span>
+              </div>
+              <div className="relative z-10">
+                <h3 className="text-xl font-black text-white tracking-tight">Employee Contributions</h3>
+                <p className="text-white/70 font-medium text-sm leading-relaxed mt-1.5">Discover tools, automations, and projects shared by the team.</p>
+              </div>
+              <div className="flex items-center space-x-3 relative z-10">
+                <div className="h-px bg-white/50 w-6 group-hover:w-12 transition-all duration-400"></div>
+                <span className="text-white/90 font-bold text-[10px] uppercase tracking-widest">Open Hub</span>
               </div>
             </button>
           )}

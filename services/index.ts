@@ -9,3 +9,4 @@ export * from './hrService';
 export * from './financeService';
 export * from './codexService';
 export * from './permissionService';
+export * from './contributionService';

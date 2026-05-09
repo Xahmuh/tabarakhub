@@ -310,6 +310,24 @@ export interface CodexEntry {
   updatedAt: string;
 }
 
+// --- Employee Contributions Types ---
+export type ContributionType = 'Tool' | 'Project' | 'Link' | 'Training' | 'SOP' | 'Dashboard' | 'Automation' | 'AI Prompt';
+
+export interface EmployeeContribution {
+  id: string;
+  title: string;
+  description?: string;
+  type: ContributionType;
+  url?: string;
+  createdBy: string;
+  branch: string;
+  tags?: string[];
+  thumbnail?: string;
+  isPinned: boolean;
+  isArchived: boolean;
+  createdAt: string;
+}
+
 // --- Feature Permissions Types ---
 export interface FeaturePermission {
   id: string;

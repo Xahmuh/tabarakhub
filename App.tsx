@@ -10,7 +10,7 @@ import {
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer,
-  FeedbackForm, QualityFeedbackAdmin
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage
 } from './app/index';
 
 
@@ -36,7 +36,7 @@ import {
 
 const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ user: null, pharmacist: null });
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | null>(null);
+  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [showPOSGuideline, setShowPOSGuideline] = useState(false);
@@ -46,7 +46,7 @@ const App: React.FC = () => {
     return params.has('token') || params.has('node') || params.has('branch');
   });
 
-  const handleTabChange = (tab: 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | null) => {
+  const handleTabChange = (tab: 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | null) => {
     if (tab === 'pos' && !authState.pharmacist) {
       setShowPharmacistSelector(true);
       return;
@@ -422,6 +422,12 @@ const App: React.FC = () => {
         ) : activeTab === 'feedback-admin' ? (
           <QualityFeedbackAdmin 
             userRole={authState.user?.role} 
+            onBack={() => handleTabChange('selector')} 
+          />
+        ) : activeTab === 'employee-contributions' ? (
+          <EmployeeContributionsPage 
+            userRole={authState.user?.role} 
+            branchCode={authState.user?.code}
             onBack={() => handleTabChange('selector')} 
           />
         ) : (
