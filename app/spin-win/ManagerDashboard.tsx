@@ -186,7 +186,12 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
             const name = s.branch?.name || 'Unknown Node';
             if (!branchStats[name]) branchStats[name] = { spins: 0, redemptions: 0 };
             branchStats[name].spins += 1;
-            if (s.redeemed_at) branchStats[name].redemptions += 1;
+            
+            if (s.redeemed_at) {
+                const redeemName = s.redeemed_branch?.name || 'External/Unknown';
+                if (!branchStats[redeemName]) branchStats[redeemName] = { spins: 0, redemptions: 0 };
+                branchStats[redeemName].redemptions += 1;
+            }
         });
 
         const sortedByTraffic = Object.entries(branchStats)
@@ -224,7 +229,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
             { header: 'Value (BHD)', key: 'value', width: 15 },
             { header: 'Branch', key: 'branch_name', width: 30 },
             { header: 'Status', key: 'status', width: 15 },
-            { header: 'Redeemed At', key: 'redeemed_at', width: 25 }
+            { header: 'Redeemed At', key: 'redeemed_at', width: 25 },
+            { header: 'Redeemed Location', key: 'redeemed_location', width: 30 }
         ];
         spins.forEach(s => {
             sheet.addRow({
@@ -236,7 +242,8 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                 value: s.prize?.value || 0,
                 branch_name: mapBranchName(s.branch?.name || 'N/A'),
                 status: s.redeemed_at ? 'REDEEMED' : 'PENDING',
-                redeemed_at: s.redeemed_at ? new Date(s.redeemed_at).toLocaleString() : '-'
+                redeemed_at: s.redeemed_at ? new Date(s.redeemed_at).toLocaleString() : '-',
+                redeemed_location: s.redeemed_branch?.name ? mapBranchName(s.redeemed_branch.name) : (s.redeemed_at ? 'External Branch' : '-')
             });
         });
         sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };

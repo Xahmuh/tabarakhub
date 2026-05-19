@@ -34,6 +34,22 @@ const fetchEnrichmentData = async (table: string, columns: string, ids: string[]
     return results;
 };
 
+const fetchAllRows = async (buildQuery: () => any) => {
+    let allData: any[] = [];
+    let from = 0;
+    const step = 999;
+    while (true) {
+        const query = buildQuery();
+        const { data, error } = await query.range(from, from + step);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length <= step) break;
+        from += step + 1;
+    }
+    return allData;
+};
+
 const DEFAULT_PRIZES: SpinPrize[] = [
     { id: '678f1234-5678-4321-9876-000000000001', name: '5% Off – Next Visit', type: 'discount', value: 5, probabilityWeight: 20, isActive: true, color: '#B91c1c', createdAt: new Date().toISOString() }, // Tabarak Red
     { id: '678f1234-5678-4321-9876-000000000002', name: '7% Off Cosmetics', type: 'discount', value: 7, probabilityWeight: 15, isActive: true, color: '#0891b2', createdAt: new Date().toISOString() }, // Cyan-600
@@ -355,18 +371,21 @@ export const spinWinService = {
         },
         list: async (filters: { branchId?: string, startDate?: string, endDate?: string } = {}) => {
             try {
-                let query = supabaseClient.from('spins').select('id, customer_id, branch_id, prize_id, voucher_code, redeemed_at, created_at, redeemed_branch_id');
+                const buildQuery = () => {
+                    let query = supabaseClient.from('spins').select('id, customer_id, branch_id, prize_id, voucher_code, redeemed_at, created_at, redeemed_branch_id');
 
-                if (filters.branchId) {
-                    // Show if created in this branch OR redeemed in this branch
-                    query = query.or(`branch_id.eq.${filters.branchId},redeemed_branch_id.eq.${filters.branchId}`);
-                }
+                    if (filters.branchId) {
+                        // Show if created in this branch OR redeemed in this branch
+                        query = query.or(`branch_id.eq.${filters.branchId},redeemed_branch_id.eq.${filters.branchId}`);
+                    }
 
-                if (filters.startDate) query = query.gte('created_at', filters.startDate);
-                if (filters.endDate) query = query.lte('created_at', filters.endDate + 'T23:59:59');
+                    if (filters.startDate) query = query.gte('created_at', filters.startDate);
+                    if (filters.endDate) query = query.lte('created_at', filters.endDate + 'T23:59:59');
 
-                const { data: spins, error } = await query.order('created_at', { ascending: false });
-                if (error) throw error;
+                    return query.order('created_at', { ascending: false });
+                };
+
+                const spins = await fetchAllRows(buildQuery);
 
                 // Manual enrichment fallback using chunked fetch to bypass 1000 row limits
                 const [customers, prizes, branches] = await Promise.all([
@@ -430,30 +449,44 @@ export const spinWinService = {
                     start = today.toISOString();
                 }
 
-                let spinQuery = supabaseClient
-                    .from('spins')
-                    .select('id, customer_id, prize_id, voucher_code, created_at')
-                    .eq('branch_id', branchId);
+                const buildSpinQuery = () => {
+                    let spinQuery = supabaseClient
+                        .from('spins')
+                        .select('id, customer_id, prize_id, voucher_code, created_at')
+                        .eq('branch_id', branchId);
 
-                let redeemQuery = supabaseClient
-                    .from('spins')
-                    .select('id')
-                    .eq('redeemed_branch_id', branchId);
+                    if (start && start.trim() !== '') {
+                        spinQuery = spinQuery.gte('created_at', start);
+                    }
 
-                if (start && start.trim() !== '') {
-                    spinQuery = spinQuery.gte('created_at', start);
-                    redeemQuery = redeemQuery.gte('redeemed_at', start);
-                }
+                    if (end && end.trim() !== '') {
+                        spinQuery = spinQuery.lte('created_at', end + 'T23:59:59');
+                    }
+                    
+                    return spinQuery;
+                };
 
-                if (end && end.trim() !== '') {
-                    spinQuery = spinQuery.lte('created_at', end + 'T23:59:59');
-                    redeemQuery = redeemQuery.lte('redeemed_at', end + 'T23:59:59');
-                }
+                const buildRedeemQuery = () => {
+                    let redeemQuery = supabaseClient
+                        .from('spins')
+                        .select('id')
+                        .eq('redeemed_branch_id', branchId);
 
-                const { data: spinsToday, error: spinError } = await spinQuery;
-                const { data: redeemsToday, error: redeemError } = await redeemQuery;
+                    if (start && start.trim() !== '') {
+                        redeemQuery = redeemQuery.gte('redeemed_at', start);
+                    }
 
-                if (spinError || redeemError) throw spinError || redeemError;
+                    if (end && end.trim() !== '') {
+                        redeemQuery = redeemQuery.lte('redeemed_at', end + 'T23:59:59');
+                    }
+                    
+                    return redeemQuery;
+                };
+
+                const [spinsToday, redeemsToday] = await Promise.all([
+                    fetchAllRows(buildSpinQuery),
+                    fetchAllRows(buildRedeemQuery)
+                ]);
 
                 // Enrich manually using chunked fetch to avoid 1000 rows limits
                 const [customers, prizes] = await Promise.all([
@@ -480,10 +513,11 @@ export const spinWinService = {
         },
         getGlobalStats: async () => {
             try {
-                const { data: spins, error } = await supabaseClient
+                const buildQuery = () => supabaseClient
                     .from('spins')
                     .select('id, customer_id, prize_id, branch_id, voucher_code, redeemed_at, created_at');
-                if (error) throw error;
+
+                const spins = await fetchAllRows(buildQuery);
 
                 const [customers, prizes, branches] = await Promise.all([
                     fetchEnrichmentData('customers', 'id, first_name, phone', (spins || []).map(s => s.customer_id)),
