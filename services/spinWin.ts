@@ -21,6 +21,19 @@ const generateUUID = () => {
     });
 };
 
+const fetchEnrichmentData = async (table: string, columns: string, ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
+    if (uniqueIds.length === 0) return [];
+    const chunkSize = 200;
+    let results: any[] = [];
+    for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+        const chunk = uniqueIds.slice(i, i + chunkSize);
+        const { data } = await supabaseClient.from(table).select(columns).in('id', chunk);
+        if (data) results = results.concat(data);
+    }
+    return results;
+};
+
 const DEFAULT_PRIZES: SpinPrize[] = [
     { id: '678f1234-5678-4321-9876-000000000001', name: '5% Off – Next Visit', type: 'discount', value: 5, probabilityWeight: 20, isActive: true, color: '#B91c1c', createdAt: new Date().toISOString() }, // Tabarak Red
     { id: '678f1234-5678-4321-9876-000000000002', name: '7% Off Cosmetics', type: 'discount', value: 7, probabilityWeight: 15, isActive: true, color: '#0891b2', createdAt: new Date().toISOString() }, // Cyan-600
@@ -355,19 +368,19 @@ export const spinWinService = {
                 const { data: spins, error } = await query.order('created_at', { ascending: false });
                 if (error) throw error;
 
-                // Manual enrichment fallback
+                // Manual enrichment fallback using chunked fetch to bypass 1000 row limits
                 const [customers, prizes, branches] = await Promise.all([
-                    supabaseClient.from('customers').select('id, phone, first_name'),
-                    supabaseClient.from('spin_prizes').select('id, name'),
-                    supabaseClient.from('branches').select('id, name')
+                    fetchEnrichmentData('customers', 'id, phone, first_name', (spins || []).map(s => s.customer_id)),
+                    fetchEnrichmentData('spin_prizes', 'id, name', (spins || []).map(s => s.prize_id)),
+                    fetchEnrichmentData('branches', 'id, name', (spins || []).map(s => s.branch_id).concat((spins || []).map(s => s.redeemed_branch_id)))
                 ]);
 
                 const enriched = (spins || []).map(s => ({
                     ...s,
-                    customer: (customers.data || []).find(x => x.id === s.customer_id),
-                    prize: (prizes.data || []).find(x => x.id === s.prize_id),
-                    branch: (branches.data || []).find(x => x.id === s.branch_id),
-                    redeemed_branch: (branches.data || []).find(x => x.id === s.redeemed_branch_id),
+                    customer: customers.find(x => x.id === s.customer_id),
+                    prize: prizes.find(x => x.id === s.prize_id),
+                    branch: branches.find(x => x.id === s.branch_id),
+                    redeemed_branch: branches.find(x => x.id === s.redeemed_branch_id),
                     voucher_code: s.voucher_code
                 }));
 
@@ -442,16 +455,16 @@ export const spinWinService = {
 
                 if (spinError || redeemError) throw spinError || redeemError;
 
-                // Enrich manually
+                // Enrich manually using chunked fetch to avoid 1000 rows limits
                 const [customers, prizes] = await Promise.all([
-                    supabaseClient.from('customers').select('id, phone, first_name'),
-                    supabaseClient.from('spin_prizes').select('id, name')
+                    fetchEnrichmentData('customers', 'id, phone, first_name', (spinsToday || []).map(s => s.customer_id)),
+                    fetchEnrichmentData('spin_prizes', 'id, name', (spinsToday || []).map(s => s.prize_id))
                 ]);
 
                 const normalized = (spinsToday || []).map(s => ({
                     ...s,
-                    customer: (customers.data || []).find(x => x.id === s.customer_id),
-                    prize: (prizes.data || []).find(x => x.id === s.prize_id),
+                    customer: customers.find(x => x.id === s.customer_id),
+                    prize: prizes.find(x => x.id === s.prize_id),
                     voucher_code: s.voucher_code
                 }));
 
@@ -473,16 +486,16 @@ export const spinWinService = {
                 if (error) throw error;
 
                 const [customers, prizes, branches] = await Promise.all([
-                    supabaseClient.from('customers').select('id, first_name, phone'),
-                    supabaseClient.from('spin_prizes').select('id, name'),
-                    supabaseClient.from('branches').select('id, name')
+                    fetchEnrichmentData('customers', 'id, first_name, phone', (spins || []).map(s => s.customer_id)),
+                    fetchEnrichmentData('spin_prizes', 'id, name', (spins || []).map(s => s.prize_id)),
+                    fetchEnrichmentData('branches', 'id, name', (spins || []).map(s => s.branch_id))
                 ]);
 
                 const enriched = (spins || []).map(s => ({
                     ...s,
-                    customer: (customers.data || []).find(x => x.id === s.customer_id),
-                    prize: (prizes.data || []).find(x => x.id === s.prize_id),
-                    branch: (branches.data || []).find(x => x.id === s.branch_id),
+                    customer: customers.find(x => x.id === s.customer_id),
+                    prize: prizes.find(x => x.id === s.prize_id),
+                    branch: branches.find(x => x.id === s.branch_id),
                     voucher_code: s.voucher_code
                 }));
 
