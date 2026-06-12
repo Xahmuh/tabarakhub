@@ -124,7 +124,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   required
                 />
               </div>
-              <p className="ml-1 text-xs font-medium text-slate-400">Short codes map to code@tabarak.local, for example admin maps to admin@tabarak.local.</p>
+              <p className="ml-1 text-xs font-medium text-slate-400">.</p>
             </div>
 
             <div className="space-y-2">

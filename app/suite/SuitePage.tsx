@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Activity, Users, FileText, Landmark, Wallet, BookOpen, Settings, LogOut, ShieldCheck, QrCode, MessageSquare, PieChart, Lightbulb, Map
+  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PackageX, PieChart, QrCode, Radar, Settings2, ShieldCheck, UsersRound, WalletCards
 } from 'lucide-react';
 import { AuthState } from '../../types';
 import { Footer } from '../shared';
@@ -63,6 +63,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   icon,
   onClick,
   isPending,
+  badge,
   cta = 'Open',
   tone = 'default'
 }) => {
@@ -78,6 +79,11 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${classes.icon}`}>
             {icon}
           </div>
+          {badge && (
+            <span className={`rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${classes.badge}`}>
+              {badge}
+            </span>
+          )}
         </div>
         <div>
           <h3 className="text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-brand">{title}</h3>
@@ -124,7 +130,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
       title: 'Lost Sales & Shortage',
       description: 'Log out-of-stock items and customer requested deficits in real time.',
-      icon: <Activity className="h-5 w-5" />,
+      icon: <PackageX className="h-5 w-5" />,
       onClick: () => handleTabChange('pos'),
       isPending,
       badge: 'Entry'
@@ -134,7 +140,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isManager && canOpenDashboard,
       title: 'Performance Portal',
       description: 'Review lost sales, shortage trends, and branch performance with manager-level branch selection.',
-      icon: <Activity className="h-5 w-5" />,
+      icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
       isPending,
       badge: 'Analytics'
@@ -144,7 +150,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isWarehouse && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
       title: 'Performance Portal',
       description: 'Review localized branch performance and inventory trends.',
-      icon: <Activity className="h-5 w-5" />,
+      icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
       isPending,
       badge: 'Analytics'
@@ -154,7 +160,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isManager && canUseHr && checkPermission('hr_requests'),
       title: 'HR Requests Admin',
       description: 'Review employee requests and generate official letterheads.',
-      icon: <Users className="h-5 w-5" />,
+      icon: <ClipboardList className="h-5 w-5" />,
       onClick: () => handleTabChange('hr-manager'),
       isPending,
       badge: 'Admin'
@@ -164,7 +170,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: !isManager && !isWarehouse && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
       title: 'Performance Portal',
       description: 'Review localized branch performance and inventory trends.',
-      icon: <Activity className="h-5 w-5" />,
+      icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
       isPending,
       badge: 'Analytics'
@@ -174,7 +180,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isManager && canUseWorkforce && checkPermission('workforce'),
       title: 'Workforce Analytics',
       description: 'Optimize staffing levels and calculate relief requirements.',
-      icon: <Users className="h-5 w-5" />,
+      icon: <UsersRound className="h-5 w-5" />,
       onClick: () => handleTabChange('workforce'),
       isPending,
       badge: 'Planning'
@@ -205,7 +211,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: !isManager && isModuleEnabled('cashTracker') && checkPermission('cash_tracker'),
       title: 'Branch Cash Tracker',
       description: 'Log and track daily cash differences between POS and count.',
-      icon: <Wallet className="h-5 w-5" />,
+      icon: <WalletCards className="h-5 w-5" />,
       onClick: () => handleTabChange('cash-tracker'),
       isPending,
       badge: 'Finance',
@@ -216,7 +222,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isModuleEnabled('corporateCodex') && checkPermission('corporate_codex'),
       title: 'Corporate Codex',
       description: 'Official policies, circulars, and operating protocols.',
-      icon: <BookOpen className="h-5 w-5" />,
+      icon: <BookOpenCheck className="h-5 w-5" />,
       onClick: () => handleTabChange('corporate-codex'),
       isPending,
       badge: 'Knowledge',
@@ -227,7 +233,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isModuleEnabled('settings') && role === 'manager' && checkPermission('settings', 'edit'),
       title: 'Settings & Permissions',
       description: 'Manage branches, staff access, and enabled workflows.',
-      icon: <Settings className="h-5 w-5" />,
+      icon: <Settings2 className="h-5 w-5" />,
       onClick: () => handleTabChange('settings'),
       isPending,
       badge: 'Control'
@@ -248,7 +254,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
       title: 'QC Insights',
       description: 'Submit anonymous quality feedback and suggestions.',
-      icon: <MessageSquare className="h-5 w-5" />,
+      icon: <MessageSquareText className="h-5 w-5" />,
       onClick: () => handleTabChange('feedback-form'),
       isPending,
       badge: 'Feedback',
@@ -282,7 +288,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: (isManager || isOwner) && checkPermission('block_analyzer'),
       title: 'BH Block Analyzer',
       description: 'Analyze block coverage and population data across regions.',
-      icon: <Map className="h-5 w-5" />,
+      icon: <MapPinned className="h-5 w-5" />,
       onClick: () => handleTabChange('block-analyzer'),
       isPending,
       badge: 'Analytics',
@@ -293,7 +299,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: checkPermission('command_center'),
       title: 'Daily Command Center',
       description: 'Download yesterday branch files, review recovery signals, and follow up daily actions.',
-      icon: <ShieldCheck className="h-5 w-5" />,
+      icon: <Radar className="h-5 w-5" />,
       onClick: () => handleTabChange('command-center'),
       isPending,
       badge: 'Daily close',
@@ -307,8 +313,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
         <div className="mb-8 page-enter">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between mb-6">
             <div className="flex items-center space-x-5">
-              <div className="w-12 h-12 bg-brand rounded-lg flex items-center justify-center shadow-sm overflow-hidden">
-                <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-brand/15 bg-brand/10 text-brand shadow-sm">
+                <LayoutGrid className="h-6 w-6" strokeWidth={2.3} />
               </div>
               <div>
                 <h2 className="text-2xl md:text-3xl font-black text-slate-950 tracking-tight mb-1.5">Operations Modules</h2>

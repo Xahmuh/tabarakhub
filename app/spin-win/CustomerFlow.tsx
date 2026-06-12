@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Spinner } from './Spinner';
 import { spinWinService } from '../../services/spinWin';
@@ -43,6 +43,21 @@ type SpinFlowDraft = {
     savedAt: number;
 };
 
+type MotionPermissionState = 'unsupported' | 'prompt' | 'enabled' | 'denied';
+
+type WheelMotionState = {
+    tiltX: number;
+    tiltY: number;
+    nudge: number;
+    strength: number;
+};
+
+type MotionPermissionEvent = {
+    requestPermission?: () => Promise<'granted' | 'denied'>;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
 export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     const [step, setStep] = useState<'validate' | 'info' | 'review' | 'spin' | 'result'>('validate');
     const [session, setSession] = useState<(SpinSession & { branches?: { name?: string, google_maps_link?: string, whatsapp_number?: string } }) | null>(null);
@@ -62,6 +77,10 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     const [winningPrize, setWinningPrize] = useState<SpinPrize | null>(null);
     const [hasClickedRate, setHasClickedRate] = useState(false);
     const [skipRating, setSkipRating] = useState(false);
+    const [motionPermission, setMotionPermission] = useState<MotionPermissionState>('unsupported');
+    const [wheelMotion, setWheelMotion] = useState<WheelMotionState>({ tiltX: 0, tiltY: 0, nudge: 0, strength: 0 });
+    const lastMotionSpinRef = useRef(0);
+    const motionResetRef = useRef<number | null>(null);
 
     // UX recovery only. Server RPCs remain the security boundary for token validity and spin execution.
     const buildSpinReturnUrl = (ratingOverride = skipRating) => {
@@ -251,11 +270,17 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         }
     };
 
-    const startSpin = async () => {
+    const startSpin = useCallback(async (source: 'tap' | 'motion' = 'tap') => {
         if (isSpinning || isLoading) return;
 
         setIsLoading(true);
         setError('');
+
+        if ('vibrate' in navigator) {
+            (navigator as Navigator & { vibrate?: (pattern: number | number[]) => boolean }).vibrate?.(
+                source === 'motion' ? [28, 22, 48] : 30
+            );
+        }
 
         try {
             const result = await spinWinService.spins.play(token, {
@@ -281,7 +306,141 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [countryCode, email, firstName, isLoading, isSpinning, lastName, phone, token]);
+
+    const requestMotionAccess = useCallback(async () => {
+        const motionWindow = window as Window & {
+            DeviceMotionEvent?: MotionPermissionEvent;
+            DeviceOrientationEvent?: MotionPermissionEvent;
+        };
+
+        if (!motionWindow.DeviceMotionEvent && !motionWindow.DeviceOrientationEvent) {
+            setMotionPermission('unsupported');
+            return;
+        }
+
+        const permissionRequests: Array<() => Promise<'granted' | 'denied'>> = [];
+
+        if (typeof motionWindow.DeviceMotionEvent?.requestPermission === 'function') {
+            permissionRequests.push(() => motionWindow.DeviceMotionEvent!.requestPermission!());
+        }
+
+        if (typeof motionWindow.DeviceOrientationEvent?.requestPermission === 'function') {
+            permissionRequests.push(() => motionWindow.DeviceOrientationEvent!.requestPermission!());
+        }
+
+        if (permissionRequests.length === 0) {
+            setMotionPermission('enabled');
+            return;
+        }
+
+        try {
+            const results = await Promise.all(permissionRequests.map(request => request()));
+            setMotionPermission(results.every(result => result === 'granted') ? 'enabled' : 'denied');
+        } catch {
+            setMotionPermission('denied');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (step !== 'spin') {
+            setWheelMotion({ tiltX: 0, tiltY: 0, nudge: 0, strength: 0 });
+            return;
+        }
+
+        const motionWindow = window as Window & {
+            DeviceMotionEvent?: MotionPermissionEvent;
+            DeviceOrientationEvent?: MotionPermissionEvent;
+        };
+
+        if (!motionWindow.DeviceMotionEvent && !motionWindow.DeviceOrientationEvent) {
+            setMotionPermission('unsupported');
+            return;
+        }
+
+        const needsPermission =
+            typeof motionWindow.DeviceMotionEvent?.requestPermission === 'function' ||
+            typeof motionWindow.DeviceOrientationEvent?.requestPermission === 'function';
+
+        setMotionPermission(current => {
+            if (current === 'enabled' || current === 'denied') return current;
+            return needsPermission ? 'prompt' : 'enabled';
+        });
+    }, [step]);
+
+    useEffect(() => {
+        if (step !== 'spin' || motionPermission !== 'enabled') return;
+
+        const scheduleMotionReset = () => {
+            if (motionResetRef.current) window.clearTimeout(motionResetRef.current);
+            motionResetRef.current = window.setTimeout(() => {
+                setWheelMotion({ tiltX: 0, tiltY: 0, nudge: 0, strength: 0 });
+            }, 850);
+        };
+
+        const handleOrientation = (event: DeviceOrientationEvent) => {
+            const gamma = clamp(Number(event.gamma || 0), -34, 34);
+            const beta = clamp(Number(event.beta || 0), -28, 42);
+
+            setWheelMotion(current => ({
+                ...current,
+                tiltX: clamp(gamma / 4, -8, 8),
+                tiltY: clamp(-beta / 8, -6, 6),
+                nudge: clamp(gamma * 0.45 + beta * 0.12, -20, 20),
+                strength: Math.max(current.strength, clamp(Math.abs(gamma) * 1.8, 0, 100))
+            }));
+            scheduleMotionReset();
+        };
+
+        const handleMotion = (event: DeviceMotionEvent) => {
+            const rotationRate = event.rotationRate;
+            const acceleration = event.accelerationIncludingGravity || event.acceleration;
+            const rotationStrength = Math.hypot(
+                Number(rotationRate?.alpha || 0),
+                Number(rotationRate?.beta || 0),
+                Number(rotationRate?.gamma || 0)
+            );
+            const accelerationStrength = Math.hypot(
+                Number(acceleration?.x || 0),
+                Number(acceleration?.y || 0),
+                Number(acceleration?.z || 0)
+            );
+            const visualStrength = clamp(Math.max(rotationStrength / 5, Math.max(0, accelerationStrength - 9.8) * 7), 0, 100);
+
+            if (visualStrength > 1) {
+                setWheelMotion(current => ({
+                    ...current,
+                    nudge: clamp(current.nudge + Number(rotationRate?.gamma || 0) / 28, -22, 22),
+                    strength: visualStrength
+                }));
+                scheduleMotionReset();
+            }
+
+            const now = Date.now();
+            const strongRotation = rotationStrength > 420;
+            const strongSwing = accelerationStrength > 24;
+
+            if (
+                prizes.length > 0 &&
+                !isSpinning &&
+                !isLoading &&
+                now - lastMotionSpinRef.current > 2400 &&
+                (strongRotation || strongSwing)
+            ) {
+                lastMotionSpinRef.current = now;
+                startSpin('motion');
+            }
+        };
+
+        window.addEventListener('deviceorientation', handleOrientation as EventListener, { passive: true });
+        window.addEventListener('devicemotion', handleMotion as EventListener, { passive: true });
+
+        return () => {
+            window.removeEventListener('deviceorientation', handleOrientation as EventListener);
+            window.removeEventListener('devicemotion', handleMotion as EventListener);
+            if (motionResetRef.current) window.clearTimeout(motionResetRef.current);
+        };
+    }, [isLoading, isSpinning, motionPermission, prizes.length, startSpin, step]);
 
     const handleSpinFinish = () => {
         setIsSpinning(false);
@@ -363,6 +522,14 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
             setIsLoading(false);
         }
     };
+
+    const motionStatusLabel = motionPermission === 'enabled'
+        ? wheelMotion.strength > 12 ? 'Moving' : 'Armed'
+        : motionPermission === 'prompt'
+            ? 'Enable'
+            : motionPermission === 'denied'
+                ? 'Blocked'
+                : 'Tap only';
 
     if (error) {
         return (
@@ -477,61 +644,131 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
 
                 {/* Review & Spin */}
                 {(step === 'review' || step === 'spin') && (
-                    <div className="flex-1 flex flex-col items-center justify-between py-4 animate-in zoom-in duration-700">
-                        <div className="w-full mb-6">
-                            <img
-                                src="/spin-header-v4.jpg"
-                                alt="Spin and Win"
-                                className="w-full h-auto object-cover rounded-2xl"
-                            />
-                        </div>
+                    <div className="relative -mx-4 -my-4 flex min-h-[calc(100svh-73px)] flex-col overflow-hidden bg-slate-950 text-white sm:-mx-6 sm:-my-6 animate-in fade-in duration-500">
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(220,38,38,0.28),transparent_34%),linear-gradient(180deg,#111827_0%,#020617_64%,#111827_100%)]" />
+                        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-red-700/25 to-transparent" />
 
-                        <div className={`relative transition-all duration-1000 ${step === 'review' ? 'grayscale opacity-40 scale-90 blur-[2px]' : 'scale-110'}`}>
-                            <Spinner
-                                prizes={prizes.map(p => ({ id: p.id, name: p.name, color: p.color || '' }))}
-                                winner={winningPrize}
-                                isSpinning={isSpinning}
-                                onFinish={handleSpinFinish}
-                            />
-                            {step === 'review' && (
-                                <div className="absolute inset-0 flex items-center justify-center z-30">
-                                    <div className="bg-slate-900/90 text-white p-6 rounded-3xl shadow-2xl backdrop-blur-md border border-white/10 flex flex-col items-center space-y-3">
-                                        <Star className="w-8 h-8 text-amber-400 fill-amber-400 animate-bounce" />
-                                        <span className="font-bold text-xs text-center leading-tight">Unlock Wheel<br />via Google Maps</span>
-                                    </div>
+                        <div className="relative z-10 flex min-h-[calc(100svh-73px)] flex-col px-4 pb-5 pt-4 sm:px-6">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-red-200/70">
+                                        {session?.branches?.name || 'Tabarak Pharmacy'}
+                                    </p>
+                                    <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+                                        Spin the Wheel
+                                    </h2>
                                 </div>
-                            )}
-                        </div>
+                                <div className="shrink-0 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white/70">
+                                    {step === 'review' ? 'Locked' : 'Ready'}
+                                </div>
+                            </div>
 
-                        <div className="w-full max-w-sm mt-8">
-                            {step === 'review' ? (
-                                !hasClickedRate ? (
-                                    <button onClick={handleReviewClick} className="w-full bg-red-600 hover:bg-red-700 text-white py-5 rounded-2xl font-bold text-sm shadow-lg transition-all active:scale-[0.98] flex items-center justify-center space-x-3">
-                                        <Star className="w-5 h-5" />
-                                        <span>Rate Branch to Spin</span>
-                                        <ArrowRight className="w-4 h-4" />
-                                    </button>
-                                ) : (
-                                    <button onClick={() => loadPrizes()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-5 rounded-2xl font-bold text-sm shadow-lg transition-all active:scale-[0.98] flex items-center justify-center space-x-3 animate-in zoom-in">
-                                        <CheckCircle2 className="w-5 h-5" />
-                                        <span>I Have Rated - Continue</span>
-                                    </button>
-                                )
-                            ) : (
-                                <button
-                                    onClick={startSpin}
-                                    disabled={isSpinning || isLoading || prizes.length === 0}
-                                    className="w-full bg-slate-900 hover:bg-red-700 text-white py-5 rounded-2xl font-bold text-sm shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-3"
-                                >
-                                    {isLoading ? (
-                                        <><Loader2 className="w-5 h-5 animate-spin" /><span>Authenticating...</span></>
-                                    ) : isSpinning ? (
-                                        <span>Consulting Luck...</span>
-                                    ) : (
-                                        <span>Tap to Spin Wheel!</span>
+                            <div className="mt-4 overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] shadow-2xl">
+                                <img
+                                    src="/spin-header-v4.jpg"
+                                    alt="Spin and Win"
+                                    className="h-[clamp(4.75rem,15svh,8rem)] w-full object-cover"
+                                />
+                            </div>
+
+                            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-3">
+                                <div className={`relative w-full max-w-[min(86vw,420px)] transition-all duration-700 ${step === 'review' ? 'grayscale opacity-55 scale-[0.94] blur-[1.5px]' : 'scale-100'}`}>
+                                    <Spinner
+                                        prizes={prizes.map(p => ({ id: p.id, name: p.name, color: p.color || '' }))}
+                                        winner={winningPrize}
+                                        isSpinning={isSpinning}
+                                        onFinish={handleSpinFinish}
+                                        motionTiltX={wheelMotion.tiltX}
+                                        motionTiltY={wheelMotion.tiltY}
+                                        motionNudge={wheelMotion.nudge}
+                                        isMotionActive={motionPermission === 'enabled' && wheelMotion.strength > 8}
+                                    />
+                                    {step === 'review' && (
+                                        <div className="absolute inset-0 z-30 flex items-center justify-center">
+                                            <div className="flex max-w-[210px] flex-col items-center rounded-[1.75rem] border border-white/10 bg-slate-950/90 p-5 text-center shadow-2xl backdrop-blur-md">
+                                                <Star className="h-8 w-8 animate-bounce fill-amber-400 text-amber-400" />
+                                                <span className="mt-3 text-xs font-black uppercase leading-tight tracking-[0.16em] text-white">Unlock Wheel</span>
+                                                <span className="mt-1 text-[10px] font-bold leading-relaxed text-white/50">Google Maps rating required</span>
+                                            </div>
+                                        </div>
                                     )}
-                                </button>
-                            )}
+                                </div>
+
+                                {step === 'spin' && (
+                                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.07] p-3 shadow-xl">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-red-200">
+                                                    <Smartphone className="h-4 w-4" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Motion Spin</p>
+                                                    <p className="text-[10px] font-bold text-white/35">Twist strength</p>
+                                                </div>
+                                            </div>
+                                            <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${motionPermission === 'enabled' ? 'bg-emerald-400/15 text-emerald-200' : motionPermission === 'prompt' ? 'bg-amber-400/15 text-amber-200' : 'bg-white/10 text-white/45'}`}>
+                                                {motionStatusLabel}
+                                            </span>
+                                        </div>
+                                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-red-400 via-amber-300 to-emerald-300 transition-all duration-150"
+                                                style={{ width: `${clamp(wheelMotion.strength, 0, 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="w-full max-w-sm self-center space-y-3 pb-1">
+                                {step === 'review' ? (
+                                    !hasClickedRate ? (
+                                        <button onClick={handleReviewClick} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-red-600 py-4 text-sm font-black text-white shadow-lg shadow-red-950/30 transition-all hover:bg-red-700 active:scale-[0.98]">
+                                            <Star className="h-5 w-5" />
+                                            <span>Rate Branch to Spin</span>
+                                            <ArrowRight className="h-4 w-4" />
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => loadPrizes()} className="flex w-full animate-in zoom-in items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-950/30 transition-all hover:bg-emerald-700 active:scale-[0.98]">
+                                            <CheckCircle2 className="h-5 w-5" />
+                                            <span>I Have Rated - Continue</span>
+                                        </button>
+                                    )
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => startSpin('tap')}
+                                            disabled={isSpinning || isLoading || prizes.length === 0}
+                                            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-white py-4 text-sm font-black text-slate-950 shadow-2xl transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            {isLoading ? (
+                                                <><Loader2 className="h-5 w-5 animate-spin" /><span>Authenticating...</span></>
+                                            ) : isSpinning ? (
+                                                <span>Consulting Luck...</span>
+                                            ) : (
+                                                <span>Tap to Spin Wheel</span>
+                                            )}
+                                        </button>
+
+                                        {motionPermission === 'prompt' && (
+                                            <button
+                                                type="button"
+                                                onClick={requestMotionAccess}
+                                                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.08] py-3 text-xs font-black uppercase tracking-[0.14em] text-white/80 transition-all hover:bg-white/[0.12] active:scale-[0.98]"
+                                            >
+                                                <Smartphone className="h-4 w-4" />
+                                                Enable Phone Motion
+                                            </button>
+                                        )}
+
+                                        {motionPermission === 'denied' && (
+                                            <p className="text-center text-[10px] font-bold leading-relaxed text-white/40">
+                                                Motion access is blocked by the browser. Tap spin still works.
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

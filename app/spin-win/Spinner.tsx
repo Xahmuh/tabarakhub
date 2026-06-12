@@ -12,6 +12,10 @@ interface SpinnerProps {
     winner?: Prize | null;
     onFinish: (prize: Prize) => void;
     isSpinning: boolean;
+    motionTiltX?: number;
+    motionTiltY?: number;
+    motionNudge?: number;
+    isMotionActive?: boolean;
 }
 
 const fallbackColors = [
@@ -78,7 +82,16 @@ const splitPrizeName = (name: string) => {
     };
 };
 
-export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSpinning }) => {
+export const Spinner: React.FC<SpinnerProps> = ({
+    prizes,
+    winner,
+    onFinish,
+    isSpinning,
+    motionTiltX = 0,
+    motionTiltY = 0,
+    motionNudge = 0,
+    isMotionActive = false
+}) => {
     const [rotation, setRotation] = useState(0);
     const [settledPrizeId, setSettledPrizeId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -145,8 +158,16 @@ export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSp
         return [x * radius, y * radius];
     };
 
+    const displayedRotation = rotation + (!isSpinning ? motionNudge : 0);
+
     return (
-        <div className="relative mx-auto w-full max-w-[480px] px-3 py-5">
+        <div className="relative mx-auto w-full max-w-[480px] px-2 py-3 sm:px-3 sm:py-5">
+            <div
+                className={`spin-wheel-tilt-shell ${isMotionActive ? 'is-motion-active' : ''}`}
+                style={{
+                    transform: `perspective(900px) rotateX(${motionTiltY}deg) rotateY(${motionTiltX}deg)`
+                }}
+            >
             <div className={`spin-wheel-stage relative aspect-square ${isSpinning ? 'is-spinning' : ''}`}>
                 <div className="absolute inset-[5%] translate-y-[8%] rounded-full bg-slate-950/25 blur-2xl"></div>
 
@@ -181,8 +202,8 @@ export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSp
                         viewBox="-100 -100 200 200"
                         className="absolute inset-[9.5%] z-[5] h-[81%] w-[81%] drop-shadow-xl"
                         style={{
-                            transform: `rotate(${rotation}deg)`,
-                            transition: isSpinning ? 'transform 5.1s cubic-bezier(0.12, 0.72, 0.08, 1)' : 'none',
+                            transform: `rotate(${displayedRotation}deg)`,
+                            transition: isSpinning ? 'transform 5.1s cubic-bezier(0.12, 0.72, 0.08, 1)' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                             willChange: 'transform'
                         }}
                     >
@@ -303,6 +324,7 @@ export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSp
                     </div>
                 </div>
             </div>
+            </div>
 
             <div className="mt-3 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">
@@ -311,6 +333,16 @@ export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSp
             </div>
 
             <style>{`
+                .spin-wheel-tilt-shell {
+                    transform-origin: center;
+                    transition: transform 180ms ease-out, filter 180ms ease-out;
+                    will-change: transform;
+                }
+
+                .spin-wheel-tilt-shell.is-motion-active {
+                    filter: saturate(1.08) drop-shadow(0 18px 28px rgba(185,28,28,0.18));
+                }
+
                 .spin-wheel-stage {
                     animation: spinWheelFloat 4s ease-in-out infinite;
                     transform-style: preserve-3d;
@@ -410,6 +442,7 @@ export const Spinner: React.FC<SpinnerProps> = ({ prizes, winner, onFinish, isSp
                 }
 
                 @media (prefers-reduced-motion: reduce) {
+                    .spin-wheel-tilt-shell,
                     .spin-wheel-stage,
                     .spin-wheel-rim-gloss,
                     .spin-wheel-bulb,

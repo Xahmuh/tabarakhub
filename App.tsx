@@ -9,7 +9,7 @@ import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
-  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, Footer, POSGuidelineModal,
+  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
   FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage
 } from './app/index';
@@ -17,14 +17,9 @@ import {
 
 // --- Icons ---
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  LogOut,
   ShieldCheck,
-  RefreshCcw,
   QrCode,
-  Loader2,
-  Settings
+  Loader2
 } from 'lucide-react';
 
 type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer';
@@ -439,93 +434,42 @@ const App: React.FC = () => {
 
   if (activeTab === null || activeTab === 'selector') {
     return (
-      <SuitePage
-        authState={authState}
-        isManager={isManager}
-        isWarehouse={isWarehouse}
-        isPending={isPending}
-        checkPermission={checkPermission}
-        handleTabChange={handleTabChange}
-        logout={logout}
-      />
+      <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
+        <AppHeader
+          authState={authState}
+          activeTab="selector"
+          isWarehouse={isWarehouse}
+          canOpenDashboard={isTabEnabled('dashboard')}
+          checkPermission={checkPermission}
+          onNavigateHome={() => handleTabChange('selector')}
+          onTabChange={handleTabChange}
+          onLogout={logout}
+        />
+        <SuitePage
+          authState={authState}
+          isManager={isManager}
+          isWarehouse={isWarehouse}
+          isPending={isPending}
+          checkPermission={checkPermission}
+          handleTabChange={handleTabChange}
+          logout={logout}
+        />
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
-      <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-[100] min-h-[72px] shadow-sm print:hidden">
-        <div className="max-w-[1400px] mx-auto px-5 md:px-8 min-h-[72px] py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center overflow-hidden">
-            <div className="flex items-center space-x-4 cursor-pointer group shrink-0" onClick={() => handleTabChange('selector')}>
-              <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center shadow-sm overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">{clientConfig.appName}<span className="text-brand">.</span></h1>
-                {clientConfig.environmentLabel && (
-                  <span className="ml-2 text-[10px] font-bold text-slate-400">{clientConfig.environmentLabel}</span>
-                )}
-                <p className="text-[11px] font-bold text-slate-400 mt-0.5 flex items-center">
-                  <span className="w-1 h-1 bg-emerald-500 rounded-full mr-1.5"></span>
-                  {authState.user?.code}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Centered Switcher */}
-          {(activeTab === 'pos' || activeTab === 'dashboard' || activeTab === 'settings') && !isWarehouse && (
-            <div className="order-3 flex w-full justify-center md:order-none md:w-auto">
-              <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
-                {isModuleEnabled('sales') && (checkPermission('lost_sales') || checkPermission('shortages')) && (
-                  <button
-                    onClick={() => handleTabChange('pos')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'pos' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    <ShoppingCart className="w-3.5 h-3.5" />
-                    <span>Items Entry</span>
-                  </button>
-                )}
-                {isTabEnabled('dashboard') && (
-                  <button
-                    onClick={() => handleTabChange('dashboard')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'dashboard' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5" />
-                    <span>Dashboard</span>
-                  </button>
-                )}
-                {authState.user?.role === 'manager' && isModuleEnabled('settings') && checkPermission('settings', 'edit') && (
-                  <button
-                    onClick={() => handleTabChange('settings')}
-                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'settings' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Settings</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-end space-x-2">
-            <button
-              onClick={() => window.location.reload()}
-              className="p-2.5 text-slate-300 hover:text-brand hover:bg-brand/5 rounded-lg transition-all active:scale-90 group"
-              title="Refresh"
-            >
-              <RefreshCcw className="w-4.5 h-4.5 group-hover:rotate-180 transition-transform duration-500" />
-            </button>
-            <button
-              onClick={logout}
-              className="p-2.5 text-slate-300 hover:text-brand hover:bg-brand/5 rounded-lg transition-all active:scale-90"
-              title="Sign Out"
-            >
-              <LogOut className="w-4.5 h-4.5" />
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        authState={authState}
+        activeTab={activeTab}
+        isWarehouse={isWarehouse}
+        canOpenDashboard={isTabEnabled('dashboard')}
+        checkPermission={checkPermission}
+        onNavigateHome={() => handleTabChange('selector')}
+        onTabChange={handleTabChange}
+        onLogout={logout}
+      />
 
       <main className="flex-1 w-full max-w-[1400px] mx-auto px-5 md:px-8 py-6">
         {activeTab === 'command-center' ? (
