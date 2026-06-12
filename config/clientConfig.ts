@@ -51,7 +51,7 @@ export const clientConfig: ClientConfig = {
   primaryDarkColor: env.VITE_PRIMARY_DARK_COLOR || '#7f1d1d',
   primaryMutedColor: env.VITE_PRIMARY_MUTED_COLOR || 'rgba(185, 28, 28, 0.05)',
   accentColor: env.VITE_ACCENT_COLOR || '#0f172a',
-  supportEmail: env.VITE_SUPPORT_EMAIL || 'support@example.com',
+  supportEmail: env.VITE_SUPPORT_EMAIL || 'tabarakph.info@gmail.com',
   defaultLocale: env.VITE_DEFAULT_LOCALE || 'en',
   currency: env.VITE_CURRENCY || 'BHD',
   country: env.VITE_COUNTRY || 'Bahrain',
