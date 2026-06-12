@@ -14,7 +14,6 @@ import {
     Lock,
     Trash2,
     FileCheck,
-    Search,
     ChevronLeft,
     ChevronRight,
     Info,
@@ -180,8 +179,8 @@ interface HRPortalPageProps {
 
 // Reusable form field component
 const FormField = ({ label, required, children, isRtl }: { label: string; required?: boolean; children: React.ReactNode; isRtl?: boolean }) => (
-    <div className="space-y-2">
-        <label className={`text-xs font-semibold text-slate-600 flex items-center gap-1 ${isRtl ? 'text-right' : ''}`}>
+    <div className="space-y-1.5">
+        <label className={`text-xs font-semibold text-slate-600 flex items-center gap-1 ${isRtl ? 'justify-end text-right' : ''}`}>
             {label}
             {required && <span className="text-red-500 text-[10px]">*</span>}
         </label>
@@ -189,8 +188,8 @@ const FormField = ({ label, required, children, isRtl }: { label: string; requir
     </div>
 );
 
-const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-4 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
-const selectClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-4 rounded-xl text-sm font-medium text-slate-900 outline-none transition-all appearance-none";
+const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
+const selectClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 outline-none transition-all appearance-none";
 
 export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
     const [lang, setLang] = useState<Language>('en');
@@ -368,7 +367,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
         <div className={`flex flex-col h-full bg-slate-50 overflow-hidden ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
 
             {/* HEADER */}
-            <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 lg:px-8 shrink-0 z-50">
+            <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 z-50">
                 <div className="flex items-center gap-4">
                     {onBack && (
                         <button
@@ -420,21 +419,21 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
             <main className="flex-1 overflow-y-auto">
                 {/* LOGIN SCREEN */}
                 {!employee.name ? (
-                    <div className="min-h-full flex items-center justify-center p-6">
-                        <div className="w-full max-w-md">
+                    <div className="min-h-full flex items-center justify-center p-4 sm:p-6">
+                        <div className="w-full max-w-sm">
                             {/* Login Card */}
-                            <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 overflow-hidden">
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                                 {/* Card Header */}
-                                <div className="bg-gradient-to-br from-red-600 to-red-700 px-8 py-10 text-center">
-                                    <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-5">
-                                        <Shield className="w-8 h-8 text-white" />
+                                <div className="bg-red-700 px-6 py-7 text-center">
+                                    <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center mx-auto mb-4">
+                                        <Shield className="w-6 h-6 text-white" />
                                     </div>
-                                    <h2 className="text-2xl font-bold text-white mb-2">{t.login_title}</h2>
+                                    <h2 className="text-xl font-bold text-white mb-1.5">{t.login_title}</h2>
                                     <p className="text-red-100 text-sm">{t.login_desc}</p>
                                 </div>
 
                                 {/* Card Body */}
-                                <div className="p-8 space-y-6">
+                                <div className="p-5 sm:p-6 space-y-5">
                                     <div className="space-y-2">
                                         <label htmlFor="cpr-input" className={`text-xs font-semibold text-slate-600 block ${isRtl ? 'text-right' : ''}`}>{t.cpr_label}</label>
                                         <div className="relative">
@@ -457,7 +456,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     <button
                                         onClick={handleLogin}
                                         disabled={isAuthenticating || !cpr.trim()}
-                                        className="w-full h-12 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="w-full h-11 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         {isAuthenticating ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                                             <>
@@ -485,11 +484,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                         />
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto py-10 px-6">
+                    <div className="max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6">
 
                         {/* STEP 2: SERVICE SELECTION */}
                         {step === 2 && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 {/* Greeting */}
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900 mb-1">
@@ -502,26 +501,26 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <button
                                         onClick={() => { setSelectedService('documents'); setStep(3); }}
-                                        className="group relative p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 text-left"
+                                        className={`group relative p-5 bg-white rounded-xl border border-slate-200 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200 ${isRtl ? 'text-right' : 'text-left'}`}
                                     >
-                                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
-                                            <FileTextIcon className="w-6 h-6" />
+                                        <div className="w-10 h-10 bg-red-50 text-red-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-700 group-hover:text-white transition-all duration-200">
+                                            <FileTextIcon className="w-5 h-5" />
                                         </div>
-                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-blue-600 transition-colors">{t.doc_service_title}</h3>
+                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-red-700 transition-colors">{t.doc_service_title}</h3>
                                         <p className="text-xs text-slate-500 leading-relaxed">{t.doc_service_desc}</p>
-                                        <ArrowRight className={`absolute ${isRtl ? 'left-6' : 'right-6'} top-6 w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-all ${isRtl ? 'rotate-180' : ''}`} />
+                                        <ArrowRight className={`absolute ${isRtl ? 'left-5' : 'right-5'} top-5 w-4 h-4 text-slate-300 group-hover:text-red-600 transition-all ${isRtl ? 'rotate-180' : ''}`} />
                                     </button>
 
                                     <button
                                         onClick={() => { setSelectedService('vacation'); }}
-                                        className="group relative p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 text-left"
+                                        className={`group relative p-5 bg-white rounded-xl border border-slate-200 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200 ${isRtl ? 'text-right' : 'text-left'}`}
                                     >
-                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300">
-                                            <CalendarDays className="w-6 h-6" />
+                                        <div className="w-10 h-10 bg-red-50 text-red-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-700 group-hover:text-white transition-all duration-200">
+                                            <CalendarDays className="w-5 h-5" />
                                         </div>
-                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-emerald-600 transition-colors">{t.vac_service_title}</h3>
+                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-red-700 transition-colors">{t.vac_service_title}</h3>
                                         <p className="text-xs text-slate-500 leading-relaxed">{t.vac_service_desc}</p>
-                                        <ArrowRight className={`absolute ${isRtl ? 'left-6' : 'right-6'} top-6 w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-all ${isRtl ? 'rotate-180' : ''}`} />
+                                        <ArrowRight className={`absolute ${isRtl ? 'left-5' : 'right-5'} top-5 w-4 h-4 text-slate-300 group-hover:text-red-600 transition-all ${isRtl ? 'rotate-180' : ''}`} />
                                     </button>
                                 </div>
                             </div>
@@ -529,7 +528,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
 
                         {/* STEP INDICATOR (Documents flow) */}
                         {step > 2 && (
-                            <div className="mb-10">
+                            <div className="mb-6">
                                 <div className="flex items-center gap-1 mb-6">
                                     <button
                                         onClick={() => { setSelectedService(null); setStep(2); }}
@@ -542,10 +541,10 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     <span className="text-xs text-slate-600 font-semibold">{t.doc_service_title}</span>
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 overflow-x-auto pb-1">
                                     {stepLabels.map((s, idx) => (
                                         <React.Fragment key={s.num}>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 shrink-0">
                                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
                                                     step >= s.num + 2
                                                         ? step > s.num + 2
@@ -564,12 +563,12 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                             </div>
                         )}
 
-                        <form className="space-y-8">
+                        <form className="space-y-5">
                             {/* STEP 3: EMPLOYEE INFO & DOCUMENTS */}
                             {step === 3 && (
-                                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     {/* Employee Info Section */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                                             <UserCircle2 className="w-4 h-4 text-slate-400" />
                                             {t.step_label_1}
@@ -630,13 +629,13 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Document Selection Section */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                                             <FileText className="w-4 h-4 text-slate-400" />
                                             {t.lbl_doc_type}
                                             <span className="text-red-500 text-[10px]">*</span>
                                         </h3>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                                             {['Experience Certificate', 'Employment Certificate', 'Salary Certificate', 'NOC', 'Bank Letter', 'Embassy Letter', 'Others'].map(doc => (
                                                 <button
                                                     key={doc}
@@ -647,11 +646,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                                             : [...formData.docTypes, doc];
                                                         setFormData({ ...formData, docTypes: types });
                                                     }}
-                                                    className={`px-3 py-2.5 rounded-xl text-left border transition-all flex items-center gap-2.5 ${
+                                                    className={`px-3 py-2.5 rounded-lg border transition-all flex items-center gap-2.5 ${
                                                         formData.docTypes.includes(doc)
                                                             ? 'bg-red-50 border-red-200 text-red-700'
                                                             : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
-                                                    }`}
+                                                    } ${isRtl ? 'text-right' : 'text-left'}`}
                                                 >
                                                     <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
                                                         formData.docTypes.includes(doc)
@@ -694,23 +693,23 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Purpose */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <FormField label={t.lbl_reason} isRtl={isRtl}>
                                             <textarea
                                                 value={formData.docReason}
                                                 onChange={e => setFormData({ ...formData, docReason: e.target.value })}
-                                                className="w-full h-24 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 p-4 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all resize-none"
+                                                className="w-full h-24 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 p-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all resize-none"
                                                 placeholder={t.lbl_reason_placeholder}
                                             />
                                         </FormField>
                                     </div>
 
                                     {/* Navigation */}
-                                    <div className="flex justify-between pt-4">
+                                    <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
                                         <button
                                             type="button"
                                             onClick={() => { setSelectedService(null); setStep(2); }}
-                                            className="h-11 px-6 rounded-xl font-semibold text-sm text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all"
+                                            className="h-11 px-6 rounded-lg font-semibold text-sm text-slate-600 hover:bg-white hover:text-slate-700 border border-slate-200 sm:border-transparent sm:hover:border-slate-200 transition-all"
                                         >
                                             {t.btn_back}
                                         </button>
@@ -731,7 +730,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                                 }
                                                 setStep(4);
                                             }}
-                                            className="h-11 px-8 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-all flex items-center gap-2"
+                                            className="h-11 px-8 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 transition-all flex items-center justify-center gap-2"
                                         >
                                             <span>{t.btn_next}</span>
                                             <ChevronRight className={`w-4 h-4 ${isRtl ? 'rotate-180' : ''}`} />
@@ -742,9 +741,9 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
 
                             {/* STEP 4: DELIVERY DETAILS */}
                             {step === 4 && (
-                                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     {/* Date & Email */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <FormField label={t.lbl_req_date} required isRtl={isRtl}>
                                                 <input
@@ -771,20 +770,20 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Delivery Method */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <h3 className="text-sm font-bold text-slate-900 mb-4">{t.lbl_delivery} <span className="text-red-500 text-[10px]">*</span></h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, delivery: 'PDF by Email' })}
-                                                className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 text-left ${
+                                                className={`p-4 rounded-lg border transition-all flex items-center gap-4 ${
                                                     formData.delivery === 'PDF by Email'
-                                                        ? 'border-blue-500 bg-blue-50/50'
+                                                        ? 'border-red-300 bg-red-50/50'
                                                         : 'border-slate-200 hover:border-slate-300'
-                                                }`}
+                                                } ${isRtl ? 'text-right' : 'text-left'}`}
                                             >
                                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                                                    formData.delivery === 'PDF by Email' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                                                    formData.delivery === 'PDF by Email' ? 'bg-red-700 text-white' : 'bg-slate-100 text-slate-400'
                                                 }`}>
                                                     <Mail className="w-5 h-5" />
                                                 </div>
@@ -797,14 +796,14 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, delivery: 'Printed Copy' })}
-                                                className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 text-left ${
+                                                className={`p-4 rounded-lg border transition-all flex items-center gap-4 ${
                                                     formData.delivery === 'Printed Copy'
-                                                        ? 'border-orange-500 bg-orange-50/50'
+                                                        ? 'border-red-300 bg-red-50/50'
                                                         : 'border-slate-200 hover:border-slate-300'
-                                                }`}
+                                                } ${isRtl ? 'text-right' : 'text-left'}`}
                                             >
                                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                                                    formData.delivery === 'Printed Copy' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-400'
+                                                    formData.delivery === 'Printed Copy' ? 'bg-red-700 text-white' : 'bg-slate-100 text-slate-400'
                                                 }`}>
                                                     <Printer className="w-5 h-5" />
                                                 </div>
@@ -817,11 +816,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Attachments */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                                         <h3 className="text-sm font-bold text-slate-900 mb-4">{t.lbl_files} <span className="text-xs text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optional'})</span></h3>
                                         <div
                                             onClick={() => document.getElementById('final-files-refined')?.click()}
-                                            className="border-2 border-dashed border-slate-200 rounded-xl py-8 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group"
+                                            className="border border-dashed border-slate-300 rounded-lg py-6 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-slate-50 hover:border-slate-400 transition-all cursor-pointer group"
                                         >
                                             <UploadCloud className="w-8 h-8 text-slate-300 group-hover:text-slate-400 mb-2 transition-colors" />
                                             <p className="text-sm font-medium text-slate-500">{t.click_upload}</p>
@@ -853,11 +852,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Navigation */}
-                                    <div className="flex justify-between pt-4">
+                                    <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
                                         <button
                                             type="button"
                                             onClick={() => setStep(3)}
-                                            className="h-11 px-6 rounded-xl font-semibold text-sm text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all"
+                                            className="h-11 px-6 rounded-lg font-semibold text-sm text-slate-600 hover:bg-white hover:text-slate-700 border border-slate-200 sm:border-transparent sm:hover:border-slate-200 transition-all"
                                         >
                                             {t.btn_back}
                                         </button>
@@ -870,7 +869,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                                 }
                                                 setStep(5);
                                             }}
-                                            className="h-11 px-8 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-all flex items-center gap-2"
+                                            className="h-11 px-8 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 transition-all flex items-center justify-center gap-2"
                                         >
                                             <span>{t.step_review}</span>
                                             <ChevronRight className={`w-4 h-4 ${isRtl ? 'rotate-180' : ''}`} />
@@ -881,18 +880,18 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
 
                             {/* STEP 5: REVIEW & CONFIRM */}
                             {step === 5 && (
-                                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     <div>
                                         <h2 className="text-xl font-bold text-slate-900 mb-1">{t.review_title}</h2>
                                         <p className="text-sm text-slate-500">{t.review_desc}</p>
                                     </div>
 
                                     {/* Summary Card */}
-                                    <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100">
+                                    <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
                                         {/* Employee Info */}
                                         <div className="p-6">
                                             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">{t.step_label_1}</h4>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <ReviewItem label={t.lbl_passport_name} value={formData.passportName} />
                                                 <ReviewItem label={t.lbl_passport} value={formData.passport} />
                                                 <ReviewItem label={t.lbl_license} value={formData.license} />
@@ -924,7 +923,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                         {/* Delivery */}
                                         <div className="p-6">
                                             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">{t.step_delivery}</h4>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <ReviewItem label={t.lbl_delivery} value={formData.delivery} />
                                                 <ReviewItem label={t.lbl_req_date} value={formData.reqDate} />
                                                 <ReviewItem label={t.lbl_email} value={formData.email} />
@@ -939,7 +938,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
 
                                     {/* Declaration */}
                                     <div
-                                        className={`p-5 rounded-xl border-2 transition-all flex items-start gap-4 cursor-pointer ${
+                                        className={`p-4 rounded-lg border transition-all flex items-start gap-4 cursor-pointer ${
                                             declared ? 'bg-emerald-50/50 border-emerald-300' : 'bg-white border-slate-200 hover:border-slate-300'
                                         }`}
                                         onClick={() => setDeclared(!declared)}
@@ -953,11 +952,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex justify-between pt-4">
+                                    <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
                                         <button
                                             type="button"
                                             onClick={() => setStep(4)}
-                                            className="h-11 px-6 rounded-xl font-semibold text-sm text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all"
+                                            className="h-11 px-6 rounded-lg font-semibold text-sm text-slate-600 hover:bg-white hover:text-slate-700 border border-slate-200 sm:border-transparent sm:hover:border-slate-200 transition-all"
                                         >
                                             {t.btn_back}
                                         </button>
@@ -965,7 +964,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                             type="button"
                                             onClick={finalSubmit}
                                             disabled={isSubmitting || !declared || isFriday(formData.reqDate)}
-                                            className="h-12 px-10 bg-red-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-600/20 hover:bg-red-700 active:scale-[0.98] transition-all flex items-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+                                            className="h-11 px-8 bg-red-700 text-white rounded-lg font-bold text-sm hover:bg-red-800 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
                                             <span>{t.btn_confirm}</span>

@@ -154,11 +154,11 @@ interface VacationRequestFlowProps {
     lang: 'en' | 'ar';
 }
 
-const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-4 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
+const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
 
 const FormField = ({ label, required, children, isRtl }: { label: string; required?: boolean; children: React.ReactNode; isRtl?: boolean }) => (
     <div className={`space-y-1.5 ${isRtl ? 'text-right' : 'text-left'}`}>
-        <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+        <label className={`text-xs font-semibold text-slate-500 flex items-center gap-1 ${isRtl ? 'justify-end' : ''}`}>
             {label}
             {required && <span className="text-red-500 text-[10px]">*</span>}
         </label>
@@ -169,7 +169,7 @@ const FormField = ({ label, required, children, isRtl }: { label: string; requir
 const ReadOnlyField = ({ label, value, isRtl }: { label: string; value: string; isRtl?: boolean }) => (
     <div className={`space-y-1.5 ${isRtl ? 'text-right' : 'text-left'}`}>
         <label className="text-xs font-semibold text-slate-400">{label}</label>
-        <div className="h-11 flex items-center px-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-semibold text-slate-900">
+        <div className="h-11 flex items-center px-3.5 bg-slate-50 border border-slate-100 rounded-lg text-sm font-semibold text-slate-900">
             {value || '—'}
         </div>
     </div>
@@ -238,13 +238,22 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
             status: 'Pending',
             timestamp: new Date().toISOString()
         };
-        await supabase.hrRequests.create(payload);
-        Swal.fire({
-            icon: 'success',
-            title: t.msg_success,
-            html: `<div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl mt-4"><p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Reference</p><h2 class="text-2xl font-bold text-slate-900 font-mono">${refNum}</h2></div>`,
-            confirmButtonColor: '#b91c1c'
-        }).then(() => onComplete());
+        try {
+            await supabase.hrRequests.create(payload);
+            Swal.fire({
+                icon: 'success',
+                title: t.msg_success,
+                html: `<div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl mt-4"><p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Reference</p><h2 class="text-2xl font-bold text-slate-900 font-mono">${refNum}</h2></div>`,
+                confirmButtonColor: '#b91c1c'
+            }).then(() => onComplete());
+        } catch (error) {
+            console.error('Vacation request submission failed:', error);
+            Swal.fire(
+                'Save Failed',
+                error instanceof Error ? error.message : 'Failed to save the vacation request to Supabase.',
+                'error'
+            );
+        }
     };
 
     const handlePrint = useReactToPrint({
@@ -255,7 +264,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
     // POLICY SCREEN
     if (step === 'policy') {
         return (
-            <div className={`max-w-3xl mx-auto py-10 px-6 animate-in fade-in duration-500 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className={`max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6 animate-in fade-in duration-300 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-1 mb-6">
                     <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors flex items-center gap-1">
@@ -266,18 +275,18 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                     <span className="text-xs text-slate-600 font-semibold">{t.policy_title}</span>
                 </div>
 
-                <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-slate-900 mb-1">{t.policy_title}</h2>
+                <div className="mb-5">
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">{t.policy_title}</h2>
                     <p className="text-sm text-slate-500">{t.policy_desc}</p>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6 max-h-[55vh] overflow-y-auto">
+                <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5 max-h-[55vh] overflow-y-auto">
                     <h3 className="text-sm font-bold text-slate-900 mb-4 pb-3 border-b border-slate-100">{t.policy_header}</h3>
                     <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{t.policy_text}</div>
                 </div>
 
                 <div
-                    className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer mb-6 ${
+                    className={`flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer mb-5 ${
                         policyRead ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 hover:border-slate-300'
                     }`}
                     onClick={() => setPolicyRead(!policyRead)}
@@ -290,14 +299,14 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                     <span className={`font-medium text-sm ${policyRead ? 'text-emerald-800' : 'text-slate-600'}`}>{t.policy_ack}</span>
                 </div>
 
-                <div className="flex justify-between">
-                    <button onClick={onBack} className="h-11 px-6 rounded-xl font-semibold text-sm text-slate-500 hover:bg-white hover:text-slate-700 border border-transparent hover:border-slate-200 transition-all">
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3">
+                    <button onClick={onBack} className="h-11 px-6 rounded-lg font-semibold text-sm text-slate-600 hover:bg-white hover:text-slate-700 border border-slate-200 sm:border-transparent sm:hover:border-slate-200 transition-all">
                         {t.btn_cancel}
                     </button>
                     <button
                         disabled={!policyRead}
                         onClick={() => setStep('form')}
-                        className="h-11 px-8 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="h-11 px-8 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         {t.btn_proceed}
                         <ArrowRight className={`w-4 h-4 ${isRtl ? 'rotate-180' : ''}`} />
@@ -312,9 +321,9 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
     return (
         <div className={isRtl ? 'font-arabic' : 'font-sans'} dir={isRtl ? 'rtl' : 'ltr'}>
             {/* --- SCREEN VIEW --- */}
-            <div className="max-w-3xl mx-auto py-10 px-6 animate-in fade-in duration-500 print:hidden">
+            <div className="max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6 animate-in fade-in duration-300 print:hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={onBack}
@@ -330,21 +339,21 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                         </div>
                     </div>
                     {isReview && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             <button onClick={() => setStep('form')} className="h-9 px-4 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-200 transition-all">{t.btn_edit}</button>
                             <button onClick={() => handlePrint()} className="h-9 px-4 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-200 transition-all flex items-center gap-1.5">
                                 <Printer className="w-3.5 h-3.5" />
                                 {t.btn_print}
                             </button>
-                            <button onClick={handleSubmit} className="h-9 px-6 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm transition-all">{t.btn_submit}</button>
+                            <button onClick={handleSubmit} className="h-9 px-6 bg-red-700 text-white rounded-lg text-xs font-bold hover:bg-red-800 transition-all">{t.btn_submit}</button>
                         </div>
                     )}
                 </div>
 
                 {/* Form Card */}
-                <div className="space-y-6">
+                <div className="space-y-5">
                     {/* Employee Info */}
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                             <User className="w-4 h-4 text-slate-400" />
                             {t.lbl_emp_info}
@@ -398,7 +407,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                     </div>
 
                     {/* Leave Details */}
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                             <CalendarDays className="w-4 h-4 text-slate-400" />
                             {t.lbl_leave_details}
@@ -440,7 +449,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                                         onClick={() => setFormData({ ...formData, leaveType: type })}
                                         className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
                                             formData.leaveType === type
-                                                ? 'bg-slate-900 text-white border-slate-900'
+                                                ? 'bg-red-700 text-white border-red-700'
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                                         } ${isReview ? 'cursor-default' : ''}`}
                                     >
@@ -463,7 +472,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                                 <textarea
                                     value={formData.notes}
                                     onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                    className="w-full h-20 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 p-4 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all resize-none"
+                                    className="w-full h-20 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 p-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all resize-none"
                                     placeholder="..."
                                 />
                             </FormField>
@@ -472,7 +481,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
 
                     {/* Undertaking */}
                     <div
-                        className={`p-5 rounded-xl border-2 transition-all flex items-start gap-4 cursor-pointer ${
+                        className={`p-4 rounded-lg border transition-all flex items-start gap-4 cursor-pointer ${
                             formData.undertakingAgreed ? 'bg-emerald-50/50 border-emerald-300' : 'bg-white border-slate-200 hover:border-slate-300'
                         } ${isReview ? 'cursor-default' : ''}`}
                         onClick={() => !isReview && setFormData({ ...formData, undertakingAgreed: !formData.undertakingAgreed })}
@@ -490,10 +499,10 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
 
                     {/* Actions */}
                     {!isReview && (
-                        <div className="flex justify-end pt-4">
+                        <div className="flex justify-end pt-2">
                             <button
                                 onClick={() => setStep('review')}
-                                className="h-11 px-8 bg-slate-900 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-all flex items-center gap-2"
+                                className="w-full sm:w-auto h-11 px-8 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 transition-all flex items-center justify-center gap-2"
                             >
                                 {t.btn_review_sign}
                                 <ArrowRight className={`w-4 h-4 ${isRtl ? 'rotate-180' : ''}`} />

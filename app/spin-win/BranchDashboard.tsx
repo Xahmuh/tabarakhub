@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { spinWinService } from '../../services/spinWin';
 import { Branch } from '../../types';
-import ExcelJS from 'exceljs';
 import { mapBranchName } from '../../utils/excelUtils';
 import {
     Users,
@@ -24,12 +23,38 @@ import {
     ArrowLeft,
     MessageCircle
 } from 'lucide-react';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '../../lib/supabaseClient';
 
 interface BranchDashboardProps {
     branch: Branch;
     onBack: () => void;
 }
+
+type BranchDashboardDateType = 'today' | '7d' | 'month' | 'custom' | 'all';
+
+const getDateRangeForType = (dateType: BranchDashboardDateType) => {
+    const now = new Date();
+
+    if (dateType === 'today') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: '' };
+    }
+
+    if (dateType === '7d') {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 7);
+        return { startDate: start.toISOString(), endDate: '' };
+    }
+
+    if (dateType === 'month') {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 30);
+        return { startDate: start.toISOString(), endDate: '' };
+    }
+
+    return { startDate: '', endDate: '' };
+};
 
 const KPICard: React.FC<{
     label: string;
@@ -78,12 +103,11 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
     const [isLoading, setIsLoading] = useState(true);
     const [notification, setNotification] = useState<any>(null);
     const [history, setHistory] = useState<any[]>([]);
-    const [filters, setFilters] = useState({
-        startDate: '',
-        endDate: '',
+    const [filters, setFilters] = useState(() => ({
+        ...getDateRangeForType('today'),
         searchTerm: '',
-        dateType: 'today' as 'today' | '7d' | 'month' | 'custom' | 'all'
-    });
+        dateType: 'today' as BranchDashboardDateType
+    }));
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
     const [manualStart, setManualStart] = useState('');
     const [manualEnd, setManualEnd] = useState('');
@@ -121,19 +145,14 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
     };
 
     useEffect(() => {
-        const now = new Date();
-        if (filters.dateType === 'today') {
-            const start = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-            setFilters(f => ({ ...f, startDate: start, endDate: '' }));
-        } else if (filters.dateType === '7d') {
-            const start = new Date(now.setDate(now.getDate() - 7)).toISOString();
-            setFilters(f => ({ ...f, startDate: start, endDate: '' }));
-        } else if (filters.dateType === 'month') {
-            const start = new Date(now.setDate(now.getDate() - 30)).toISOString();
-            setFilters(f => ({ ...f, startDate: start, endDate: '' }));
-        } else if (filters.dateType === 'all') {
-            setFilters(f => ({ ...f, startDate: '', endDate: '' }));
-        }
+        if (filters.dateType === 'custom') return;
+
+        const range = getDateRangeForType(filters.dateType);
+        setFilters(f => (
+            f.startDate === range.startDate && f.endDate === range.endDate
+                ? f
+                : { ...f, ...range }
+        ));
     }, [filters.dateType]);
 
     useEffect(() => {
@@ -176,6 +195,7 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
     }, [branch.id, filters.startDate, filters.endDate]);
 
     const exportData = async () => {
+        const ExcelJS = await import('exceljs');
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Branch Audit');
 

@@ -1,4 +1,4 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
 import { Pharmacist } from '../types';
 
 export const pharmacistService = {

@@ -5,7 +5,6 @@ import { CommentsTable } from '../components/dashboard/CommentsTable';
 import { ProtectedRoute } from '../components/shared/ProtectedRoute';
 import { DashboardFilters } from '../types/feedback.types';
 import { 
-  Loader2, 
   Download, 
   Calendar, 
   Users, 
@@ -15,7 +14,6 @@ import {
   BarChart3, 
   Settings, 
   FileQuestion,
-  Search,
   LayoutDashboard,
   AlertTriangle
 } from 'lucide-react';
@@ -31,6 +29,7 @@ import { AIInsightsPanel } from '../components/dashboard/AIInsightsPanel';
 import { CorrelationCharts } from '../components/dashboard/CorrelationCharts';
 import { QuestionManager } from '../components/admin/QuestionManager';
 import { ModuleSettingsControl } from '../components/admin/ModuleSettingsControl';
+import { isModuleEnabled } from '../../../../config/clientConfig';
 
 interface Props {
   userRole?: string;
@@ -38,9 +37,12 @@ interface Props {
 }
 
 type Tab = 'analytics' | 'questions' | 'settings';
+type AnalyticsSection = 'summary' | 'trends' | 'responses';
 
 export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
+  const [activeAnalyticsSection, setActiveAnalyticsSection] = useState<AnalyticsSection>('summary');
+  const canManageQuestions = userRole?.toLowerCase() === 'manager';
   const [filters, setFilters] = useState<DashboardFilters>({
     dateFrom: '',
     dateTo: '',
@@ -55,16 +57,22 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (data) {
-      exportToExcel(data, `Quality_Feedback_Report_${new Date().toISOString().split('T')[0]}`, questions);
+      await exportToExcel(data, `Quality_Feedback_Report_${new Date().toISOString().split('T')[0]}`, questions);
     } else {
       alert("No data available to export with current filters.");
     }
   };
 
+  const analyticsSections = [
+    { id: 'summary' as const, label: 'Summary', icon: LayoutDashboard },
+    { id: 'trends' as const, label: 'Trends', icon: BarChart3 },
+    { id: 'responses' as const, label: 'Responses', icon: Users },
+  ];
+
   return (
-    <ProtectedRoute roles={['admin', 'manager', 'ceo']} userRole={userRole}>
+    <ProtectedRoute roles={['manager', 'owner', 'ceo']} userRole={userRole}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -74,18 +82,18 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
           </div>
           
           <div className="flex items-center gap-3">
-            {activeTab === 'analytics' && (
+            {activeTab === 'analytics' && isModuleEnabled('excelExport') && (
               <button 
                 onClick={handleExport}
                 disabled={isLoading || !data?.raw_responses?.length}
-                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-4 h-4" />
                 Export CSV
               </button>
             )}
             {onBack && (
-              <button onClick={onBack} className="px-6 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all">
+              <button onClick={onBack} className="btn-primary">
                 Back to Suite
               </button>
             )}
@@ -93,10 +101,10 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit">
+        <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl w-full overflow-x-auto sm:w-fit">
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition-all whitespace-nowrap ${
               activeTab === 'analytics' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -105,16 +113,16 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
           </button>
           <button
             onClick={() => setActiveTab('questions')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition-all whitespace-nowrap ${
               activeTab === 'questions' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             <FileQuestion className="w-4 h-4" />
-            Questions
+            QC Questions
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition-all whitespace-nowrap ${
               activeTab === 'settings' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -128,7 +136,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
             <AlertBanner show={!!data?.negative_alert} />
 
             {/* Filters */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
+            <div className="operational-panel p-4 flex flex-wrap gap-4 items-end">
               {(() => {
                 const monthOptions = [];
                 const now = new Date();
@@ -145,7 +153,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                       <select 
                         value={filters.dateFrom} 
                         onChange={e => updateFilter('dateFrom', e.target.value)} 
-                        className="w-full rounded-xl border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none appearance-none"
+                        className="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none appearance-none"
                       >
                         <option value="">Start Month</option>
                         {monthOptions.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
@@ -156,7 +164,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                       <select 
                         value={filters.dateTo} 
                         onChange={e => updateFilter('dateTo', e.target.value)} 
-                        className="w-full rounded-xl border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none appearance-none"
+                        className="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none appearance-none"
                       >
                         <option value="">End Month</option>
                         {monthOptions.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
@@ -167,7 +175,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
               })()}
               <label className="flex-1 min-w-[150px]">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Cluster</span>
-                <select value={filters.cluster} onChange={e => updateFilter('cluster', e.target.value)} className="w-full rounded-xl border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none">
+                <select value={filters.cluster} onChange={e => updateFilter('cluster', e.target.value)} className="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none">
                   <option value="All">All Clusters</option>
                   <option value="North Cluster">North Cluster</option>
                   <option value="Central Cluster">Central Cluster</option>
@@ -177,7 +185,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
               </label>
               <label className="flex-1 min-w-[150px]">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Role</span>
-                <select value={filters.role} onChange={e => updateFilter('role', e.target.value)} className="w-full rounded-xl border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none">
+                <select value={filters.role} onChange={e => updateFilter('role', e.target.value)} className="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none">
                   <option value="All">All Roles</option>
                   <option value="Pharmacist">Pharmacist</option>
                   <option value="Cashier">Cashier</option>
@@ -186,47 +194,74 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                   <option value="Supervisor">Supervisor</option>
                 </select>
               </label>
-              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', cluster: 'All', role: 'All', experience: 'All' })} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors" title="Reset Filters">
+              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', cluster: 'All', role: 'All', experience: 'All' })} className="h-10 w-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors flex items-center justify-center" title="Reset Filters">
                 <RefreshCw className="w-5 h-5" />
               </button>
             </div>
 
+            <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl w-full overflow-x-auto sm:w-fit">
+              {analyticsSections.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveAnalyticsSection(id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-black transition-all whitespace-nowrap ${
+                    activeAnalyticsSection === id ? 'bg-red-50 text-brand' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {error ? (
-              <div className="bg-red-50 text-red-600 p-8 rounded-3xl border border-red-200 text-center space-y-4">
+              <div className="bg-red-50 text-red-600 p-8 rounded-xl border border-red-200 text-center space-y-4">
                 <AlertTriangle className="w-12 h-12 mx-auto opacity-50" />
                 <p className="font-bold">{error}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                  <KPICard title="Health Score" score={data?.management_health_score || 0} colorType="health" />
-                  <KPICard title="Operations" score={data?.operations_avg || 0} colorType="ops" />
-                  <KPICard title="Purchasing" score={data?.purchasing_avg || 0} colorType="pur" />
-                  <KPICard title="HR" score={data?.hr_avg || 0} colorType="hr" />
-                  <KPICard title="IT" score={data?.it_avg || 0} colorType="it" />
-                  <KPICard title="Responses" score={data?.total_responses || 0} colorType="neutral" />
-                </div>
+                {activeAnalyticsSection === 'summary' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <KPICard title="Health Score" score={data?.management_health_score || 0} colorType="health" />
+                      <KPICard title="Responses" score={data?.total_responses || 0} colorType="neutral" />
+                    </div>
 
-                <TrendChart data={data?.monthly_trend} isLoading={isLoading} />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <KPICard title="Operations" score={data?.operations_avg || 0} colorType="ops" />
+                      <KPICard title="Purchasing" score={data?.purchasing_avg || 0} colorType="pur" />
+                      <KPICard title="HR" score={data?.hr_avg || 0} colorType="hr" />
+                      <KPICard title="IT" score={data?.it_avg || 0} colorType="it" />
+                    </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <HeatmapGrid data={data?.monthly_trend} isLoading={isLoading} />
-                  <BarComparison data={data?.by_cluster} isLoading={isLoading} />
-                </div>
+                    <AIInsightsPanel stats={data?.sentiment_stats} onRefresh={refresh} isLoading={isLoading} />
+                  </div>
+                )}
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <AIInsightsPanel stats={data?.sentiment_stats} onRefresh={refresh} isLoading={isLoading} />
-                  <CorrelationCharts data={data?.correlation_data} isLoading={isLoading} />
-                </div>
+                {activeAnalyticsSection === 'trends' && (
+                  <div className="space-y-5">
+                    <TrendChart data={data?.monthly_trend} isLoading={isLoading} />
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  <ExperienceBreakdown data={data?.by_experience} isLoading={isLoading} />
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[350px]">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-lg font-black text-slate-900 tracking-tight">Recent Comments</h3>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                        <input type="text" placeholder="Search..." className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-brand" />
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                      <HeatmapGrid data={data?.monthly_trend} isLoading={isLoading} />
+                      <BarComparison data={data?.by_cluster} isLoading={isLoading} />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                      <ExperienceBreakdown data={data?.by_experience} isLoading={isLoading} />
+                      <CorrelationCharts data={data?.correlation_data} isLoading={isLoading} />
+                    </div>
+                  </div>
+                )}
+
+                {activeAnalyticsSection === 'responses' && (
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col min-h-[480px]">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight">Recent Comments</h3>
+                        <p className="text-xs text-slate-500 font-medium">Latest written feedback for the selected filters.</p>
                       </div>
                     </div>
                     <div className="flex-1 overflow-hidden">
@@ -241,7 +276,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                       )}
                     </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>
@@ -249,7 +284,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
 
         {activeTab === 'questions' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <QuestionManager />
+            <QuestionManager canManage={canManageQuestions} />
           </div>
         )}
 

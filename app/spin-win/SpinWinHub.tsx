@@ -31,7 +31,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
         });
     };
 
-    if (userRole === 'manager' || userRole === 'admin') {
+    if (userRole === 'manager' || userRole === 'owner') {
         return <ManagerDashboard onBack={onBack} />;
     }
 
@@ -40,7 +40,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
     if (subTab === 'dashboard') return <BranchDashboard branch={branch} onBack={() => handleTabChange('menu')} />;
 
     const isEnabled = branch.isSpinEnabled !== false;
-    const canManage = userRole === 'manager' || userRole === 'admin';
+    const canManage = userRole === 'manager';
 
     const menuItems = [
         {
@@ -50,7 +50,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
             description: isEnabled
                 ? 'Generate session tokens for physical customers or shared links for delivery orders.'
                 : 'Access suspended by Global Administrator. Please contact management to re-enable.',
-            cta: isEnabled ? 'Launch Token Protocol' : 'Protocol Safe-Locked',
+            cta: isEnabled ? 'Generate Customer QR' : 'QR Disabled',
             gradient: 'from-red-600 to-red-700',
             iconBg: isEnabled ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-400',
             hoverBorder: isEnabled ? 'hover:border-red-200 hover:shadow-red-100/50' : '',
@@ -91,7 +91,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
                 className="inline-flex items-center gap-2 text-slate-400 hover:text-red-600 mb-8 transition-colors group"
             >
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                <span className="text-xs font-bold uppercase tracking-widest">Operational Suite</span>
+                <span className="text-xs font-bold uppercase tracking-widest">Command Center</span>
             </button>
 
             {/* Header */}
@@ -101,7 +101,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
                         <Zap className="w-5 h-5 text-white" />
                     </div>
                     <h2 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-                        Spin & Win <span className="text-red-600">Suite</span>
+                        Spin & Win <span className="text-red-600">Rewards</span>
                     </h2>
                 </div>
                 <div className="flex items-center gap-3">

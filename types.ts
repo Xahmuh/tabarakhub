@@ -1,6 +1,6 @@
 
 // Define Role type for consistent usage
-export type Role = 'admin' | 'branch' | 'manager' | 'accounts';
+export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch';
 
 export interface Branch {
   id: string;
@@ -12,7 +12,6 @@ export interface Branch {
   isItemsEntryEnabled?: boolean;
   isKPIDashboardEnabled?: boolean;
   whatsappNumber?: string;
-  password?: string;
 }
 
 export interface Pharmacist {
@@ -28,6 +27,8 @@ export interface Product {
   category?: string;
   agent?: string;
   defaultPrice: number;
+  vatEnabled?: boolean;
+  vatRate?: number;
   isManual: boolean;
   createdByBranch?: string;
   internalCode?: string;
@@ -63,6 +64,16 @@ export interface AuthState {
   user: Branch | null;
   pharmacist: Pharmacist | null;
   permissions?: FeaturePermission[];
+  rolePermissions?: RolePermission[];
+}
+
+export interface MaintenanceSettings {
+  id: 'global';
+  isMaintenanceModeEnabled: boolean;
+  maintenanceTitle: string;
+  maintenanceMessage: string;
+  updatedAt?: string;
+  updatedBy?: string | null;
 }
 
 export type ShortageStatus = 'Low' | 'Critical' | 'Out of Stock';
@@ -335,4 +346,109 @@ export interface FeaturePermission {
   branchId: string;
   featureName: string;
   accessLevel: 'read' | 'edit' | 'none';
+}
+
+export interface RolePermission {
+  role: Role;
+  featureName: string;
+  accessLevel: 'read' | 'edit' | 'none';
+}
+
+export interface AppUser {
+  userId: string;
+  email: string;
+  role: Role;
+  branchId?: string | null;
+  branchCode?: string | null;
+  branchName?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface SupervisorBranchAssignment {
+  supervisorUserId: string;
+  branchId: string;
+}
+
+// --- Delivery Recording & Traceability Types ---
+
+export type Governorate = 'Capital' | 'Muharraq' | 'Northern' | 'Southern';
+export type DeliveryPaymentType = 'BP' | 'CARD' | 'CASH' | 'TALABAT';
+
+export interface DeliveryBlock {
+  blockNumber: string;
+  areaName: string;
+  governorate: Governorate;
+  isActive: boolean;
+}
+
+export interface DeliveryDriver {
+  id: string;
+  name: string;
+  phone?: string;
+  notes?: string;
+  isActive: boolean;
+}
+
+export interface BranchClassification {
+  branchId: string;
+  area?: string;
+  supervisorName?: string;
+  supervisorUserId?: string | null;
+  governorate?: Governorate | null;
+}
+
+export interface DeliveryCostSetting {
+  id?: string;
+  driverId: string;
+  monthlyCostBhd: number;
+  workingDaysPerMonth: number;
+  targetOrdersPerDay: number;
+  assumedMarginPct?: number | null;
+}
+
+export interface DeliveryOrder {
+  id: string;
+  branchId: string;
+  branchName?: string;
+  orderDate: string; // yyyy-mm-dd
+  valueBhd: number;
+  paymentType: DeliveryPaymentType;
+  pharmacistId?: string | null;
+  pharmacistName?: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+  blockNumber?: string | null;
+  areaName?: string | null;
+  governorate?: Governorate | null;
+  isOutsideGovernorate: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface DeliveryOrderInput {
+  branchId: string;
+  orderDate: string;
+  valueBhd: number;
+  paymentType: DeliveryPaymentType;
+  pharmacistId?: string | null;
+  pharmacistName?: string | null;
+  driverId?: string | null;
+  blockNumber?: string | null;
+  notes?: string;
+}
+
+export type DriverEfficiencyClass = 'optimum' | 'in_range' | 'low_efficiency' | 'loss_making';
+
+export interface DriverEfficiency {
+  driverId: string;
+  driverName: string;
+  orders: number;
+  totalValue: number;
+  ordersPerDay: number;
+  costPerOrder: number | null;
+  periodCost: number | null;
+  estimatedContribution: number | null;
+  estimatedNet: number | null;
+  classification: DriverEfficiencyClass | 'no_cost_data';
 }

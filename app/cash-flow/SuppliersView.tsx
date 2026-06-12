@@ -44,25 +44,25 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
             html: `
         <div class="space-y-4 text-left p-4">
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Supplier / Node Name</label>
-          <input id="swal-name" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="e.g. Medico Global Solutions">
+          <input id="swal-name" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="e.g. Medico Global Solutions">
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Flexibility</label>
-          <select id="swal-flex" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+          <select id="swal-flex" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             <option value="High">High (Allows 15+ Days Delay)</option>
             <option value="Medium" selected>Medium (Allows 7 Days Delay)</option>
             <option value="Low">Low (Fixed Due Dates)</option>
           </select>
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Internal Notes</label>
-          <textarea id="swal-notes" class="w-full p-4 bg-slate-50 border-0 rounded-2xl h-24 text-sm font-bold" placeholder="Legacy contract details, contact info..."></textarea>
+          <textarea id="swal-notes" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg h-24 text-sm font-bold" placeholder="Legacy contract details, contact info..."></textarea>
         </div>
       `,
             showCancelButton: true,
             confirmButtonText: 'Initialize Supplier',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-brand rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
-                cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest'
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 return {
@@ -97,25 +97,26 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cheque Number</label>
-              <input id="swal-num" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="CHQ-9901">
+              <input id="swal-num" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="CHQ-9901">
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Amount (BHD)</label>
-              <input id="swal-amount" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="0.000">
+              <input id="swal-amount" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="0.000">
             </div>
           </div>
-          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Maturity / Due Date</label>
-              <input id="swal-date" type="date" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+              <input id="swal-date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Bank Execution Time</label>
-              <input id="swal-time" type="time" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" value="09:00">
+              <input id="swal-time" type="time" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="09:00">
             </div>
           </div>
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Audit Priority</label>
-          <select id="swal-priority" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold">
+          <select id="swal-priority" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
             <option value="Critical">Critical (No Delay Possible)</option>
             <option value="Normal" selected>Normal (Standard Cycle)</option>
             <option value="Flexible">Flexible (Can Reschedule)</option>
@@ -125,9 +126,9 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
             showCancelButton: true,
             confirmButtonText: 'Register Commitment',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-brand rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
-                cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest'
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 return {
@@ -162,8 +163,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
             showCancelButton: true,
             confirmButtonText: 'Update Registry',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-brand rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
             }
         });
 
@@ -181,8 +182,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                         return null;
                     },
                     customClass: {
-                        popup: 'rounded-[2.5rem]',
-                        confirmButton: 'bg-red-500 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
+                        popup: 'rounded-lg',
+                        confirmButton: 'bg-red-600 text-white rounded-lg px-4 py-2.5 font-bold text-sm',
                     }
                 });
                 if (!reason) return;
@@ -195,8 +196,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                     inputValue: cheque.dueDate,
                     confirmButtonText: 'Commit New Date',
                     customClass: {
-                        popup: 'rounded-[2.5rem]',
-                        confirmButton: 'bg-slate-900 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
+                        popup: 'rounded-lg',
+                        confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
                     }
                 });
                 if (newDate) {
@@ -215,28 +216,28 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* Supplier List */}
-            <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-6">
+            <div className="lg:col-span-4 space-y-5">
+                <div className="operational-panel p-5">
+                    <div className="flex items-center justify-between mb-5">
                         <h3 className="text-lg font-black text-slate-900 tracking-tight">Suppliers</h3>
                         <button
                             onClick={handleAddSupplier}
-                            className="p-3 bg-brand text-white rounded-2xl hover:scale-110 active:scale-90 transition-all shadow-lg shadow-brand/20"
+                            className="btn-primary h-9 w-9 !p-0"
                         >
                             <Plus className="w-4 h-4" />
                         </button>
                     </div>
 
-                    <div className="relative mb-6">
+                    <div className="relative mb-5">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                         <input
                             type="text"
                             placeholder="Query databases..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-12 pr-4 py-4 bg-slate-50 border-0 rounded-2xl text-xs font-bold focus:ring-2 ring-brand/20 transition-all"
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
                         />
                     </div>
 
@@ -245,7 +246,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                             <button
                                 key={s.id}
                                 onClick={() => setSelectedSupplierId(s.id)}
-                                className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all group ${selectedSupplierId === s.id ? 'bg-slate-900 text-white shadow-xl translate-x-2' : 'bg-slate-50 hover:bg-white border border-transparent hover:border-slate-100 text-slate-600'}`}
+                                className={`w-full flex items-center justify-between p-4 rounded-lg transition-colors group ${selectedSupplierId === s.id ? 'bg-brand text-white shadow-sm shadow-brand/10' : 'bg-slate-50 hover:bg-white border border-transparent hover:border-brand/20 text-slate-600'}`}
                             >
                                 <div className="flex items-center space-x-3 text-left">
                                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedSupplierId === s.id ? 'bg-white/10' : 'bg-white shadow-sm border border-slate-100'}`}>
@@ -264,22 +265,22 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
             </div>
 
             {/* Supplier Detail & Cheques */}
-            <div className="lg:col-span-8 space-y-6">
+            <div className="lg:col-span-8 space-y-5">
                 {!selectedSupplier ? (
-                    <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center h-[500px]">
-                        <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 text-slate-200">
-                            <User className="w-10 h-10" />
+                    <div className="operational-panel p-8 flex flex-col items-center justify-center text-center h-[500px]">
+                        <div className="w-16 h-16 bg-slate-50 rounded-lg flex items-center justify-center mb-5 text-slate-200">
+                            <User className="w-8 h-8" />
                         </div>
                         <h4 className="text-xl font-black text-slate-900">Selective Node Detail</h4>
                         <p className="text-slate-400 text-sm max-w-xs mt-2">Select a supplier from the registry to manage active commitments and audit trails.</p>
                     </div>
                 ) : (
                     <>
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm animate-in fade-in slide-in-from-right-4 duration-500">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                                <div className="flex items-center space-x-6">
-                                    <div className="w-16 h-16 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/20">
-                                        <Briefcase className="text-white w-8 h-8" />
+                        <div className="operational-panel p-5 md:p-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 mb-6">
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-12 h-12 bg-brand rounded-lg flex items-center justify-center shadow-sm shadow-brand/10">
+                                        <Briefcase className="text-white w-6 h-6" />
                                     </div>
                                     <div>
                                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedSupplier.name}</h3>
@@ -296,18 +297,18 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                                 <div className="flex items-center space-x-3">
                                     <button
                                         onClick={handleAddCheque}
-                                        className="flex items-center space-x-3 px-6 py-4 bg-brand text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all"
+                                        className="btn-primary text-[10px] uppercase tracking-widest"
                                     >
                                         <Plus className="w-4 h-4" />
                                         <span>Issue Cheque</span>
                                     </button>
-                                    <button className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all">
+                                    <button className="btn-danger h-10 w-10 !p-0">
                                         <Trash2 className="w-5 h-5" />
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50 p-6 rounded-3xl">
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Strategy & Notes</p>
                                 <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
                                     "{selectedSupplier.notes || 'No strategic overview provided for this node.'}"
@@ -315,14 +316,14 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                             </div>
                         </div>
 
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-                            <div className="flex items-center justify-between mb-8">
+                        <div className="operational-panel p-5 md:p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+                            <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <h4 className="text-lg font-black text-slate-900 tracking-tight">Financial Commitments</h4>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active cheques and scheduled transfers</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <span className="px-3 py-1 bg-slate-100 text-slate-900 rounded-full text-[10px] font-black">{supplierCheques.length} Records</span>
+                                    <span className="px-3 py-1 bg-slate-100 text-slate-900 rounded-md text-[10px] font-black">{supplierCheques.length} Records</span>
                                 </div>
                             </div>
 
@@ -385,7 +386,7 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ suppliers, cheques
                                                     <td className="py-5 text-right">
                                                         <button
                                                             onClick={() => handleUpdateChequeStatus(c)}
-                                                            className="p-2 text-slate-300 hover:text-brand transition-colors hover:scale-110"
+                                                            className="p-2 text-slate-300 hover:text-brand transition-colors"
                                                         >
                                                             <Edit className="w-4 h-4" />
                                                         </button>

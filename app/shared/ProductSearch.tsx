@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Package, X, ChevronRight, Zap, Box, Command, Loader2, Sparkles, Tag } from 'lucide-react';
+import { Search, Package, X, ChevronRight, Command, Loader2 } from 'lucide-react';
 import { Product } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/calculations';
+import { getPriceIncludingVat, formatVatLabel } from '../../utils/vat';
 
 interface ProductSearchProps {
   onSelect: (product: Product) => void;
@@ -100,85 +101,88 @@ export const ProductSearch: React.FC<ProductSearchProps> = ({ onSelect, onManual
   return (
     <div ref={containerRef} className="relative w-full">
       <div className="relative group">
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center space-x-2 pointer-events-none z-10">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none z-10">
           {isSearching ? (
-            <Loader2 className="text-brand w-6 h-6 animate-spin" />
+            <Loader2 className="text-brand w-4 h-4 animate-spin" />
           ) : (
-            <Search className={`w-6 h-6 transition-colors duration-300 ${isOpen ? 'text-brand' : 'text-slate-300 group-focus-within:text-brand'}`} />
+            <Search className={`w-5 h-5 transition-colors duration-200 ${isOpen ? 'text-brand' : 'text-slate-400 group-focus-within:text-brand'}`} />
           )}
         </div>
 
         <input
           ref={inputRef}
           type="text"
-          className="w-full h-16 md:h-22 pl-16 md:pl-20 pr-24 md:pr-32 bg-white border-2 border-slate-100 rounded-[2rem] text-lg md:text-2xl font-black text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-[12px] focus:ring-brand/5 focus:border-brand shadow-2xl shadow-slate-200/40 transition-all duration-500"
-          placeholder="SEARCH BY NAME OR CODE..."
+          className="w-full h-12 md:h-14 pl-12 pr-20 md:pr-24 bg-white border border-slate-200 rounded-xl text-sm md:text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-brand/10 focus:border-brand shadow-sm transition-all duration-200"
+          placeholder="Search by name or code..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => query.length > 0 && setIsOpen(true)}
         />
 
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center space-x-2 md:space-x-4">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
           {query && (
             <button
               onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-              className="p-2 md:p-3 bg-slate-100 hover:bg-rose-50 hover:text-rose-500 rounded-2xl transition-all duration-300"
+              className="p-2 bg-slate-100 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200"
+              aria-label="Clear search"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
-          <div className="hidden sm:flex items-center space-x-2 px-3 py-2.5 bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 select-none shadow-sm">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-slate-400 select-none">
             <Command className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-black tracking-widest">K</span>
+            <span className="text-[10px] font-bold tracking-widest">K</span>
           </div>
         </div>
       </div>
 
       {isOpen && (
-        <div className="absolute mt-4 w-full bg-white rounded-[2rem] shadow-[0_50px_100px_-20px_rgba(139,0,0,0.15)] border border-slate-100 overflow-hidden z-[2000] animate-in fade-in slide-in-from-top-6 duration-500">
-          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div className="absolute mt-2 w-full bg-white rounded-xl shadow-xl shadow-slate-200/70 border border-slate-200 overflow-hidden z-[2000] animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="max-h-[380px] overflow-y-auto custom-scrollbar">
             {results.length > 0 ? (
-              <div className="py-4">
+              <div className="py-2">
                 {results.map((product, idx) => (
                   <button
                     key={product.id}
                     onClick={() => { onSelect(product); setQuery(''); setIsOpen(false); }}
                     onMouseEnter={() => setActiveIndex(idx)}
-                    className={`w-full px-10 py-5 md:py-6 flex items-center justify-between transition-all group ${activeIndex === idx ? 'bg-brand/5' : 'bg-transparent hover:bg-slate-50'}`}
+                    className={`w-full px-4 py-3 flex items-center justify-between gap-4 transition-all group ${activeIndex === idx ? 'bg-brand/5' : 'bg-transparent hover:bg-slate-50'}`}
                   >
-                    <div className="flex items-center space-x-6 overflow-hidden">
-                      <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center transition-all duration-500 shadow-inner ${activeIndex === idx ? 'bg-brand text-white' : 'bg-slate-100 text-slate-300'}`}>
-                        <Package className="w-6 h-6 md:w-7 md:h-7" />
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${activeIndex === idx ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        <Package className="w-5 h-5" />
                       </div>
                       <div className="text-left flex-1 min-w-0">
-                        <div className="flex items-baseline space-x-3 mb-1">
-                          <p className={`text-lg md:text-xl font-black tracking-tighter leading-none truncate ${activeIndex === idx ? 'text-brand' : 'text-slate-900'}`}>{product.name}</p>
-                          {product.internalCode && <span className="text-xs font-black text-slate-400">#{product.internalCode}</span>}
+                        <div className="flex items-center gap-2 mb-1 min-w-0">
+                          <p className={`text-sm md:text-base font-bold leading-tight truncate ${activeIndex === idx ? 'text-brand' : 'text-slate-900'}`}>{product.name}</p>
+                          {product.internalCode && <span className="text-[11px] font-bold text-slate-400 shrink-0">#{product.internalCode}</span>}
                           {/* Display Price next to name */}
-                          <span className="text-sm font-mono font-black text-brand bg-brand/5 px-2 py-0.5 rounded-lg shrink-0">
-                            {formatCurrency(product.defaultPrice)}
+                          <span className="text-xs font-mono font-bold text-brand bg-brand/5 px-2 py-0.5 rounded-md shrink-0">
+                            {formatCurrency(getPriceIncludingVat(product.defaultPrice, product.vatEnabled, product.vatRate))}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-4">
-                          <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{product.agent || 'N/A'}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wide truncate">{product.agent || 'N/A'}</span>
                           <span className="text-[10px] md:text-xs font-bold text-slate-300">|</span>
-                          <span className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest">{product.internalCode || 'NO-CODE'}</span>
+                          <span className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wide">{product.internalCode || 'NO-CODE'}</span>
+                          <span className="text-[10px] md:text-xs font-bold text-slate-300">|</span>
+                          <span className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wide">{formatVatLabel(product.vatEnabled, product.vatRate)}</span>
                         </div>
                       </div>
                     </div>
-                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all ${activeIndex === idx ? 'bg-brand/10 text-brand translate-x-1' : 'bg-slate-50 text-slate-200'}`}>
-                      <ChevronRight className="w-6 h-6" />
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${activeIndex === idx ? 'bg-brand/10 text-brand translate-x-0.5' : 'bg-slate-50 text-slate-300'}`}>
+                      <ChevronRight className="w-4 h-4" />
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="p-16 text-center">
-                <p className="text-slate-400 font-black uppercase tracking-widest text-xs">No matching products found.</p>
+              <div className="p-8 text-center">
+                <p className="text-slate-500 font-semibold text-sm">No matching products found.</p>
                 <button
                   onClick={() => { onManual(query); setQuery(''); setIsOpen(false); }}
-                  className="mt-6 bg-brand text-white font-black px-10 py-5 rounded-2xl hover:bg-brand-hover transition-all text-xs uppercase tracking-widest"
+                  className="btn-primary mt-4"
                 >
                   Create Manual Entry
                 </button>

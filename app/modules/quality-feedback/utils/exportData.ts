@@ -1,6 +1,19 @@
-import * as XLSX from 'xlsx';
+const addSheet = (workbook: any, sheetName: string, rows: Record<string, any>[]) => {
+  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31));
+  const headers = Array.from(new Set(rows.flatMap(row => Object.keys(row))));
 
-export const exportToExcel = (dashboardData: any, fileName: string, questions: any[] = []) => {
+  worksheet.columns = headers.map(header => ({
+    header,
+    key: header,
+    width: Math.min(Math.max(header.length + 4, 14), 42)
+  }));
+
+  rows.forEach(row => worksheet.addRow(row));
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+};
+
+export const exportToExcel = async (dashboardData: any, fileName: string, questions: any[] = []) => {
   const { raw_responses, monthly_trend } = dashboardData;
 
   if (!raw_responses || raw_responses.length === 0) return;
@@ -133,18 +146,22 @@ export const exportToExcel = (dashboardData: any, fileName: string, questions: a
       'Sentiment': r.sentiment_label
     }));
 
-  // --- Create Workbook and Sheets ---
-  const wb = XLSX.utils.book_new();
-  
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mainData), 'All Responses');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deptComparison), 'Dept Average');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(branchComparison), 'Branch Comparison');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trendSheet), 'Monthly Trends');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(alertsSheet), 'Low Score Alerts');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(heatmapSheet), 'Weak Areas Heatmap');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(experienceAnalysis), 'Experience Analysis');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(complaintsSheet), 'Complaints');
+  const ExcelJS = await import('exceljs');
+  const { saveAs } = await import('file-saver');
+  const workbook = new ExcelJS.Workbook();
 
-  // Export
-  XLSX.writeFile(wb, `${fileName}.xlsx`);
+  addSheet(workbook, 'All Responses', mainData);
+  addSheet(workbook, 'Dept Average', deptComparison);
+  addSheet(workbook, 'Branch Comparison', branchComparison);
+  addSheet(workbook, 'Monthly Trends', trendSheet);
+  addSheet(workbook, 'Low Score Alerts', alertsSheet);
+  addSheet(workbook, 'Weak Areas Heatmap', heatmapSheet);
+  addSheet(workbook, 'Experience Analysis', experienceAnalysis);
+  addSheet(workbook, 'Complaints', complaintsSheet);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${fileName}.xlsx`
+  );
 };

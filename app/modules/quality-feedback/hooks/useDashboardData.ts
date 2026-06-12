@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { feedbackService } from '../services/feedbackService';
 import { DashboardFilters, MonthlyTrend, Question, ModuleSettings } from '../types/feedback.types';
+import { isDemoMode } from '../../../../config/clientConfig';
 
 export const useDashboardData = (filters: DashboardFilters) => {
   const [responses, setResponses] = useState<any[]>([]);
@@ -114,6 +115,7 @@ export const useDashboardData = (filters: DashboardFilters) => {
         if (s > 0) { totalScore += s; totalRatings++; }
       });
     });
+    const managementHealthScore = totalRatings > 0 ? Number((totalScore / totalRatings).toFixed(1)) : 0;
 
     // Group by experience
     const experienceCounts: Record<string, number> = {};
@@ -129,8 +131,66 @@ export const useDashboardData = (filters: DashboardFilters) => {
       clusterScores[r.branch_cluster].count += 1;
     });
 
+    const commentTexts = responses.flatMap(r => [
+      r.biggest_issue,
+      r.best_thing,
+      r.improvement_suggestion,
+      ...(r.ratings && typeof r.ratings === 'object'
+        ? Object.entries(r.ratings)
+          .filter(([key, value]) => key.startsWith('note_') && value)
+          .map(([, value]) => String(value))
+        : [])
+    ]).filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    const stopWords = new Set([
+      'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'are', 'was', 'were',
+      'you', 'your', 'our', 'but', 'not', 'all', 'too', 'very', 'need', 'needs', 'more', 'less',
+      'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'هذا', 'هذه', 'كان', 'كانت', 'يجب'
+    ]);
+    const keywordCounts = new Map<string, number>();
+    commentTexts
+      .join(' ')
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06FF\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 3 && !stopWords.has(word))
+      .forEach(word => keywordCounts.set(word, (keywordCounts.get(word) || 0) + 1));
+
+    const topKeywords = Array.from(keywordCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([word]) => word);
+
+    const positiveCount = responses.filter(r => r.sentiment_label === 'positive').length;
+    const negativeCount = responses.filter(r => r.sentiment_label === 'negative').length;
+    const neutralCount = responses.filter(r => r.sentiment_label === 'neutral').length;
+    const keyInsights: string[] = [];
+
+    if (count < 5) {
+      keyInsights.push('Insufficient response volume for reliable insights yet.');
+    } else {
+      if (managementHealthScore > 0 && managementHealthScore < 3) {
+        keyInsights.push('Management health score is below the target threshold and needs review.');
+      }
+      if (negativeCount > positiveCount && negativeCount > 0) {
+        keyInsights.push('Negative sentiment currently exceeds positive sentiment in analyzed comments.');
+      }
+      if (topKeywords.length > 0) {
+        keyInsights.push(`Most repeated feedback themes: ${topKeywords.slice(0, 3).join(', ')}.`);
+      }
+    }
+
+    const demoSentimentStats = isDemoMode && count === 0 ? {
+      positive_count: 0,
+      negative_count: 0,
+      neutral_count: 0,
+      top_keywords: [],
+      key_insights: ['Demo mode is enabled. Add feedback responses to populate real insights.'],
+      last_analyzed: new Date().toISOString()
+    } : null;
+
     return {
-      management_health_score: totalRatings > 0 ? Number((totalScore / totalRatings).toFixed(1)) : 0,
+      management_health_score: managementHealthScore,
       operations_avg: getAvg('Operations'),
       purchasing_avg: getAvg('Purchasing'),
       hr_avg: getAvg('HR'),
@@ -222,17 +282,17 @@ export const useDashboardData = (filters: DashboardFilters) => {
           turnover: h ? h.turnover_rate : 0
         };
       }),
-      sentiment_stats: {
-        positive_count: responses.filter(r => r.sentiment_label === 'positive').length,
-        negative_count: responses.filter(r => r.sentiment_label === 'negative').length,
-        neutral_count: responses.filter(r => r.sentiment_label === 'neutral').length,
-        top_keywords: ['workload', 'salary', 'software', 'delivery'], // Mock or derived
-        key_insights: [
-          'High satisfaction in South Cluster despite recent workload increase.',
-          'IT issues are the primary driver of negative sentiment in East Cluster.',
-          'Purchasing speed has improved 12% since last quarter.'
-        ],
-        last_analyzed: new Date().toISOString()
+      sentiment_stats: demoSentimentStats || {
+        positive_count: positiveCount,
+        negative_count: negativeCount,
+        neutral_count: neutralCount,
+        top_keywords: topKeywords,
+        key_insights: keyInsights,
+        last_analyzed: responses
+          .map(r => r.sentiment_analyzed_at || r.updated_at || r.submitted_at)
+          .filter(Boolean)
+          .sort()
+          .at(-1) || null
       },
       negative_alert: totalRatings > 0 && (totalScore / totalRatings) < 3.0
     };

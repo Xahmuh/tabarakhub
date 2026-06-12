@@ -34,21 +34,21 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
             html: `
         <div class="space-y-4 text-left p-4">
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Daily Amount (BHD)</label>
-          <input id="rev-amount" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="0.000">
+          <input id="rev-amount" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="0.000">
           
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Revenue Date</label>
-              <input id="rev-date" type="date" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" value="${new Date().toISOString().split('T')[0]}">
+              <input id="rev-date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="${new Date().toISOString().split('T')[0]}">
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Settlement Time</label>
-              <input id="rev-time" type="time" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" value="08:30">
+              <input id="rev-time" type="time" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="08:30">
             </div>
           </div>
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Primary Payment Channel</label>
-          <select id="rev-type" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+          <select id="rev-type" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             <option value="Cash">Cash Liquidity</option>
             <option value="Visa">Digital / Visa Settlement</option>
           </select>
@@ -57,9 +57,9 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
             showCancelButton: true,
             confirmButtonText: 'Lock Revenue Integrity',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-emerald-500 text-white rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/20',
-                cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest'
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 const dateStr = (document.getElementById('rev-date') as HTMLInputElement).value;
@@ -101,36 +101,36 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
             html: `
         <div class="space-y-4 text-left p-4">
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Forecasted Amount (BHD)</label>
-          <input id="exp-amount" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="0.000">
+          <input id="exp-amount" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="0.000">
           
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Forecast Date</label>
-              <input id="exp-date" type="date" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+              <input id="exp-date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Expected Time</label>
-              <input id="exp-time" type="time" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" value="13:00">
+              <input id="exp-time" type="time" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="13:00">
             </div>
           </div>
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Confidence Rating</label>
-          <select id="exp-conf" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+          <select id="exp-conf" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             <option value="High">High (Historical Consistency)</option>
             <option value="Medium" selected>Medium (Seasonality Applied)</option>
             <option value="Low">Low (Speculative / Promotion)</option>
           </select>
           
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Strategic Justification</label>
-          <input id="exp-reason" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" placeholder="e.g. End of month peak, New marketing drive...">
+          <input id="exp-reason" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="e.g. End of month peak, New marketing drive...">
         </div>
       `,
             showCancelButton: true,
             confirmButtonText: 'Inject Data Point',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-brand rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest shadow-xl shadow-brand/20',
-                cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest'
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 return {
@@ -151,23 +151,22 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 {/* Left Stats Side */}
-                <div className="lg:col-span-4 space-y-6">
-                    <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-brand/20 rounded-full -ml-16 -mb-16 blur-3xl"></div>
-                        <div className="relative z-10">
-                            <div className="flex bg-white/5 p-1.5 rounded-2xl mb-8 w-fit">
+                <div className="lg:col-span-4 space-y-5">
+                    <div className="operational-panel p-5">
+                        <div>
+                            <div className="tab-nav mb-6 w-fit">
                                 <button
                                     onClick={() => setActiveTab('actual')}
-                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'actual' ? 'bg-white text-slate-900 shadow-xl' : 'text-white/40 hover:text-white'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${activeTab === 'actual' ? 'tab-item-brand' : ''}`}
                                 >
                                     Daily Actual
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('expected')}
-                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'expected' ? 'bg-white text-slate-900 shadow-xl' : 'text-white/40 hover:text-white'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${activeTab === 'expected' ? 'tab-item-brand' : ''}`}
                                 >
                                     Future Forecast
                                 </button>
@@ -175,11 +174,11 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
 
                             {activeTab === 'actual' ? (
                                 <div>
-                                    <h3 className="text-2xl font-black tracking-tight mb-2">Liquidity Injection</h3>
-                                    <p className="text-white/40 text-xs font-medium leading-relaxed mb-8">Record actual closing figures to update the opening balance for subsequent forecast cycles.</p>
+                                    <h3 className="text-xl font-black tracking-tight mb-2 text-slate-900">Liquidity Injection</h3>
+                                    <p className="text-slate-500 text-xs font-medium leading-relaxed mb-5">Record actual closing figures to update the opening balance for subsequent forecast cycles.</p>
                                     <button
                                         onClick={handleAddActual}
-                                        className="w-full py-5 bg-emerald-500 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-3"
+                                        className="btn-primary w-full text-xs uppercase tracking-widest"
                                     >
                                         <DollarSign className="w-5 h-5" />
                                         <span>Log Daily Closing</span>
@@ -187,11 +186,11 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                                 </div>
                             ) : (
                                 <div>
-                                    <h3 className="text-2xl font-black tracking-tight mb-2">Target Definition</h3>
-                                    <p className="text-white/40 text-xs font-medium leading-relaxed mb-8">Define speculative or target-based sales figures to visualize potential cash health.</p>
+                                    <h3 className="text-xl font-black tracking-tight mb-2 text-slate-900">Target Definition</h3>
+                                    <p className="text-slate-500 text-xs font-medium leading-relaxed mb-5">Define speculative or target-based sales figures to visualize potential cash health.</p>
                                     <button
                                         onClick={handleAddExpected}
-                                        className="w-full py-5 bg-brand text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-brand/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center space-x-3"
+                                        className="btn-primary w-full text-xs uppercase tracking-widest"
                                     >
                                         <Target className="w-5 h-5" />
                                         <span>Push Sales Target</span>
@@ -201,21 +200,21 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                         </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                    <div className="operational-panel p-5">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 px-2">Liquidity Distribution</h4>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                                 <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-blue-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/10">
+                                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white shadow-sm">
                                         <CreditCard className="w-4 h-4" />
                                     </div>
                                     <span className="text-[10px] font-black text-slate-900 uppercase">Visa Settlements</span>
                                 </div>
                                 <span className="text-xs font-black text-slate-900">42%</span>
                             </div>
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                                 <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/10">
+                                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white shadow-sm">
                                         <DollarSign className="w-4 h-4" />
                                     </div>
                                     <span className="text-[10px] font-black text-slate-900 uppercase">Cash Reserve</span>
@@ -225,17 +224,17 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                         </div>
                     </div>
 
-                    <div className="p-8 bg-gradient-to-br from-brand to-brand/90 rounded-[2.5rem] text-white">
-                        <Zap className="w-6 h-6 mb-4" />
-                        <h4 className="text-sm font-black uppercase tracking-tight mb-1">Precision Audit</h4>
-                        <p className="text-[10px] font-medium text-white/70 leading-relaxed">System variance is currently at 0.4% between expected and actual figures.</p>
+                    <div className="operational-panel-muted p-5 border-brand/20">
+                        <Zap className="w-6 h-6 mb-4 text-brand" />
+                        <h4 className="text-sm font-black uppercase tracking-tight mb-1 text-slate-900">Precision Audit</h4>
+                        <p className="text-[10px] font-medium text-slate-500 leading-relaxed">System variance is currently at 0.4% between expected and actual figures.</p>
                     </div>
                 </div>
 
                 {/* List Side */}
                 <div className="lg:col-span-8">
-                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm min-h-[600px]">
-                        <div className="flex items-center justify-between mb-8">
+                    <div className="operational-panel p-5 md:p-6 min-h-[560px]">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                             <div>
                                 <h3 className="text-xl font-black text-slate-900 tracking-tight">
                                     {activeTab === 'actual' ? 'Actual Revenue Registry' : 'Sales Target Forecast'}
@@ -247,7 +246,7 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                                 <input
                                     type="text"
                                     placeholder="Audit Search..."
-                                    className="pl-12 pr-4 py-3 bg-slate-50 border-0 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:bg-white focus:ring-1 ring-brand/10 transition-all w-48"
+                                    className="pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none focus:bg-white focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all w-full md:w-48"
                                 />
                             </div>
                         </div>

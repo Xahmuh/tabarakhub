@@ -6,14 +6,11 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emailjs/browser": "^4.4.1",
-    "@google/genai": "^1.35.0",
-    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.45.0",
-    "axios": "^1.13.2",
     "canvas-confetti": "^1.9.4",
     "docx": "^9.5.1",
     "exceljs": "^4.4.0",
@@ -26,8 +23,7 @@
     "react-dom": "^19.2.3",
     "react-to-print": "^3.2.0",
     "recharts": "^3.6.0",
-    "sweetalert2": "^11.26.17",
-    "xlsx": "0.18.5"
+    "sweetalert2": "^11.26.17"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",

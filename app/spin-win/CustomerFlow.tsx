@@ -3,6 +3,7 @@ import { toPng } from 'html-to-image';
 import { Spinner } from './Spinner';
 import { spinWinService } from '../../services/spinWin';
 import { SpinPrize, SpinSession, Customer, Branch } from '../../types';
+import { isDemoMode } from '../../config/clientConfig';
 import {
     Phone,
     Mail,
@@ -27,6 +28,21 @@ interface CustomerFlowProps {
     token: string;
 }
 
+const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
+const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
+const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
+
+type SpinFlowDraft = {
+    token: string;
+    phone: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    countryCode: string;
+    hasClickedRate: boolean;
+    savedAt: number;
+};
+
 export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     const [step, setStep] = useState<'validate' | 'info' | 'review' | 'spin' | 'result'>('validate');
     const [session, setSession] = useState<(SpinSession & { branches?: { name?: string, google_maps_link?: string, whatsapp_number?: string } }) | null>(null);
@@ -46,6 +62,60 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     const [winningPrize, setWinningPrize] = useState<SpinPrize | null>(null);
     const [hasClickedRate, setHasClickedRate] = useState(false);
     const [skipRating, setSkipRating] = useState(false);
+
+    // UX recovery only. Server RPCs remain the security boundary for token validity and spin execution.
+    const buildSpinReturnUrl = (ratingOverride = skipRating) => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('token', token);
+        if (ratingOverride) params.set('skipRating', 'true');
+        else params.delete('skipRating');
+        return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    };
+
+    const persistSpinReturn = (ratingOverride = skipRating) => {
+        const url = buildSpinReturnUrl(ratingOverride);
+        window.history.replaceState({ spinToken: token }, '', url);
+        sessionStorage.setItem(SPIN_RETURN_KEY, JSON.stringify({
+            token,
+            url,
+            savedAt: Date.now()
+        }));
+        return url;
+    };
+
+    const saveFlowDraft = (patch: Partial<SpinFlowDraft> = {}) => {
+        const draft: SpinFlowDraft = {
+            token,
+            phone,
+            firstName,
+            lastName,
+            email,
+            countryCode,
+            hasClickedRate,
+            savedAt: Date.now(),
+            ...patch
+        };
+        sessionStorage.setItem(SPIN_DRAFT_KEY, JSON.stringify(draft));
+    };
+
+    const readFlowDraft = (): SpinFlowDraft | null => {
+        try {
+            const draft = JSON.parse(sessionStorage.getItem(SPIN_DRAFT_KEY) || 'null') as SpinFlowDraft | null;
+            if (!draft?.token || draft.token !== token || Date.now() - draft.savedAt > SPIN_RETURN_TTL_MS) {
+                sessionStorage.removeItem(SPIN_DRAFT_KEY);
+                return null;
+            }
+            return draft;
+        } catch {
+            sessionStorage.removeItem(SPIN_DRAFT_KEY);
+            return null;
+        }
+    };
+
+    const clearSpinRecovery = () => {
+        sessionStorage.removeItem(SPIN_RETURN_KEY);
+        sessionStorage.removeItem(SPIN_DRAFT_KEY);
+    };
 
     const countryCodes = [
         { code: '+973', country: 'BH' },
@@ -73,10 +143,24 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                     const urlParams = new URLSearchParams(window.location.search);
                     const shouldSkipRating = urlParams.get('skipRating') === 'true';
                     setSkipRating(shouldSkipRating);
+                    persistSpinReturn(shouldSkipRating);
+
+                    const savedDraft = readFlowDraft();
+                    if (savedDraft) {
+                        setPhone(savedDraft.phone);
+                        setFirstName(savedDraft.firstName);
+                        setLastName(savedDraft.lastName);
+                        setEmail(savedDraft.email);
+                        setCountryCode(savedDraft.countryCode);
+                        setHasClickedRate(savedDraft.hasClickedRate);
+                        setStep(savedDraft.hasClickedRate && !shouldSkipRating ? 'review' : 'info');
+                        return;
+                    }
 
                     setStep('info');
                 } else {
                     const reason = result?.error || 'INVALID_OR_NOT_FOUND';
+                    clearSpinRecovery();
                     setError(`Security Check Failed: ${reason}. Please ask the pharmacist for a NEW QR code.`);
                 }
             } catch (err: any) {
@@ -87,8 +171,9 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     }, [token]);
 
     useEffect(() => {
-        const newUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, '', newUrl);
+        if (step !== 'result') {
+            persistSpinReturn();
+        }
 
         switch (step) {
             case 'info': document.title = "Register Entry"; break;
@@ -97,9 +182,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
             case 'result': document.title = "You Won!"; break;
             default: document.title = "Tabarak Reward Hub";
         }
-    }, [step]);
-
-    const [ip, setIp] = useState('');
+    }, [step, skipRating, token]);
 
     const handleInfoSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -108,25 +191,19 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         const fullPhone = `${countryCode}${phone}`;
 
         try {
-            let clientIp = '';
-            try {
-                const ipRes = await fetch('https://api.ipify.org?format=json');
-                const ipData = await ipRes.json();
-                clientIp = ipData.ip;
-                setIp(clientIp);
-            } catch (e) {
-                console.warn('Failed to fetch IP', e);
-            }
-
             const cust = await spinWinService.customers.upsert(fullPhone, email, firstName, lastName);
             setCustomer(cust);
+            saveFlowDraft({ hasClickedRate: false, savedAt: Date.now() });
 
-            const dailyCount = await spinWinService.spins.getDailyCount(clientIp || cust.id, clientIp ? 'ip' : 'customer');
+            if (isDemoMode) {
+                const dailyCount = await spinWinService.spins.getDailyCount(cust.id, 'customer');
 
-            if (dailyCount >= 2) {
-                setError(`Daily limit reached for this device/connection (2 spins). fraud protection active.`);
-                return;
+                if (dailyCount >= 2) {
+                    setError(`Daily limit reached for this demo customer (2 spins).`);
+                    return;
+                }
             }
+            // Production fraud/rate checks are enforced server-side inside the spin RPC.
 
             if (session) {
                 if (skipRating) {
@@ -159,14 +236,19 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
 
     const handleReviewClick = async () => {
         if (!customer || !session) return;
+        persistSpinReturn();
+        setHasClickedRate(true);
+        saveFlowDraft({ hasClickedRate: true, savedAt: Date.now() });
         spinWinService.reviews.log({
             customerId: customer.id,
             branchId: session.branchId,
             reviewClicked: true
         });
         const reviewUrl = session.branches?.google_maps_link || 'https://search.google.com/local/writereview?placeid=ChIJo_Y029TfPTUREonl7Y1yN5A';
-        window.open(reviewUrl, '_blank');
-        setHasClickedRate(true);
+        const opened = window.open(reviewUrl, '_blank');
+        if (!opened) {
+            window.location.assign(reviewUrl);
+        }
     };
 
     const startSpin = async () => {
@@ -180,8 +262,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                 phone: `${countryCode}${phone}`,
                 firstName,
                 lastName,
-                email,
-                ip: ip
+                email
             });
 
             setWinningPrize(result.prize);
@@ -190,7 +271,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         } catch (err: any) {
             console.error('Spin execution failed:', err);
             const msg = err.message || JSON.stringify(err);
-            if (msg.includes('TOKEN_INVALID_OR_USED')) setError('This session is no longer valid.');
+            const tokenFailure = msg.includes('TOKEN_INVALID_OR_USED') || msg.includes('TOKEN_EXPIRED') || msg.includes('TOKEN_NOT_FOUND');
+            if (tokenFailure) {
+                clearSpinRecovery();
+                setError('This session is no longer valid. Please ask the pharmacist for a new QR code.');
+            }
             else if (msg.includes('NO_PRIZES_CONFIGURED')) setError('No prizes are available right now.');
             else setError(`Server Error: ${msg}`);
         } finally {
@@ -202,6 +287,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         setIsSpinning(false);
         setWonPrize(winningPrize);
         setStep('result');
+        clearSpinRecovery();
 
         const newUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, '', newUrl);
@@ -287,7 +373,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                     </div>
                     <h2 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Oops!</h2>
                     <p className="text-slate-500 text-sm leading-relaxed mb-8">{error}</p>
-                    <button onClick={() => window.location.reload()} className="w-full bg-slate-900 hover:bg-red-700 text-white py-4 rounded-2xl font-bold text-sm transition-colors">Try Again</button>
+                    <button onClick={() => { clearSpinRecovery(); window.location.reload(); }} className="w-full bg-slate-900 hover:bg-red-700 text-white py-4 rounded-2xl font-bold text-sm transition-colors">Try Again</button>
                 </div>
             </div>
         );

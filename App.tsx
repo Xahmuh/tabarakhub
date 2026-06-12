@@ -2,14 +2,15 @@
 import React, { useState, useEffect, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Branch, Pharmacist, AuthState } from './types';
+import { Pharmacist, AuthState, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
-import { spinWinService } from './services/spinWin';
+import { buildPermissionChecker } from './lib/access';
+import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, Footer, POSGuidelineModal,
-  CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer,
+  CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
   FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage
 } from './app/index';
 
@@ -19,34 +20,140 @@ import {
   LayoutDashboard,
   ShoppingCart,
   LogOut,
-  ChevronRight,
-  Activity,
-  Globe,
   ShieldCheck,
-  Landmark,
   RefreshCcw,
   QrCode,
-  FileText,
   Loader2,
-  Users,
-  Wallet,
-  BookOpen,
   Settings
 } from 'lucide-react';
 
+type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer';
+const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
+const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
+const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
+
+const getRecoverableSpinToken = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(SPIN_RETURN_KEY) || 'null') as { token?: string } | null;
+        if (saved?.token && saved.token !== token) {
+          sessionStorage.removeItem(SPIN_RETURN_KEY);
+          sessionStorage.removeItem(SPIN_DRAFT_KEY);
+        }
+      } catch {
+        sessionStorage.removeItem(SPIN_RETURN_KEY);
+        sessionStorage.removeItem(SPIN_DRAFT_KEY);
+      }
+      return token;
+    }
+
+    const saved = JSON.parse(sessionStorage.getItem(SPIN_RETURN_KEY) || 'null') as { token?: string; url?: string; savedAt?: number } | null;
+    if (!saved?.token || !saved.savedAt || Date.now() - saved.savedAt > SPIN_RETURN_TTL_MS) {
+      sessionStorage.removeItem(SPIN_RETURN_KEY);
+      sessionStorage.removeItem(SPIN_DRAFT_KEY);
+      return null;
+    }
+
+    if (saved.url && window.location.href !== saved.url) {
+      window.history.replaceState({ spinToken: saved.token }, '', saved.url);
+    }
+    return saved.token;
+  } catch {
+    sessionStorage.removeItem(SPIN_RETURN_KEY);
+    sessionStorage.removeItem(SPIN_DRAFT_KEY);
+    return null;
+  }
+};
+
+const canControlMaintenance = (role?: string | null) =>
+  role === 'admin' || role === 'manager' || role === 'owner';
+
+const hexToRgbParts = (value: string, fallback: string) => {
+  const normalized = value.trim().replace('#', '');
+  const hex = normalized.length === 3
+    ? normalized.split('').map(char => char + char).join('')
+    : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return fallback;
+
+  const red = parseInt(hex.slice(0, 2), 16);
+  const green = parseInt(hex.slice(2, 4), 16);
+  const blue = parseInt(hex.slice(4, 6), 16);
+  return `${red} ${green} ${blue}`;
+};
+
 const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ user: null, pharmacist: null });
-  const [activeTab, setActiveTab] = useState<'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | null>(null);
+  const [activeTab, setActiveTab] = useState<AppTab | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
+  const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(true);
+  const [isMaintenanceAdminLoginOpen, setIsMaintenanceAdminLoginOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [showPOSGuideline, setShowPOSGuideline] = useState(false);
   const [showPharmacistSelector, setShowPharmacistSelector] = useState(false);
+  const [customerFlowError, setCustomerFlowError] = useState<string | null>(null);
   const [isCustomerFlow] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('token') || params.has('node') || params.has('branch');
   });
 
-  const handleTabChange = (tab: 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | null) => {
+  const isDashboardEnabledForRole = (role?: string) => {
+    if (!isModuleEnabled('reports')) return false;
+    if (role === 'warehouse') return isModuleEnabled('adminDashboard');
+    if (role === 'manager' || role === 'owner' || role === 'supervisor') return isModuleEnabled('managerDashboard');
+    return isModuleEnabled('branchDashboard');
+  };
+
+  const canUseFeature = (feature: string, minimum: 'read' | 'edit' = 'read', role = authState.user?.role) =>
+    buildPermissionChecker(role, authState.permissions, authState.rolePermissions)(feature, minimum);
+
+  const isTabEnabled = (tab: AppTab | null, role = authState.user?.role) => {
+    if (!tab || tab === 'selector') return true;
+    switch (tab) {
+      case 'command-center':
+        return canUseFeature('command_center', 'read', role);
+      case 'pos':
+        return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role) || canUseFeature('shortages', 'edit', role));
+      case 'dashboard':
+        return isDashboardEnabledForRole(role) && (canUseFeature('lost_sales', 'read', role) || canUseFeature('shortages', 'read', role));
+      case 'spin-win':
+        return isModuleEnabled('spinWin') && canUseFeature('spin_win', 'read', role);
+      case 'hr':
+      case 'hr-manager':
+        return isModuleEnabled('hr') && canUseFeature('hr_requests', 'read', role);
+      case 'workforce':
+        return isModuleEnabled('hr') && isModuleEnabled('workforce') && canUseFeature('workforce', 'read', role);
+      case 'cash-flow':
+        return isModuleEnabled('cashFlow') && canUseFeature('cash_flow', 'read', role);
+      case 'cash-tracker':
+        return isModuleEnabled('cashTracker') && canUseFeature('cash_tracker', 'read', role);
+      case 'corporate-codex':
+        return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role);
+      case 'settings':
+        return isModuleEnabled('settings') && role === 'manager' && canUseFeature('settings', 'edit', role);
+      case 'feedback-form':
+        return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role);
+      case 'feedback-admin':
+        return isModuleEnabled('qualityFeedback') && (role === 'manager' || role === 'owner') && canUseFeature('quality_feedback', 'read', role);
+      case 'employee-contributions':
+        return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role);
+      case 'block-analyzer':
+        return (role === 'manager' || role === 'owner') && canUseFeature('block_analyzer', 'read', role);
+      default:
+        return true;
+    }
+  };
+
+  const handleTabChange = (tab: AppTab | null) => {
+    if (!isTabEnabled(tab)) {
+      setActiveTab('selector');
+      sessionStorage.setItem('tabarak_active_tab', 'selector');
+      return;
+    }
     if (tab === 'pos' && !authState.pharmacist) {
       setShowPharmacistSelector(true);
       return;
@@ -64,17 +171,46 @@ const App: React.FC = () => {
     });
   };
 
-  const [customerToken, setCustomerToken] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('token');
-  });
+  const [customerToken, setCustomerToken] = useState<string | null>(() => getRecoverableSpinToken());
   const [isBhAnalyzerPage] = useState(() => {
     const cleanPath = window.location.pathname.replace(/\/+$/, '') || '/';
     const params = new URLSearchParams(window.location.search);
     return cleanPath.toLowerCase() === '/bh_analyzer' || params.get('bh_analyzer') === '1';
   });
 
-  // Handle Static QR Codes (e.g. ?node=BH-01 or ?branch=BH-01)
+  useEffect(() => {
+    document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
+    const root = document.documentElement;
+    root.style.setProperty('--client-primary-color', clientConfig.primaryColor);
+    root.style.setProperty('--client-primary-hover-color', clientConfig.primaryHoverColor);
+    root.style.setProperty('--client-primary-dark-color', clientConfig.primaryDarkColor);
+    root.style.setProperty('--client-primary-muted-color', clientConfig.primaryMutedColor);
+    root.style.setProperty('--client-accent-color', clientConfig.accentColor);
+    root.style.setProperty('--client-primary-rgb', hexToRgbParts(clientConfig.primaryColor, '185 28 28'));
+    root.style.setProperty('--client-primary-hover-rgb', hexToRgbParts(clientConfig.primaryHoverColor, '153 27 27'));
+    root.style.setProperty('--client-primary-dark-rgb', hexToRgbParts(clientConfig.primaryDarkColor, '127 29 29'));
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMaintenanceSettings = async () => {
+      try {
+        const settings = await supabase.systemSettings.getMaintenanceSettings();
+        if (isMounted) setMaintenanceSettings(settings);
+      } finally {
+        if (isMounted) setIsMaintenanceLoading(false);
+      }
+    };
+
+    loadMaintenanceSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Legacy static branch QR links cannot safely mint public tokens in the browser.
   useEffect(() => {
     if (isBhAnalyzerPage) return;
 
@@ -83,21 +219,8 @@ const App: React.FC = () => {
       const branchCode = params.get('node') || params.get('branch');
 
       if (branchCode && !customerToken) {
-        setIsInitializing(true);
-        try {
-          const branch = await supabase.branches.findByCode(branchCode);
-          if (branch) {
-            // Generate a multi-use token for this branch
-            const session = await spinWinService.sessions.generate(branch.id, true);
-            if (session?.token) {
-              setCustomerToken(session.token);
-            }
-          }
-        } catch (err) {
-          console.error("Static token error:", err);
-        } finally {
-          setIsInitializing(false);
-        }
+        setCustomerFlowError('This QR link format is no longer supported. Please ask the branch team for a fresh secure QR code.');
+        setIsInitializing(false);
       }
     };
     handleStaticToken();
@@ -112,26 +235,28 @@ const App: React.FC = () => {
     const init = async () => {
       try {
         const { data } = await supabase.auth.getSession();
-        const session = data?.session;
-        if (session) {
-          let currentSession = session as any;
+        const session = data?.session as AuthState | null;
+        if (session?.user) {
+          let currentSession: AuthState = session;
           if (currentSession.user) {
             try {
-              const perms = await supabase.permissions.listForBranch(currentSession.user.id);
+              const [perms, rolePerms] = await Promise.all([
+                supabase.permissions.listForBranch(currentSession.user.id),
+                supabase.permissions.listRoleDefaults(currentSession.user.role)
+              ]);
               currentSession.permissions = perms;
-              supabase.auth.setSession(currentSession);
+              currentSession.rolePermissions = rolePerms;
             } catch (pErr) {
               console.error("Init permission fetch error:", pErr);
               // Fallback: ensure permissions is at least an empty array if undefined
               if (!currentSession.permissions) currentSession.permissions = [];
+              if (!currentSession.rolePermissions) currentSession.rolePermissions = [];
             }
           }
           setAuthState(currentSession);
-          const savedTab = sessionStorage.getItem('tabarak_active_tab');
-          if (savedTab) {
-            setActiveTab(savedTab as any);
-          } else if (currentSession.user?.role === 'admin' || currentSession.user?.role === 'manager') {
-            setActiveTab('dashboard');
+          const savedTab = sessionStorage.getItem('tabarak_active_tab') as AppTab | null;
+          if (savedTab && isTabEnabled(savedTab, currentSession.user?.role)) {
+            setActiveTab(savedTab);
           } else {
             setActiveTab('selector');
           }
@@ -145,20 +270,31 @@ const App: React.FC = () => {
     init();
   }, [isBhAnalyzerPage]);
 
-  const handleLogin = async (branch: Branch) => {
+  const handleLogin = async (identifier: string, password: string) => {
     setIsInitializing(true);
     try {
-      const permissions = await supabase.permissions.listForBranch(branch.id);
-      const newState = { user: branch, pharmacist: null, permissions };
+      const signedInState = await supabase.auth.signInWithPassword(identifier, password);
+      const branch = signedInState.user;
+      if (!branch) {
+        throw new Error('Authenticated account is not linked to a branch profile.');
+      }
+      const [permissions, rolePermissions] = await Promise.all([
+        supabase.permissions.listForBranch(branch.id),
+        supabase.permissions.listRoleDefaults(branch.role)
+      ]);
+      const newState = { user: branch, pharmacist: null, permissions, rolePermissions };
       setAuthState(newState);
-      supabase.auth.setSession(newState);
-      handleTabChange('selector');
+      setIsMaintenanceAdminLoginOpen(false);
+
+      if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(branch.role) && isModuleEnabled('settings')) {
+        sessionStorage.setItem('tabarak_active_tab', 'settings');
+        startTransition(() => setActiveTab('settings'));
+      } else {
+        handleTabChange('selector');
+      }
     } catch (err) {
       console.error("Login permission error:", err);
-      const newState = { user: branch, pharmacist: null, permissions: [] };
-      setAuthState(newState);
-      supabase.auth.setSession(newState);
-      handleTabChange('selector');
+      throw err;
     } finally {
       setIsInitializing(false);
     }
@@ -167,7 +303,6 @@ const App: React.FC = () => {
   const handleSelectPharmacist = (pharmacist: Pharmacist) => {
     const newState = { ...authState, pharmacist };
     setAuthState(newState);
-    supabase.auth.setSession(newState);
     const savedTab = sessionStorage.getItem('tabarak_active_tab');
     if (savedTab && savedTab !== 'selector') {
       startTransition(() => setActiveTab(savedTab as any));
@@ -176,21 +311,71 @@ const App: React.FC = () => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     sessionStorage.removeItem('tabarak_active_tab');
-    supabase.auth.signOut();
-    window.location.reload();
+    await supabase.auth.signOut();
+    setAuthState({ user: null, pharmacist: null, permissions: [] });
+    setActiveTab(null);
+    setIsMaintenanceAdminLoginOpen(false);
   };
 
   const handleBackToPharmacist = () => {
     const newState = { ...authState, pharmacist: null };
     setAuthState(newState);
-    supabase.auth.setSession(newState);
     setShowPharmacistSelector(true);
   };
 
+  const isMaintenanceEnabled = maintenanceSettings?.isMaintenanceModeEnabled === true;
+  const canBypassMaintenance = canControlMaintenance(authState.user?.role);
+  const isMaintenanceAdminLoginAllowed = isMaintenanceEnabled && isMaintenanceAdminLoginOpen && !authState.user;
+  const shouldRenderMaintenance = isMaintenanceEnabled && !canBypassMaintenance && !isMaintenanceAdminLoginAllowed;
+
+  if (isInitializing || isMaintenanceLoading) {
+    const isRewardFlowLoading = isCustomerFlow && !isMaintenanceLoading;
+
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-10 text-center space-y-8">
+        <div className="relative">
+          <div className="w-16 h-16 border-[3px] border-slate-100 border-t-brand rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            {isRewardFlowLoading ? (
+              <QrCode className="w-6 h-6 text-brand" />
+            ) : (
+              <div className="w-8 h-8 bg-brand rounded-lg shadow-lg shadow-brand/20 overflow-hidden">
+                <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+            {isRewardFlowLoading ? 'Reward Hub' : clientConfig.clientName}
+          </h3>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-[0.2em]">
+            {isRewardFlowLoading ? 'Verifying Security Token...' : 'Establishing connection...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldRenderMaintenance) {
+    return (
+      <MaintenancePage
+        settings={maintenanceSettings}
+        onAdminAccess={!authState.user ? () => setIsMaintenanceAdminLoginOpen(true) : undefined}
+        onSignOut={authState.user ? logout : undefined}
+        userLabel={authState.user?.code || authState.user?.name}
+      />
+    );
+  }
+
+  if (isMaintenanceAdminLoginAllowed) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   if (isBhAnalyzerPage) {
-    return <BlockCoverageAnalyzer />;
+    return <BlockCoverageAnalyzer onBack={() => window.location.assign('/')} />;
   }
 
   if (customerToken) {
@@ -201,20 +386,12 @@ const App: React.FC = () => {
     );
   }
 
-  // If we are definitely in customer flow but waiting for token exchange (static QR)
-  if (isCustomerFlow && isInitializing) {
+  if (isCustomerFlow && customerFlowError) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-10 text-center space-y-8">
-        <div className="relative">
-          <div className="w-16 h-16 border-[3px] border-slate-100 border-t-brand rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <QrCode className="w-6 h-6 text-brand" />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Reward Hub</h3>
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-[0.2em]">Verifying Security Token...</p>
-        </div>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-10 text-center space-y-4">
+        <ShieldCheck className="w-10 h-10 text-brand" />
+        <h1 className="text-xl font-black text-slate-900">Secure QR Required</h1>
+        <p className="max-w-sm text-sm font-medium text-slate-500">{customerFlowError}</p>
       </div>
     );
   }
@@ -229,50 +406,27 @@ const App: React.FC = () => {
     );
   }
 
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center space-y-8">
-        <div className="relative">
-          <div className="w-16 h-16 border-[3px] border-slate-100 border-t-brand rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-8 h-8 bg-brand rounded-lg shadow-lg shadow-brand/20 overflow-hidden">
-              <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
-            </div>
-          </div>
-        </div>
-        <div className="text-center space-y-2">
-          <p className="text-sm font-black text-slate-900 uppercase tracking-[0.3em]">Tabarak</p>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">Establishing connection...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!authState.user) {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  const isManager = authState.user?.role === 'manager' || authState.user?.role === 'admin';
-  const isAccounts = authState.user?.role === 'accounts';
-  const isAdmin01 = authState.user?.code === 'ADMIN01';
+  const isManager = authState.user?.role === 'manager';
+  const isWarehouse = authState.user?.role === 'warehouse';
 
-  const checkPermission = (feature: string) => {
-    // Admins and Managers have full access by default, but we still check for explicit denies
-    if (!authState.permissions) return true;
-    const perm = authState.permissions.find(p => p.featureName === feature);
-    if (!perm) return true; // Default to allow if no specific rule
-    return perm.accessLevel !== 'none';
-  };
+  const checkPermission = buildPermissionChecker(
+    authState.user?.role,
+    authState.permissions,
+    authState.rolePermissions
+  );
 
   if (showPharmacistSelector) {
     return (
       <SelectPharmacistPage
         branch={authState.user!}
-        backLabel="Back to Suite"
+        backLabel="Back to Modules"
         onSelect={(pharmacist) => {
           const newState = { ...authState, pharmacist };
           setAuthState(newState);
-          supabase.auth.setSession(newState);
           setShowPharmacistSelector(false);
           setShowPOSGuideline(true);
           sessionStorage.setItem('tabarak_active_tab', 'pos');
@@ -288,8 +442,7 @@ const App: React.FC = () => {
       <SuitePage
         authState={authState}
         isManager={isManager}
-        isAdmin01={isAdmin01}
-        isAccounts={isAccounts}
+        isWarehouse={isWarehouse}
         isPending={isPending}
         checkPermission={checkPermission}
         handleTabChange={handleTabChange}
@@ -300,17 +453,20 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
-      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-[100] h-[72px] shadow-sm print:hidden">
-        <div className="max-w-[1400px] mx-auto px-6 md:px-10 h-full flex items-center justify-between">
-          <div className="flex-1 flex items-center overflow-hidden">
+      <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200/80 sticky top-0 z-[100] min-h-[72px] shadow-sm print:hidden">
+        <div className="max-w-[1400px] mx-auto px-5 md:px-8 min-h-[72px] py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center overflow-hidden">
             <div className="flex items-center space-x-4 cursor-pointer group shrink-0" onClick={() => handleTabChange('selector')}>
-              <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center shadow-md shadow-brand/20 overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+              <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center shadow-sm overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
               </div>
               <div>
-                <h1 className="text-lg font-black text-slate-900 tracking-tighter leading-none">Tabarak<span className="text-brand">.</span></h1>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 flex items-center">
-                  <span className="w-1 h-1 bg-emerald-500 rounded-full mr-1.5 animate-pulse"></span>
+                <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">{clientConfig.appName}<span className="text-brand">.</span></h1>
+                {clientConfig.environmentLabel && (
+                  <span className="ml-2 text-[10px] font-bold text-slate-400">{clientConfig.environmentLabel}</span>
+                )}
+                <p className="text-[11px] font-bold text-slate-400 mt-0.5 flex items-center">
+                  <span className="w-1 h-1 bg-emerald-500 rounded-full mr-1.5"></span>
                   {authState.user?.code}
                 </p>
               </div>
@@ -318,29 +474,31 @@ const App: React.FC = () => {
           </div>
 
           {/* Centered Switcher */}
-          {(activeTab === 'pos' || activeTab === 'dashboard' || activeTab === 'settings') && !isAdmin01 && (
-            <div className="flex-1 flex justify-center">
+          {(activeTab === 'pos' || activeTab === 'dashboard' || activeTab === 'settings') && !isWarehouse && (
+            <div className="order-3 flex w-full justify-center md:order-none md:w-auto">
               <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
-                {(checkPermission('lost_sales') || checkPermission('shortages')) && (
+                {isModuleEnabled('sales') && (checkPermission('lost_sales') || checkPermission('shortages')) && (
                   <button
                     onClick={() => handleTabChange('pos')}
-                    className={`px-5 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center space-x-2 ${activeTab === 'pos' ? 'bg-white text-brand shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'pos' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     <ShoppingCart className="w-3.5 h-3.5" />
                     <span>Items Entry</span>
                   </button>
                 )}
-                <button
-                  onClick={() => handleTabChange('dashboard')}
-                  className={`px-5 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center space-x-2 ${activeTab === 'dashboard' ? 'bg-white text-brand shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5" />
-                  <span>Dashboard</span>
-                </button>
-                {authState.user?.role === 'manager' && (
+                {isTabEnabled('dashboard') && (
+                  <button
+                    onClick={() => handleTabChange('dashboard')}
+                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'dashboard' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    <span>Dashboard</span>
+                  </button>
+                )}
+                {authState.user?.role === 'manager' && isModuleEnabled('settings') && checkPermission('settings', 'edit') && (
                   <button
                     onClick={() => handleTabChange('settings')}
-                    className={`px-5 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 flex items-center space-x-2 ${activeTab === 'settings' ? 'bg-white text-brand shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 rounded-md text-xs font-bold transition-all duration-200 flex items-center space-x-2 ${activeTab === 'settings' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     <Settings className="w-3.5 h-3.5" />
                     <span>Settings</span>
@@ -350,7 +508,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="flex-1 flex items-center justify-end space-x-2">
+          <div className="flex items-center justify-end space-x-2">
             <button
               onClick={() => window.location.reload()}
               className="p-2.5 text-slate-300 hover:text-brand hover:bg-brand/5 rounded-lg transition-all active:scale-90 group"
@@ -369,8 +527,25 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 md:px-10 py-8">
-        {activeTab === 'pos' ? (
+      <main className="flex-1 w-full max-w-[1400px] mx-auto px-5 md:px-8 py-6">
+        {activeTab === 'command-center' ? (
+          <div className="space-y-6 page-enter">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Operations module</p>
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Daily Command Center</h2>
+                <p className="mt-1 text-sm font-medium text-slate-500">Risks, saved tasks, branch health, and pending work in one control view.</p>
+              </div>
+              <button
+                onClick={() => handleTabChange('selector')}
+                className="btn-secondary"
+              >
+                Back to Modules
+              </button>
+            </div>
+            <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
+          </div>
+        ) : activeTab === 'pos' ? (
           <POSPage branch={authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
         ) : activeTab === 'spin-win' ? (
           <SpinWinHub
@@ -387,8 +562,8 @@ const App: React.FC = () => {
                 <h2 className="text-3xl font-black text-slate-900 tracking-tighter">HR Admin Portal</h2>
                 <p className="text-slate-500 font-medium">Manage employee requests and approvals</p>
               </div>
-              <button onClick={() => handleTabChange('selector')} className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50">
-                Back to Suite
+              <button onClick={() => handleTabChange('selector')} className="btn-secondary">
+                Back to Modules
               </button>
             </div>
             <HRRequestsSection />
@@ -430,6 +605,8 @@ const App: React.FC = () => {
             branchCode={authState.user?.code}
             onBack={() => handleTabChange('selector')} 
           />
+        ) : activeTab === 'block-analyzer' ? (
+          <BlockCoverageAnalyzer onBack={() => handleTabChange('selector')} />
         ) : (
 
           <DashboardPage
@@ -441,7 +618,7 @@ const App: React.FC = () => {
       </main>
 
       <div className="print:hidden">
-        <Footer onNavigate={handleTabChange} permissions={authState.permissions} user={authState.user} />
+        <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} />
       </div>
 
       <POSGuidelineModal
@@ -453,5 +630,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-

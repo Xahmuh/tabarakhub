@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { Product } from '../../types';
+import { BAHRAIN_VAT_RATE, getPriceIncludingVat } from '../../utils/vat';
 
 interface AdminProductModalProps {
     isOpen: boolean;
@@ -15,6 +16,8 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
         category: '',
         agent: '',
         defaultPrice: 0,
+        vatEnabled: false,
+        vatRate: BAHRAIN_VAT_RATE,
         internalCode: '',
         isManual: true
     });
@@ -34,6 +37,8 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
                     category: '',
                     agent: '',
                     defaultPrice: 0,
+                    vatEnabled: false,
+                    vatRate: BAHRAIN_VAT_RATE,
                     internalCode: '',
                     isManual: true
                 });
@@ -101,7 +106,7 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Default Price</label>
+                                <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">Price Ex. VAT</label>
                                 <div className="relative">
                                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">BHD</span>
                                     <input
@@ -113,6 +118,9 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
                                         className="w-full pl-16 p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none transition-all font-mono"
                                     />
                                 </div>
+                                <p className="text-xs text-slate-400">
+                                    Inc. VAT: {getPriceIncludingVat(Number(formData.defaultPrice || 0), !!formData.vatEnabled, formData.vatRate).toFixed(3)} BHD
+                                </p>
                             </div>
 
                             <div className="col-span-1 md:col-span-2 space-y-2">
@@ -147,6 +155,28 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
                                     className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none transition-all uppercase"
                                     placeholder="e.g. INTERCOL"
                                 />
+                            </div>
+
+                            <div className="col-span-1 md:col-span-2 space-y-2">
+                                <label className="text-sm font-bold text-slate-700 uppercase tracking-wider">VAT</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, vatEnabled: true, vatRate: BAHRAIN_VAT_RATE }))}
+                                        className={`p-4 rounded-xl border-2 text-left transition-all ${formData.vatEnabled ? 'border-red-700 bg-red-50 text-red-800' : 'border-slate-200 bg-white text-slate-600 hover:border-red-200'}`}
+                                    >
+                                        <span className="block text-sm font-black uppercase">YES</span>
+                                        <span className="text-xs font-semibold">Apply Bahrain VAT ({Math.round(BAHRAIN_VAT_RATE * 100)}%)</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, vatEnabled: false, vatRate: BAHRAIN_VAT_RATE }))}
+                                        className={`p-4 rounded-xl border-2 text-left transition-all ${!formData.vatEnabled ? 'border-slate-900 bg-slate-50 text-slate-900' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                                    >
+                                        <span className="block text-sm font-black uppercase">NO</span>
+                                        <span className="text-xs font-semibold">0% VAT for this item</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 

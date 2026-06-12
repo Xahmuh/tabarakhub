@@ -157,8 +157,8 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                 showCancelButton: true,
                 confirmButtonText: 'Confirm Delay',
                 customClass: {
-                    popup: 'rounded-[2.5rem]',
-                    confirmButton: 'bg-brand text-white rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest shadow-xl shadow-brand/20'
+                    popup: 'rounded-lg',
+                    confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm'
                 }
             });
 
@@ -179,7 +179,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Execute Move',
-                customClass: { popup: 'rounded-[2.5rem]', confirmButton: 'bg-blue-500 text-white rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20' }
+                customClass: { popup: 'rounded-lg', confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm' }
             });
 
             if (result.isConfirmed) {
@@ -198,7 +198,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                 inputValue: new Date(new Date(date).getTime() + 86400000).toISOString().split('T')[0],
                 showCancelButton: true,
                 confirmButtonText: 'Confirm Postpone',
-                customClass: { popup: 'rounded-[2.5rem]', confirmButton: 'bg-amber-500 text-white rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/20' }
+                customClass: { popup: 'rounded-lg', confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm' }
             });
 
             if (newDate) {
@@ -216,13 +216,13 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
         return (
             <div className="flex flex-col items-center justify-center h-[600px] space-y-4">
                 <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Synchronizing Financial Core...</p>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading financial alerts...</p>
             </div>
         );
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
+        <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                 <div>
@@ -230,14 +230,14 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                         <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">Global Module</span>
                         <span className="px-3 py-1 bg-brand/10 text-brand rounded-lg text-[10px] font-black uppercase tracking-widest">Manager Control</span>
                     </div>
-                    <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Cash Flow <span className="text-brand">Planner & Monitor</span></h2>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Cash Flow <span className="text-brand">Planner & Monitor</span></h2>
                     <p className="text-slate-500 font-medium">Predictive liquidity management and risk auditing</p>
                 </div>
 
                 <div className="flex items-center space-x-4">
                     <button
                         onClick={onBack}
-                        className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 flex items-center space-x-2"
+                        className="btn-secondary"
                     >
                         <span>Exit Module</span>
                     </button>
@@ -245,24 +245,24 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
             </div>
 
             {/* Sub Navigation */}
-            <div className="flex items-center space-x-2 bg-slate-100 p-1.5 rounded-2xl w-fit overflow-x-auto">
+            <div className="tab-nav w-full overflow-x-auto md:w-fit">
                 {[
                     { id: 'dashboard', label: 'Overview', icon: Activity },
                     { id: 'suppliers', label: 'Suppliers & Cheques', icon: CreditCard },
                     { id: 'expenses', label: 'OpEx Planner', icon: TrendingDown },
                     { id: 'revenues', label: 'Revenue Entry', icon: TrendingUp },
                     { id: 'history', label: 'Audit Log', icon: History }
-                ].filter(tab => userRole === 'manager' || userRole === 'admin').map(tab => (
+                ].filter(tab => userRole === 'manager' || userRole === 'owner').map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveSubTab(tab.id as any)}
-                        className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeSubTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                        className={`tab-item flex items-center space-x-2 whitespace-nowrap text-[10px] uppercase tracking-widest ${activeSubTab === tab.id ? 'tab-item-brand' : ''}`}
                     >
                         <tab.icon className="w-4 h-4" />
                         <span>{tab.label}</span>
                     </button>
                 ))}
-                {(userRole === 'manager' || userRole === 'admin') && (
+                {userRole === 'manager' && (
                     <button
                         onClick={() => {
                             Swal.fire({
@@ -270,13 +270,13 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                                 html: `
                 <div class="space-y-4 text-left p-4">
                   <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Safe Threshold (BHD)</label>
-                  <input id="safe-threshold" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4" value="${settings.safeThreshold}">
+                  <input id="safe-threshold" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="${settings.safeThreshold}">
                   
                   <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Opening Balance (BHD)</label>
-                  <input id="initial-balance" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4" value="${settings.initialBalance}">
+                  <input id="initial-balance" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" value="${settings.initialBalance}">
                   
                   <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Forecast Horizon</label>
-                  <select id="forecast-horizon" class="w-full p-4 bg-slate-50 border-0 rounded-2xl">
+                  <select id="forecast-horizon" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
                     <option value="30" ${settings.forecastHorizon === 30 ? 'selected' : ''}>30 Days</option>
                     <option value="60" ${settings.forecastHorizon === 60 ? 'selected' : ''}>60 Days</option>
                     <option value="90" ${settings.forecastHorizon === 90 ? 'selected' : ''}>90 Days</option>
@@ -286,9 +286,9 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                                 showCancelButton: true,
                                 confirmButtonText: 'Save Configuration',
                                 customClass: {
-                                    popup: 'rounded-[2.5rem]',
-                                    confirmButton: 'bg-brand rounded-2xl px-8 py-4 font-black text-xs uppercase tracking-widest',
-                                    cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-8 py-4 font-black text-xs uppercase tracking-widest'
+                                    popup: 'rounded-lg',
+                                    confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                                    cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
                                 }
                             }).then(async (result) => {
                                 if (result.isConfirmed) {
@@ -303,7 +303,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                                 }
                             });
                         }}
-                        className="p-3 text-slate-400 hover:text-brand hover:bg-white rounded-xl transition-all ml-2"
+                        className="btn-secondary h-9 w-9 !p-0 ml-1"
                     >
                         <Settings className="w-4 h-4" />
                     </button>
@@ -369,9 +369,9 @@ const DashboardView: React.FC<{
     onExecuteSuggestion: (suggestion: any) => void
 }> = ({ stats, forecast, suggestions, suppliers, cheques, settings, onRefresh, onExecuteSuggestion }) => {
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
             {/* Top Stats */}
-            <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                     label="Morning Coverage"
                     value={stats.morningCoverage}
@@ -405,9 +405,9 @@ const DashboardView: React.FC<{
             </div>
 
             {/* Main Chart */}
-            <div className="lg:col-span-3 space-y-8">
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+            <div className="lg:col-span-3 space-y-5">
+                <div className="operational-panel p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
                         <div>
                             <h3 className="text-xl font-black text-slate-900 tracking-tight">Liquidity Forecast</h3>
                             <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Estimated closing balance over ${settings.forecastHorizon} days</p>
@@ -451,7 +451,7 @@ const DashboardView: React.FC<{
                                         if (active && payload && payload.length) {
                                             const data = payload[0].payload as ForecastDay;
                                             return (
-                                                <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-white/10 backdrop-blur-xl">
+                                                <div className="bg-slate-900 text-white p-4 rounded-lg shadow-xl border border-white/10 backdrop-blur-xl">
                                                     <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-white/50">{new Date(data.date).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                                                     <div className="space-y-1">
                                                         <div className="flex justify-between space-x-8">
@@ -508,8 +508,8 @@ const DashboardView: React.FC<{
                 </div>
 
                 {/* Heatmap */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
+                <div className="operational-panel p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
                         <div>
                             <h3 className="text-xl font-black text-slate-900 tracking-tight">Financial Risk Calendar</h3>
                             <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Interactive heatmap of liquidity stability</p>
@@ -567,42 +567,41 @@ const DashboardView: React.FC<{
             </div>
 
             {/* Sidebar Suggestions */}
-            <div className="space-y-6">
-                <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-                    <div className="relative z-10">
-                        <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
+            <div className="space-y-5">
+                <div className="operational-panel p-5">
+                    <div>
+                        <div className="w-10 h-10 bg-brand/10 rounded-lg flex items-center justify-center mb-5">
                             <Shield className="w-6 h-6 text-brand" />
                         </div>
-                        <h3 className="text-xl font-black tracking-tight mb-2">Smart Suggestions Engine</h3>
-                        <p className="text-white/50 text-xs font-medium leading-relaxed mb-6">AI models detected {suggestions.length} ways to optimize your cash gap.</p>
+                        <h3 className="text-lg font-black tracking-tight mb-2 text-slate-900">Smart Suggestions Engine</h3>
+                        <p className="text-slate-500 text-xs font-medium leading-relaxed mb-5">AI models detected {suggestions.length} ways to optimize your cash gap.</p>
 
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             {suggestions.length === 0 ? (
-                                <div className="p-6 bg-white/5 border border-white/10 rounded-3xl flex flex-col items-center text-center">
+                                <div className="p-5 bg-slate-50 border border-slate-100 rounded-lg flex flex-col items-center text-center">
                                     <Heart className="w-8 h-8 text-emerald-400 mb-3" />
                                     <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Perfect Stability</p>
-                                    <p className="text-xs text-white/40 mt-1 font-medium">No liquidity risks detected in the next {settings.forecastHorizon} days.</p>
+                                    <p className="text-xs text-slate-500 mt-1 font-medium">No liquidity risks detected in the next {settings.forecastHorizon} days.</p>
                                 </div>
                             ) : (
                                 suggestions.slice(0, 4).map((sug, idx) => (
-                                    <div key={idx} className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all group">
+                                    <div key={idx} className="p-4 bg-slate-50 hover:bg-white border border-slate-100 rounded-lg transition-colors group">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${sug.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-400' :
                                                 sug.riskLevel === 'Medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'
                                                 }`}>
                                                 {sug.riskLevel} Risk
                                             </span>
-                                            <span className="text-[8px] font-black text-white/30 uppercase">{new Date(sug.date).toLocaleDateString()}</span>
+                                            <span className="text-[8px] font-black text-slate-400 uppercase">{new Date(sug.date).toLocaleDateString()}</span>
                                         </div>
-                                        <p className="text-xs font-bold text-white group-hover:text-brand transition-colors">
+                                        <p className="text-xs font-bold text-slate-900 group-hover:text-brand transition-colors">
                                             {sug.type === 'delay_cheque' ? `Delay Cheque #${sug.item.chequeNumber}` : `Postpone ${sug.item.category}`}
                                         </p>
-                                        <p className="text-[10px] text-white/40 mt-1 line-clamp-2 leading-relaxed">{sug.reason}</p>
-                                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/10">
+                                        <p className="text-[10px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">{sug.reason}</p>
+                                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200/70">
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-[8px] font-black text-white/30 uppercase">Impact</span>
-                                                <span className="text-xs font-black text-white">+{sug.impact.toLocaleString(undefined, { minimumFractionDigits: 3 })} BHD</span>
+                                                <span className="text-[8px] font-black text-slate-400 uppercase">Impact</span>
+                                                <span className="text-xs font-black text-slate-900">+{sug.impact.toLocaleString(undefined, { minimumFractionDigits: 3 })} BHD</span>
                                             </div>
                                             <button
                                                 onClick={() => onExecuteSuggestion(sug)}
@@ -618,14 +617,14 @@ const DashboardView: React.FC<{
                         </div>
 
                         {suggestions.length > 4 && (
-                            <button className="w-full mt-6 py-4 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all">
+                            <button className="btn-secondary w-full mt-5 text-[10px] uppercase tracking-widest">
                                 View All {suggestions.length} Suggestions
                             </button>
                         )}
                     </div>
                 </div>
 
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                <div className="operational-panel p-5">
                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Upcoming Large Payments</h4>
                     <div className="space-y-4">
                         {cheques
@@ -633,7 +632,7 @@ const DashboardView: React.FC<{
                             .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                             .slice(0, 3)
                             .map(c => (
-                                <div key={c.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                                <div key={c.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                                     <div className="flex items-center space-x-3">
                                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white ${c.priority === 'Critical' ? 'bg-red-500 shadow-sm' :
                                             c.priority === 'Normal' ? 'bg-slate-900' : 'bg-emerald-500'
@@ -657,17 +656,20 @@ const DashboardView: React.FC<{
 
 const StatCard: React.FC<{ label: string, value: number, sub: string, icon: any, color: string, trend?: 'up' | 'down', isCurrency?: boolean }> = ({ label, value, sub, icon: Icon, color, trend, isCurrency = true }) => {
     const colorMap: any = {
-        brand: 'border-brand text-brand bg-brand/5 shadow-brand/10',
-        slate: 'border-slate-200 text-slate-900 bg-slate-50 shadow-slate-200/50',
-        red: 'border-red-200 text-red-600 bg-red-50 shadow-red-200/50',
-        emerald: 'border-emerald-200 text-emerald-600 bg-emerald-50 shadow-emerald-200/50',
-        blue: 'border-blue-200 text-blue-600 bg-blue-50 shadow-blue-200/50'
+        brand: 'border-brand/30 text-brand bg-brand/5',
+        slate: 'border-slate-200 text-slate-900 bg-slate-50',
+        red: 'border-red-200 text-red-600 bg-red-50',
+        emerald: 'border-emerald-200 text-emerald-600 bg-emerald-50',
+        blue: 'border-blue-200 text-blue-600 bg-blue-50'
     };
+    const formattedValue = isCurrency
+        ? value.toLocaleString(undefined, { minimumFractionDigits: 3 })
+        : value.toLocaleString();
 
     return (
-        <div className={`p-8 rounded-[2.5rem] border-2 transition-all duration-500 bg-white ${colorMap[color] || colorMap.slate} hover:scale-105 active:scale-95 cursor-default`}>
-            <div className="flex items-center justify-between mb-6">
-                <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100">
+        <div className={`p-5 rounded-lg border transition-colors bg-white ${colorMap[color] || colorMap.slate} cursor-default`}>
+            <div className="flex items-center justify-between mb-5">
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-slate-100">
                     <Icon className="w-5 h-5" />
                 </div>
                 {trend && (
@@ -680,8 +682,8 @@ const StatCard: React.FC<{ label: string, value: number, sub: string, icon: any,
             <div>
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</h4>
                 <div className="flex items-baseline space-x-1">
-                    <span className="text-3xl font-black tracking-tighter text-slate-900">{value.toLocaleString(undefined, { minimumFractionDigits: 3 })}</span>
-                    <span className="text-[10px] font-bold text-slate-400 ml-1">BHD</span>
+                    <span className="text-2xl font-black tracking-tight text-slate-900">{formattedValue}</span>
+                    {isCurrency && <span className="text-[10px] font-bold text-slate-400 ml-1">BHD</span>}
                 </div>
                 <p className="text-[10px] font-bold text-slate-500 mt-2 truncate opacity-70">{sub}</p>
             </div>

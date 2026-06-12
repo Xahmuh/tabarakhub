@@ -1,8 +1,28 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
+import { isDemoMode } from '../config/clientConfig';
+import { HRRequest } from '../types';
 import { generateUUID } from '../utils/uuid';
 
+const readDemoRequests = (): HRRequest[] => {
+  if (!isDemoMode) return [];
+  try {
+    return JSON.parse(localStorage.getItem('tabarak_hr_requests') || '[]') as HRRequest[];
+  } catch {
+    return [];
+  }
+};
+
+const writeDemoRequests = (requests: HRRequest[]) => {
+  if (!isDemoMode) return;
+  localStorage.setItem('tabarak_hr_requests', JSON.stringify(requests));
+};
+
+const throwUnlessDemoMode = (error: unknown) => {
+  if (!isDemoMode) throw error;
+};
+
 export const hrService = {
-  create: async (request: any) => {
+  create: async (request: Partial<HRRequest>) => {
     try {
       const payload = {
         ref_num: request.refNum,
@@ -39,10 +59,11 @@ export const hrService = {
       if (error) throw error;
       return data;
     } catch (e) {
-      const offline = JSON.parse(localStorage.getItem('tabarak_hr_requests') || '[]');
-      const newRequest = { ...request, id: generateUUID(), timestamp: new Date().toISOString(), status: 'Pending' };
+      throwUnlessDemoMode(e);
+      const offline = readDemoRequests();
+      const newRequest = { ...request, id: generateUUID(), timestamp: new Date().toISOString(), status: 'Pending' } as HRRequest;
       offline.push(newRequest);
-      localStorage.setItem('tabarak_hr_requests', JSON.stringify(offline));
+      writeDemoRequests(offline);
       return newRequest;
     }
   },
@@ -84,8 +105,9 @@ export const hrService = {
         lastVacationDate: r.last_vacation_date
       }));
     } catch (e) {
-      const offline = JSON.parse(localStorage.getItem('tabarak_hr_requests') || '[]');
-      return offline.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      throwUnlessDemoMode(e);
+      const offline = readDemoRequests();
+      return offline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     }
   },
   updateStatus: async (id: string, status: string) => {
@@ -93,11 +115,12 @@ export const hrService = {
       const { error } = await supabaseClient.from('hr_requests').update({ status }).or(`id.eq.${id},ref_num.eq.${id}`);
       if (error) throw error;
     } catch (e) {
-      const offline = JSON.parse(localStorage.getItem('tabarak_hr_requests') || '[]');
-      const idx = offline.findIndex((r: any) => r.id === id || r.refNum === id);
+      throwUnlessDemoMode(e);
+      const offline = readDemoRequests();
+      const idx = offline.findIndex(r => r.id === id || r.refNum === id);
       if (idx >= 0) {
-        offline[idx].status = status;
-        localStorage.setItem('tabarak_hr_requests', JSON.stringify(offline));
+        offline[idx] = { ...offline[idx], status: status as HRRequest['status'] };
+        writeDemoRequests(offline);
       }
     }
   }

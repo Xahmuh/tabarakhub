@@ -1,0 +1,38 @@
+import type { ClientConfig } from './clientConfig';
+
+export const demoClientConfig: ClientConfig = {
+  appName: 'Pharmacy Operations System',
+  clientName: 'Demo Pharmacy Group',
+  logoUrl: '/logo.jpg',
+  primaryColor: '#B91c1c',
+  primaryHoverColor: '#991b1b',
+  primaryDarkColor: '#7f1d1d',
+  primaryMutedColor: 'rgba(185, 28, 28, 0.05)',
+  accentColor: '#0f172a',
+  supportEmail: 'support@demo-client.example',
+  defaultLocale: 'en',
+  currency: 'BHD',
+  country: 'BH',
+  isDemoMode: true,
+  environmentLabel: 'Demo',
+  enabledModules: {
+    hr: true,
+    qualityFeedback: true,
+    reports: true,
+    excelExport: true,
+    branchDashboard: true,
+    managerDashboard: true,
+    adminDashboard: true,
+    products: true,
+    sales: true,
+    spinWin: true,
+    cashFlow: true,
+    cashTracker: true,
+    corporateCodex: true,
+    employeeContributions: true,
+    settings: true,
+    workforce: true,
+  },
+};
+
+export default demoClientConfig;

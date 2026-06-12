@@ -1,14 +1,28 @@
 
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
 import { SpinPrize, SpinSession, Spin, Customer, BranchReview, VoucherShare, Branch } from '../types';
+import { isDemoMode } from '../config/clientConfig';
 
 const CUSTOMERS_KEY = 'tabarak_spinwin_customers';
 const SPINS_KEY = 'tabarak_spinwin_spins';
 const PRIZES_KEY = 'tabarak_spinwin_prizes';
 const SESSIONS_KEY = 'tabarak_spinwin_sessions';
 
-const getLocal = (key: string) => JSON.parse(localStorage.getItem(key) || '[]');
-const saveLocal = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
+const getLocal = <T = Record<string, unknown>>(key: string): T[] => {
+    if (!isDemoMode) return [];
+    try {
+        return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+    } catch {
+        return [];
+    }
+};
+const saveLocal = <T>(key: string, data: T[]) => {
+    if (!isDemoMode) return;
+    localStorage.setItem(key, JSON.stringify(data));
+};
+const throwUnlessDemoMode = (error: unknown) => {
+    if (!isDemoMode) throw error;
+};
 
 const generateUUID = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -82,11 +96,12 @@ export const spinWinService = {
                     createdAt: p.created_at
                 })) as SpinPrize[];
 
-                if (prizes.length === 0) return DEFAULT_PRIZES;
+                if (prizes.length === 0) return isDemoMode ? DEFAULT_PRIZES : [];
                 saveLocal(PRIZES_KEY, prizes);
                 return prizes;
             } catch (err) {
-                const local = getLocal(PRIZES_KEY) as SpinPrize[];
+                throwUnlessDemoMode(err);
+                const local = getLocal<SpinPrize>(PRIZES_KEY);
                 return local.length > 0 ? local : DEFAULT_PRIZES;
             }
         },
@@ -109,7 +124,8 @@ export const spinWinService = {
                 if (error) throw error;
                 return data as SpinPrize;
             } catch (err) {
-                const prizes = getLocal(PRIZES_KEY);
+                throwUnlessDemoMode(err);
+                const prizes = getLocal<SpinPrize>(PRIZES_KEY);
                 const newPrize = { ...prize, id: generateUUID(), createdAt: new Date().toISOString() };
                 prizes.push(newPrize);
                 saveLocal(PRIZES_KEY, prizes);
@@ -137,8 +153,9 @@ export const spinWinService = {
                 if (error) throw error;
                 return data as SpinPrize;
             } catch (err) {
-                const prizes = getLocal(PRIZES_KEY);
-                const idx = prizes.findIndex((p: any) => p.id === id);
+                throwUnlessDemoMode(err);
+                const prizes = getLocal<SpinPrize>(PRIZES_KEY);
+                const idx = prizes.findIndex(p => p.id === id);
                 if (idx !== -1) {
                     prizes[idx] = { ...prizes[idx], ...prize };
                     saveLocal(PRIZES_KEY, prizes);
@@ -154,8 +171,9 @@ export const spinWinService = {
                     .eq('id', id);
                 if (error) throw error;
             } catch (err) {
-                const prizes = getLocal(PRIZES_KEY);
-                saveLocal(PRIZES_KEY, prizes.filter((p: any) => p.id !== id));
+                throwUnlessDemoMode(err);
+                const prizes = getLocal<SpinPrize>(PRIZES_KEY);
+                saveLocal(PRIZES_KEY, prizes.filter(p => p.id !== id));
             }
         }
     },
@@ -252,8 +270,9 @@ export const spinWinService = {
                     .eq('token', token);
                 if (error) throw error;
             } catch (err) {
-                const sessions = getLocal(SESSIONS_KEY);
-                const idx = sessions.findIndex((s: any) => s.token === token);
+                throwUnlessDemoMode(err);
+                const sessions = getLocal<SpinSession>(SESSIONS_KEY);
+                const idx = sessions.findIndex(s => s.token === token);
                 if (idx !== -1 && !sessions[idx].isMultiUse) {
                     sessions[idx].used = true;
                     saveLocal(SESSIONS_KEY, sessions);
@@ -282,8 +301,9 @@ export const spinWinService = {
                     lastReviewedAt: data.last_reviewed_at
                 } as Customer;
             } catch (err) {
-                const customers = getLocal(CUSTOMERS_KEY);
-                return customers.find((c: any) => c.phone === phone) || null;
+                throwUnlessDemoMode(err);
+                const customers = getLocal<Customer>(CUSTOMERS_KEY);
+                return customers.find(c => c.phone === phone) || null;
             }
         },
         upsert: async (phone: string, email?: string, firstName?: string, lastName?: string) => {
@@ -315,9 +335,10 @@ export const spinWinService = {
                     createdAt: data.created_at
                 } as Customer;
             } catch (err) {
-                console.warn('DB Sync failed, using resilient local backup');
-                const customers = getLocal(CUSTOMERS_KEY);
-                let customer = customers.find((c: any) => c.phone === phone);
+                throwUnlessDemoMode(err);
+                console.warn('DB Sync failed, using demo local backup');
+                const customers = getLocal<Customer>(CUSTOMERS_KEY);
+                let customer = customers.find(c => c.phone === phone);
                 if (!customer) {
                     customer = {
                         id: generateUUID(), // Essential: Must be valid UUID for foreign key
@@ -336,7 +357,7 @@ export const spinWinService = {
     },
 
     spins: {
-        play: async (token: string, customerInfo: { phone: string, firstName: string, lastName: string, email: string, ip?: string }) => {
+        play: async (token: string, customerInfo: { phone: string, firstName: string, lastName: string, email: string }) => {
             try {
                 // EXECUTING ATOMIC BACKEND TRANSACTION
                 const { data, error } = await supabaseClient.rpc('execute_spin_transaction', {
@@ -345,7 +366,9 @@ export const spinWinService = {
                     p_first_name: customerInfo.firstName,
                     p_last_name: customerInfo.lastName,
                     p_email: customerInfo.email,
-                    p_ip_address: customerInfo.ip || null
+                    // Backwards-compatible RPC argument. Fraud limits are computed
+                    // server-side from customers/spins, not from client IP data.
+                    p_ip_address: null
                 });
 
                 if (error) {
@@ -405,6 +428,7 @@ export const spinWinService = {
 
                 return enriched;
             } catch (err) {
+                throwUnlessDemoMode(err);
                 console.error('Spins list fetch failed:', err);
                 return getLocal(SPINS_KEY);
             }
@@ -429,11 +453,11 @@ export const spinWinService = {
                 if (error) throw error;
                 return count || 0;
             } catch (err) {
-                // Fallback for local dev or offline - though IP check offline is tricky
+                throwUnlessDemoMode(err);
+                // Demo fallback only; production fraud/rate checks must run server-side.
                 const today = new Date().toISOString().split('T')[0];
-                const spins = getLocal(SPINS_KEY);
-                // Local mock doesn't support IP checks well, default to allow or basic customer check
-                return spins.filter((s: any) => s.customerId === identifier && s.createdAt.startsWith(today)).length;
+                const spins = getLocal<Spin>(SPINS_KEY);
+                return spins.filter(s => s.customerId === identifier && s.createdAt.startsWith(today)).length;
             }
         },
         getBranchStats: async (branchId: string, startDate?: string, endDate?: string) => {
@@ -577,7 +601,11 @@ export const spinWinService = {
                 const [customer, prize, branch] = await Promise.all([
                     supabaseClient.from('customers').select('*').eq('id', spin.customer_id).maybeSingle(),
                     supabaseClient.from('spin_prizes').select('*').eq('id', spin.prize_id).maybeSingle(),
-                    supabaseClient.from('branches').select('*').eq('id', spin.branch_id).maybeSingle()
+                    supabaseClient
+                        .from('branches')
+                        .select('id, code, name, role, google_maps_link, whatsapp_number, is_spin_enabled')
+                        .eq('id', spin.branch_id)
+                        .maybeSingle()
                 ]);
 
                 return {
@@ -593,13 +621,10 @@ export const spinWinService = {
             }
         },
         redeem: async (id: string, branchId: string) => {
-            const { error } = await supabaseClient
-                .from('spins')
-                .update({
-                    redeemed_at: new Date().toISOString(),
-                    redeemed_branch_id: branchId
-                })
-                .eq('id', id);
+            const { error } = await supabaseClient.rpc('redeem_spin_voucher', {
+                p_spin_id: id,
+                p_branch_id: branchId
+            });
             if (error) throw error;
             return true;
         }
@@ -622,6 +647,7 @@ export const spinWinService = {
                 if (error) throw error;
                 return data as BranchReview;
             } catch (err) {
+                throwUnlessDemoMode(err);
                 console.error('Database review log failed', err);
                 return { ...review, id: generateUUID(), reviewedAt: new Date().toISOString() } as any;
             }
@@ -667,7 +693,7 @@ export const spinWinService = {
             list: async () => {
                 const { data, error } = await supabaseClient
                     .from('branches')
-                    .select('*')
+                    .select('id, code, name, role, google_maps_link, is_spin_enabled, whatsapp_number')
                     .order('name', { ascending: true });
                 if (error) throw error;
                 return data.map(b => ({

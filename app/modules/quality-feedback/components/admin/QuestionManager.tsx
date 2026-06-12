@@ -16,7 +16,17 @@ import {
   ChevronUp
 } from 'lucide-react';
 
-export const QuestionManager: React.FC = () => {
+interface QuestionManagerProps {
+  canManage?: boolean;
+}
+
+const getErrorMessage = (err: unknown) => {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err && 'message' in err) return String((err as { message?: unknown }).message);
+  return 'Unknown error';
+};
+
+export const QuestionManager: React.FC<QuestionManagerProps> = ({ canManage = true }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,14 +45,23 @@ export const QuestionManager: React.FC = () => {
     try {
       const data = await feedbackService.fetchAllQuestions();
       setQuestions(data);
+      setError(null);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load questions');
+      try {
+        const activeQuestions = await feedbackService.fetchActiveQuestions();
+        setQuestions(activeQuestions);
+        setError(`Loaded active questions only. Full question management is blocked by database access: ${getErrorMessage(err)}`);
+      } catch (fallbackErr) {
+        setQuestions([]);
+        setError(`Failed to load questions: ${getErrorMessage(err)}. Active-question fallback also failed: ${getErrorMessage(fallbackErr)}`);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const startEdit = (q: Question) => {
+    if (!canManage) return;
     setEditingId(q.id);
     setEditForm(q);
   };
@@ -78,6 +97,7 @@ export const QuestionManager: React.FC = () => {
   };
 
   const toggleStatus = async (q: Question) => {
+    if (!canManage) return;
     try {
       const updated = await feedbackService.updateQuestion(q.id, { is_active: !q.is_active });
       setQuestions(questions.map(item => item.id === q.id ? updated : item));
@@ -87,6 +107,7 @@ export const QuestionManager: React.FC = () => {
   };
 
   const deleteQuestion = async (id: string) => {
+    if (!canManage) return;
     if (!window.confirm('Are you sure? This will not delete historical data but will remove the question from the form.')) return;
     
     try {
@@ -98,6 +119,7 @@ export const QuestionManager: React.FC = () => {
   };
 
   const addNew = () => {
+    if (!canManage) return;
     setEditingId('new');
     setEditForm({
       section: 'Operations',
@@ -110,6 +132,7 @@ export const QuestionManager: React.FC = () => {
   };
 
   const moveQuestion = async (id: string, direction: 'up' | 'down') => {
+    if (!canManage) return;
     const index = questions.findIndex(q => q.id === id);
     if (index < 0) return;
     if (direction === 'up' && index === 0) return;
@@ -145,26 +168,33 @@ export const QuestionManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-900">Question Management</h2>
+          <h2 className="text-2xl font-black text-slate-900">QC Questions</h2>
           <p className="text-slate-500 font-medium">Configure the fields and sections of the feedback form</p>
         </div>
-        <button
-          onClick={addNew}
-          disabled={!!editingId}
-          className="px-4 py-2 bg-brand text-white font-bold rounded-xl hover:bg-brand-600 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-brand/20"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Question</span>
-        </button>
+        {canManage ? (
+          <button
+            onClick={addNew}
+            disabled={!!editingId}
+            className="btn-primary disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Question</span>
+          </button>
+        ) : (
+          <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+            Read only
+          </span>
+        )}
       </div>
 
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5" />
           <p className="font-bold text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <button onClick={fetchQuestions} className="ml-auto text-xs font-black text-red-700 hover:text-red-900">Retry</button>
+          <button onClick={() => setError(null)}><X className="w-4 h-4" /></button>
         </div>
       )}
 
@@ -185,8 +215,12 @@ export const QuestionManager: React.FC = () => {
               <tr key={q.id} className={`hover:bg-slate-50/50 transition-colors ${editingId === q.id ? 'bg-brand/5' : ''}`}>
                 <td className="p-4">
                   <div className="flex flex-col gap-1">
-                    <button onClick={() => moveQuestion(q.id, 'up')} disabled={idx === 0} className="text-slate-300 hover:text-slate-600 disabled:opacity-0"><ChevronUp className="w-4 h-4" /></button>
-                    <button onClick={() => moveQuestion(q.id, 'down')} disabled={idx === questions.length - 1} className="text-slate-300 hover:text-slate-600 disabled:opacity-0"><ChevronDown className="w-4 h-4" /></button>
+                    {canManage && (
+                      <>
+                        <button onClick={() => moveQuestion(q.id, 'up')} disabled={idx === 0} className="text-slate-300 hover:text-slate-600 disabled:opacity-0"><ChevronUp className="w-4 h-4" /></button>
+                        <button onClick={() => moveQuestion(q.id, 'down')} disabled={idx === questions.length - 1} className="text-slate-300 hover:text-slate-600 disabled:opacity-0"><ChevronDown className="w-4 h-4" /></button>
+                      </>
+                    )}
                   </div>
                 </td>
                 <td className="p-4">
@@ -243,7 +277,8 @@ export const QuestionManager: React.FC = () => {
                 <td className="p-4">
                   <button
                     onClick={() => toggleStatus(q)}
-                    className={`flex items-center gap-1 text-xs font-bold ${q.is_active ? 'text-emerald-600' : 'text-slate-400'}`}
+                    disabled={!canManage}
+                    className={`flex items-center gap-1 text-xs font-bold ${q.is_active ? 'text-emerald-600' : 'text-slate-400'} ${canManage ? '' : 'cursor-default'}`}
                   >
                     {q.is_active ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
                     <span>{q.is_active ? 'Active' : 'Hidden'}</span>
@@ -251,7 +286,9 @@ export const QuestionManager: React.FC = () => {
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {editingId === q.id ? (
+                    {!canManage ? (
+                      <span className="text-xs font-semibold text-slate-300">-</span>
+                    ) : editingId === q.id ? (
                       <>
                         <button onClick={handleSave} disabled={isSaving} className="p-2 bg-brand text-white rounded-lg hover:bg-brand-600 transition-colors">
                           {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -275,7 +312,7 @@ export const QuestionManager: React.FC = () => {
               </tr>
             ))}
 
-            {editingId === 'new' && (
+            {canManage && editingId === 'new' && (
               <tr className="bg-brand/5">
                 <td className="p-4"></td>
                 <td className="p-4">

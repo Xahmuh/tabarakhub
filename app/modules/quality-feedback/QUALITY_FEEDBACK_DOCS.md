@@ -24,7 +24,7 @@ A comprehensive migration file is available at: [full-migration.sql](file:///a:/
 
 ### Tables Created:
 1. `feedback_responses`: Primary feedback storage with sentiment analysis support.
-2. `feedback_questions`: Dynamic questionnaire management.
+2. `quality_feedback_questions`: Dynamic questionnaire management.
 3. `module_settings`: Global module accessibility control.
 4. `branch_sales_data`: Correlation data (revenue).
 5. `branch_hr_turnover`: Correlation data (staffing).

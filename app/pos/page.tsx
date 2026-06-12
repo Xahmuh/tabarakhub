@@ -32,6 +32,7 @@ import { ProductSearch, ManualProductModal, BarcodeScanner } from '../shared';
 import { Product, LostSale, Branch, Pharmacist, Shortage } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/calculations';
+import { getPriceIncludingVat } from '../../utils/vat';
 
 interface POSPageProps {
   branch: Branch;
@@ -44,7 +45,7 @@ type Mode = 'sales' | 'shortages';
 
 export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permissions, onBackToPharmacist }) => {
   const getPermission = (feature: string) => {
-    if (branch.role === 'admin' || branch.role === 'manager') return 'edit';
+    if (branch.role === 'manager') return 'edit';
     const level = permissions.find(p => p.featureName === feature)?.accessLevel || 'edit';
     // If a branch is in POS, they should have logging access ('edit') by default
     return level === 'read' ? 'edit' : level;
@@ -62,6 +63,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [modeSwitchTarget, setModeSwitchTarget] = useState<Mode | null>(null);
 
   // --- Draft Persistence Management ---
   const DRAFT_KEY = `tabarak_pos_draft_${branch.id}_${pharmacist.id}`;
@@ -97,11 +99,20 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
   }, []);
 
   const switchMode = (newMode: Mode) => {
+    if (newMode === mode) return;
     if (cart.length > 0) {
-      if (!confirm('Switching modes will clear current items. Continue?')) return;
+      setModeSwitchTarget(newMode);
+      return;
     }
     setCart([]);
     setMode(newMode);
+  };
+
+  const confirmModeSwitch = () => {
+    if (!modeSwitchTarget) return;
+    setCart([]);
+    setMode(modeSwitchTarget);
+    setModeSwitchTarget(null);
   };
 
   const addItem = (product: Product) => {
@@ -113,7 +124,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
     }
 
     if (existingIdx !== -1 && mode === 'shortages') {
-      alert("Item already in shortage list");
+      setToastMessage({ message: 'Item already in shortage list', type: 'info' });
       return;
     }
 
@@ -126,7 +137,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
         productName: product.name,
         agentName: product.agent,
         category: product.category,
-        unitPrice: Number(product.defaultPrice || 0),
+        unitPrice: getPriceIncludingVat(Number(product.defaultPrice || 0), product.vatEnabled, product.vatRate),
         quantity: 1,
         priceSource: product.isManual ? 'manual' : 'db',
         isManual: !!product.isManual,
@@ -239,7 +250,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       console.error("Checkout Error:", err);
-      alert("System Error: " + (err as any).message);
+      setToastMessage({ message: `System Error: ${(err as any).message}`, type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -273,7 +284,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
             </div>
             <button
               onClick={() => setIsScannerOpen(true)}
-              className="w-full md:w-auto h-14 md:h-[58px] px-5 bg-white border-2 border-slate-100 text-slate-400 hover:text-red-700 hover:border-red-200 rounded-2xl flex items-center justify-center gap-2 transition-all shrink-0 press-effect"
+              className="btn-secondary h-12 w-full shrink-0 md:w-auto"
               aria-label="Open barcode scanner"
             >
               <ScanLine className="w-5 h-5" />
@@ -282,20 +293,20 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
           </div>
         )}
 
-        <div className="flex-1 bg-white rounded-[2rem] border-2 border-slate-100 overflow-hidden flex flex-col relative shadow-sm">
+        <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col relative shadow-sm">
           {/* Cart Header */}
-          <div className="px-7 py-5 border-b border-slate-100 flex items-center justify-between relative">
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative">
             <div className="flex-1 min-w-0">
-              <h2 className="text-base font-black text-slate-900 tracking-tight uppercase leading-none">
+              <h2 className="text-base font-black text-slate-900 tracking-tight leading-none">
                 {mode === 'sales' ? 'Loss Logging' : 'Shortage Report'}
               </h2>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+              <p className="text-xs font-medium text-slate-400 mt-1.5">
                 {mode === 'sales' ? 'Documenting Gaps' : 'Inventory Audit'}
               </p>
             </div>
 
             {/* Mode Switcher */}
-            <div className="absolute left-1/2 -translate-x-1/2 tab-nav">
+            <div className="order-3 w-full justify-center overflow-x-auto lg:order-none lg:w-auto xl:absolute xl:left-1/2 xl:-translate-x-1/2 tab-nav">
               {salesPerm !== 'none' && (
                 <button
                   onClick={() => switchMode('sales')}
@@ -335,7 +346,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
               </div>
             ) : (
               cart.map((item, idx) => (
-                <div key={idx} className="group p-4 bg-white rounded-2xl border-2 border-slate-100 hover:border-red-200/60 hover:shadow-lg hover:shadow-red-500/5 transition-all duration-300 flex flex-col gap-3">
+                <div key={idx} className="group flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-brand/30">
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div className="flex items-center gap-3.5 w-full sm:w-auto">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${mode === 'sales' ? 'bg-orange-50 text-orange-500 border border-orange-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>
@@ -357,7 +368,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
                     {mode === 'sales' ? (
                       <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
                         {/* Marks */}
-                        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 p-1">
                           <button
                             onClick={() => toggleAlternative(idx)}
                             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-tight transition-all border ${item.alternativeGiven ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-transparent border-transparent text-slate-400 hover:text-slate-600'}`}
@@ -399,11 +410,11 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
                           </div>
                         </div>
 
-                        <button onClick={() => removeItem(idx)} className="p-2.5 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" aria-label="Remove item from cart"><Trash2 size={18} /></button>
+                        <button onClick={() => removeItem(idx)} className="p-2.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" aria-label="Remove item from cart"><Trash2 size={18} /></button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-                        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 p-1">
                           <button
                             onClick={() => updateStatus(idx, 'Low')}
                             className={`px-3.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${item.status === 'Low' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
@@ -425,13 +436,13 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
                             <span>OOS</span>
                           </button>
                         </div>
-                        <button onClick={() => removeItem(idx)} className="p-2.5 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" aria-label="Remove item from cart"><Trash2 size={18} /></button>
+                        <button onClick={() => removeItem(idx)} className="p-2.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" aria-label="Remove item from cart"><Trash2 size={18} /></button>
                       </div>
                     )}
                   </div>
 
                   {/* Notes */}
-                  <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100/80 flex items-start gap-2">
+                  <div className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/70 p-3">
                     <FileText size={13} className="text-slate-300 mt-0.5 shrink-0" />
                     <textarea
                       placeholder="Add a remark or note for the warehouse/audit..."
@@ -447,13 +458,13 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
 
           {/* Success Banner */}
           {showSuccess && (
-            <div className="absolute inset-x-5 bottom-5 bg-slate-900 text-white p-6 rounded-2xl flex items-center gap-5 shadow-2xl z-50 ring-1 ring-white/10 animate-fade-in-up">
-              <div className="w-11 h-11 bg-emerald-500 rounded-xl flex items-center justify-center text-white shrink-0">
-                <CheckCircle2 size={24} />
+            <div className="absolute inset-x-4 bottom-4 bg-slate-900 text-white p-4 rounded-xl flex items-center gap-4 shadow-xl z-50 ring-1 ring-white/10 animate-fade-in-up">
+              <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-white shrink-0">
+                <CheckCircle2 size={22} />
               </div>
               <div>
-                <p className="font-black text-lg tracking-tight">SUCCESSFULLY SYNCED</p>
-                <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-0.5">Inventory records updated in real-time</p>
+                <p className="font-black text-base tracking-tight">Successfully synced</p>
+                <p className="text-white/50 text-xs font-medium mt-0.5">Inventory records updated in real time</p>
               </div>
             </div>
           )}
@@ -463,7 +474,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
       {/* Sidebar */}
       <div className="lg:col-span-4 flex flex-col gap-5">
         {/* Summary Card */}
-        <div className="bg-white rounded-[2rem] border-2 border-slate-100 shadow-sm p-7 flex-1 flex flex-col">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 md:p-6 flex-1 flex flex-col">
           <div className="flex-1 flex flex-col">
             <div className="min-h-[130px] flex flex-col items-center justify-center mb-6">
               {mode === 'sales' ? (
@@ -486,11 +497,11 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
             </div>
 
             <div className="space-y-2.5 border-t border-slate-100 pt-5">
-              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
+              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Cart Items</span>
                 <span className="px-2.5 py-0.5 bg-white rounded-lg text-xs font-black text-slate-900 shadow-sm border border-slate-100 tabular-nums">{cart.length}</span>
               </div>
-              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
+              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg">
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Network</span>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -503,9 +514,9 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
           {/* Finalize Button */}
           {(mode === 'sales' ? salesPerm === 'edit' : shortagesPerm === 'edit') ? (
             <button
-              onClick={handleCheckout}
-              disabled={cart.length === 0 || isSubmitting}
-              className={`w-full text-white font-black py-8 rounded-[2rem] shadow-2xl hover:-translate-y-1 active:scale-[0.98] transition-all disabled:bg-slate-100 disabled:text-slate-300 disabled:shadow-none disabled:translate-y-0 text-lg tracking-[0.15em] uppercase flex items-center justify-center gap-3 mt-8 ${isSubmitting ? 'bg-slate-400' : 'bg-red-700 hover:bg-red-800 shadow-red-700/20'}`}
+            onClick={handleCheckout}
+            disabled={cart.length === 0 || isSubmitting}
+              className={`btn-primary mt-8 w-full py-3 text-sm md:text-base ${isSubmitting ? 'bg-slate-400 border-slate-400' : ''}`}
             >
               {isSubmitting ? (
                 <>
@@ -520,7 +531,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
               )}
             </button>
           ) : (
-            <div className="w-full bg-slate-50 text-slate-400 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border-2 border-slate-100 flex items-center justify-center gap-3 mt-8">
+            <div className="w-full bg-slate-50 text-slate-400 py-4 rounded-xl font-black text-xs border border-slate-100 flex items-center justify-center gap-3 mt-8">
               <AlertTriangle size={16} />
               <span>Read-Only Access</span>
             </div>
@@ -528,19 +539,18 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
         </div>
 
         {/* Pharmacist Identity Card */}
-        <div className="bg-slate-900 rounded-[2rem] shadow-2xl p-8 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl group-hover:bg-red-500/10 transition-all duration-700"></div>
+        <div className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-900 p-6 md:p-7">
           <div className="relative z-10 text-center">
-            <div className="w-20 h-20 bg-white/10 backdrop-blur-xl border border-white/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl group-hover:scale-105 transition-all duration-500">
-              <div className="w-14 h-14 bg-red-700 rounded-[1.5rem] flex items-center justify-center text-white shadow-lg shadow-red-700/20">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl flex items-center justify-center mx-auto mb-5 shadow-lg group-hover:scale-105 transition-all duration-300">
+              <div className="w-11 h-11 bg-red-700 rounded-lg flex items-center justify-center text-white shadow-sm">
                 <UserCircle size={36} strokeWidth={1.5} />
               </div>
             </div>
-            <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-2">Certified Pharmacist</p>
+            <p className="text-xs font-bold text-red-400 mb-2">Certified pharmacist</p>
             <h3 className="font-black text-2xl text-white tracking-tighter mb-6 leading-tight">{pharmacist.name}</h3>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3.5 bg-white/5 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-3.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center">
                     <ShieldCheck size={15} />
@@ -552,7 +562,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
 
               <button
                 onClick={onBackToPharmacist}
-                className="w-full flex items-center justify-center gap-2.5 p-4 rounded-2xl bg-white/5 hover:bg-white/10 text-[10px] font-black text-white/40 hover:text-white uppercase tracking-[0.2em] transition-all border border-transparent hover:border-white/10 group"
+                className="w-full flex items-center justify-center gap-2.5 p-3.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-white/50 hover:text-white transition-all border border-transparent hover:border-white/10 group"
               >
                 <RefreshCcw size={14} className="group-hover:rotate-180 transition-transform duration-700" />
                 <span>Switch Profile</span>
@@ -571,6 +581,8 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
             id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: data.product_name,
             defaultPrice: Number(data.selling_price || 0),
+            vatEnabled: false,
+            vatRate: 0,
             agent: data.agent_name,
             category: data.category,
             isManual: true,
@@ -584,9 +596,43 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
       />
       {isScannerOpen && <BarcodeScanner onScan={handleScan} onClose={() => setIsScannerOpen(false)} />}
 
+      {modeSwitchTarget && (
+        <div className="fixed inset-0 z-[520] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mode-switch-title"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl"
+          >
+            <div className="border-b border-slate-100 p-5">
+              <p id="mode-switch-title" className="text-sm font-black text-slate-950">Switch logging mode?</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Switching to {modeSwitchTarget === 'sales' ? 'Lost Sales' : 'Shortage'} will clear the {cart.length} item{cart.length === 1 ? '' : 's'} currently in this draft.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-5">
+              <button
+                type="button"
+                onClick={() => setModeSwitchTarget(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 focus-ring"
+              >
+                Keep draft
+              </button>
+              <button
+                type="button"
+                onClick={confirmModeSwitch}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 focus-ring"
+              >
+                Clear and switch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toastMessage && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-4 rounded-2xl shadow-2xl z-[500] animate-fade-in-up flex items-center gap-3 border border-white/10 backdrop-blur-xl ${toastMessage.type === 'error' ? 'bg-red-950 text-white' :
+        <div className={`fixed bottom-5 left-1/2 z-[500] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl border border-white/10 px-4 py-3 shadow-xl backdrop-blur-xl animate-fade-in-up ${toastMessage.type === 'error' ? 'bg-red-950 text-white' :
           toastMessage.type === 'success' ? 'bg-emerald-900 text-white' :
             'bg-slate-900 text-white'
           }`}>
@@ -594,7 +640,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
             toastMessage.type === 'success' ? 'bg-emerald-400 animate-pulse' :
               'bg-red-500 animate-pulse'
             }`}></div>
-          <span className="text-sm font-black uppercase tracking-widest">{toastMessage.message}</span>
+          <span className="text-sm font-bold">{toastMessage.message}</span>
           <button
             onClick={() => setToastMessage(null)}
             className="ml-4 text-white/40 hover:text-white transition-colors"

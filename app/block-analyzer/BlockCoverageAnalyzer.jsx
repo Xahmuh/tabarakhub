@@ -1,4 +1,8 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+
+const DataContext = createContext();
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 const COVERAGE_DATA = {"Capital":{"Zone 01":{"total":13,"covered":[307,308,310,317,318,319,320,321,346],"gaps":[309,322,323,344],"coverage_pct":69},"Zone 02":{"total":17,"covered":[301,302,303,304,305,306,311,315,351,356],"gaps":[312,313,314,316,353,354,357],"coverage_pct":59},"Zone 03":{"total":17,"covered":[408,410,412,414,422,426,428,434],"gaps":[402,404,406,424,430,432,436,438,592],"coverage_pct":47},"Zone 04":{"total":15,"covered":[324,326,327,333,335,336,337,340,341,342,373],"gaps":[325,338,339,343],"coverage_pct":73},"Zone 05":{"total":13,"covered":[328,329,330,331,332,358,359,360,361,362,364],"gaps":[334,363],"coverage_pct":85},"Zone 06":{"total":18,"covered":[368,407,411,419,701,705,707,711],"gaps":[365,366,367,369,405,413,421,423,425,713],"coverage_pct":44},"Zone 07":{"total":5,"covered":[709,721,729],"gaps":[733,816],"coverage_pct":60},"Zone 08":{"total":9,"covered":[604,605,606],"gaps":[380,381,382,601,602,603],"coverage_pct":33},"Zone 09":{"total":8,"covered":[608,611,624],"gaps":[607,609,623,633,634],"coverage_pct":38},"Zone 10":{"total":6,"covered":[626,644,743,745],"gaps":[625,815],"coverage_pct":67}},"Muharraq":{"Zone 01":{"total":4,"covered":[225,226,228,229],"gaps":[],"coverage_pct":100},"Zone 02":{"total":6,"covered":[203,205,206,222],"gaps":[209,221],"coverage_pct":67},"Zone 03":{"total":7,"covered":[202,204,210,223,224],"gaps":[208,227],"coverage_pct":71},"Zone 04":{"total":8,"covered":[207,211,212,215],"gaps":[213,214,216,217],"coverage_pct":50},"Zone 05":{"total":13,"covered":[252,253,254,255,257,258,263,264],"gaps":[251,256,265,266,269],"coverage_pct":62},"Zone 06":{"total":7,"covered":[231,236],"gaps":[232,233,234,235,237],"coverage_pct":29},"Zone 07":{"total":9,"covered":[240,242,243,244],"gaps":[241,245,246,247,248],"coverage_pct":44},"Zone 08":{"total":20,"covered":[105,108,109,110,111,112,113,128],"gaps":[101,102,103,104,106,107,115,116,117,118,119,121],"coverage_pct":40}},"North":{"Zone 01":{"total":19,"covered":[450,460,502,504,514,526,536],"gaps":[444,454,456,458,506,508,518,520,522,524,528,530],"coverage_pct":37},"Zone 02":{"total":16,"covered":[537,540,580],"gaps":[531,538,539,541,542,543,544,582,583,584,586,588,590],"coverage_pct":19},"Zone 03":{"total":23,"covered":[552,555,1002,1010],"gaps":[550,553,557,559,561,565,569,587,581,585,589,591,1001,1003,1004,1006,1009,1089,1095],"coverage_pct":17},"Zone 04":{"total":15,"covered":[439,447,457,704,708,714],"gaps":[431,433,435,441,455,702,706,712,744],"coverage_pct":40},"Zone 05":{"total":23,"covered":[463,469,481,513,515,517,525,527,529,533],"gaps":[449,453,465,471,473,475,477,479,505,507,509,521,523],"coverage_pct":43},"Zone 06":{"total":7,"covered":[732,734,738,740,742],"gaps":[730,736],"coverage_pct":71},"Zone 07":{"total":18,"covered":[545,571,575,579,752,754,1014,1022],"gaps":[547,549,551,577,756,758,760,762,1012,1019],"coverage_pct":44},"Zone 08":{"total":4,"covered":[1016,1203],"gaps":[1204,1206],"coverage_pct":50},"Zone 09":{"total":4,"covered":[1209,1210],"gaps":[1205,1207],"coverage_pct":50},"Zone 10":{"total":4,"covered":[1218],"gaps":[1208,1212,1214],"coverage_pct":25},"Zone 11":{"total":5,"covered":[1046,1215],"gaps":[1211,1213,1216],"coverage_pct":40},"Zone 12":{"total":15,"covered":[1017,1020,1025,1032,1033,1034,1038],"gaps":[1018,1026,1027,1028,1037,1041,1042,1044],"coverage_pct":47}},"South":{"Zone 01":{"total":11,"covered":[718,720,801,803,806,810],"gaps":[802,804,805,807,808],"coverage_pct":55},"Zone 02":{"total":6,"covered":[809,812,814],"gaps":[813,840,841],"coverage_pct":50},"Zone 03":{"total":6,"covered":[933,934,935,941],"gaps":[922,937],"coverage_pct":67},"Zone 04":{"total":6,"covered":[645,929,939],"gaps":[643,646,931],"coverage_pct":50},"Zone 05":{"total":6,"covered":[901,903,905,925,927],"gaps":[910],"coverage_pct":83},"Zone 06":{"total":9,"covered":[913,914,915,917,919,923],"gaps":[916,918,921],"coverage_pct":67},"Zone 07":{"total":13,"covered":[746,902,904,908,912,928,932],"gaps":[748,906,920,924,926,930],"coverage_pct":54},"Zone 08":{"total":30,"covered":[636,907,911,942,943,945,951,952,957,960],"gaps":[613,614,615,616,635,909,946,948,949,950,953,954,955,958,959,965,981,982,983,985],"coverage_pct":33},"Zone 09":{"total":21,"covered":[1048,1057],"gaps":[944,947,976,986,1051,1052,1054,1055,1056,1058,1061,1062,1063,1064,1067,1068,1069,1070,1099],"coverage_pct":10},"Zone 10":{"total":22,"covered":[],"gaps":[961,967,971,973,987,988,989,995,997,998,999,1101,1102,1103,1104,1106,1107,1108,1110,1111,1112,1113],"coverage_pct":0}}};
@@ -44,8 +48,9 @@ const ProgressBar = ({ pct, color }) => (
 // ─── BLOCK POPUP ─────────────────────────────────────────────────────────────
 // Fixed position popup — positioned via getBoundingClientRect, no portal needed
 function BlockPopup({ block, gov, triggerRef, onClose }) {
-  const pharmacies = BLOCK_PHARMACY_MAP[String(block)] || [];
-  const areaName   = BLOCK_AREA_NAMES[String(block)]   || "";
+  const { pharmacyMap, areaNames } = useContext(DataContext);
+  const pharmacies = pharmacyMap[String(block)] || [];
+  const areaName   = areaNames[String(block)]   || "";
   const boxRef     = useRef(null);
   const m          = GOV_META[gov] || { color:"#6366f1" };
 
@@ -195,13 +200,14 @@ function BlockPopup({ block, gov, triggerRef, onClose }) {
 // ─── BLOCK CHIP ──────────────────────────────────────────────────────────────
 // Each covered block as a clickable chip that opens BlockPopup
 function BlockChip({ block, gov, isCovered, isHighlighted }) {
+  const { pharmacyMap, areaNames } = useContext(DataContext);
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
   const m = GOV_META[gov] || { color:"#10b981" };
   const pharmCount = isCovered
-    ? ((typeof BLOCK_PHARMACY_MAP !== "undefined" && BLOCK_PHARMACY_MAP[String(block)])?.length || 0)
+    ? (pharmacyMap[String(block)]?.length || 0)
     : 0;
-  const areaName = (typeof BLOCK_AREA_NAMES !== "undefined" && BLOCK_AREA_NAMES[String(block)]) || "";
+  const areaName = areaNames[String(block)] || "";
 
   const toggle = useCallback((e) => {
     e.stopPropagation();
@@ -361,9 +367,10 @@ const ZoneCard = ({ gov, zone, data, isExpanded, onToggle, searchBlock }) => {
 
 // ─── SUMMARY STATS ────────────────────────────────────────────────────────────
 const SummaryStats = ({ view }) => {
+  const { coverageData } = useContext(DataContext);
   const stats = useMemo(() => {
     let tB=0, cB=0, gB=0;
-    const src = view==="all" ? COVERAGE_DATA : { [view]: COVERAGE_DATA[view] };
+    const src = view==="all" ? coverageData : { [view]: coverageData[view] };
     Object.values(src).forEach(zones =>
       Object.values(zones).forEach(z => { tB+=z.total; cB+=z.covered.length; gB+=z.gaps.length; })
     );
@@ -399,9 +406,10 @@ const SummaryStats = ({ view }) => {
 
 // ─── GOV FILTER BAR ───────────────────────────────────────────────────────────
 const GovBar = ({ activeGov, setActiveGov }) => {
+  const { coverageData } = useContext(DataContext);
   const govSummary = useMemo(() => GOVS.map(gov => {
     let total=0, covered=0;
-    Object.values(COVERAGE_DATA[gov]).forEach(z => { total+=z.total; covered+=z.covered.length; });
+    Object.values(coverageData[gov]).forEach(z => { total+=z.total; covered+=z.covered.length; });
     return { gov, gaps:total-covered, pct:Math.round(covered/total*100) };
   }), []);
 
@@ -438,11 +446,12 @@ const GovBar = ({ activeGov, setActiveGov }) => {
 
 // ─── GAPS ONLY TABLE ──────────────────────────────────────────────────────────
 const GapsOnlyView = ({ govFilter }) => {
+  const { coverageData, areaNames } = useContext(DataContext);
   const rows = useMemo(() => {
     const out = [];
     const govs = govFilter==="all" ? GOVS : [govFilter];
     govs.forEach(gov => {
-      Object.entries(COVERAGE_DATA[gov]).forEach(([zone, data]) => {
+      Object.entries(coverageData[gov]).forEach(([zone, data]) => {
         if (data.gaps.length > 0)
           out.push({ gov, zone, gaps:data.gaps, total:data.total, pct:data.coverage_pct });
       });
@@ -495,7 +504,7 @@ const GapsOnlyView = ({ govFilter }) => {
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {gaps.map(b => {
-                        const area = (typeof BLOCK_AREA_NAMES!=="undefined" && BLOCK_AREA_NAMES[String(b)]) || "";
+                        const area = areaNames[String(b)] || "";
                         return (
                           <div key={b} className="flex flex-col items-center bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-2 py-0.5 rounded leading-none">
                             <span>{b}</span>
@@ -519,12 +528,13 @@ const GapsOnlyView = ({ govFilter }) => {
 
 // ─── POPULATION INTELLIGENCE VIEW ────────────────────────────────────────────
 function PopulationView() {
+  const { coverageData, areaNames } = useContext(DataContext);
   const [activeTab, setActiveTab] = useState("overview"); // overview | opportunities | density
 
   // Per-gov stats
   const govStats = useMemo(() => {
     return GOVS.map(gov => {
-      const zones = COVERAGE_DATA[gov];
+      const zones = coverageData[gov];
       let total=0, covered=0, gaps=0;
       Object.values(zones).forEach(z => {
         total   += z.total;
@@ -546,14 +556,14 @@ function PopulationView() {
     const rows = [];
     GOVS.forEach(gov => {
       const pop = POP_DATA[gov].total;
-      const allBlocks = Object.values(COVERAGE_DATA[gov]).reduce((a,z) => a+z.total, 0);
+      const allBlocks = Object.values(coverageData[gov]).reduce((a,z) => a+z.total, 0);
       const popPerBlock = pop / allBlocks;
       
       // Group gap blocks by area
       const areaGaps = {};
-      Object.entries(COVERAGE_DATA[gov]).forEach(([zone, data]) => {
+      Object.entries(coverageData[gov]).forEach(([zone, data]) => {
         data.gaps.forEach(block => {
-          const area = BLOCK_AREA_NAMES[String(block)] || "Unknown area";
+          const area = areaNames[String(block)] || "Unknown area";
           if (!areaGaps[area]) areaGaps[area] = { blocks:[], zone, gov };
           areaGaps[area].blocks.push(block);
         });
@@ -899,12 +909,13 @@ function PopulationView() {
 
 // ─── BLOCK SEARCH ─────────────────────────────────────────────────────────────
 const BlockSearch = ({ onResult }) => {
+  const { coverageData } = useContext(DataContext);
   const [val, setVal] = useState("");
   const search = () => {
     const num = parseInt(val.trim());
     if (!num) { onResult(null); return; }
     for (const gov of GOVS) {
-      for (const [zone, data] of Object.entries(COVERAGE_DATA[gov])) {
+      for (const [zone, data] of Object.entries(coverageData[gov])) {
         if (data.covered.includes(num)) { onResult({ block:num, gov, zone, status:"covered" }); return; }
         if (data.gaps.includes(num))    { onResult({ block:num, gov, zone, status:"gap"     }); return; }
       }
@@ -933,13 +944,178 @@ const BlockSearch = ({ onResult }) => {
   );
 };
 
+const AddPharmacyModal = ({ isOpen, onClose, onSave, coverageData }) => {
+  const [gov, setGov] = useState(GOVS[0]);
+  const [zone, setZone] = useState("Zone 01");
+  const [block, setBlock] = useState("");
+  const [area, setArea] = useState("");
+  const [name, setName] = useState("");
+  const [group, setGroup] = useState("");
+  const [type, setType] = useState("Pharmacy");
+
+  if (!isOpen) return null;
+
+  const availableZones = coverageData[gov] ? Object.keys(coverageData[gov]) : [];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!block || !name) return;
+    onSave({ gov, zone, block, area, name, group: group || name, type });
+    onClose();
+    setBlock(""); setArea(""); setName(""); setGroup(""); setType("Pharmacy");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+        <h2 className="text-xl font-bold mb-4">Link Pharmacy to Block</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Governorate</label>
+              <select className="w-full border rounded-lg p-2 bg-white" value={gov} onChange={e => {setGov(e.target.value); setZone(Object.keys(coverageData[e.target.value])[0]);}}>
+                {GOVS.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Zone</label>
+              <select className="w-full border rounded-lg p-2 bg-white" value={zone} onChange={e => setZone(e.target.value)}>
+                {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Block Number *</label>
+              <input required type="number" className="w-full border rounded-lg p-2" value={block} onChange={e => setBlock(e.target.value)} placeholder="e.g. 502" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Area Name</label>
+              <input type="text" className="w-full border rounded-lg p-2" value={area} onChange={e => setArea(e.target.value)} placeholder="e.g. Jannusan" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Pharmacy Name *</label>
+            <input required type="text" className="w-full border rounded-lg p-2" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Al-Dawaa Pharmacy" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Group Name</label>
+              <input type="text" className="w-full border rounded-lg p-2" value={group} onChange={e => setGroup(e.target.value)} placeholder="Defaults to Name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Type</label>
+              <select className="w-full border rounded-lg p-2 bg-white" value={type} onChange={e => setType(e.target.value)}>
+                <option>Pharmacy</option>
+                <option>Hospital Pharmacy</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">Cancel</button>
+            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">Save Link</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
-export function BlockCoverageAnalyzer() {
+export function BlockCoverageAnalyzer({ onBack }) {
+  const [coverageData, setCoverageData] = useState(() => {
+    const saved = localStorage.getItem('BCA_COVERAGE_DATA');
+    return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(COVERAGE_DATA));
+  });
+  const [pharmacyMap, setPharmacyMap] = useState(() => {
+    const saved = localStorage.getItem('BCA_PHARMACY_MAP');
+    return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(BLOCK_PHARMACY_MAP));
+  });
+  const [areaNames, setAreaNames] = useState(() => {
+    const saved = localStorage.getItem('BCA_AREA_NAMES');
+    return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(BLOCK_AREA_NAMES));
+  });
+
   const [activeGov,    setActiveGov]    = useState("all");
   const [displayMode,  setDisplayMode]  = useState("zones");
   const [expandedZones,setExpandedZones] = useState({});
   const [searchResult, setSearchResult] = useState(null);
   const [searchHL,     setSearchHL]     = useState("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  const handleAddPharmacy = (data) => {
+    const { gov, zone, block, area, name, group, type } = data;
+    const numBlock = parseInt(block);
+    
+    const newPharmacyMap = { ...pharmacyMap };
+    if (!newPharmacyMap[numBlock]) newPharmacyMap[numBlock] = [];
+    newPharmacyMap[numBlock].push({ name, group, type, area });
+    
+    const newAreaNames = { ...areaNames };
+    if (area) newAreaNames[numBlock] = area;
+
+    const newCoverageData = JSON.parse(JSON.stringify(coverageData));
+    const zData = newCoverageData[gov][zone];
+    
+    if (zData.gaps.includes(numBlock)) {
+      zData.gaps = zData.gaps.filter(b => b !== numBlock);
+      if (!zData.covered.includes(numBlock)) zData.covered.push(numBlock);
+    } else if (!zData.covered.includes(numBlock)) {
+      zData.covered.push(numBlock);
+      zData.total += 1;
+    }
+    zData.coverage_pct = Math.round((zData.covered.length / zData.total) * 100);
+
+    setPharmacyMap(newPharmacyMap);
+    setAreaNames(newAreaNames);
+    setCoverageData(newCoverageData);
+
+    localStorage.setItem('BCA_PHARMACY_MAP', JSON.stringify(newPharmacyMap));
+    localStorage.setItem('BCA_AREA_NAMES', JSON.stringify(newAreaNames));
+    localStorage.setItem('BCA_COVERAGE_DATA', JSON.stringify(newCoverageData));
+  };
+
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('Block Coverage');
+    
+    ws.columns = [
+      { header: 'Governorate', key: 'gov', width: 15 },
+      { header: 'Zone', key: 'zone', width: 12 },
+      { header: 'Block', key: 'block', width: 10 },
+      { header: 'Area', key: 'area', width: 25 },
+      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Pharmacies Count', key: 'pharmCount', width: 18 },
+      { header: 'Pharmacies', key: 'pharmacies', width: 50 },
+    ];
+
+    for (const gov of GOVS) {
+      for (const [zone, data] of Object.entries(coverageData[gov])) {
+        for (const block of data.covered) {
+          const pharms = pharmacyMap[String(block)] || [];
+          ws.addRow({
+            gov, zone, block,
+            area: areaNames[String(block)] || '',
+            status: 'Covered',
+            pharmCount: pharms.length,
+            pharmacies: pharms.map(p => p.name).join(', ')
+          });
+        }
+        for (const block of data.gaps) {
+          ws.addRow({
+            gov, zone, block,
+            area: areaNames[String(block)] || '',
+            status: 'Gap',
+            pharmCount: 0,
+            pharmacies: ''
+          });
+        }
+      }
+    }
+
+    const buf = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buf]), 'Block_Coverage_Data.xlsx');
+  };
 
   const toggleZone = (gov, zone) => {
     const k = `${gov}__${zone}`;
@@ -966,15 +1142,22 @@ export function BlockCoverageAnalyzer() {
   };
 
   const govData = activeGov==="all"
-    ? Object.entries(COVERAGE_DATA)
-    : [[activeGov, COVERAGE_DATA[activeGov]]];
+    ? Object.entries(coverageData)
+    : [[activeGov, coverageData[activeGov]]];
 
   return (
-    <div className="min-h-screen bg-gray-50" style={{ fontFamily:"'Inter',system-ui,sans-serif" }}>
+    <DataContext.Provider value={{ coverageData, pharmacyMap, areaNames }}>
+      <AddPharmacyModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddPharmacy} coverageData={coverageData} />
+      <div className="min-h-screen bg-gray-50" style={{ fontFamily:"'Inter',system-ui,sans-serif" }}>
       {/* Header */}
       <div className="bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 sticky top-0 z-30 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
+            {onBack && (
+              <button onClick={onBack} className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors" title="Back">
+                <Icon d="M15 19l-7-7 7-7" size={17} />
+              </button>
+            )}
             <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow">
               <Icon d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" size={17} className="text-white"/>
             </div>
@@ -984,6 +1167,15 @@ export function BlockCoverageAnalyzer() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button onClick={()=>setIsAddModalOpen(true)}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">
+              + Link Pharmacy
+            </button>
+            <button onClick={exportToExcel}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-800 text-white hover:bg-gray-900 shadow-sm flex items-center gap-2">
+              <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" size={16}/>
+              Export Excel
+            </button>
             <button onClick={()=>setDisplayMode("zones")}
               className={`w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 displayMode==="zones"?"bg-gray-900 text-white":"bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
@@ -1016,7 +1208,7 @@ export function BlockCoverageAnalyzer() {
               {searchResult.status==="covered" && (
                 <p className="font-semibold text-emerald-800">
                   Block <strong>{searchResult.block}</strong>
-                  {BLOCK_AREA_NAMES?.[String(searchResult.block)] && ` (${BLOCK_AREA_NAMES[String(searchResult.block)]})`}
+                  {areaNames?.[String(searchResult.block)] && ` (${areaNames[String(searchResult.block)]})`}
                   {" "}is covered — there is a registered pharmacy in this block.
                   <span className="ml-2 text-emerald-600 font-normal">{searchResult.gov} · {searchResult.zone}</span>
                 </p>
@@ -1024,7 +1216,7 @@ export function BlockCoverageAnalyzer() {
               {searchResult.status==="gap" && (
                 <p className="font-semibold text-red-800">
                   Block <strong>{searchResult.block}</strong>
-                  {BLOCK_AREA_NAMES?.[String(searchResult.block)] && ` (${BLOCK_AREA_NAMES[String(searchResult.block)]})`}
+                  {areaNames?.[String(searchResult.block)] && ` (${areaNames[String(searchResult.block)]})`}
                   {" "}has NO registered pharmacy — opportunity gap!
                   <span className="ml-2 text-red-600 font-normal">{searchResult.gov} · {searchResult.zone}</span>
                 </p>
@@ -1107,5 +1299,6 @@ export function BlockCoverageAnalyzer() {
         </div>
       </div>
     </div>
+    </DataContext.Provider>
   );
 }

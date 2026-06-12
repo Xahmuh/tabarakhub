@@ -55,7 +55,7 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
         tags: []
     });
 
-    const isManager = userRole === 'admin' || userRole === 'manager';
+    const isManager = userRole === 'manager';
 
     useEffect(() => {
         fetchEntries();
@@ -85,17 +85,13 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
 
     const loadPdfJs = async () => {
         if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
-        return new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            script.onload = () => {
-                const pdfjsLib = (window as any)['pdfjs-dist/build/pdf'];
-                (window as any).pdfjsLib = pdfjsLib;
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                resolve(pdfjsLib);
-            };
-            document.head.appendChild(script);
-        });
+        const [pdfjsLib, worker] = await Promise.all([
+            import('pdfjs-dist'),
+            import('pdfjs-dist/build/pdf.worker.mjs?url')
+        ]);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = worker.default;
+        (window as any).pdfjsLib = pdfjsLib;
+        return pdfjsLib;
     };
 
     const processPdf = async (file: File) => {

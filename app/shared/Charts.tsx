@@ -134,62 +134,96 @@ export const ShortageTrendChart: React.FC<{ data: any[] }> = ({ data }) => (
   </ChartWrapper>
 );
 
-export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => (
-  <ChartWrapper height={400}>
-    <AreaChart data={data} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-      <defs>
-        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#22c55e" stopOpacity={0.15} />
-          <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
-        </linearGradient>
-        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.1} />
-          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <CartesianGrid vertical={true} strokeDasharray="3 3" stroke="rgba(0,0,0,0.03)" />
-      <XAxis
-        dataKey="name"
-        axisLine={false}
-        tickLine={false}
-        tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }}
-        dy={10}
-      />
-      <YAxis hide />
-      <Tooltip content={<CustomTooltip />} />
-      <Area
-        type="monotone"
-        dataKey="value"
-        name="value"
-        stroke="#22c55e"
-        strokeWidth={3}
-        fillOpacity={1}
-        fill="url(#colorValue)"
-        animationDuration={1500}
-      />
-      <Area
-        type="monotone"
-        dataKey="count"
-        name="count"
-        stroke="#f59e0b"
-        strokeWidth={2}
-        fillOpacity={1}
-        fill="url(#colorCount)"
-        animationDuration={2000}
-      />
-      {data.length > 5 && (
-        <Brush
+export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => {
+  if (!data.length) {
+    return (
+      <div className="flex min-h-[340px] w-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No trend data available</p>
+      </div>
+    );
+  }
+
+  return (
+    <ChartWrapper height={380}>
+      <AreaChart data={data} margin={{ top: 18, right: 18, left: 4, bottom: 4 }}>
+        <defs>
+          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+          </linearGradient>
+          <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.12} />
+            <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} strokeDasharray="6 6" stroke="rgba(15,23,42,0.06)" />
+        <XAxis
           dataKey="name"
-          height={30}
-          stroke="#cbd5e1"
-          fill="#f8fafc"
-          className="opacity-50"
-          travellerWidth={10}
+          axisLine={false}
+          tickLine={false}
+          tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }}
+          dy={12}
+          minTickGap={24}
         />
-      )}
-    </AreaChart>
-  </ChartWrapper>
-);
+        <YAxis
+          yAxisId="impact"
+          axisLine={false}
+          tickLine={false}
+          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 800 }}
+          tickFormatter={(val) => Number(val).toFixed(1)}
+          width={56}
+        />
+        <YAxis
+          yAxisId="customers"
+          orientation="right"
+          axisLine={false}
+          tickLine={false}
+          tick={{ fill: '#f59e0b', fontSize: 10, fontWeight: 800 }}
+          tickFormatter={(val) => Math.round(Number(val)).toString()}
+          width={42}
+        />
+        <Tooltip
+          content={<CustomTooltip />}
+          cursor={{ stroke: '#0f172a', strokeWidth: 1.5, strokeDasharray: '5 5' }}
+        />
+        <Area
+          yAxisId="impact"
+          type="monotone"
+          dataKey="value"
+          name="value"
+          stroke="#16a34a"
+          strokeWidth={3}
+          fillOpacity={1}
+          fill="url(#colorValue)"
+          activeDot={{ r: 5, fill: '#16a34a', stroke: '#ffffff', strokeWidth: 3 }}
+          animationDuration={1200}
+        />
+        <Area
+          yAxisId="customers"
+          type="monotone"
+          dataKey="count"
+          name="count"
+          stroke="#f59e0b"
+          strokeWidth={2.5}
+          fillOpacity={1}
+          fill="url(#colorCount)"
+          activeDot={{ r: 4, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }}
+          animationDuration={1600}
+        />
+        {data.length > 5 && (
+          <Brush
+            dataKey="name"
+            height={28}
+            stroke="#cbd5e1"
+            fill="#f8fafc"
+            className="opacity-70"
+            travellerWidth={10}
+          />
+        )}
+      </AreaChart>
+    </ChartWrapper>
+  );
+};
 
 export const RevenueChart: React.FC<{ data: any[] }> = ({ data }) => (
   <ChartWrapper height={400}>

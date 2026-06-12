@@ -53,7 +53,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     const [alertsPage, setAlertsPage] = useState(1); // Pagination for alerts
 
     // --- Date Filter States ---
-    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>(role === 'accounts' || role === 'manager' ? 'all' : 'today');
+    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>(role === 'manager' || role === 'owner' ? 'all' : 'today');
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -104,7 +104,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                     console.error("Failed to fetch metadata", e);
                 }
             }
-            if (role === 'admin' || role === 'accounts') {
+            if (role === 'manager' || role === 'owner') {
                 const bList = await supabase.branches.list();
                 setBranches(bList);
             }
@@ -142,10 +142,10 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             ${pharmacists.map(p => `<option value="${p}">`).join('')}
           </datalist>
 
-          ${(role === 'admin' || role === 'accounts') && !branchId ? `
+          ${(role === 'manager' || role === 'owner') && !branchId ? `
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Branch</label>
-              <select id="swal-branch" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold appearance-none">
+              <select id="swal-branch" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold appearance-none">
                 <option value="">Select Branch</option>
                 ${branches.map(b => `<option value="${b.id}" ${existingData?.branchId === b.id ? 'selected' : ''}>${b.name}</option>`).join('')}
               </select>
@@ -153,39 +153,39 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
           ` : `
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Branch</label>
-              <input type="text" class="w-full p-4 bg-slate-100 border-0 rounded-2xl text-sm font-black text-slate-400" value="${currentBranchName || 'Loading...'}" readonly>
+              <input type="text" class="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-black text-slate-400" value="${currentBranchName || 'Loading...'}" readonly>
             </div>
           `}
           
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Date</label>
-              <input id="swal-date" type="date" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" value="${existingData ? existingData.date : new Date().toISOString().split('T')[0]}">
+              <input id="swal-date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" value="${existingData ? existingData.date : new Date().toISOString().split('T')[0]}">
             </div>
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pharmacist Name</label>
-              <input id="swal-pharmacist" type="text" list="pharmacists-list" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" value="${existingData ? existingData.pharmacistName : (pharmacistName || '')}" placeholder="Search or enter name">
+              <input id="swal-pharmacist" type="text" list="pharmacists-list" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" value="${existingData ? existingData.pharmacistName : (pharmacistName || '')}" placeholder="Search or enter name">
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Cash (BHD)</label>
-              <input id="swal-system" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" placeholder="0.000" value="${existingData ? existingData.systemCash : ''}">
+              <input id="swal-system" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="0.000" value="${existingData ? existingData.systemCash : ''}">
             </div>
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Actual Cash (BHD)</label>
-              <input id="swal-actual" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" placeholder="0.000" value="${existingData ? existingData.actualCash : ''}">
+              <input id="swal-actual" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="0.000" value="${existingData ? existingData.actualCash : ''}">
             </div>
           </div>
 
           <div id="drawer-balance-container" class="animate-in fade-in slide-in-from-top-2">
             <label class="block text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Cash in Drawer (BHD) *</label>
-            <input id="swal-drawer-balance" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-2 border-red-100 rounded-2xl text-sm font-bold" placeholder="Required: Current cash in drawer" value="${existingData?.drawerBalance || ''}" required>
+            <input id="swal-drawer-balance" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-red-200 rounded-lg text-sm font-bold" placeholder="Required: Current cash in drawer" value="${existingData?.drawerBalance || ''}" required>
             <p class="text-[8px] text-red-500 font-bold mt-1">⚠️ This field is mandatory</p>
           </div>
 
-          <div class="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center space-x-3 cursor-pointer select-none" onclick="document.getElementById('swal-has-invoices').click()">
+          <div class="p-3 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center space-x-3 cursor-pointer select-none" onclick="document.getElementById('swal-has-invoices').click()">
             <input id="swal-has-invoices" type="checkbox" ${existingData?.hasInvoices ? 'checked' : ''} class="w-5 h-5 rounded-lg border-emerald-200 text-emerald-600 focus:ring-emerald-500">
             <div class="flex-1">
               <label class="block text-[10px] font-black text-emerald-900 uppercase tracking-widest leading-none">Invoices Forwarded to Accounts</label>
@@ -195,12 +195,12 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
           <div id="invoice-ref-container" class="${existingData?.hasInvoices ? '' : 'hidden'} animate-in fade-in slide-in-from-top-2">
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Invoice Reference / Receipt #</label>
-            <input id="swal-invoice-ref" type="text" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" placeholder="Enter reference numbers" value="${existingData?.invoiceReference || ''}">
+            <input id="swal-invoice-ref" type="text" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="Enter reference numbers" value="${existingData?.invoiceReference || ''}">
           </div>
 
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reason / Notes</label>
-            <textarea id="swal-reason" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold h-24" placeholder="Optional explanation...">${existingData?.reason || ''}</textarea>
+            <textarea id="swal-reason" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold h-24" placeholder="Optional explanation...">${existingData?.reason || ''}</textarea>
           </div>
         </div>
       `,
@@ -217,13 +217,13 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             },
             showCancelButton: true,
             confirmButtonText: existingData ? 'Update Record' : 'Record Difference',
-            confirmButtonColor: '#000000',
+            confirmButtonColor: '#ef4444',
             cancelButtonColor: '#f8fafc',
             customClass: {
-                container: 'rounded-[3rem]',
-                popup: 'rounded-[2.5rem] border-0 shadow-2xl',
-                confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase tracking-widest text-xs',
-                cancelButton: 'rounded-2xl px-8 py-4 font-black uppercase tracking-widest text-xs text-slate-400'
+                container: 'rounded-lg',
+                popup: 'rounded-lg border-0 shadow-xl',
+                confirmButton: 'rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'rounded-lg px-4 py-2.5 font-bold text-sm text-slate-500'
             },
             preConfirm: () => {
                 const date = (document.getElementById('swal-date') as HTMLInputElement).value;
@@ -294,34 +294,34 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     };
 
     const handleUpdateStatus = async (diff: CashDifference) => {
-        if (role !== 'manager' && role !== 'accounts') return;
+        if (role !== 'manager') return;
 
         const { value: result } = await Swal.fire({
-            title: `<span class="text-2xl font-black uppercase tracking-tighter">${role === 'accounts' ? 'Accounts Approval' : 'Review Difference'}</span>`,
+            title: `<span class="text-2xl font-black uppercase tracking-tighter">Review Difference</span>`,
             html: `
         <div class="space-y-4 text-left p-4">
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Decision</label>
-            <select id="swal-status" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold appearance-none">
+            <select id="swal-status" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold appearance-none">
               <option value="Open" ${diff.status === 'Open' ? 'selected' : ''}>Pending</option>
               <option value="Reviewed" ${diff.status === 'Reviewed' ? 'selected' : ''}>Reviewed (Manager)</option>
               <option value="Closed" ${diff.status === 'Closed' ? 'selected' : ''}>Approved & Reconciled (Accounts)</option>
             </select>
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">${role === 'accounts' ? 'Accounts Remark' : 'Manager Comment'}</label>
-            <textarea id="swal-comment" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold h-24" placeholder="${role === 'accounts' ? 'Verify reconcilement...' : 'Add your notes...'}">${diff.managerComment || ''}</textarea>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Manager Comment</label>
+            <textarea id="swal-comment" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold h-24" placeholder="Add your notes...">${diff.managerComment || ''}</textarea>
           </div>
-          ${role === 'accounts' ? `<p class="text-[9px] text-emerald-600 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">By closing this, you confirm the reconciliation between Accounts & Branch.</p>` : ''}
+          <p class="text-[9px] text-emerald-600 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">By closing this, you confirm the reconciliation with the branch.</p>
         </div>
       `,
             showCancelButton: true,
             confirmButtonText: 'Save Update',
-            confirmButtonColor: '#000000',
+            confirmButtonColor: '#ef4444',
             customClass: {
-                container: 'rounded-[3rem]',
-                popup: 'rounded-[2.5rem] border-0 shadow-2xl',
-                confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase tracking-widest text-xs'
+                container: 'rounded-lg',
+                popup: 'rounded-lg border-0 shadow-xl',
+                confirmButton: 'rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 return {
@@ -356,10 +356,10 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             cancelButtonColor: '#f8fafc',
             confirmButtonText: 'Yes, delete it!',
             customClass: {
-                container: 'rounded-[3rem]',
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase tracking-widest text-xs',
-                cancelButton: 'rounded-2xl px-8 py-4 font-black uppercase tracking-widest text-xs text-slate-400'
+                container: 'rounded-lg',
+                popup: 'rounded-lg',
+                confirmButton: 'rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'rounded-lg px-4 py-2.5 font-bold text-sm text-slate-500'
             }
         });
 
@@ -460,7 +460,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
     // Add all branches to groupedByBranch even if they have no logs (for accounts dashboard)
     // Filter to show only branches with role='branch'
-    if (role === 'accounts') {
+    if (role === 'manager' || role === 'owner') {
         branches
             .filter(branch => branch.role === 'branch')
             .forEach(branch => {
@@ -513,9 +513,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header & Actions */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-slate-100 shadow-sm transition-all">
+            <div className="operational-panel p-5 md:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div className="flex items-center space-x-4">
                     <div>
                         <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-slate-900 mb-1 uppercase">Financial Registry</h2>
@@ -528,7 +528,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                         <input
                             type="text"
                             placeholder="Find records..."
-                            className="w-full pl-11 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl text-[10px] font-black tracking-widest uppercase focus:bg-white focus:border-brand/20 focus:ring-4 focus:ring-brand/5 transition-all outline-none"
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black tracking-widest uppercase focus:bg-white focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all outline-none"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -536,13 +536,13 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
                     <div className="relative">
                         <button onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                            className="flex items-center gap-3 px-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-700 hover:bg-white hover:border-brand/20 transition-all">
+                            className="btn-secondary text-[10px] uppercase tracking-widest">
                             <CalendarDays size={16} className="text-brand" />
                             <span>{dateType === 'today' ? 'Today' : dateType === 'yesterday' ? 'Yesterday' : dateType === '7d' ? 'Last 7 Days' : dateType === 'month' ? 'Last Month' : dateType === 'custom' ? 'Custom' : 'Archive'}</span>
                             <ChevronDown size={14} />
                         </button>
                         {isDatePickerOpen && (
-                            <div className={`absolute top-full right-0 mt-3 bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-4 z-[100] animate-in slide-in-from-top-5 duration-300 ${dateType === 'custom' ? 'w-auto' : 'w-72'}`}>
+                            <div className={`absolute top-full right-0 mt-3 bg-white rounded-lg shadow-xl border border-slate-100 p-3 z-[100] animate-in slide-in-from-top-5 duration-300 ${dateType === 'custom' ? 'w-auto' : 'w-72'}`}>
                                 {dateType !== 'custom' ? (
                                     <div className="grid grid-cols-1 gap-1.5">
                                         {[
@@ -560,7 +560,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                 setDateType(t.id as any);
                                                 if (t.id !== 'custom') setIsDatePickerOpen(false);
                                             }}
-                                                className={`w-full text-left p-4 rounded-xl transition-all ${dateType === t.id ? 'bg-slate-900 text-white shadow-lg' : 'hover:bg-slate-50'}`}>
+                                                className={`w-full text-left p-3 rounded-lg transition-colors ${dateType === t.id ? 'bg-brand text-white shadow-sm shadow-brand/10' : 'hover:bg-slate-50'}`}>
                                                 <p className="text-[10px] font-black uppercase tracking-widest">{t.label}</p>
                                                 <p className={`text-[8px] font-bold ${dateType === t.id ? 'text-white/60' : 'text-slate-400'} uppercase mt-1 tracking-tighter`}>{t.sub}</p>
                                             </button>
@@ -572,12 +572,12 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             <div>
                                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">From (DD-MM-YYYY)</label>
                                                 <input type="text" placeholder="01-01-2026" value={manualStart} onChange={(e) => setManualStart(e.target.value)}
-                                                    className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl text-[10px] font-black outline-none focus:border-brand transition-all" />
+                                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] font-black outline-none focus:border-brand/40 transition-all" />
                                             </div>
                                             <div>
                                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">To (DD-MM-YYYY)</label>
                                                 <input type="text" placeholder="31-01-2026" value={manualEnd} onChange={(e) => setManualEnd(e.target.value)}
-                                                    className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl text-[10px] font-black outline-none focus:border-brand transition-all" />
+                                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] font-black outline-none focus:border-brand/40 transition-all" />
                                             </div>
                                         </div>
                                         <button onClick={() => {
@@ -586,7 +586,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             if (s && e) { setStartDate(s); setEndDate(e); setIsDatePickerOpen(false); }
                                             else { Swal.fire('Error', 'Invalid date format (DD-MM-YYYY)', 'error'); }
                                         }}
-                                            className="w-full bg-slate-900 text-white p-3.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] shadow-lg hover:bg-slate-800 transition-all">
+                                            className="btn-primary w-full text-[9px] uppercase tracking-widest">
                                             Confirm Period
                                         </button>
                                         <button onClick={() => { setManualStart(''); setManualEnd(''); setStartDate(''); setEndDate(''); setDateType('all'); setIsDatePickerOpen(false); }}
@@ -599,20 +599,20 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                         )}
                     </div>
 
-                    {role !== 'accounts' && (
+                    {role !== 'owner' && (
                         <button
                             onClick={() => handleAddLog()}
-                            className="flex items-center justify-center space-x-2 bg-slate-900 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-slate-800 active:scale-95 transition-all shadow-xl shadow-slate-200"
+                            className="btn-primary text-[10px] uppercase tracking-widest"
                         >
                             <Plus className="w-4 h-4" />
                             <span>Log Difference</span>
                         </button>
                     )}
 
-                    {role === 'accounts' && (
+                    {(role === 'manager' || role === 'owner') && (
                         <button
                             onClick={handleExportExcel}
-                            className="flex items-center justify-center space-x-2 bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-emerald-700 active:scale-95 transition-all shadow-xl shadow-emerald-200"
+                            className="btn-secondary text-[10px] uppercase tracking-widest"
                         >
                             <FileDown className="w-4 h-4" />
                             <span>Bulk Export</span>
@@ -622,46 +622,45 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             </div>
 
             {/* Accounts Notification & Pending Center */}
-            {role === 'accounts' && pendingLogs.length > 0 && (
-                <div className="bg-emerald-900 text-white rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                    <div className="flex items-center justify-between mb-8 relative z-10">
+            {role === 'manager' && pendingLogs.length > 0 && (
+                <div className="operational-panel p-5 md:p-6">
+                    <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center animate-pulse">
-                                <Bell className="w-6 h-6 text-emerald-400" />
+                            <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
+                                <Bell className="w-5 h-5 text-emerald-600" />
                             </div>
                             <div>
-                                <h3 className="text-xl font-black tracking-tighter uppercase">New Submission Alerts</h3>
-                                <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-widest">Awaiting reconciliation from branches</p>
+                                <h3 className="text-lg font-black tracking-tight uppercase text-slate-900">New Submission Alerts</h3>
+                                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Awaiting reconciliation from branches</p>
                             </div>
                         </div>
-                        <div className="bg-emerald-400 text-emerald-950 px-4 py-2 rounded-full text-xs font-black">
+                        <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-md text-xs font-black border border-emerald-100">
                             {pendingLogs.length} PENDING
                         </div>
                     </div>
 
-                    <div className="space-y-4 relative z-10">
+                    <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {pendingLogs.slice((alertsPage - 1) * 6, alertsPage * 6).map(log => (
-                                <div key={log.id} className="bg-white/10 border border-white/10 rounded-3xl p-5 hover:bg-white/20 transition-all cursor-pointer" onClick={() => handleUpdateStatus(log)}>
+                                <div key={log.id} className="bg-slate-50 border border-slate-100 rounded-lg p-4 hover:border-brand/30 transition-colors cursor-pointer" onClick={() => handleUpdateStatus(log)}>
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center space-x-2">
                                             <div className="w-8 h-8 bg-emerald-400/20 rounded-lg flex items-center justify-center">
                                                 <Building2 className="w-4 h-4 text-emerald-400" />
                                             </div>
-                                            <span className="text-xs font-black uppercase tracking-tighter">{log.branchName}</span>
+                                            <span className="text-xs font-black uppercase tracking-tighter text-slate-900">{log.branchName}</span>
                                         </div>
-                                        <span className="text-[10px] font-black opacity-50">{formatTime(log.createdAt)}</span>
+                                        <span className="text-[10px] font-black text-slate-400">{formatTime(log.createdAt)}</span>
                                     </div>
                                     <div className="mb-4">
-                                        <p className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest mb-1">Financial Impact</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Financial Impact</p>
                                         <p className={`text-lg font-black ${log.differenceType === 'Shortage' ? 'text-orange-400' : 'text-emerald-400'}`}>
                                             {log.differenceType === 'Shortage' ? '-' : '+'}{Math.abs(log.difference).toFixed(3)} BHD
                                         </p>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <User className="w-3 h-3 text-emerald-400" />
-                                        <span className="text-[11px] font-bold opacity-80">{log.pharmacistName}</span>
+                                        <span className="text-[11px] font-bold text-slate-600">{log.pharmacistName}</span>
                                     </div>
                                 </div>
                             ))}
@@ -673,9 +672,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                 <button
                                     onClick={() => setAlertsPage(prev => Math.max(1, prev - 1))}
                                     disabled={alertsPage === 1}
-                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                                    className="px-4 py-2 bg-slate-50 hover:bg-white border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-xs font-black uppercase tracking-widest transition-colors text-slate-600"
                                 >
-                                    ← Previous
+                                    Previous
                                 </button>
 
                                 <div className="flex items-center gap-2">
@@ -684,8 +683,8 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             key={page}
                                             onClick={() => setAlertsPage(page)}
                                             className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${page === alertsPage
-                                                ? 'bg-emerald-400 text-emerald-950'
-                                                : 'bg-white/10 hover:bg-white/20'
+                                                ? 'bg-brand text-white'
+                                                : 'bg-slate-50 hover:bg-white border border-slate-100 text-slate-500'
                                                 }`}
                                         >
                                             {page}
@@ -696,9 +695,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                 <button
                                     onClick={() => setAlertsPage(prev => Math.min(Math.ceil(pendingLogs.length / 6), prev + 1))}
                                     disabled={alertsPage === Math.ceil(pendingLogs.length / 6)}
-                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                                    className="px-4 py-2 bg-slate-50 hover:bg-white border border-slate-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-xs font-black uppercase tracking-widest transition-colors text-slate-600"
                                 >
-                                    Next →
+                                    Next
                                 </button>
                             </div>
                         )}
@@ -707,9 +706,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             )}
 
             {/* Summary Cards (Quick Stats) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 flex items-center space-x-4">
-                    <div className="p-4 bg-red-50 rounded-2xl text-red-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="operational-panel p-5 flex items-center space-x-4">
+                    <div className="p-3 bg-red-50 rounded-lg text-red-500">
                         <ArrowDownRight className="w-6 h-6" />
                     </div>
                     <div>
@@ -719,8 +718,8 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                         </p>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 flex items-center space-x-4">
-                    <div className="p-4 bg-emerald-50 rounded-2xl text-emerald-500">
+                <div className="operational-panel p-5 flex items-center space-x-4">
+                    <div className="p-3 bg-emerald-50 rounded-lg text-emerald-500">
                         <ArrowUpRight className="w-6 h-6" />
                     </div>
                     <div>
@@ -730,8 +729,8 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                         </p>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 flex items-center space-x-4">
-                    <div className="p-4 bg-amber-50 rounded-2xl text-amber-500">
+                <div className="operational-panel p-5 flex items-center space-x-4">
+                    <div className="p-3 bg-amber-50 rounded-lg text-amber-500">
                         <Clock className="w-6 h-6" />
                     </div>
                     <div>
@@ -741,8 +740,8 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                         </p>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-[2rem] border-2 border-slate-50 flex items-center space-x-4">
-                    <div className="p-4 bg-blue-50 rounded-2xl text-blue-500">
+                <div className="operational-panel p-5 flex items-center space-x-4">
+                    <div className="p-3 bg-blue-50 rounded-lg text-blue-500">
                         <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
@@ -754,22 +753,22 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                 </div>
             </div>
 
-            {role === 'accounts' ? (
+            {(role === 'manager' || role === 'owner') ? (
                 <div className="space-y-4">
                     {sortedBranches.map((branch, index) => {
                         const logs = groupedByBranch[branch];
                         const isNew = hasNewLogs(branch);
                         return (
-                            <div key={branch} className={`bg-white rounded-[2rem] border-2 shadow-sm overflow-hidden transition-all ${isNew ? 'border-red-200 bg-red-50/30' : 'border-slate-100'}`}>
+                            <div key={branch} className={`rounded-lg border shadow-sm overflow-hidden transition-colors ${isNew ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-white'}`}>
                                 <div
                                     onClick={() => toggleBranch(branch)}
                                     className={`w-full flex items-center justify-between p-6 hover:bg-slate-100/50 transition-all border-b border-slate-100 cursor-pointer ${isNew ? 'bg-red-50/50' : 'bg-slate-50'}`}
                                 >
                                     <div className="flex items-center space-x-4">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${isNew ? 'bg-red-100 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm ${isNew ? 'bg-red-100 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
                                             #{index + 1}
                                         </div>
-                                        <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                                        <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
                                             <MapPin className="w-5 h-5 text-emerald-600" />
                                         </div>
                                         <div className="text-left">
@@ -938,7 +937,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                                     setShowAllLogsBranches(prev => [...prev, branch]);
                                                                 }
                                                             }}
-                                                            className="flex items-center gap-3 px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+                                                            className="btn-primary text-[10px] uppercase tracking-widest"
                                                         >
                                                             {showAllLogsBranches.includes(branch) ? (
                                                                 <>
@@ -963,25 +962,25 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                     })}
                 </div >
             ) : (
-                <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 shadow-sm overflow-hidden">
-                    <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                <div className="operational-panel overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                         <div className="flex items-center space-x-4 text-xs font-black uppercase tracking-widest">
-                            <div className="flex space-x-2 bg-slate-100 p-1 rounded-xl">
+                            <div className="tab-nav">
                                 <button
                                     onClick={() => setFilterStatus('All')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === 'All' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'All' ? 'tab-item-brand' : ''}`}
                                 >
                                     All Records
                                 </button>
                                 <button
                                     onClick={() => setFilterStatus('Open')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === 'Open' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'Open' ? 'tab-item-brand' : ''}`}
                                 >
                                     Pending
                                 </button>
                                 <button
                                     onClick={() => setFilterStatus('Closed')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === 'Closed' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'Closed' ? 'tab-item-brand' : ''}`}
                                 >
                                     Reconciled
                                 </button>
@@ -991,7 +990,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
                             <button
                                 onClick={handleExportExcel}
-                                className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-white transition-all font-black uppercase text-[9px] tracking-widest flex items-center space-x-2 shadow-sm"
+                                className="btn-secondary text-[9px] uppercase tracking-widest"
                             >
                                 <FileDown className="w-3.5 h-3.5" />
                                 <span>Export CSV</span>
@@ -1073,7 +1072,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             <div className="flex justify-center flex-col items-center space-y-2">
                                                 <button
                                                     onClick={() => handleUpdateStatus(d)}
-                                                    disabled={role !== 'manager' && role !== 'accounts'}
+                                                    disabled={role !== 'manager'}
                                                     className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center space-x-1.5 transition-all
                                 ${d.status === 'Open' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
                                                              d.status === 'Reviewed' ? 'bg-blue-50 text-blue-600 border border-blue-100' :

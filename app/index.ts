@@ -6,13 +6,14 @@ export { DashboardPage, HRRequestsSection, PharmacistActivitySection } from './d
 export { HRPortalPage, VacationRequestFlow } from './hr';
 export { WorkforcePage, useStaffingCalculator } from './workforce';
 export { SuitePage } from './suite';
+export * from './command-center';
 export * from './spin-win';
 export * from './corporate-codex';
 export * from './project-settings';
 export * from './shared';
 export * from './block-analyzer';
 export * from './cash-flow';
+export * from './maintenance';
 export { FeedbackForm } from './modules/quality-feedback/pages/FeedbackForm';
 export { AdminDashboard as QualityFeedbackAdmin } from './modules/quality-feedback/pages/AdminDashboard';
 export * from './employee-contributions';
-

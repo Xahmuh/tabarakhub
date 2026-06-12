@@ -1,4 +1,4 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
 import { EmployeeContribution, ContributionType } from '../types';
 import { generateUUID } from '../utils/uuid';
 

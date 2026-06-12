@@ -1,4 +1,4 @@
-import { supabaseClient as supabase } from '@/lib/supabase';
+import { supabaseClient as supabase } from '@/lib/supabaseClient';
 import { 
   FeedbackFormData, 
   DashboardFilters, 
@@ -38,8 +38,8 @@ export const feedbackService = {
 
   // Fetch active questions
   fetchActiveQuestions: async (): Promise<Question[]> => {
-    const { data, error } = await supabase
-      .from('feedback_questions')
+      const { data, error } = await supabase
+      .from('quality_feedback_questions')
       .select('*')
       .eq('is_active', true)
       .order('order_index', { ascending: true });
@@ -99,7 +99,7 @@ export const feedbackService = {
   // Fetch all questions for management
   fetchAllQuestions: async (): Promise<Question[]> => {
     const { data, error } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .select('*')
       .order('section', { ascending: true })
       .order('order_index', { ascending: true });
@@ -110,11 +110,11 @@ export const feedbackService = {
   // Question CRUD
   createQuestion: async (question: Omit<Question, 'id'>): Promise<Question> => {
     const { error } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .insert([question]);
     if (error) throw error;
     const { data, error: fetchError } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .select('*')
       .eq('field_key', question.field_key);
     if (fetchError) throw fetchError;
@@ -126,12 +126,12 @@ export const feedbackService = {
     // Strip id and timestamps — only send actual editable fields
     const { id: _id, created_at: _ca, updated_at: _ua, ...safeUpdates } = updates as any;
     const { error } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .update(safeUpdates)
       .eq('id', id);
     if (error) throw error;
     const { data, error: fetchError } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .select('*')
       .eq('id', id);
     if (fetchError) throw fetchError;
@@ -146,7 +146,7 @@ export const feedbackService = {
 
   deleteQuestion: async (id: string): Promise<void> => {
     const { error } = await supabase
-      .from('feedback_questions')
+      .from('quality_feedback_questions')
       .delete()
       .eq('id', id);
     if (error) throw error;

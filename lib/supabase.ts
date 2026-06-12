@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { authService } from '../services/authService';
 import { branchService } from '../services/branchService';
 import { pharmacistService } from '../services/pharmacistService';
@@ -7,15 +6,9 @@ import { saleService } from '../services/saleService';
 import { hrService } from '../services/hrService';
 import { financeService } from '../services/financeService';
 import { codexService } from '../services/codexService';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase credentials missing in .env - falling back to offline seeds.");
-}
-
-export const supabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+import { systemSettingsService } from '../services/systemSettingsService';
+import { supabaseClient } from './supabaseClient';
+export { supabaseClient } from './supabaseClient';
 
 /**
  * @deprecated Use individual services from @/services instead.
@@ -34,5 +27,6 @@ export const supabase = {
   hrRequests: hrService,
   cashFlow: financeService.cashFlow,
   cashDifferences: financeService.cashDifferences,
-  codex: codexService
+  codex: codexService,
+  systemSettings: systemSettingsService
 };

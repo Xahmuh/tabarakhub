@@ -13,8 +13,6 @@ import {
   Globe,
   MonitorCheck,
   ChevronRight,
-  Clock,
-  ArrowDownWideNarrow,
   AlertTriangle,
   Download,
   MapPin,
@@ -54,10 +52,18 @@ import { PharmacistActivitySection } from './PharmacistActivitySection';
 import { ProductManagementSection } from '../shared';
 import { supabase } from '../../lib/supabase';
 import { LostSale, Branch, Product, Shortage } from '../../types';
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
 import { mapBranchName } from '../../utils/excelUtils';
+import { isModuleEnabled } from '../../config/clientConfig';
 import styles from './dashboard.module.css';
+
+const createExcelWorkbook = async () => {
+  if (!isModuleEnabled('excelExport')) {
+    throw new Error('Excel export is disabled for this client deployment');
+  }
+
+  const ExcelJS = await import('exceljs');
+  return new ExcelJS.Workbook();
+};
 
 const StrategicKPI: React.FC<{
   label: string;
@@ -141,6 +147,8 @@ interface DashboardPageProps {
   onBack?: () => void;
 }
 
+type DashboardDateType = 'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom';
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions, onBack }) => {
   const getPermission = (feature: string) => {
     return permissions.find(p => p.featureName === feature)?.accessLevel || 'read';
@@ -157,19 +165,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const cleanName = (name: string) => name?.toLowerCase().trim().replace(/\s+/g, ' ') || '';
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const isCanSelectBranch = user.role === 'admin' || user.role === 'manager';
-  const isAdmin = user.role === 'admin';
+  const isCanSelectBranch = user.role === 'manager' || user.role === 'owner' || user.role === 'warehouse' || user.role === 'supervisor';
+  const isAdmin = isCanSelectBranch;
   const [selectedBranch, setSelectedBranch] = useState<string>(isCanSelectBranch ? 'all' : user.id);
-  const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>('today');
+  const initialDateType = (() => {
+    const saved = sessionStorage.getItem('tabarak_dashboard_date_filter') as DashboardDateType | null;
+    const allowed: DashboardDateType[] = ['all', 'today', 'yesterday', '7d', 'month', 'custom'];
+    if (saved && allowed.includes(saved)) {
+      sessionStorage.removeItem('tabarak_dashboard_date_filter');
+      return saved;
+    }
+    return 'today';
+  })();
+  const [dateType, setDateType] = useState<DashboardDateType>(initialDateType);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
   const [paretoPage, setParetoPage] = useState(1);
+  const [lossDriverFilter, setLossDriverFilter] = useState<'priority' | 'high_value' | 'frequent' | 'all'>('priority');
+  const [lossDriverSearch, setLossDriverSearch] = useState('');
   const [branchPage, setBranchPage] = useState(1);
   const [hotShortagePage, setHotShortagePage] = useState(1);
   const [performanceLogPage, setPerformanceLogPage] = useState(1);
   const [performanceLogFilter, setPerformanceLogFilter] = useState<'no_recovery' | 'alt_given' | 'transferred' | null>(null);
+  const [performanceLogSearch, setPerformanceLogSearch] = useState('');
   // تقسيم حالة التحميل: مزامنة البيانات وتصدير الملفات
   const [isSyncing, setIsSyncing] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -392,14 +412,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    if (!performanceLogFilter) return sortedLogSales;
+    const normalizedSearch = performanceLogSearch.trim().toLowerCase();
+
     return sortedLogSales.filter(s => {
+      if (normalizedSearch) {
+        const branchName = branches.find(b => b.id === s.branchId)?.name || '';
+        const searchable = [
+          s.productName,
+          s.pharmacistName,
+          s.internalCode,
+          s.agentName,
+          s.category,
+          branchName
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!searchable.includes(normalizedSearch)) return false;
+      }
+
+      if (!performanceLogFilter) return true;
       if (performanceLogFilter === 'no_recovery') return !s.alternativeGiven && !s.internalTransfer;
       if (performanceLogFilter === 'alt_given') return !!s.alternativeGiven;
       if (performanceLogFilter === 'transferred') return !!s.internalTransfer;
       return true;
     });
-  }, [logSales, performanceLogFilter]);
+  }, [logSales, performanceLogFilter, performanceLogSearch, branches]);
+
+  const performanceLogFilterLabel = performanceLogFilter === 'no_recovery'
+    ? 'No recovery'
+    : performanceLogFilter === 'alt_given'
+      ? 'Alt given'
+      : performanceLogFilter === 'transferred'
+        ? 'Transfer'
+        : 'All statuses';
 
   const aggregateMetrics = useMemo(() => {
     const totalRevenue = sales.reduce((acc, sale) => acc + (Number(sale.totalValue) || 0), 0);
@@ -450,16 +493,52 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   }, [sales]);
 
   const paretoAnalysis = useMemo(() => {
-    const productMap: Record<string, { total: number, count: number }> = {};
+    const productMap: Record<string, {
+      total: number;
+      count: number;
+      incidents: number;
+      category: string;
+      agentName: string;
+      branchIds: Set<string>;
+    }> = {};
+
     sales.forEach(s => {
-      if (!productMap[s.productName]) productMap[s.productName] = { total: 0, count: 0 };
-      productMap[s.productName].total += (Number(s.totalValue) || 0);
-      productMap[s.productName].count += (Number(s.quantity) || 0);
+      const productName = s.productName || 'Unnamed Product';
+      if (!productMap[productName]) {
+        productMap[productName] = {
+          total: 0,
+          count: 0,
+          incidents: 0,
+          category: s.category || 'Uncategorized',
+          agentName: s.agentName || 'Unassigned Agent',
+          branchIds: new Set()
+        };
+      }
+
+      productMap[productName].total += (Number(s.totalValue) || 0);
+      productMap[productName].count += (Number(s.quantity) || 0);
+      productMap[productName].incidents += 1;
+      productMap[productName].branchIds.add(s.branchId);
+
+      if (s.category && productMap[productName].category === 'Uncategorized') {
+        productMap[productName].category = s.category;
+      }
+      if (s.agentName && productMap[productName].agentName === 'Unassigned Agent') {
+        productMap[productName].agentName = s.agentName;
+      }
     });
 
     const sortedImpact = Object.entries(productMap)
       .sort((a, b) => b[1].total - a[1].total)
-      .map(([name, data]) => ({ name, ...data }));
+      .map(([name, data]) => ({
+        name,
+        total: data.total,
+        count: data.count,
+        incidents: data.incidents,
+        category: data.category,
+        agentName: data.agentName,
+        branchCount: data.branchIds.size
+      }));
 
     const totalLossPool = sortedImpact.reduce((acc, item) => acc + item.total, 0);
     let runningSum = 0;
@@ -467,18 +546,59 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     return sortedImpact.map(item => {
       runningSum += item.total;
       const cumulativePercentage = (runningSum / (totalLossPool || 1)) * 100;
-      return { ...item, isPriority: cumulativePercentage <= 80 };
+      const share = totalLossPool > 0 ? (item.total / totalLossPool) * 100 : 0;
+      return {
+        ...item,
+        share,
+        averageValue: item.incidents > 0 ? item.total / item.incidents : 0,
+        isPriority: cumulativePercentage <= 80
+      };
     });
   }, [sales]);
 
-  const temporalMatrix = useMemo(() => {
-    const slots = Array.from({ length: 24 }, (_, i) => ({ hour: i, value: 0 }));
-    sales.forEach(s => {
-      const h = parseInt(s.lostHour);
-      if (!isNaN(h)) slots[h].value += Number(s.totalValue);
+  const lossDriverFilterOptions = useMemo(() => {
+    const maxValue = Math.max(...paretoAnalysis.map(item => item.total), 0);
+    const averageIncidents = paretoAnalysis.length
+      ? paretoAnalysis.reduce((sum, item) => sum + item.incidents, 0) / paretoAnalysis.length
+      : 0;
+    const isHighValue = (item: typeof paretoAnalysis[number]) => maxValue > 0 && item.total >= maxValue * 0.5;
+    const isFrequent = (item: typeof paretoAnalysis[number]) => item.incidents >= Math.max(1, Math.ceil(averageIncidents));
+
+    return [
+      { id: 'priority' as const, label: 'Priority', count: paretoAnalysis.filter(item => item.isPriority).length },
+      { id: 'high_value' as const, label: 'High Value', count: paretoAnalysis.filter(isHighValue).length },
+      { id: 'frequent' as const, label: 'Frequent', count: paretoAnalysis.filter(isFrequent).length },
+      { id: 'all' as const, label: 'All', count: paretoAnalysis.length }
+    ];
+  }, [paretoAnalysis]);
+
+  const filteredLossDrivers = useMemo(() => {
+    const maxValue = Math.max(...paretoAnalysis.map(item => item.total), 0);
+    const averageIncidents = paretoAnalysis.length
+      ? paretoAnalysis.reduce((sum, item) => sum + item.incidents, 0) / paretoAnalysis.length
+      : 0;
+    const normalizedSearch = lossDriverSearch.trim().toLowerCase();
+
+    return paretoAnalysis.filter(item => {
+      const matchesSearch = !normalizedSearch
+        || item.name.toLowerCase().includes(normalizedSearch)
+        || item.category.toLowerCase().includes(normalizedSearch)
+        || item.agentName.toLowerCase().includes(normalizedSearch);
+
+      if (!matchesSearch) return false;
+      if (lossDriverFilter === 'priority') return item.isPriority;
+      if (lossDriverFilter === 'high_value') return maxValue > 0 && item.total >= maxValue * 0.5;
+      if (lossDriverFilter === 'frequent') return item.incidents >= Math.max(1, Math.ceil(averageIncidents));
+      return true;
     });
-    return slots;
-  }, [sales]);
+  }, [paretoAnalysis, lossDriverFilter, lossDriverSearch]);
+
+  const lossDriverPageCount = Math.max(1, Math.ceil(filteredLossDrivers.length / 5));
+  const visibleLossDrivers = filteredLossDrivers.slice((paretoPage - 1) * 5, paretoPage * 5);
+
+  useEffect(() => {
+    setParetoPage(page => Math.min(page, lossDriverPageCount));
+  }, [lossDriverPageCount]);
 
   const geographicDistribution = useMemo(() => {
     const nodeMap: Record<string, number> = {};
@@ -515,6 +635,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       .sort((a, b) => new Date(a._ts).getTime() - new Date(b._ts).getTime())
       .map(({ name, value, count }) => ({ name, value, count }));
   }, [sales]);
+
+  const operationalTrendSummary = useMemo(() => {
+    const totalImpact = performanceTrend.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+    const totalSessions = performanceTrend.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+    const peakDay = performanceTrend.reduce<{ name: string; value: number; count: number } | null>((peak, item) => {
+      const value = Number(item.value) || 0;
+      const count = Number(item.count) || 0;
+      return !peak || value > peak.value ? { name: item.name, value, count } : peak;
+    }, null);
+    const firstValue = Number(performanceTrend[0]?.value) || 0;
+    const lastValue = Number(performanceTrend[performanceTrend.length - 1]?.value) || 0;
+    const delta = firstValue > 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
+
+    return {
+      totalImpact,
+      totalSessions,
+      averageImpact: totalSessions > 0 ? totalImpact / totalSessions : 0,
+      peakDay,
+      delta,
+      dayCount: performanceTrend.length
+    };
+  }, [performanceTrend]);
 
   // تصفية النقص بناءً على الحالة المحددة - Memoized filtered shortages
   const filteredShortages = useMemo(() => {
@@ -637,45 +779,88 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     return all;
   };
 
+  const sanitizeExportFilePart = (value: string) =>
+    value
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 48) || 'Branch';
+
+  const resolveExportScope = () => {
+    if (user.role === 'manager') {
+      if (selectedBranch === 'all') {
+        return {
+          branchId: null,
+          label: 'All Branches',
+          filePart: 'All_Branches',
+          isAllBranches: true
+        };
+      }
+
+      const branchName = mapBranchName(branches.find(b => b.id === selectedBranch)?.name || 'Selected Branch');
+      return {
+        branchId: selectedBranch,
+        label: branchName,
+        filePart: sanitizeExportFilePart(branchName),
+        isAllBranches: false
+      };
+    }
+
+    if (user.role === 'branch') {
+      const branchName = mapBranchName(user.name || user.code || 'Branch');
+      return {
+        branchId: user.id,
+        label: branchName,
+        filePart: sanitizeExportFilePart(branchName),
+        isAllBranches: false
+      };
+    }
+
+    if (selectedBranch && selectedBranch !== 'all') {
+      const branchName = mapBranchName(branches.find(b => b.id === selectedBranch)?.name || 'Selected Branch');
+      return {
+        branchId: selectedBranch,
+        label: branchName,
+        filePart: sanitizeExportFilePart(branchName),
+        isAllBranches: false
+      };
+    }
+
+    throw new Error('Only manager accounts can export all branches. Select one branch before exporting.');
+  };
+
+  const applyExportFilters = (query: any, scope: ReturnType<typeof resolveExportScope>) => {
+    const { start, end } = getDateRange(dateType, startDate, endDate);
+    if (start) query = query.gte('timestamp', start.toISOString());
+    if (end) query = query.lte('timestamp', end.toISOString());
+    if (scope.branchId) query = query.eq('branch_id', scope.branchId);
+    return query.order('timestamp', { ascending: false });
+  };
+
+  const styleWorksheetHeader = (worksheet: any) => {
+    worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    worksheet.getRow(1).alignment = { horizontal: 'center' };
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: worksheet.columnCount }
+    };
+  };
+
   const exportLostSales = async () => {
     // استخدام حالة منفصلة للتصدير
     setIsExporting(true);
     setIsExportDropdownOpen(false);
     try {
-      const workbook = new ExcelJS.Workbook();
+      const workbook = await createExcelWorkbook();
+      const exportScope = resolveExportScope();
 
       // Fetch data directly from the Standardized View
       let query = supabase.client
         .from('lost_sales_excel_export')
         .select('*');
 
-      // Apply filters matching current dashboard state
-      const referenceDate = new Date();
-      if (dateType === 'today') {
-        const threshold = new Date(); threshold.setHours(0, 0, 0, 0);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'yesterday') {
-        const start = new Date(); start.setDate(referenceDate.getDate() - 1); start.setHours(0, 0, 0, 0);
-        const end = new Date(); end.setDate(referenceDate.getDate() - 1); end.setHours(23, 59, 59, 999);
-        query = query.gte('timestamp', start.toISOString()).lte('timestamp', end.toISOString());
-      } else if (dateType === '7d') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 7);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'month') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 30);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'custom' && startDate && endDate) {
-        const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate); end.setHours(23, 59, 59, 999);
-        query = query.gte('timestamp', start.toISOString()).lte('timestamp', end.toISOString());
-      }
-
-      if (!isAdmin) {
-        query = query.eq('branch_id', user.id);
-      } else if (selectedBranch !== 'all') {
-        query = query.eq('branch_id', selectedBranch);
-      }
-
+      query = applyExportFilters(query, exportScope);
       const viewData = await fetchAllPages(query);
 
       if (!viewData || viewData.length === 0) {
@@ -779,9 +964,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         });
 
       // Style Header for Tab 2
-      aggregatedSheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      aggregatedSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      aggregatedSheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(aggregatedSheet);
 
       // --- TAB 3: LOSS BY AGENT ---
       const agentSheet = workbook.addWorksheet('Loss by Agent');
@@ -800,9 +983,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       Object.entries(agentStats).sort((a, b) => b[1].value - a[1].value).forEach(([name, stats]) => {
         agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: stats.value });
       });
-      agentSheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      agentSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      agentSheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(agentSheet);
 
       // --- TAB 4: RANKING (Branches & Pharmacists) ---
       const rankingSheet = workbook.addWorksheet('Ranking');
@@ -849,16 +1030,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       rankingSheet.columns.forEach(col => col.width = 25);
 
       // Finalize Lost Sales Tab
-      worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      worksheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(worksheet);
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `Tabarak_Lost_Sales_Analysis_${new Date().toISOString().split('T')[0]}.xlsx`;
+      anchor.download = `Tabarak_Lost_Sales_${exportScope.filePart}_${new Date().toISOString().split('T')[0]}.xlsx`;
       anchor.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
@@ -874,42 +1053,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setIsExporting(true);
     setIsExportDropdownOpen(false);
     try {
-      const workbook = new ExcelJS.Workbook();
+      const workbook = await createExcelWorkbook();
+      const exportScope = resolveExportScope();
 
       // Fetch data directly from the Standardized View
       let query = supabase.client
         .from('shortages_excel_export')
         .select('*');
 
-      // Apply filters matching current dashboard state
-      const referenceDate = new Date();
-      if (dateType === 'today') {
-        const threshold = new Date(); threshold.setHours(0, 0, 0, 0);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'yesterday') {
-        const start = new Date(); start.setDate(referenceDate.getDate() - 1); start.setHours(0, 0, 0, 0);
-        const end = new Date(); end.setDate(referenceDate.getDate() - 1); end.setHours(23, 59, 59, 999);
-        query = query.gte('timestamp', start.toISOString()).lte('timestamp', end.toISOString());
-      } else if (dateType === '7d') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 7);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'month') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 30);
-        query = query.gte('timestamp', threshold.toISOString());
-      } else if (dateType === 'custom' && startDate && endDate) {
-        const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate); end.setHours(23, 59, 59, 999);
-        query = query.gte('timestamp', start.toISOString()).lte('timestamp', end.toISOString());
-      }
-
-      if (!isAdmin) {
-        query = query.eq('branch_id', user.id);
-      } else if (selectedBranch !== 'all') {
-        query = query.eq('branch_id', selectedBranch);
-      }
-
-      const { data: viewData, error } = await query;
-      if (error) throw error;
+      query = applyExportFilters(query, exportScope);
+      const viewData = await fetchAllPages(query);
       if (!viewData || viewData.length === 0) {
         showToast("No shortages found for this period.", 'info');
         return;
@@ -949,9 +1102,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
           });
         });
 
-        worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-        worksheet.getRow(1).alignment = { horizontal: 'center' };
+        styleWorksheetHeader(worksheet);
       };
 
       // --- Filter Data for Store Tabs ---
@@ -960,23 +1111,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
       const medicineData = viewData.filter((s: any) => medicineCategories.includes((s.category || '').toLowerCase()));
       const generalData = viewData.filter((s: any) => generalCategories.includes((s.category || '').toLowerCase()));
-      // Fallback: items that don't match either list go to General or can be separate. 
-      // User request implies these are the exhaustive lists. We'll put anything else in General Store or just keep All.
-      // Let's stick strictly to what was asked. If strictly asked, maybe leftovers go nowhere? 
-      // Usually better to put leftovers in General or have an 'Others'.
-      // For now, I'll add a catch-all "All Shortages" tab first, then the split tabs.
+      const otherData = viewData.filter((s: any) => {
+        const category = (s.category || '').toLowerCase();
+        return !medicineCategories.includes(category) && !generalCategories.includes(category);
+      });
 
       // TAB 1: ALL SHORTAGES (Master List)
       createSheet('All Shortages', viewData);
 
       // TAB 2: MEDICINE STORE
-      if (medicineData.length > 0) createSheet('Medicine Store', medicineData);
+      createSheet('Medicine Store', medicineData);
 
-      // TAB 3: GENERAL STORE (Includes explicit general categories + any leftovers just in case?)
-      // The user listed specific categories. I will strictly follow the list for the 'General Store' tab.
-      if (generalData.length > 0) createSheet('General Store', generalData);
+      // TAB 3: GENERAL STORE
+      createSheet('General Store', generalData);
 
-      // TAB 4: RANKING (Branches & Pharmacists)
+      // TAB 4: OTHER CATEGORIES (keeps unmatched categories visible instead of hiding them)
+      createSheet('Other Categories', otherData);
+
+      // TAB 5: RANKING (Branches & Pharmacists)
       const rankingSheet = workbook.addWorksheet('Ranking');
 
       // Branch Ranking
@@ -1022,7 +1174,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `Tabarak_Shortage_Analysis_${new Date().toISOString().split('T')[0]}.xlsx`;
+      anchor.download = `Tabarak_Shortage_${exportScope.filePart}_${new Date().toISOString().split('T')[0]}.xlsx`;
       anchor.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
@@ -1038,48 +1190,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setIsExporting(true);
     setIsExportDropdownOpen(false);
     try {
-      const workbook = new ExcelJS.Workbook();
-
-      // --- FILTERS PREPARATION ---
-      let startFilter = '';
-      let endFilter = '';
-      const referenceDate = new Date();
-      if (dateType === 'today') {
-        const threshold = new Date(); threshold.setHours(0, 0, 0, 0);
-        startFilter = threshold.toISOString();
-      } else if (dateType === 'yesterday') {
-        const start = new Date(); start.setDate(referenceDate.getDate() - 1); start.setHours(0, 0, 0, 0);
-        const end = new Date(); end.setDate(referenceDate.getDate() - 1); end.setHours(23, 59, 59, 999);
-        startFilter = start.toISOString();
-        endFilter = end.toISOString();
-      } else if (dateType === '7d') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 7);
-        startFilter = threshold.toISOString();
-      } else if (dateType === 'month') {
-        const threshold = new Date(); threshold.setDate(referenceDate.getDate() - 30);
-        startFilter = threshold.toISOString();
-      } else if (dateType === 'custom' && startDate && endDate) {
-        const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate); end.setHours(23, 59, 59, 999);
-        startFilter = start.toISOString();
-        endFilter = end.toISOString();
-      }
+      const workbook = await createExcelWorkbook();
+      const exportScope = resolveExportScope();
 
       // --- 1. FETCH SALES & SHORTAGES IN PARALLEL ---
       let salesQuery = supabase.client.from('lost_sales_excel_export').select('*');
       let shortagesQuery = supabase.client.from('shortages_excel_export').select('*');
 
-      // Apply Filters Helper
-      const applyFilters = (q: any) => {
-        if (startFilter) q = q.gte('timestamp', startFilter);
-        if (endFilter) q = q.lte('timestamp', endFilter);
-        if (!isAdmin) q = q.eq('branch_id', user.id);
-        else if (selectedBranch !== 'all') q = q.eq('branch_id', selectedBranch);
-        return q;
-      };
-
-      salesQuery = applyFilters(salesQuery);
-      shortagesQuery = applyFilters(shortagesQuery);
+      salesQuery = applyExportFilters(salesQuery, exportScope);
+      shortagesQuery = applyExportFilters(shortagesQuery, exportScope);
 
       const [salesData, shortagesData] = await Promise.all([
         fetchAllPages(salesQuery),
@@ -1136,9 +1255,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         });
       }
 
-      lostSalesSheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      lostSalesSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      lostSalesSheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(lostSalesSheet);
 
       // --- TAB 2: LOSS BY AGENT (Powered by View) ---
       const agentSheet = workbook.addWorksheet('Loss by Agent');
@@ -1159,9 +1276,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       Object.entries(agentStats).sort((a, b) => b[1].value - a[1].value).forEach(([name, stats]) => {
         agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: stats.value });
       });
-      agentSheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      agentSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      agentSheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(agentSheet);
 
       // --- TAB 3: INVENTORY SHORTAGES (Powered by View) ---
       const shortageSheet = workbook.addWorksheet('Inventory Shortages');
@@ -1196,9 +1311,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         });
       });
 
-      shortageSheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-      shortageSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-      shortageSheet.getRow(1).alignment = { horizontal: 'center' };
+      styleWorksheetHeader(shortageSheet);
 
       // --- TAB 4: RANKING (Branches & Pharmacists) ---
       const rankingSheet = workbook.addWorksheet('Ranking');
@@ -1252,7 +1365,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `Tabarak_Complete_Analysis_${new Date().toISOString().split('T')[0]}.xlsx`;
+      anchor.download = `Tabarak_Combined_Analysis_${exportScope.filePart}_${new Date().toISOString().split('T')[0]}.xlsx`;
       anchor.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
@@ -1266,6 +1379,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
 
   const activeBranchLabel = selectedBranch === 'all' ? 'CENTRAL CONSOLE' : branches.find(b => b.id === selectedBranch)?.name;
+  const headerTitle = viewMode === 'standard'
+    ? 'Lost Sales Tracker'
+    : viewMode === 'expanded'
+      ? 'Inventory Gaps'
+      : 'Product Catalogue';
+  const HeaderIcon = viewMode === 'products'
+    ? Package
+    : viewMode === 'expanded'
+      ? PackageX
+      : LayoutGrid;
 
     return (
       <div className="min-h-screen bg-white font-sans selection:bg-red-100">
@@ -1273,12 +1396,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
           {/* --- HEADER --- */}
           <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
             <div className="flex items-center gap-4">
-              <div className="w-13 h-13 bg-red-700 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-red-700/20">
-                <LayoutGrid size={28} />
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm transition-all ${
+                viewMode === 'products' ? 'bg-slate-900 border border-slate-800' : 'bg-red-700'
+              }`}>
+                <HeaderIcon size={26} strokeWidth={2.2} />
               </div>
               <div>
                 <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none whitespace-nowrap">
-                  {viewMode === 'standard' ? 'Lost Sales Tracker' : viewMode === 'expanded' ? 'Inventory Gaps' : 'Product Catalog'}
+                  {headerTitle}
                 </h1>
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mt-1.5">Real-time performance analytics</p>
               </div>
@@ -1447,6 +1572,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               )}
             </div>
 
+              {isModuleEnabled('excelExport') && (
               <div className="relative export-dropdown-container">
                 <button
                   onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
@@ -1470,7 +1596,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         </div>
                         <div>
                           <p className="text-slate-900">Lost Sales Analysis</p>
-                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">2 Tabs: Sales Data + Agent Summary</p>
+                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Records, Item, Agent, Ranking</p>
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-slate-300 group-hover:text-red-600 transition-colors" />
@@ -1486,7 +1612,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         </div>
                         <div>
                           <p className="text-slate-900">Shortage Analysis</p>
-                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">3 Tabs: Inventory Shortages</p>
+                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">5 Tabs: All, Stores, Other, Ranking</p>
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-slate-300 group-hover:text-amber-600 transition-colors" />
@@ -1502,7 +1628,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         </div>
                         <div>
                           <p>Complete Analysis</p>
-                          <p className="text-[8px] text-white/60 font-bold normal-case tracking-normal mt-0.5">3 Tabs: All Data Combined</p>
+                          <p className="text-[8px] text-white/60 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Lost Sales, Shortage, Ranking</p>
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-white/40 group-hover:text-white transition-colors" />
@@ -1511,6 +1637,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                 </div>
               )}
             </div>
+              )}
 
               {onBack && (
                 <button
@@ -1547,9 +1674,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               {(user.role === 'manager') && (
                 <button
                   onClick={() => changeViewMode('products')}
-                  className={`tab-item px-7 py-3 rounded-xl ${viewMode === 'products' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
+                  className={`tab-item px-7 py-3 rounded-xl flex items-center gap-2 ${viewMode === 'products' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
                 >
-                  Product Catalog
+                  <Package size={16} />
+                  Product Catalogue
                 </button>
               )}
             </div>
@@ -1653,23 +1781,57 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
               {/* --- Section 2.3: Performance Log (New) --- */}
               <section className="bg-white rounded-[2.8rem] border border-slate-100 shadow-sm overflow-hidden mb-20 p-8 md:p-12 relative">
-                <div className="flex items-center justify-between mb-10">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4">
-                      <FileText size={20} />
+                <div className="flex flex-col gap-6 mb-8">
+                  <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5">
+                    <div className="flex items-start">
+                      <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 shrink-0">
+                        <FileText size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Branch Performance Log</h2>
+                        <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Recent Lost Sale Activity</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                            <Database size={12} />
+                            {filteredPerformanceLogData.length} / {logSales.length} Records
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
+                            <MapPin size={12} />
+                            {activeBranchLabel || 'Selected Branch'}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                            <CalendarDays size={12} />
+                            {dateType === 'today' ? 'Today' : dateType === 'yesterday' ? 'Yesterday' : dateType === '7d' ? 'Last 7 Days' : dateType === 'month' ? 'Last Month' : dateType === 'custom' ? 'Custom Period' : 'All Time'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Branch Performance Log</h2>
-                      <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Recent Lost Sale Activity</p>
+
+                    <div className="w-full xl:max-w-md">
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                        <input
+                          type="text"
+                          value={performanceLogSearch}
+                          onChange={(e) => {
+                            setPerformanceLogSearch(e.target.value);
+                            setPerformanceLogPage(1);
+                          }}
+                          placeholder="Search product, branch, pharmacist, code..."
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-red-200 focus:bg-white focus:ring-4 focus:ring-red-50"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => {
                         setPerformanceLogFilter(performanceLogFilter === 'no_recovery' ? null : 'no_recovery');
                         setPerformanceLogPage(1);
                       }}
-                      className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'no_recovery'
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'no_recovery'
                         ? 'bg-red-500 text-white shadow-lg scale-105'
                         : 'bg-red-100 text-red-700 hover:bg-red-200'
                         }`}
@@ -1681,7 +1843,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         setPerformanceLogFilter(performanceLogFilter === 'alt_given' ? null : 'alt_given');
                         setPerformanceLogPage(1);
                       }}
-                      className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'alt_given'
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'alt_given'
                         ? 'bg-emerald-500 text-white shadow-lg scale-105'
                         : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                         }`}
@@ -1693,28 +1855,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         setPerformanceLogFilter(performanceLogFilter === 'transferred' ? null : 'transferred');
                         setPerformanceLogPage(1);
                       }}
-                      className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'transferred'
+                      className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${performanceLogFilter === 'transferred'
                         ? 'bg-blue-500 text-white shadow-lg scale-105'
                         : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                         }`}
                     >
                       transfer
                     </button>
-                    {performanceLogFilter && (
+                    {(performanceLogFilter || performanceLogSearch) && (
                       <button
                         onClick={() => {
                           setPerformanceLogFilter(null);
+                          setPerformanceLogSearch('');
                           setPerformanceLogPage(1);
                         }}
-                        className="px-2 py-1 bg-slate-100 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors"
+                        className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors"
                       >
-                        Clear
+                        Clear filters
                       </button>
                     )}
                   </div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                      Showing {performanceLogFilterLabel}{performanceLogSearch.trim() ? ` matching "${performanceLogSearch.trim()}"` : ''}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto min-h-[780px] flex flex-col">
+                <div className="overflow-x-auto min-h-[620px] flex flex-col">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-50">
@@ -1722,14 +1889,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         <th className="pb-4">Product / Branch</th>
                         <th className="pb-4 text-center w-32">Qty / Vol</th>
                         <th className="pb-4 text-right pr-4 w-40">Potential Loss</th>
-                        <th className="pb-4 text-center w-24">Status</th>
-                        <th className="pb-4 text-center w-24">Action</th>
+                        <th className="pb-4 text-center w-40">Recovery Status</th>
+                        <th className="pb-4 text-center w-28">Action</th>
                       </tr>
                     </thead>
                     <tbody className="text-sm font-bold text-slate-700">
                       {filteredPerformanceLogData.slice((performanceLogPage - 1) * 10, performanceLogPage * 10).map((s, idx) => {
-                        // Calculate global index: (Current Page - 1) * Page Size + (idx + 1)
                         const globalIdx = ((performanceLogPage - 1) * 10) + (idx + 1);
+                        const statusMeta = s.alternativeGiven
+                          ? { label: 'Alt Given', className: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' }
+                          : s.internalTransfer
+                            ? { label: 'Transfer', className: 'bg-blue-50 text-blue-700 border-blue-100', dot: 'bg-blue-500' }
+                            : { label: 'No Recovery', className: 'bg-red-50 text-red-700 border-red-100', dot: 'bg-red-500' };
                         return (
                           <tr key={s.id || idx} className="border-b border-slate-50 hover:bg-slate-50/50 transition-all h-[77px]">
                             <td className="py-4 pl-4 text-[10px] font-black text-slate-400 tabular-nums w-12">
@@ -1749,25 +1920,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                             <td className="py-4 text-right text-slate-900 pr-4 tabular-nums w-40">
                               {s.totalValue.toFixed(3)} <span className="text-[9px] text-slate-300">BHD</span>
                             </td>
-                            <td className="py-4 text-center w-24">
-                              <div className="flex justify-center gap-1">
-                                {s.alternativeGiven && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Alt Given"></span>}
-                                {s.internalTransfer && <span className="w-2 h-2 rounded-full bg-blue-500" title="Transfer"></span>}
-                                {!s.alternativeGiven && !s.internalTransfer && <span className="w-2 h-2 rounded-full bg-red-500" title="No Recovery"></span>}
-                              </div>
+                            <td className="py-4 text-center w-40">
+                              <span className={`inline-flex items-center justify-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${statusMeta.className}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`}></span>
+                                {statusMeta.label}
+                              </span>
                             </td>
-                            <td className="py-4 text-center w-24">
+                            <td className="py-4 text-center w-28">
                               {(user.role === 'branch' || user.role === 'manager') && (
                                 <button
-                                  onClick={() => {
-                                    if (confirm('Remove this lost sale record?')) {
-                                      supabase.sales.delete(s.id);
+                                  onClick={async () => {
+                                    if (confirm(`Remove lost sale record for "${s.productName}"? This cannot be undone.`)) {
+                                      try {
+                                        await supabase.sales.delete(s.id);
+                                        await syncDashboardData();
+                                        showToast('Lost sale record removed', 'success');
+                                      } catch (error) {
+                                        console.error('Failed to delete lost sale record:', error);
+                                        showToast(error instanceof Error ? error.message : 'Failed to delete lost sale record', 'error');
+                                      }
                                     }
                                   }}
-                                  className="w-8 h-8 rounded-lg inline-flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-transparent px-2.5 py-2 text-[9px] font-black uppercase tracking-wider text-slate-300 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600"
                                   aria-label="Delete lost sale record"
+                                  title="Delete lost sale record"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/center" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash2 lucide-trash-2" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                  <Trash2 size={14} />
+                                  <span className="hidden xl:inline">Delete</span>
                                 </button>
                               )}
                             </td>
@@ -1809,8 +1988,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                     </div>
                   )}
                   {filteredPerformanceLogData.length === 0 && (
-                    <div className="text-center py-12">
-                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No lost sales found for this period</p>
+                    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-[2rem] border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12 text-center">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-300 shadow-sm">
+                        <Search size={24} />
+                      </div>
+                      <p className="text-sm font-black text-slate-700 uppercase tracking-[0.14em]">No lost sales records found</p>
+                      <p className="mt-2 max-w-md text-xs font-bold leading-relaxed text-slate-400">
+                        Try changing the branch/date filter, clearing the recovery filter, or searching with another product, pharmacist, branch, or internal code.
+                      </p>
+                      {(performanceLogSearch || performanceLogFilter) && (
+                        <button
+                          onClick={() => {
+                            setPerformanceLogSearch('');
+                            setPerformanceLogFilter(null);
+                            setPerformanceLogPage(1);
+                          }}
+                          className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white hover:bg-red-800 transition-colors"
+                        >
+                          Clear log filters
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1982,10 +2179,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                                         )}
                                         {(user.role === 'branch' || user.role === 'manager') && (
                                           <button
-                                            onClick={(e) => {
+                                            onClick={async (e) => {
                                               e.stopPropagation();
                                               if (confirm('Delete this shortage record?')) {
-                                                supabase.shortages.delete(item.id);
+                                                try {
+                                                  await supabase.shortages.delete(item.id);
+                                                  await syncDashboardData();
+                                                  showToast('Shortage record removed', 'success');
+                                                } catch (error) {
+                                                  console.error('Failed to delete shortage record:', error);
+                                                  showToast(error instanceof Error ? error.message : 'Failed to delete shortage record', 'error');
+                                                }
                                               }
                                             }}
                                             className="p-2 text-slate-300 hover:text-red-500 transition-colors"
@@ -2246,160 +2450,196 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
           viewMode === 'standard' ? (
             <>
               {/* --- Section 4: Deep Analytics Row --- */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-20 items-stretch">
+              <div className="grid grid-cols-1 gap-8 mb-20 items-stretch">
 
-                {/* REVENUE LEAKAGE (Pareto Optimization) */}
-                <div className="bg-white rounded-[2rem] p-5 md:p-10 border border-slate-100 shadow-sm flex flex-col min-h-[520px] md:min-h-[600px]">
-                  <div>
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter flex items-center uppercase">
-                      <ArrowDownWideNarrow className="w-6 h-6 mr-3 text-brand" />
-                      Revenue Leakage
-                    </h2>
-                    <p className="text-[8px] font-black text-slate-300 uppercase mt-1 tracking-widest">Pareto Principal Analysis (80/20 Risk)</p>
-                  </div>
-
-                  <div className="space-y-3 flex-1 px-1">
-                    {paretoAnalysis.slice((paretoPage - 1) * 5, paretoPage * 5).map((item, idx) => (
-                      <div key={idx} className={`p-4 md:p-5 rounded-[1.8rem] flex items-center justify-between border transition-all duration-500 transform-gpu hover:scale-[1.01] ${item.isPriority ? 'bg-red-50/30 border-brand/5' : 'bg-slate-50 border-transparent'}`}>
-                        <div className="flex items-center space-x-4 overflow-hidden">
-                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-[10px] md:text-xs shadow-sm transition-colors ${item.isPriority ? 'bg-brand text-white' : 'bg-white text-slate-300'}`}>
-                            {(paretoPage - 1) * 5 + idx + 1}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-black text-slate-800 text-sm md:text-base tracking-tight truncate max-w-[160px] md:max-w-[280px] leading-tight uppercase">
-                              {item.name}
-                            </p>
-                            <div className="flex items-center mt-2 space-x-3">
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white px-2 py-1 rounded-md border border-slate-100">Freq: {item.count}</span>
-                              {item.isPriority && <span className="text-[8px] font-black text-brand uppercase animate-pulse flex items-center"><Zap size={10} className="mr-1" /> High Risk SKU</span>}
-                            </div>
-                          </div>
+                {/* TOP LOSS DRIVERS (Filtered Product Impact) */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[640px]">
+                  <div className="p-6 md:p-8 bg-slate-50/80 border-b border-slate-100">
+                    <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
+                      <div className="flex items-start gap-4 min-w-0">
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                          <Target size={20} />
                         </div>
-                        <div className="text-right flex flex-col items-end shrink-0 pl-4">
-                          <span className="text-[9px] font-black text-brand uppercase leading-none mb-1.5 opacity-70">BHD</span>
-                          <span className="font-black text-slate-900 text-lg md:text-2xl tracking-tighter tabular-nums leading-none">
-                            {item.total.toFixed(3)}
-                          </span>
+                        <div className="min-w-0">
+                          <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase">Top Loss Drivers</h2>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-[0.16em]">
+                            Products creating the highest missed sales impact
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-[0.12em]">
+                              <PackageX size={12} />
+                              {filteredLossDrivers.length} / {paretoAnalysis.length} Items
+                            </span>
+                            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-100 text-[10px] font-black text-red-700 uppercase tracking-[0.12em]">
+                              <Zap size={12} />
+                              {lossDriverFilterOptions.find(option => option.id === 'priority')?.count || 0} Priority
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="w-full xl:max-w-xl space-y-3">
+                        <div className="relative">
+                          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                          <input
+                            type="text"
+                            value={lossDriverSearch}
+                            onChange={(e) => {
+                              setLossDriverSearch(e.target.value);
+                              setParetoPage(1);
+                            }}
+                            placeholder="Search product, category, or agent"
+                            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-brand/40 focus:ring-4 focus:ring-brand/5"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {lossDriverFilterOptions.map(option => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => {
+                                setLossDriverFilter(option.id);
+                                setParetoPage(1);
+                              }}
+                              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${lossDriverFilter === option.id
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300 hover:text-slate-900'
+                                }`}
+                            >
+                              {option.label}
+                              <span className={`rounded-full px-2 py-0.5 text-[9px] ${lossDriverFilter === option.id ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                {option.count}
+                              </span>
+                            </button>
+                          ))}
+                          {(lossDriverSearch || lossDriverFilter !== 'priority') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLossDriverFilter('priority');
+                                setLossDriverSearch('');
+                                setParetoPage(1);
+                              }}
+                              className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 hover:text-brand hover:bg-brand/5 transition-all"
+                            >
+                              <Filter size={12} />
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between px-2">
-                    <button onClick={() => setParetoPage(p => Math.max(1, p - 1))} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm" aria-label="Previous page">
+                  <div className="p-4 md:p-6 space-y-3 flex-1">
+                    {visibleLossDrivers.length > 0 ? (
+                      visibleLossDrivers.map((item, idx) => {
+                        const rank = (paretoPage - 1) * 5 + idx + 1;
+                        const impactWidth = `${Math.min(100, Math.max(4, item.share))}%`;
+
+                        return (
+                          <div key={item.name} className={`rounded-[1.4rem] border p-4 md:p-5 transition-all hover:border-slate-300 hover:shadow-sm ${item.isPriority ? 'border-red-100 bg-red-50/25' : 'border-slate-100 bg-slate-50/70'}`}>
+                            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+                              <div className="flex items-start gap-4 min-w-0 flex-1">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${item.isPriority ? 'bg-brand text-white' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                                  {rank}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                                    <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-[0.12em]">
+                                      {item.category}
+                                    </span>
+                                    <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-[0.12em]">
+                                      {item.agentName}
+                                    </span>
+                                    {item.isPriority && (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-700 text-white text-[9px] font-black uppercase tracking-[0.12em]">
+                                        <Zap size={10} />
+                                        Priority Driver
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-base md:text-lg font-black text-slate-900 leading-snug break-words" title={item.name}>
+                                    {item.name}
+                                  </p>
+                                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <div className="rounded-xl bg-white border border-slate-100 px-3 py-2">
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.12em]">Incidents</p>
+                                      <p className="text-sm font-black text-slate-900 tabular-nums">{item.incidents}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-white border border-slate-100 px-3 py-2">
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.12em]">Units</p>
+                                      <p className="text-sm font-black text-slate-900 tabular-nums">{item.count}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-white border border-slate-100 px-3 py-2">
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.12em]">Branches</p>
+                                      <p className="text-sm font-black text-slate-900 tabular-nums">{item.branchCount}</p>
+                                    </div>
+                                    <div className="rounded-xl bg-white border border-slate-100 px-3 py-2">
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.12em]">Avg Case</p>
+                                      <p className="text-sm font-black text-slate-900 tabular-nums">{item.averageValue.toFixed(3)}</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.14em]">Share of selected loss</span>
+                                      <span className="text-[10px] font-black text-slate-700 tabular-nums">{item.share.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="h-2 rounded-full bg-white border border-slate-100 overflow-hidden">
+                                      <div className="h-full rounded-full bg-brand transition-all duration-700" style={{ width: impactWidth }}></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="lg:text-right lg:min-w-[150px]">
+                                <p className="text-[9px] font-black text-brand uppercase tracking-[0.16em] mb-1">BHD Impact</p>
+                                <p className="text-2xl md:text-3xl font-black text-slate-900 tabular-nums leading-none">{item.total.toFixed(3)}</p>
+                                <p className="mt-2 text-[9px] font-bold text-slate-400 uppercase tracking-[0.12em]">
+                                  Filter: {lossDriverFilterOptions.find(option => option.id === lossDriverFilter)?.label || 'Priority'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="min-h-[300px] rounded-[1.4rem] border border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-center p-8">
+                        <PackageX className="text-slate-300 mb-4" size={32} />
+                        <p className="text-sm font-black text-slate-500 uppercase tracking-[0.16em]">No matching loss drivers</p>
+                        <p className="text-xs font-bold text-slate-400 mt-2">Adjust the filter or search term to widen the list.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="px-6 py-5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                    <button
+                      onClick={() => setParetoPage(p => Math.max(1, p - 1))}
+                      disabled={paretoPage === 1}
+                      className="p-3 bg-white text-slate-400 rounded-xl border border-slate-200 hover:bg-slate-900 hover:text-white transition-all shadow-sm disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-400"
+                      aria-label="Previous page"
+                    >
                       <ChevronLeft size={18} />
                     </button>
                     <div className="flex flex-col items-center">
-                      <span className="text-[9px] font-black text-slate-900 uppercase tabular-nums">Page {paretoPage} OF {Math.max(1, Math.ceil(paretoAnalysis.length / 5))}</span>
+                      <span className="text-[9px] font-black text-slate-900 uppercase tabular-nums">Page {paretoPage} OF {lossDriverPageCount}</span>
                       <div className="flex gap-1 mt-2">
-                        {Array.from({ length: Math.min(5, Math.ceil(paretoAnalysis.length / 5)) }).map((_, i) => (
+                        {Array.from({ length: Math.min(5, lossDriverPageCount) }).map((_, i) => (
                           <div key={i} className={`h-1 rounded-full transition-all ${paretoPage === i + 1 ? 'w-5 bg-brand' : 'w-1 bg-slate-200'}`}></div>
                         ))}
                       </div>
                     </div>
-                    <button onClick={() => setParetoPage(p => Math.min(Math.max(1, Math.ceil(paretoAnalysis.length / 5)), p + 1))} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm" aria-label="Next page">
+                    <button
+                      onClick={() => setParetoPage(p => Math.min(lossDriverPageCount, p + 1))}
+                      disabled={paretoPage === lossDriverPageCount}
+                      className="p-3 bg-white text-slate-400 rounded-xl border border-slate-200 hover:bg-slate-900 hover:text-white transition-all shadow-sm disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-400"
+                      aria-label="Next page"
+                    >
                       <ChevronRight size={18} />
                     </button>
                   </div>
                 </div>
 
-                {/* RISK PEAK HOURS (Temporal Matrix - Compact) */}
-                <div className="bg-[#0f172a] rounded-[2.5rem] p-8 md:p-12 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.4)] border border-white/5 relative flex flex-col min-h-[520px] md:min-h-[600px] group/heatmap font-sans">
-                  {/* Atmospheric Glow */}
-                  <div className="absolute -top-32 -right-32 w-80 h-80 bg-brand/10 rounded-full blur-[100px] animate-pulse pointer-events-none"></div>
-                  <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-slate-800/20 rounded-full blur-[100px] pointer-events-none"></div>
-
-                  <div className="flex items-center justify-between mb-12 relative z-10 px-2">
-                    <div>
-                      <div className="flex items-center gap-4 mb-2">
-                        <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-brand ring-1 ring-white/10 group-hover/heatmap:bg-white/10 transition-colors duration-500">
-                          <Clock className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-black text-white tracking-tighter uppercase leading-none">
-                            Risk Peak <span className="text-brand">Hours</span>
-                          </h2>
-                          <p className="text-[10px] font-black text-slate-500 uppercase mt-2 tracking-widest flex items-center gap-2">
-                            <span className="w-1 h-1 rounded-full bg-slate-700"></span>
-                            Temporal Node Impact Analysis
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl text-[9px] font-black text-white/40 uppercase tracking-widest border border-white/5">
-                      <Zap size={14} className="text-brand fill-brand/20 animate-pulse" />
-                      <span>Live Intelligence</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 md:gap-5 flex-1 pr-3 relative z-10 px-2 pb-6 pt-4">
-                    {temporalMatrix.map((h, i) => {
-                      const maxVal = Math.max(...temporalMatrix.map(d => d.value)) || 1;
-                      const ratio = h.value / maxVal;
-                      return (
-                        <div key={i} className="group/cell relative aspect-square">
-                          <div
-                            className={`${styles.heatmapCell} ${ratio > 0.8 ? 'border-brand/40 shadow-brand/10' : 'border-white/[0.03] hover:border-white/10'}`}
-                            style={{
-                              '--cell-bg': ratio > 0 ? `rgba(185, 28, 28, ${Math.max(0.1, ratio * 0.9)})` : 'rgba(255, 255, 255, 0.02)',
-                              boxShadow: ratio > 0.7 ? `0 0 20px rgba(185, 28, 28, ${ratio * 0.15})` : 'none'
-                            } as React.CSSProperties}
-                          >
-                            <span className={`font-black text-[11px] transition-colors duration-300 ${ratio > 0.5 ? 'text-white' : 'text-slate-500/50 group-hover/cell:text-slate-300'}`}>
-                              {h.hour}
-                            </span>
-                            <span className="text-[7px] font-black opacity-30 mt-0.5 tracking-tighter">HRS</span>
-                            {ratio > 0.7 && (
-                              <div className="absolute top-3 right-3">
-                                <span className="relative flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-brand"></span>
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Premium Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 opacity-0 group-hover/cell:opacity-100 transition-all duration-500 pointer-events-none z-[100] scale-90 group-hover/cell:scale-100">
-                            <div className="bg-slate-900 border border-slate-800 p-5 rounded-[1.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] min-w-[160px] ring-1 ring-white/10">
-                              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center justify-between">
-                                <span>TIME SLOT</span>
-                                <span className="text-brand bg-brand/10 px-2 py-0.5 rounded-lg">{h.hour}:00</span>
-                              </p>
-                              <div className="space-y-1">
-                                <p className="text-2xl font-black text-white tabular-nums tracking-tighter leading-none">
-                                  {h.value.toFixed(3)}
-                                </p>
-                                <p className="text-[9px] font-black text-brand uppercase tracking-widest">BHD Total Deficit</p>
-                              </div>
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-[10px] border-transparent border-t-slate-900"></div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap items-center justify-between gap-6 relative z-10 px-2">
-                    <div className="flex items-center space-x-8">
-                      <div className="flex items-center space-x-3 group/legend cursor-help">
-                        <div className="w-3 h-3 bg-white/5 rounded-full border border-white/10 transition-colors group-hover/legend:border-white/30"></div>
-                        <span className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Idle Phase</span>
-                      </div>
-                      <div className="flex items-center space-x-3 group/legend cursor-help">
-                        <div className="relative">
-                          <div className="w-3 h-3 bg-brand rounded-full"></div>
-                          <div className="absolute inset-0 bg-brand animate-ping rounded-full"></div>
-                        </div>
-                        <span className="text-[9px] font-black text-brand uppercase tracking-[0.2em]">High Risk Load</span>
-                      </div>
-                    </div>
-                    <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 flex items-center space-x-3">
-                      <RefreshCcw size={10} className="text-brand animate-spin" />
-                      <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.4em]">Live Node Sync</span>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* --- Section 3: Performance Calendar (RESTORED) --- */}
@@ -2428,45 +2668,73 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               </section>
 
               {/* --- Section 3.1: STOCK-STYLE TREND ANALYSIS --- */}
-              <section className="w-full bg-white rounded-[2.8rem] border border-slate-100 shadow-sm overflow-hidden group mb-20 p-8 md:p-12 relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none"></div>
-
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 relative z-10">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 group-hover:bg-brand transition-colors">
-                      <TrendingUp size={20} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Operational Trend Matrix</h2>
-                      <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Comparative value-volume analysis</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="underline decoration-emerald-500/30 decoration-2 underline-offset-4">
-                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">BHD Revenue Impact</span>
-                        </div>
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+              <section className="w-full bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden group mb-20">
+                <div className="px-6 py-6 md:px-8 md:py-7 bg-slate-50/70 border-b border-slate-100">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                    <div className="flex items-center min-w-0">
+                      <div className="w-11 h-11 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 group-hover:bg-brand transition-colors shrink-0">
+                        <TrendingUp size={20} />
                       </div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Primary Fiscal Leakage Line</p>
-                    </div>
-                    <div className="w-px h-8 bg-slate-100 italic"></div>
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="underline decoration-amber-500/30 decoration-2 underline-offset-4">
-                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Lost Customers No</span>
-                        </div>
-                        <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></div>
+                      <div className="min-w-0">
+                        <h2 className="text-lg md:text-xl font-black text-slate-900 tracking-tight uppercase">Operational Trend Matrix</h2>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-[0.16em]">Daily revenue impact and affected-customer trend</p>
                       </div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Unique Deficit Sessions</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm w-full xl:max-w-3xl divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+                      <div className="px-5 py-4">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Total Impact</p>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[10px] font-black text-emerald-600 uppercase">BHD</span>
+                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.totalImpact.toFixed(3)}</span>
+                        </div>
+                      </div>
+                      <div className="px-5 py-4">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Affected Sessions</p>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.totalSessions}</span>
+                          <span className="text-[10px] font-black text-amber-600 uppercase">Customers</span>
+                        </div>
+                      </div>
+                      <div className="px-5 py-4">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Average Loss</p>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[10px] font-black text-emerald-600 uppercase">BHD</span>
+                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.averageImpact.toFixed(3)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="relative h-[350px] w-full">
-                  <OperationalTrendChart data={performanceTrend} />
+                <div className="p-4 md:p-8">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.14em]">BHD Revenue Impact</span>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-[0.14em]">Lost Customers</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                        Peak: <span className="text-slate-900">{operationalTrendSummary.peakDay?.name || 'No data'}</span>
+                      </span>
+                      <span className={`rounded-full border px-3 py-1.5 ${operationalTrendSummary.delta > 0 ? 'border-red-200 bg-red-50 text-red-600' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                        {operationalTrendSummary.delta >= 0 ? '+' : ''}{operationalTrendSummary.delta.toFixed(1)}%
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                        {operationalTrendSummary.dayCount} Days
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-100 bg-white p-2 md:p-4 shadow-inner shadow-slate-100/60">
+                    <OperationalTrendChart data={performanceTrend} />
+                  </div>
                 </div>
               </section>
 

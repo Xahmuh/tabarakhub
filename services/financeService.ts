@@ -1,6 +1,34 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
 import { Supplier, Cheque, Expense, ActualRevenue, ExpectedRevenue, CashFlowSettings, CashDifference, Role } from '../types';
 import { generateUUID, isUUID } from '../utils/uuid';
+import { isDemoMode } from '../config/clientConfig';
+
+const readDemoArray = <T>(key: string): T[] => {
+  if (!isDemoMode) return [];
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+  } catch {
+    return [];
+  }
+};
+
+const writeDemoArray = <T>(key: string, data: T[]) => {
+  if (!isDemoMode) return;
+  localStorage.setItem(key, JSON.stringify(data));
+};
+
+const readDemoValue = <T>(key: string, fallback: T): T => {
+  if (!isDemoMode) return fallback;
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const throwUnlessDemoMode = (error: unknown) => {
+  if (!isDemoMode) throw error;
+};
 
 export const financeService = {
   cashFlow: {
@@ -11,7 +39,8 @@ export const financeService = {
           if (error) throw error;
           return data.map(s => ({ id: s.id, name: s.name, flexibilityLevel: s.flexibility_level, notes: s.notes }));
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_suppliers') || '[]');
+          throwUnlessDemoMode(e);
+          return readDemoArray<Supplier>('tabarak_cf_suppliers');
         }
       },
       upsert: async (supplier: Omit<Supplier, 'id'> & { id?: string }) => {
@@ -22,11 +51,12 @@ export const financeService = {
           if (error) throw error;
           return { id: data.id, name: data.name, flexibilityLevel: data.flexibility_level, notes: data.notes };
         } catch (e) {
-          const offline = JSON.parse(localStorage.getItem('tabarak_cf_suppliers') || '[]');
-          const idx = offline.findIndex((s: any) => s.id === id);
+          throwUnlessDemoMode(e);
+          const offline = readDemoArray<Supplier>('tabarak_cf_suppliers');
+          const idx = offline.findIndex(s => s.id === id);
           const newSupp = { ...supplier, id };
           if (idx >= 0) offline[idx] = newSupp; else offline.push(newSupp);
-          localStorage.setItem('tabarak_cf_suppliers', JSON.stringify(offline));
+          writeDemoArray('tabarak_cf_suppliers', offline);
           return newSupp;
         }
       }
@@ -42,7 +72,8 @@ export const financeService = {
             status: c.status, delayReason: c.delay_reason, executionTime: c.execution_time, createdAt: c.created_at
           }));
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_cheques') || '[]');
+          throwUnlessDemoMode(e);
+          return readDemoArray<Cheque>('tabarak_cf_cheques');
         }
       },
       upsert: async (cheque: Omit<Cheque, 'id' | 'createdAt'> & { id?: string }) => {
@@ -61,11 +92,12 @@ export const financeService = {
             status: data.status, delayReason: data.delay_reason, executionTime: data.execution_time, createdAt: data.created_at
           };
         } catch (e) {
-          const offline = JSON.parse(localStorage.getItem('tabarak_cf_cheques') || '[]');
-          const idx = offline.findIndex((c: any) => c.id === id);
+          throwUnlessDemoMode(e);
+          const offline = readDemoArray<Cheque>('tabarak_cf_cheques');
+          const idx = offline.findIndex(c => c.id === id);
           const newCheque = { ...cheque, id, createdAt: new Date().toISOString() };
           if (idx >= 0) offline[idx] = newCheque; else offline.push(newCheque);
-          localStorage.setItem('tabarak_cf_cheques', JSON.stringify(offline));
+          writeDemoArray('tabarak_cf_cheques', offline);
           return newCheque;
         }
       }
@@ -81,7 +113,8 @@ export const financeService = {
             maxDelayDays: e.max_delay_days, priority: e.priority, notes: e.notes
           }));
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_expenses') || '[]');
+          throwUnlessDemoMode(e);
+          return readDemoArray<Expense>('tabarak_cf_expenses');
         }
       },
       upsert: async (expense: Omit<Expense, 'id'> & { id?: string }) => {
@@ -101,11 +134,12 @@ export const financeService = {
             max_delay_days: data.max_delay_days, priority: data.priority, notes: data.notes
           };
         } catch (e) {
-          const offline = JSON.parse(localStorage.getItem('tabarak_cf_expenses') || '[]');
-          const idx = offline.findIndex((ex: any) => ex.id === id);
+          throwUnlessDemoMode(e);
+          const offline = readDemoArray<Expense>('tabarak_cf_expenses');
+          const idx = offline.findIndex(ex => ex.id === id);
           const newExpense = { ...expense, id };
           if (idx >= 0) offline[idx] = newExpense; else offline.push(newExpense);
-          localStorage.setItem('tabarak_cf_expenses', JSON.stringify(offline));
+          writeDemoArray('tabarak_cf_expenses', offline);
           return newExpense;
         }
       }
@@ -120,7 +154,8 @@ export const financeService = {
             paymentType: r.payment_type, settlementTime: r.settlement_time, createdAt: r.created_at
           }));
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_rev_actual') || '[]');
+          throwUnlessDemoMode(e);
+          return readDemoArray<ActualRevenue>('tabarak_cf_rev_actual');
         }
       },
       upsert: async (revenue: Omit<ActualRevenue, 'id' | 'createdAt'> & { id?: string }) => {
@@ -134,11 +169,12 @@ export const financeService = {
             paymentType: data.payment_type, settlementTime: data.settlement_time, createdAt: data.created_at
           };
         } catch (e) {
-          const offline = JSON.parse(localStorage.getItem('tabarak_cf_rev_actual') || '[]');
-          const idx = offline.findIndex((r: any) => r.id === id);
+          throwUnlessDemoMode(e);
+          const offline = readDemoArray<ActualRevenue>('tabarak_cf_rev_actual');
+          const idx = offline.findIndex(r => r.id === id);
           const newRev = { ...revenue, id, createdAt: new Date().toISOString() };
           if (idx >= 0) offline[idx] = newRev; else offline.push(newRev);
-          localStorage.setItem('tabarak_cf_rev_actual', JSON.stringify(offline));
+          writeDemoArray('tabarak_cf_rev_actual', offline);
           return newRev;
         }
       }
@@ -153,7 +189,8 @@ export const financeService = {
             confidence: r.confidence, expectedTime: r.expected_time, reason: r.reason, createdAt: r.created_at
           }));
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_rev_expected') || '[]');
+          throwUnlessDemoMode(e);
+          return readDemoArray<ExpectedRevenue>('tabarak_cf_rev_expected');
         }
       },
       upsert: async (revexp: Omit<ExpectedRevenue, 'id' | 'createdAt'> & { id?: string }) => {
@@ -170,11 +207,12 @@ export const financeService = {
             confidence: data.confidence, expectedTime: data.expected_time, reason: data.reason, createdAt: data.created_at
           };
         } catch (e) {
-          const offline = JSON.parse(localStorage.getItem('tabarak_cf_rev_expected') || '[]');
-          const idx = offline.findIndex((r: any) => r.id === id);
+          throwUnlessDemoMode(e);
+          const offline = readDemoArray<ExpectedRevenue>('tabarak_cf_rev_expected');
+          const idx = offline.findIndex(r => r.id === id);
           const newExp = { ...revexp, id, createdAt: new Date().toISOString() };
           if (idx >= 0) offline[idx] = newExp; else offline.push(newExp);
-          localStorage.setItem('tabarak_cf_rev_expected', JSON.stringify(offline));
+          writeDemoArray('tabarak_cf_rev_expected', offline);
           return newExp;
         }
       }
@@ -190,7 +228,8 @@ export const financeService = {
             forecastHorizon: data.forecast_horizon
           };
         } catch (e) {
-          return JSON.parse(localStorage.getItem('tabarak_cf_settings') || '{"safeThreshold": 1000, "initialBalance": 0, "forecastHorizon": 30}');
+          throwUnlessDemoMode(e);
+          return readDemoValue<CashFlowSettings>('tabarak_cf_settings', { safeThreshold: 1000, initialBalance: 0, forecastHorizon: 30 });
         }
       },
       update: async (settings: CashFlowSettings) => {
@@ -203,7 +242,8 @@ export const financeService = {
         try {
           await supabaseClient.from('cash_flow_settings').upsert([payload]);
         } catch (e) {
-          localStorage.setItem('tabarak_cf_settings', JSON.stringify(settings));
+          throwUnlessDemoMode(e);
+          if (isDemoMode) localStorage.setItem('tabarak_cf_settings', JSON.stringify(settings));
         }
         return settings;
       }
@@ -229,8 +269,9 @@ export const financeService = {
           createdAt: d.created_at
         }));
       } catch (e) {
-        const allData = JSON.parse(localStorage.getItem('tabarak_cash_differences') || '[]');
-        if (role === 'branch' && branchId) return allData.filter((d: any) => d.branchId === branchId);
+        throwUnlessDemoMode(e);
+        const allData = readDemoArray<CashDifference>('tabarak_cash_differences');
+        if (role === 'branch' && branchId) return allData.filter(d => d.branchId === branchId);
         return allData;
       }
     },
@@ -249,9 +290,11 @@ export const financeService = {
     delete: async (id: string) => {
       try {
         if (isUUID(id)) await supabaseClient.from('cash_differences').delete().eq('id', id);
-      } catch (e) { }
-      const offline = JSON.parse(localStorage.getItem('tabarak_cash_differences') || '[]');
-      localStorage.setItem('tabarak_cash_differences', JSON.stringify(offline.filter((s: any) => s.id !== id)));
+      } catch (e) {
+        throwUnlessDemoMode(e);
+      }
+      const offline = readDemoArray<CashDifference>('tabarak_cash_differences');
+      writeDemoArray('tabarak_cash_differences', offline.filter(s => s.id !== id));
       return true;
     }
   }

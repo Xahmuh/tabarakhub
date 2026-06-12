@@ -5,11 +5,18 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 const CEO_EMAIL = Deno.env.get('CEO_EMAIL') || 'ceo@example.com'
+const FUNCTION_SECRET = Deno.env.get('FUNCTION_SECRET')
 
 serve(async (req) => {
   try {
     if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Missing environment variables")
+    }
+    if (!FUNCTION_SECRET || req.headers.get('x-function-secret') !== FUNCTION_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)

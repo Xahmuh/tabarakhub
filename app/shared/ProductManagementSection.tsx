@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, FileDown, Upload, Plus, Search, FileSpreadsheet, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Download, Upload, Plus, Search, FileSpreadsheet, AlertCircle, CheckCircle, ShieldCheck, Database } from 'lucide-react';
 import { productService } from '../../services/productService';
-import { generateProductTemplate, generateProductListExport, parseProductUpload, ProductImportResult } from '../../utils/excelUtils';
+import { generateProductTemplate, generateProductListExport, parseProductUpload } from '../../utils/excelUtils';
 import { AdminProductModal } from './AdminProductModal';
 import { Product } from '../../types';
 import Swal from 'sweetalert2';
+import { isModuleEnabled } from '../../config/clientConfig';
+import { formatVatLabel, getPriceIncludingVat } from '../../utils/vat';
 
 export const ProductManagementSection: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
@@ -48,12 +50,12 @@ export const ProductManagementSection: React.FC = () => {
 
     const handleDownloadList = async () => {
         try {
-            if (products.length === 0) {
-                await fetchProducts(); // Ensure we have data
+            let exportRows = products;
+            if (exportRows.length === 0) {
+                exportRows = await productService.getProductsForExport();
+                setProducts(exportRows);
             }
-            await generateProductListExport(products);
-            // Note: generateProductListExport uses the passed array. If fetchProducts updates state strictly, we might need to rely on that or re-fetch.
-            // But 'products' state should be populated.
+            await generateProductListExport(exportRows);
         } catch (error) {
             Swal.fire('Error', 'Failed to export list', 'error');
         }
@@ -141,6 +143,8 @@ export const ProductManagementSection: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 50;
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+    const excelWorkflowsEnabled = isModuleEnabled('excelExport');
+    const bulkImportEnabled = excelWorkflowsEnabled;
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const paginatedProducts = filteredProducts.slice(
@@ -182,11 +186,11 @@ export const ProductManagementSection: React.FC = () => {
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-6 animate-in fade-in duration-300">
             {/* Header & Stats */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Product Management</h2>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Product Management</h2>
                     <p className="text-slate-500 font-medium mt-1">Manage global product catalog, pricing, and bulk imports.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -201,56 +205,112 @@ export const ProductManagementSection: React.FC = () => {
                 </div>
             </div>
 
-            {/* Actions Toolbar */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
-                <div className="flex flex-wrap gap-3">
-                    <button
-                        onClick={handleDownloadTemplate}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition-all text-sm"
-                    >
-                        <FileSpreadsheet size={18} />
-                        <span>Download Template</span>
-                    </button>
+            {/* Bulk Import */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-red-50 text-red-700 flex items-center justify-center shrink-0">
+                            <Upload size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Bulk Product Upload</h3>
+                            <p className="text-xs text-slate-500 font-medium mt-1">
+                                Upload `.xlsx` files using the official template. Existing `internal_code` rows update; new codes insert.
+                            </p>
+                        </div>
+                    </div>
 
-                    {selectedProductIds.size > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                        {bulkImportEnabled && (
+                            <button
+                                onClick={handleDownloadTemplate}
+                                className="btn-secondary"
+                            >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                <span>Template</span>
+                            </button>
+                        )}
+
+                        {bulkImportEnabled && (
+                        <>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                accept=".xlsx"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="btn-primary"
+                            >
+                                <Upload className="w-4 h-4" />
+                                <span>Bulk Import</span>
+                            </button>
+                        </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 bg-slate-50/60">
+                    <div className="p-4 flex items-start gap-3">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-xs font-black text-slate-700">Trusted manager workflow</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Excel import is kept inside Product Management only.</p>
+                        </div>
+                    </div>
+                    <div className="p-4 flex items-start gap-3">
+                        <Database className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-xs font-black text-slate-700">Upsert by internal code</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Same-code rows update the existing product; latest row in the file wins.</p>
+                        </div>
+                    </div>
+                    <div className="p-4 flex items-start gap-3">
+                        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-xs font-black text-slate-700">5MB maximum file size</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Required headers: internal_code, name, category, agent, retail price ex vat, vat, is_manual.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {!bulkImportEnabled && (
+                    <div className="p-4 bg-amber-50 border-t border-amber-100 text-sm font-semibold text-amber-800">
+                        Bulk import is disabled by `VITE_MODULE_EXCEL_EXPORT`. Enable it for trusted manager/admin deployments.
+                    </div>
+                )}
+            </div>
+
+            {/* Actions Toolbar */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                <div className="flex flex-wrap gap-3">
+                    {excelWorkflowsEnabled && (selectedProductIds.size > 0 ? (
                         <button
                             onClick={handleDownloadSelected}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all text-sm shadow-md"
+                            className="btn-primary"
                         >
-                            <Download size={18} />
+                            <Download className="w-4 h-4" />
                             <span>Export Selected ({selectedProductIds.size})</span>
                         </button>
                     ) : (
                         <button
                             onClick={handleDownloadList}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl font-bold transition-all text-sm"
+                            className="btn-secondary"
                         >
-                            <Download size={18} />
+                            <Download className="w-4 h-4" />
                             <span>Export Full Database ({products.length})</span>
                         </button>
-                    )}
+                    ))}
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept=".xlsx"
-                        className="hidden"
-                        onChange={handleFileUpload}
-                    />
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-bold transition-all text-sm"
-                    >
-                        <Upload size={18} />
-                        <span>Bulk Import</span>
-                    </button>
                     <button
                         onClick={() => { setEditingProduct(null); setIsModalOpen(true); }}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-xl active:scale-95 text-sm"
+                        className="btn-primary"
                     >
-                        <Plus size={18} />
+                        <Plus className="w-4 h-4" />
                         <span>Add Product</span>
                     </button>
                 </div>
@@ -258,21 +318,21 @@ export const ProductManagementSection: React.FC = () => {
 
             {/* Upload Results Summary */}
             {uploadStats && (
-                <div className={`p-6 rounded-2xl border ${uploadStats.failed > 0 ? 'bg-orange-50 border-orange-100' : 'bg-green-50 border-green-100'}`}>
+                <div className={`p-5 rounded-xl border ${uploadStats.failed > 0 ? 'bg-orange-50 border-orange-100' : 'bg-green-50 border-green-100'}`}>
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                         {uploadStats.failed > 0 ? <AlertCircle className="text-orange-600" /> : <CheckCircle className="text-green-600" />}
                         <span className={uploadStats.failed > 0 ? 'text-orange-900' : 'text-green-900'}>Last Upload Summary</span>
                     </h3>
                     <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center">
+                        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 flex flex-col items-center">
                             <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Inserted</span>
                             <span className="text-2xl font-black text-green-600">{uploadStats.inserted}</span>
                         </div>
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center">
+                        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 flex flex-col items-center">
                             <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Updated</span>
                             <span className="text-2xl font-black text-blue-600">{uploadStats.updated}</span>
                         </div>
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center">
+                        <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 flex flex-col items-center">
                             <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Failed</span>
                             <span className={`text-2xl font-black ${uploadStats.failed > 0 ? 'text-red-600' : 'text-slate-300'}`}>{uploadStats.failed}</span>
                         </div>
@@ -324,16 +384,18 @@ export const ProductManagementSection: React.FC = () => {
                                 <th className="p-4">Product Name</th>
                                 <th className="p-4">Category</th>
                                 <th className="p-4">Agent</th>
-                                <th className="p-4 text-right">Price</th>
+                                <th className="p-4 text-right">Price Ex. VAT</th>
+                                <th className="p-4 text-center">VAT</th>
+                                <th className="p-4 text-right">Price Inc. VAT</th>
                                 <th className="p-4 text-center">Is Manual</th>
                                 <th className="p-4 text-right pr-6">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
-                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 italic">Loading products...</td></tr>
+                                <tr><td colSpan={10} className="p-8 text-center text-slate-400 italic">Loading products...</td></tr>
                             ) : filteredProducts.length === 0 ? (
-                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 italic">No products found.</td></tr>
+                                <tr><td colSpan={10} className="p-8 text-center text-slate-400 italic">No products found.</td></tr>
                             ) : paginatedProducts.map((product) => (
                                 <tr key={product.id} className={`hover:bg-slate-50 transition-colors group ${selectedProductIds.has(product.id) ? 'bg-blue-50/50' : ''}`}>
                                     <td className="p-4 pl-6">
@@ -351,6 +413,14 @@ export const ProductManagementSection: React.FC = () => {
                                     </td>
                                     <td className="p-4 text-sm text-slate-600">{product.agent}</td>
                                     <td className="p-4 text-right font-mono font-bold text-slate-800">{product.defaultPrice?.toFixed(3)} BHD</td>
+                                    <td className="p-4 text-center">
+                                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${product.vatEnabled ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                            {formatVatLabel(product.vatEnabled, product.vatRate)}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-right font-mono font-bold text-slate-600">
+                                        {getPriceIncludingVat(product.defaultPrice || 0, product.vatEnabled, product.vatRate).toFixed(3)} BHD
+                                    </td>
                                     <td className="p-4 text-center">
                                         {product.isManual ? (
                                             <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-full">

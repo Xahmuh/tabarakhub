@@ -38,30 +38,30 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
             html: `
         <div class="space-y-4 text-left p-4">
           <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Expense Category</label>
-          <input id="ex-cat" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="e.g. Rent, Salaries, Electricity...">
+          <input id="ex-cat" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="e.g. Rent, Salaries, Electricity...">
           
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Amount (BHD)</label>
-              <input id="ex-amount" type="number" step="0.001" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold" placeholder="0.000">
+              <input id="ex-amount" type="number" step="0.001" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold" placeholder="0.000">
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Execution Date</label>
-              <input id="ex-date" type="date" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+              <input id="ex-date" type="date" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
             </div>
           </div>
           
           <div class="grid grid-cols-2 gap-4">
              <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Expense Type</label>
-              <select id="ex-type" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+              <select id="ex-type" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
                 <option value="Variable">Variable</option>
                 <option value="Fixed">Fixed Cost</option>
               </select>
             </div>
             <div>
               <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Strategic Priority</label>
-              <select id="ex-priority" class="w-full p-4 bg-slate-50 border-0 rounded-2xl mb-4 text-sm font-bold">
+              <select id="ex-priority" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-sm font-bold">
                 <option value="High">High (Immediate)</option>
                 <option value="Medium" selected>Medium</option>
                 <option value="Low">Low (Deferrable)</option>
@@ -69,14 +69,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
             </div>
           </div>
 
-          <div class="flex items-center space-x-3 p-4 bg-slate-50 rounded-2xl">
+          <div class="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-100 rounded-lg">
             <input id="ex-delay" type="checkbox" class="w-5 h-5 accent-brand rounded-lg">
             <label for="ex-delay" class="text-[10px] font-black text-brand uppercase tracking-widest">Delay Allowed (Smart Engine)</label>
           </div>
           
           <div id="delay-settings" class="hidden animate-in fade-in duration-300">
              <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-4">Max Delay Days</label>
-             <input id="ex-max-delay" type="number" class="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold" value="0">
+             <input id="ex-max-delay" type="number" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" value="0">
           </div>
         </div>
       `,
@@ -90,9 +90,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
             showCancelButton: true,
             confirmButtonText: 'Initialize Expense',
             customClass: {
-                popup: 'rounded-[2.5rem]',
-                confirmButton: 'bg-brand rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest',
-                cancelButton: 'bg-slate-100 text-slate-400 rounded-2xl px-10 py-5 font-black text-xs uppercase tracking-widest'
+                popup: 'rounded-lg',
+                confirmButton: 'bg-brand text-white rounded-lg px-4 py-2.5 font-bold text-sm',
+                cancelButton: 'bg-slate-100 text-slate-600 rounded-lg px-4 py-2.5 font-bold text-sm'
             },
             preConfirm: () => {
                 return {
@@ -115,15 +115,15 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
-            <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-10">
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="operational-panel p-5 md:p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-6">
                     <div>
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">Operating Expenses Registry</h3>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Audit and planning of recurring outflows</p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row items-center gap-4">
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
                         <div className="relative w-full md:w-64">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                             <input
@@ -131,16 +131,16 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
                                 placeholder="Search categories..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-0 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest focus:ring-2 ring-brand/20 transition-all"
+                                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest outline-none focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
                             />
                         </div>
 
-                        <div className="flex bg-slate-100 p-1.5 rounded-full overflow-hidden">
+                        <div className="tab-nav">
                             {['All', 'Fixed', 'Variable'].map(type => (
                                 <button
                                     key={type}
                                     onClick={() => setFilterType(type as any)}
-                                    className={`px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${filterType === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterType === type ? 'tab-item-brand' : ''}`}
                                 >
                                     {type}
                                 </button>
@@ -149,7 +149,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
 
                         <button
                             onClick={handleAddExpense}
-                            className="px-8 py-4 bg-brand text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-brand/30 hover:scale-105 active:scale-95 transition-all flex items-center space-x-3"
+                            className="btn-primary text-[10px] uppercase tracking-widest"
                         >
                             <Plus className="w-5 h-5" />
                             <span>Schedule Cost</span>
@@ -184,9 +184,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
                                     <tr key={e.id} className="group hover:bg-slate-50 transition-all duration-300">
                                         <td className="py-6 px-4">
                                             <div className="flex items-center space-x-4">
-                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${e.type === 'Fixed' ? 'bg-slate-900 shadow-xl' : 'bg-white border border-slate-200'
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${e.type === 'Fixed' ? 'bg-brand shadow-sm' : 'bg-white border border-slate-200'
                                                     }`}>
-                                                    <TrendingDown className={`w-6 h-6 ${e.type === 'Fixed' ? 'text-white' : 'text-slate-400'}`} />
+                                                    <TrendingDown className={`w-5 h-5 ${e.type === 'Fixed' ? 'text-white' : 'text-slate-400'}`} />
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-black text-slate-900 tracking-tight">{e.category}</p>
@@ -200,7 +200,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
                                         </td>
                                         <td className="py-6 px-4">
                                             <span className={`text-[10px] font-black uppercase tracking-widest flex items-center space-x-2 ${e.type === 'Fixed' ? 'text-slate-900' : 'text-slate-400'}`}>
-                                                <div className={`w-2 h-2 rounded-full ${e.type === 'Fixed' ? 'bg-slate-900 animate-pulse' : 'bg-slate-300'}`}></div>
+                                                <div className={`w-2 h-2 rounded-full ${e.type === 'Fixed' ? 'bg-brand' : 'bg-slate-300'}`}></div>
                                                 <span>{e.type} Cost</span>
                                             </span>
                                         </td>
@@ -229,10 +229,10 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onRefresh 
                                             )}
                                         </td>
                                         <td className="py-6 px-4 text-right">
-                                            <button className="p-3 text-slate-300 hover:text-brand transition-all hover:scale-110">
+                                            <button className="p-2 text-slate-300 hover:text-brand transition-colors">
                                                 <Edit className="w-4 h-4" />
                                             </button>
-                                            <button className="p-3 text-slate-300 hover:text-red-500 transition-all hover:scale-110 ml-2">
+                                            <button className="p-2 text-slate-300 hover:text-red-500 transition-colors ml-2">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </td>

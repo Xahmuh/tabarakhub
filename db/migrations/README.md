@@ -1,7 +1,11 @@
 # Database Migrations
 
-All SQL migration files are located in the project root for backward compatibility.
-See root-level `*_migration.sql` and `*.sql` files.
+Legacy SQL migration files are kept here for backward compatibility.
+Production Supabase migrations live in `supabase/migrations`.
+
+Apply `supabase/migrations/20260612034500_security_auth_rls_hardening.sql`
+after the legacy schema to remove broad anonymous policies and enable
+Supabase Auth/profile-backed RLS.
 
 ## Files Reference
 

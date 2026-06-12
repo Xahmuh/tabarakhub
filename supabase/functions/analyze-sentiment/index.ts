@@ -31,7 +31,15 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // We assume the user is authorized here, but in production we'd verify user role from custom claims or a users table
+    const { data: profile, error: profileError } = await supabase
+      .from('app_user_profiles')
+      .select('role, is_active')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (profileError || !profile?.is_active || !['admin', 'manager'].includes(profile.role)) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
     // 1. Fetch unanalyzed responses. Limit to 20 to avoid Edge Function timeouts.
     const { data: responses, error: fetchError } = await supabase

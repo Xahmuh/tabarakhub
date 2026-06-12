@@ -28,6 +28,7 @@ export const HRRequestsSection: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     useEffect(() => {
         loadRequests();
@@ -41,8 +42,14 @@ export const HRRequestsSection: React.FC = () => {
     };
 
     const updateStatus = async (id: string, status: 'Approved' | 'Rejected' | 'Completed') => {
-        await supabase.hrRequests.updateStatus(id, status);
-        loadRequests();
+        try {
+            await supabase.hrRequests.updateStatus(id, status);
+            setNotice({ type: 'success', message: `Request marked ${status}.` });
+            await loadRequests();
+        } catch (error) {
+            console.error('HR status update failed:', error);
+            setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Failed to update HR request status.' });
+        }
     };
 
     const generateWordDocument = async (req: HRRequest) => {
@@ -65,7 +72,7 @@ export const HRRequestsSection: React.FC = () => {
             }
         } catch (error) {
             console.error("Error generating document:", error);
-            alert("Failed to generate document. Please try again.");
+            setNotice({ type: 'error', message: 'Failed to generate document. Please try again.' });
         }
     };
 
@@ -97,7 +104,13 @@ export const HRRequestsSection: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="space-y-5 animate-in fade-in duration-500">
+            {notice && (
+                <div className={`rounded-lg border p-4 text-sm font-bold ${notice.type === 'success' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
+                    {notice.message}
+                </div>
+            )}
+
             {/* Stats Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <StatCard label="Total Requests" value={stats.total} color="slate" />
@@ -154,7 +167,7 @@ export const HRRequestsSection: React.FC = () => {
 
                     <button
                         onClick={loadRequests}
-                        className="h-9 w-9 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-all"
+                        className="h-9 w-9 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:border-brand/30 hover:bg-brand/5 hover:text-brand transition-colors"
                         title="Refresh"
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -163,10 +176,10 @@ export const HRRequestsSection: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="operational-panel overflow-hidden">
                 {isLoading ? (
                     <div className="flex items-center justify-center py-20">
-                        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                        <Loader2 className="w-6 h-6 animate-spin text-brand" />
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -363,7 +376,7 @@ const StatCard = ({ label, value, color }: { label: string; value: number; color
         emerald: 'bg-emerald-50 border-emerald-200 text-emerald-700',
     };
     return (
-        <div className={`px-4 py-3 rounded-xl border ${colorMap[color] || colorMap.slate}`}>
+        <div className={`px-4 py-3 rounded-lg border ${colorMap[color] || colorMap.slate}`}>
             <div className="text-2xl font-bold">{value}</div>
             <div className="text-[10px] font-semibold uppercase tracking-wider opacity-60">{label}</div>
         </div>

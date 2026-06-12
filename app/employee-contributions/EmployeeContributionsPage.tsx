@@ -26,7 +26,7 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
   const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<'All' | string>('All');
 
-  const isManager = userRole === 'admin' || userRole === 'manager' || userRole === 'master';
+  const isManager = userRole === 'manager' || userRole === 'master';
 
   const loadData = async () => {
     setIsLoading(true);

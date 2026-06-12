@@ -32,12 +32,11 @@ import {
     MessageCircle,
     ArrowLeft
 } from 'lucide-react';
-import ExcelJS from 'exceljs';
 import { RangeDatePicker } from '../shared/RangeDatePicker';
 import { SpinHeatmapCalendar } from './SpinHeatmapCalendar';
 import { formatCurrency } from '../../utils/calculations';
 import { mapBranchName } from '../../utils/excelUtils';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '../../lib/supabaseClient';
 
 interface ManagerDashboardProps {
     onBack: () => void;
@@ -218,6 +217,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
     }, [spins]);
 
     const exportAudit = async () => {
+        const ExcelJS = await import('exceljs');
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Spin Audit');
         sheet.columns = [

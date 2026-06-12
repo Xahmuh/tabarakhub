@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toPng } from 'html-to-image';
 import { spinWinService } from '../../services/spinWin';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '../../lib/supabaseClient';
 import { SpinSession, Branch } from '../../types';
 import {
     QrCode,

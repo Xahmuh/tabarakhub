@@ -1,0 +1,79 @@
+import { ClientModuleKey, clientConfig, isModuleEnabled } from '../config/clientConfig';
+
+export type AccessFeatureId =
+  | 'command_center'
+  | 'lost_sales'
+  | 'shortages'
+  | 'spin_win'
+  | 'hr_requests'
+  | 'workforce'
+  | 'cash_flow'
+  | 'cash_tracker'
+  | 'corporate_codex'
+  | 'quality_feedback'
+  | 'employee_contributions'
+  | 'delivery'
+  | 'products'
+  | 'block_analyzer'
+  | 'settings';
+
+export type AccessFeature = {
+  id: AccessFeatureId | string;
+  label: string;
+  module?: ClientModuleKey;
+  description?: string;
+};
+
+export const ACCESS_FEATURES: AccessFeature[] = [
+  { id: 'command_center', label: 'Daily Command Center', description: 'Daily action center and operational follow-up.' },
+  { id: 'lost_sales', label: 'Lost Sales Tracker', module: 'sales', description: 'Log and review missed sales requests.' },
+  { id: 'shortages', label: 'Shortages Tracker', module: 'sales', description: 'Log and review branch stock gaps.' },
+  { id: 'spin_win', label: 'Spin & Win Dashboard', module: 'spinWin', description: 'Customer reward wheel controls and branch QR access.' },
+  { id: 'hr_requests', label: 'HR Portal', module: 'hr', description: 'HR self-service and request management.' },
+  { id: 'workforce', label: 'Workforce Analytics', module: 'workforce', description: 'Staffing and relief planning analytics.' },
+  { id: 'cash_flow', label: 'Cash Flow Planner', module: 'cashFlow', description: 'Liquidity planning and cash flow forecast.' },
+  { id: 'cash_tracker', label: 'Branch Cash Tracker', module: 'cashTracker', description: 'Daily branch cash difference tracking.' },
+  { id: 'corporate_codex', label: 'Corporate Codex', module: 'corporateCodex', description: 'Policies, circulars, and operating protocols.' },
+  { id: 'quality_feedback', label: 'Quality Feedback', module: 'qualityFeedback', description: 'Anonymous feedback form and quality analytics.' },
+  { id: 'employee_contributions', label: 'Team Contributions', module: 'employeeContributions', description: 'Employee-submitted tools, projects, and knowledge.' },
+  { id: 'delivery', label: 'Delivery Recording & Traceability', description: 'Delivery orders, driver costs, and block traceability.' },
+  { id: 'products', label: 'Product Catalogue', module: 'products', description: 'Product catalogue and item management.' },
+  { id: 'block_analyzer', label: 'BH Block Analyzer', description: 'Block coverage and population analysis.' },
+  { id: 'settings', label: 'Project Settings', module: 'settings', description: 'Identity, access, and system settings.' }
+];
+
+const formatModuleLabel = (moduleKey: string): string =>
+  moduleKey
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+
+export const getAccessFeatureLabel = (featureId: string): string =>
+  ACCESS_FEATURES.find(feature => feature.id === featureId)?.label || formatModuleLabel(featureId);
+
+const NON_ACCESS_MODULE_KEYS: ClientModuleKey[] = [
+  'reports',
+  'excelExport',
+  'branchDashboard',
+  'managerDashboard',
+  'adminDashboard'
+];
+
+export const getEnabledAccessFeatures = (): AccessFeature[] => {
+  const knownFeatures = ACCESS_FEATURES.filter(feature => !feature.module || isModuleEnabled(feature.module));
+  const representedModules = new Set(ACCESS_FEATURES.map(feature => feature.module).filter(Boolean));
+  const automaticFeatures = (Object.keys(clientConfig.enabledModules) as ClientModuleKey[])
+    .filter(moduleKey =>
+      clientConfig.enabledModules[moduleKey] !== false
+      && !representedModules.has(moduleKey)
+      && !NON_ACCESS_MODULE_KEYS.includes(moduleKey)
+    )
+    .map(moduleKey => ({
+      id: moduleKey,
+      label: formatModuleLabel(moduleKey),
+      module: moduleKey,
+      description: 'Auto-registered module access. Defaults to no access until a manager approves it.'
+    }));
+
+  return [...knownFeatures, ...automaticFeatures];
+};

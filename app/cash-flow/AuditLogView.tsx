@@ -28,15 +28,15 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ cheques, expenses })
     );
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
-            <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-10">
+        <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="operational-panel p-5 md:p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-6">
                     <div>
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">Strategy Audit Trail</h3>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Immutable record of financial re-prioritization</p>
                     </div>
 
-                    <div className="flex items-center space-x-4 bg-slate-50 p-4 rounded-3xl">
+                    <div className="flex items-center space-x-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                         <div className="flex items-center space-x-2 px-4 border-r border-slate-200">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Integrity Level</span>
                             <div className="flex space-x-0.5">
@@ -52,9 +52,9 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ cheques, expenses })
 
                 <div className="space-y-6">
                     {auditEntries.length === 0 ? (
-                        <div className="py-24 text-center">
-                            <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-slate-200">
-                                <ShieldCheck className="w-10 h-10" />
+                        <div className="py-20 text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-lg flex items-center justify-center mx-auto mb-5 text-slate-200">
+                                <ShieldCheck className="w-8 h-8" />
                             </div>
                             <h4 className="text-lg font-black text-slate-900">Clear Financial History</h4>
                             <p className="text-slate-400 text-xs font-medium max-w-xs mx-auto mt-2">No delayed commitments or justification entries found in the current audit horizon.</p>
@@ -68,11 +68,11 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ cheques, expenses })
                                 {/* Timeline Dot */}
                                 <div className="absolute left-0 top-1.5 w-6 h-6 bg-white border-4 border-slate-100 rounded-full z-10 group-hover:border-brand transition-colors"></div>
 
-                                <div className="bg-slate-50 group-hover:bg-white border border-transparent group-hover:border-slate-100 p-8 rounded-[2.5rem] transition-all duration-500 group-hover:shadow-2xl group-hover:shadow-slate-200/50">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                                <div className="bg-slate-50 group-hover:bg-white border border-slate-100 p-5 rounded-lg transition-colors">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
                                         <div className="flex items-center space-x-4">
-                                            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                                                <History className="w-6 h-6 text-slate-900" />
+                                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                                                <History className="w-5 h-5 text-brand" />
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Commitment Adjustment</p>
@@ -81,10 +81,10 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ cheques, expenses })
                                         </div>
 
                                         <div className="flex items-center space-x-3">
-                                            <span className="px-3 py-1 bg-white text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-100">
+                                            <span className="px-3 py-1 bg-white text-slate-600 rounded-md text-[10px] font-black uppercase tracking-widest border border-slate-100">
                                                 {new Date(entry.createdAt || entry.dueDate).toLocaleDateString()}
                                             </span>
-                                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                            <span className="px-3 py-1 bg-red-100 text-red-600 rounded-md text-[10px] font-black uppercase tracking-widest">
                                                 Status: Delayed
                                             </span>
                                         </div>
@@ -110,7 +110,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ cheques, expenses })
                                             </div>
                                         </div>
 
-                                        <div className="bg-white p-6 rounded-3xl border border-slate-100">
+                                        <div className="bg-white p-4 rounded-lg border border-slate-100">
                                             <div className="flex items-center justify-between mb-4">
                                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Impact</span>
                                                 <span className="text-sm font-black text-brand">+{entry.amount.toLocaleString(undefined, { minimumFractionDigits: 3 })} BHD In-Day Liquidity</span>

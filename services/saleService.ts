@@ -1,9 +1,29 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '../lib/supabaseClient';
 import { LostSale, Product, Role, Shortage } from '../types';
 import { isUUID, generateUUID } from '../utils/uuid';
+import { isDemoMode } from '../config/clientConfig';
+import { BAHRAIN_VAT_RATE } from '../utils/vat';
 
 const SALES_KEY = 'tabarak_offline_sales';
 const PRODUCTS_KEY = 'tabarak_offline_products';
+
+const readDemoArray = <T>(key: string): T[] => {
+  if (!isDemoMode) return [];
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+  } catch {
+    return [];
+  }
+};
+
+const writeDemoArray = <T>(key: string, data: T[]) => {
+  if (!isDemoMode) return;
+  localStorage.setItem(key, JSON.stringify(data));
+};
+
+const throwUnlessDemoMode = (error: unknown) => {
+  if (!isDemoMode) throw error;
+};
 
 export const saleService = {
   products: {
@@ -13,6 +33,7 @@ export const saleService = {
         if (data) return data.map(p => ({
           id: p.id, name: p.name, category: p.category, agent: p.agent,
           defaultPrice: Number(p.default_price || 0), isManual: !!p.is_manual,
+          vatEnabled: !!p.vat_enabled, vatRate: Number(p.vat_rate ?? BAHRAIN_VAT_RATE),
           internalCode: p.internal_code, internationalCode: p.international_code,
           createdByBranch: p.created_by_branch
         }));
@@ -33,12 +54,15 @@ export const saleService = {
         if (data && data.length > 0) return data.map(p => ({
           id: p.id, name: p.name, category: p.category, agent: p.agent,
           defaultPrice: Number(p.default_price || 0), isManual: !!p.is_manual,
+          vatEnabled: !!p.vat_enabled, vatRate: Number(p.vat_rate ?? BAHRAIN_VAT_RATE),
           internalCode: p.internal_code, internationalCode: p.international_code,
           createdByBranch: p.created_by_branch
         }));
+        if (!isDemoMode) return [];
         throw new Error("No remote results");
       } catch (e) {
-        const localProducts: Product[] = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]');
+        throwUnlessDemoMode(e);
+        const localProducts = readDemoArray<Product>(PRODUCTS_KEY);
         const allLocal = [...localProducts];
         return allLocal.filter(p =>
           p.name.toLowerCase().includes(q) ||
@@ -52,20 +76,23 @@ export const saleService = {
         const { data, error } = await supabaseClient.from('products').insert([{
           name: product.name, category: product.category, agent: product.agent,
           default_price: Number(product.defaultPrice || 0), is_manual: true,
+          vat_enabled: !!product.vatEnabled, vat_rate: Number(product.vatRate ?? BAHRAIN_VAT_RATE),
           created_by_branch: product.createdByBranch
         }]).select().single();
         if (error) throw error;
         return {
           id: data.id, name: data.name, category: data.category, agent: data.agent,
           defaultPrice: Number(data.default_price || 0), isManual: !!data.is_manual,
+          vatEnabled: !!data.vat_enabled, vatRate: Number(data.vat_rate ?? BAHRAIN_VAT_RATE),
           internalCode: data.internal_code, internationalCode: data.international_code,
           createdByBranch: data.created_by_branch
         };
       } catch (e) {
+        throwUnlessDemoMode(e);
         const newProd = { ...product, id: Math.random().toString(36).substr(2, 9) };
-        const offline = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || '[]');
+        const offline = readDemoArray<Product>(PRODUCTS_KEY);
         offline.push(newProd);
-        localStorage.setItem(PRODUCTS_KEY, JSON.stringify(offline));
+        writeDemoArray(PRODUCTS_KEY, offline);
         return newProd;
       }
     }
@@ -81,10 +108,11 @@ export const saleService = {
         if (error) throw error;
         return result;
       } catch (e) {
-        const offline = JSON.parse(localStorage.getItem('tabarak_manual_products_log') || '[]');
+        throwUnlessDemoMode(e);
+        const offline = readDemoArray<Record<string, unknown>>('tabarak_manual_products_log');
         const entry = { ...data, id: 'manual-' + Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() };
         offline.push(entry);
-        localStorage.setItem('tabarak_manual_products_log', JSON.stringify(offline));
+        writeDemoArray('tabarak_manual_products_log', offline);
         return entry;
       }
     }
@@ -100,7 +128,7 @@ export const saleService = {
         let hasMore = true;
         while (hasMore) {
           let query = supabaseClient.from('lost_sales').select('*');
-          if ((role === 'admin' || role === 'manager') && branchId && branchId !== 'all') {
+          if (role !== 'branch' && branchId && branchId !== 'all') {
             if (isUUID(branchId)) query = query.eq('branch_id', branchId);
           } else if (role === 'branch') {
             if (isUUID(branchId)) query = query.eq('branch_id', branchId);
@@ -130,8 +158,10 @@ export const saleService = {
           internalTransfer: !!s.internal_transfer,
           internalCode: s.internal_code
         }));
-      } catch (e) { }
-      const localData: LostSale[] = JSON.parse(localStorage.getItem(SALES_KEY) || '[]');
+      } catch (e) {
+        throwUnlessDemoMode(e);
+      }
+      const localData = readDemoArray<LostSale>(SALES_KEY);
       const filteredLocal = branchId && branchId !== 'all' ? localData.filter(s => s.branchId === branchId) : localData;
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();
@@ -180,10 +210,11 @@ export const saleService = {
         window.dispatchEvent(new CustomEvent('tabarak_sales_updated', { detail: mapped }));
         return mapped;
       } catch (e) {
-        const offline = JSON.parse(localStorage.getItem(SALES_KEY) || '[]');
+        throwUnlessDemoMode(e);
+        const offline = readDemoArray<LostSale>(SALES_KEY);
         const newSale: LostSale = { ...sale, id, totalValue: payload.total_value, timestamp: payload.timestamp, lostDate: payload.lost_date, lostHour: payload.lost_hour } as LostSale;
         offline.push(newSale);
-        localStorage.setItem(SALES_KEY, JSON.stringify(offline));
+        writeDemoArray(SALES_KEY, offline);
         window.dispatchEvent(new CustomEvent('tabarak_sales_updated', { detail: newSale }));
         return newSale;
       }
@@ -191,9 +222,11 @@ export const saleService = {
     delete: async (id: string) => {
       try {
         if (isUUID(id)) await supabaseClient.from('lost_sales').delete().eq('id', id);
-      } catch (e) { }
-      const offline = JSON.parse(localStorage.getItem(SALES_KEY) || '[]');
-      localStorage.setItem(SALES_KEY, JSON.stringify(offline.filter((s: any) => s.id !== id)));
+      } catch (e) {
+        throwUnlessDemoMode(e);
+      }
+      const offline = readDemoArray<LostSale>(SALES_KEY);
+      writeDemoArray(SALES_KEY, offline.filter(s => s.id !== id));
       window.dispatchEvent(new CustomEvent('tabarak_sales_updated'));
       return true;
     }
@@ -209,7 +242,7 @@ export const saleService = {
         let hasMore = true;
         while (hasMore) {
           let query = supabaseClient.from('shortages').select('*');
-          if ((role === 'admin' || role === 'manager') && branchId && branchId !== 'all' && isUUID(branchId)) query = query.eq('branch_id', branchId);
+          if (role !== 'branch' && branchId && branchId !== 'all' && isUUID(branchId)) query = query.eq('branch_id', branchId);
           else if (role === 'branch' && isUUID(branchId)) query = query.eq('branch_id', branchId);
           const { data, error } = await query
             .order('timestamp', { ascending: false })
@@ -229,8 +262,10 @@ export const saleService = {
           pharmacistName: s.pharmacist_name, timestamp: s.timestamp,
           notes: s.notes, internalCode: s.internal_code, history: s.history || []
         }));
-      } catch (e) { }
-      const localData = JSON.parse(localStorage.getItem('tabarak_offline_shortages') || '[]');
+      } catch (e) {
+        throwUnlessDemoMode(e);
+      }
+      const localData = readDemoArray<Shortage>('tabarak_offline_shortages');
       const filteredLocal = branchId && branchId !== 'all' ? localData.filter((s: any) => s.branchId === branchId) : localData;
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();
@@ -288,20 +323,21 @@ export const saleService = {
           } as Shortage;
         }
       } catch (e) {
-        const offline = JSON.parse(localStorage.getItem('tabarak_offline_shortages') || '[]');
+        throwUnlessDemoMode(e);
+        const offline = readDemoArray<Shortage>('tabarak_offline_shortages');
         const idx = offline.findIndex((s: any) => s.branchId === shortage.branchId && (shortage.productId ? s.productId === shortage.productId : s.productName === shortage.productName));
         if (idx >= 0) {
           const item = offline[idx];
           const history = item.history || [];
           history.push({ status: item.status, timestamp: item.timestamp, pharmacistName: item.pharmacistName });
           offline[idx] = { ...item, status: shortage.status, timestamp: shortage.timestamp, pharmacistName: shortage.pharmacistName, pharmacistId: shortage.pharmacistId, history };
-          localStorage.setItem('tabarak_offline_shortages', JSON.stringify(offline));
+          writeDemoArray('tabarak_offline_shortages', offline);
           window.dispatchEvent(new CustomEvent('tabarak_shortages_updated'));
           return offline[idx];
         } else {
           const newItem = { ...shortage, id: Math.random().toString(36).substr(2, 9), history: [] };
           offline.push(newItem);
-          localStorage.setItem('tabarak_offline_shortages', JSON.stringify(offline));
+          writeDemoArray('tabarak_offline_shortages', offline);
           window.dispatchEvent(new CustomEvent('tabarak_shortages_updated'));
           return newItem;
         }
@@ -310,9 +346,11 @@ export const saleService = {
     delete: async (id: string) => {
       try {
         if (isUUID(id)) await supabaseClient.from('shortages').delete().eq('id', id);
-      } catch (e) { }
-      const offline = JSON.parse(localStorage.getItem('tabarak_offline_shortages') || '[]');
-      localStorage.setItem('tabarak_offline_shortages', JSON.stringify(offline.filter((s: any) => s.id !== id)));
+      } catch (e) {
+        throwUnlessDemoMode(e);
+      }
+      const offline = readDemoArray<Shortage>('tabarak_offline_shortages');
+      writeDemoArray('tabarak_offline_shortages', offline.filter(s => s.id !== id));
       window.dispatchEvent(new CustomEvent('tabarak_shortages_updated'));
       return true;
     }

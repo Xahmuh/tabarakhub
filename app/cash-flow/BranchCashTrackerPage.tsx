@@ -18,15 +18,15 @@ export const BranchCashTrackerPage: React.FC<BranchCashTrackerPageProps> = ({
 }) => {
     return (
         <div className="min-h-screen bg-white">
-            <div className="max-w-[1600px] mx-auto px-6 md:px-12 py-10">
+            <div className="max-w-[1600px] mx-auto px-5 md:px-8 py-8">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 mb-8">
                     <div className="flex items-center space-x-4">
-                        <div className="w-14 h-14 bg-[#0f172A] rounded-[1.4rem] flex items-center justify-center text-white shadow-2xl shadow-[#0f172A]/20">
-                            <Wallet size={28} />
+                        <div className="w-12 h-12 bg-brand rounded-lg flex items-center justify-center text-white shadow-sm shadow-brand/10">
+                            <Wallet size={24} />
                         </div>
                         <div>
-                            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+                            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
                                 Branch Cash Discrepancies
                             </h1>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2 italic">
@@ -38,7 +38,7 @@ export const BranchCashTrackerPage: React.FC<BranchCashTrackerPageProps> = ({
                     <div className="flex items-center space-x-3">
                         <button
                             onClick={onBack}
-                            className="px-8 py-4 bg-white border-2 border-slate-100 rounded-2xl text-slate-400 hover:text-slate-900 hover:border-slate-200 transition-all font-black uppercase text-[10px] tracking-widest flex items-center space-x-2 shadow-sm"
+                            className="btn-secondary text-[10px] uppercase tracking-widest"
                         >
                             <span>Back to Operational Suite</span>
                         </button>

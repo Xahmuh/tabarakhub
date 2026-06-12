@@ -14,6 +14,15 @@
     background-color: rgba(185, 28, 28, 0.12);
     color: #0f172a;
   }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid rgba(185, 28, 28, 0.32);
+    outline-offset: 2px;
+  }
 }
 
 /* Scrollbar */
@@ -153,11 +162,11 @@
 
 /* Premium card hover lift */
 .card-hover {
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
 }
 
 .card-hover:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
 }
 
 /* Subtle pulse glow for active states */
@@ -194,44 +203,65 @@
 }
 
 /* ============================================
-   PREMIUM BUTTON SYSTEM
+   OPERATIONAL BUTTON SYSTEM
+   red = primary, white/border = secondary,
+   gray = neutral, light red = danger
    ============================================ */
 
 .btn-primary {
-  @apply bg-red-700 text-white font-black uppercase tracking-widest text-xs;
-  @apply px-8 py-4 rounded-2xl;
-  @apply shadow-lg shadow-red-700/20;
-  @apply hover:bg-red-800 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-red-700/30;
-  @apply active:scale-[0.98] active:shadow-md;
-  @apply transition-all duration-300;
-  @apply disabled:opacity-40 disabled:shadow-none disabled:translate-y-0 disabled:pointer-events-none;
+  @apply inline-flex items-center justify-center gap-2 bg-brand text-white font-bold text-sm;
+  @apply px-4 py-2.5 rounded-lg border border-brand;
+  @apply shadow-sm shadow-brand/10;
+  @apply hover:bg-brand-hover hover:border-brand-hover;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
+  @apply disabled:opacity-40 disabled:shadow-none disabled:pointer-events-none;
 }
 
 .btn-secondary {
-  @apply bg-slate-900 text-white font-black uppercase tracking-widest text-xs;
-  @apply px-8 py-4 rounded-2xl;
-  @apply shadow-lg shadow-slate-900/20;
-  @apply hover:bg-slate-800 hover:-translate-y-0.5 hover:shadow-xl;
-  @apply active:scale-[0.98];
-  @apply transition-all duration-300;
-  @apply disabled:opacity-40 disabled:shadow-none disabled:translate-y-0 disabled:pointer-events-none;
+  @apply inline-flex items-center justify-center gap-2 bg-white text-slate-700 font-bold text-sm;
+  @apply px-4 py-2.5 rounded-lg border border-slate-200;
+  @apply shadow-sm;
+  @apply hover:border-brand/30 hover:bg-brand/5 hover:text-brand;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
+  @apply disabled:opacity-40 disabled:shadow-none disabled:pointer-events-none;
+}
+
+.btn-neutral {
+  @apply inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-bold text-sm;
+  @apply px-4 py-2.5 rounded-lg border border-slate-200;
+  @apply hover:bg-slate-200 hover:text-slate-900;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
+  @apply disabled:opacity-40 disabled:pointer-events-none;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 bg-red-50 text-red-700 font-bold text-sm;
+  @apply px-4 py-2.5 rounded-lg border border-red-100;
+  @apply hover:bg-red-100 hover:border-red-200;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
+  @apply disabled:opacity-40 disabled:pointer-events-none;
 }
 
 .btn-outline {
-  @apply bg-white text-slate-600 font-bold text-sm;
-  @apply px-6 py-3 rounded-xl;
-  @apply border-2 border-slate-200;
-  @apply hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900;
-  @apply active:scale-[0.98];
-  @apply transition-all duration-300;
+  @apply inline-flex items-center justify-center gap-2 bg-white text-slate-700 font-bold text-sm;
+  @apply px-4 py-2.5 rounded-lg border border-slate-200;
+  @apply shadow-sm;
+  @apply hover:border-brand/30 hover:bg-brand/5 hover:text-brand;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
+  @apply disabled:opacity-40 disabled:shadow-none disabled:pointer-events-none;
 }
 
 .btn-ghost {
   @apply bg-transparent text-slate-500 font-bold text-sm;
-  @apply px-4 py-2 rounded-xl;
+  @apply px-4 py-2 rounded-lg;
   @apply hover:bg-slate-100 hover:text-slate-900;
-  @apply active:scale-[0.98];
-  @apply transition-all duration-200;
+  @apply active:scale-[0.99];
+  @apply transition-colors duration-200;
 }
 
 /* ============================================
@@ -248,7 +278,7 @@
 }
 
 .input-field-lg {
-  @apply w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4;
+  @apply w-full bg-white border-2 border-slate-100 rounded-xl px-5 py-4;
   @apply text-slate-900 font-bold text-base;
   @apply outline-none;
   @apply focus:border-red-200 focus:ring-4 focus:ring-red-50;
@@ -257,7 +287,7 @@
 }
 
 .input-label {
-  @apply text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2;
+  @apply text-xs font-bold text-slate-500 block mb-2;
 }
 
 /* ============================================
@@ -292,7 +322,7 @@
    ============================================ */
 
 .badge {
-  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider;
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold;
 }
 
 .badge-success {
@@ -324,13 +354,13 @@
    ============================================ */
 
 .tab-nav {
-  @apply flex items-center gap-1 bg-slate-100/60 p-1 rounded-xl border border-slate-200/50;
+  @apply flex items-center gap-1 bg-slate-100/70 p-1 rounded-lg border border-slate-200/70;
 }
 
 .tab-item {
-  @apply px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider;
-  @apply transition-all duration-300 cursor-pointer;
-  @apply text-slate-400 hover:text-slate-600;
+  @apply px-4 py-2 rounded-md text-xs font-bold;
+  @apply transition-all duration-200 cursor-pointer;
+  @apply text-slate-500 hover:text-slate-700;
 }
 
 .tab-item-active {
@@ -352,7 +382,7 @@
 }
 
 .modal-content {
-  @apply bg-white rounded-[2rem] shadow-2xl border border-slate-100;
+  @apply bg-white rounded-xl shadow-xl border border-slate-100;
   @apply w-full max-w-lg max-h-[90vh] overflow-y-auto;
   animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -419,8 +449,8 @@
 }
 
 .hover-lift {
-  @apply transition-all duration-500;
-  @apply hover:-translate-y-1 hover:shadow-xl;
+  @apply transition-all duration-200;
+  @apply hover:-translate-y-0.5 hover:shadow-md;
 }
 
 .hover-glow {
@@ -430,6 +460,59 @@
 
 .focus-ring {
   @apply outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-2;
+}
+
+/* ============================================
+   GLOBAL OPERATIONAL UI NORMALIZATION
+   Keeps every module closer to the same practical UI language.
+   ============================================ */
+
+.rounded-2xl,
+.rounded-3xl,
+.rounded-\[1\.4rem\],
+.rounded-\[1\.5rem\],
+.rounded-\[1\.75rem\],
+.rounded-\[2rem\],
+.rounded-\[2\.25rem\],
+.rounded-\[2\.5rem\],
+.rounded-\[3rem\],
+.rounded-\[32px\] {
+  border-radius: 0.75rem !important;
+}
+
+.shadow-xl,
+.shadow-2xl {
+  box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.45) !important;
+}
+
+.hover\:shadow-xl:hover,
+.hover\:shadow-2xl:hover {
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.5) !important;
+}
+
+button[class*="py-5"],
+button[class*="py-6"],
+button[class*="py-7"] {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+}
+
+button[class*="px-8"],
+button[class*="px-10"] {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+button[class*="shadow-brand"],
+button[class*="shadow-red"],
+button[class*="shadow-slate"] {
+  box-shadow: 0 8px 18px -16px rgba(185, 28, 28, 0.55) !important;
+}
+
+.blur-3xl,
+.blur-\[100px\],
+.blur-\[120px\] {
+  opacity: 0.35 !important;
 }
 
 /* ============================================
@@ -449,18 +532,18 @@
    ============================================ */
 
 .card-elevated {
-  @apply bg-white rounded-[2rem] border-2 border-slate-100 shadow-sm;
-  @apply hover:shadow-xl hover:border-slate-200 transition-all duration-500;
+  @apply bg-white rounded-lg border border-slate-200 shadow-sm;
+  @apply hover:border-slate-300 transition-colors duration-200;
 }
 
 .card-dark {
-  @apply bg-slate-900 rounded-[2rem] border-2 border-slate-800 text-white;
-  @apply shadow-2xl shadow-slate-900/30;
+  @apply bg-slate-900 rounded-xl border border-slate-800 text-white;
+  @apply shadow-lg shadow-slate-900/20;
 }
 
 .card-brand {
-  @apply bg-red-900 rounded-[2rem] border-2 border-red-800 text-white;
-  @apply shadow-2xl shadow-red-900/20;
+  @apply bg-brand rounded-lg border border-brand-hover text-white;
+  @apply shadow-sm shadow-brand/10;
 }
 
 /* ============================================
@@ -522,6 +605,14 @@
 
 .empty-state-desc {
   @apply text-xs text-slate-400 mt-1.5;
+}
+
+.operational-panel {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+}
+
+.operational-panel-muted {
+  @apply rounded-lg border border-slate-200 bg-slate-50/60;
 }
 
 /* ============================================

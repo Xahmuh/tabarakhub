@@ -11,10 +11,10 @@ export default {
         extend: {
             colors: {
                 brand: {
-                    DEFAULT: '#B91c1c',
-                    hover: '#991b1b',
-                    muted: 'rgba(185, 28, 28, 0.05)',
-                    dark: '#7f1d1d'
+                    DEFAULT: 'rgb(var(--client-primary-rgb, 185 28 28) / <alpha-value>)',
+                    hover: 'rgb(var(--client-primary-hover-rgb, 153 27 27) / <alpha-value>)',
+                    muted: 'rgb(var(--client-primary-rgb, 185 28 28) / 0.05)',
+                    dark: 'rgb(var(--client-primary-dark-rgb, 127 29 29) / <alpha-value>)'
                 },
                 red: {
                     50: '#fff1f2',
