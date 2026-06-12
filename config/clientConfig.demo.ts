@@ -32,6 +32,7 @@ export const demoClientConfig: ClientConfig = {
     employeeContributions: true,
     settings: true,
     workforce: true,
+    delivery: true,
   },
 };
 

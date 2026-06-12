@@ -11,7 +11,7 @@ import {
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub
 } from './app/index';
 
 
@@ -22,7 +22,7 @@ import {
   Loader2
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer';
+type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
@@ -138,6 +138,8 @@ const App: React.FC = () => {
         return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role);
       case 'block-analyzer':
         return (role === 'manager' || role === 'owner') && canUseFeature('block_analyzer', 'read', role);
+      case 'delivery':
+        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
       default:
         return true;
     }
@@ -551,6 +553,12 @@ const App: React.FC = () => {
           />
         ) : activeTab === 'block-analyzer' ? (
           <BlockCoverageAnalyzer onBack={() => handleTabChange('selector')} />
+        ) : activeTab === 'delivery' ? (
+          <DeliveryHub
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+          />
         ) : (
 
           <DashboardPage

@@ -11,3 +11,4 @@ export * from './codexService';
 export * from './permissionService';
 export * from './contributionService';
 export * from './systemSettingsService';
+export * from './deliveryService';

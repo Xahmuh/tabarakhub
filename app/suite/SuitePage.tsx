@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PackageX, PieChart, QrCode, Radar, Settings2, ShieldCheck, UsersRound, WalletCards
+  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PackageX, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
 import { AuthState } from '../../types';
 import { Footer } from '../shared';
@@ -282,6 +282,19 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       badge: 'Ideas',
       cta: 'Open hub',
       tone: 'knowledge'
+    },
+    {
+      key: 'delivery',
+      visible: isModuleEnabled('delivery') && checkPermission('delivery'),
+      title: 'Delivery Recording & Traceability',
+      description: role === 'branch'
+        ? 'Record daily delivery orders and track WhatsApp & Talabat activity.'
+        : 'Delivery analytics, driver performance, geography, and cost efficiency.',
+      icon: <Truck className="h-5 w-5" />,
+      onClick: () => handleTabChange('delivery'),
+      isPending,
+      badge: 'Delivery',
+      tone: 'feature'
     },
     {
       key: 'block-analyzer',

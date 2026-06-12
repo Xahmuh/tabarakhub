@@ -7,6 +7,7 @@ import { hrService } from '../services/hrService';
 import { financeService } from '../services/financeService';
 import { codexService } from '../services/codexService';
 import { systemSettingsService } from '../services/systemSettingsService';
+import { deliveryService } from '../services/deliveryService';
 import { supabaseClient } from './supabaseClient';
 export { supabaseClient } from './supabaseClient';
 
@@ -28,5 +29,6 @@ export const supabase = {
   cashFlow: financeService.cashFlow,
   cashDifferences: financeService.cashDifferences,
   codex: codexService,
-  systemSettings: systemSettingsService
+  systemSettings: systemSettingsService,
+  delivery: deliveryService
 };

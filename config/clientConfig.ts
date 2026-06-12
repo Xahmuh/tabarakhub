@@ -14,7 +14,8 @@ export type ClientModuleKey =
   | 'corporateCodex'
   | 'employeeContributions'
   | 'settings'
-  | 'workforce';
+  | 'workforce'
+  | 'delivery';
 
 export type ClientConfig = {
   appName: string;
@@ -74,6 +75,7 @@ export const clientConfig: ClientConfig = {
     employeeContributions: readBoolean('VITE_MODULE_EMPLOYEE_CONTRIBUTIONS'),
     settings: readBoolean('VITE_MODULE_SETTINGS'),
     workforce: readBoolean('VITE_MODULE_WORKFORCE'),
+    delivery: readBoolean('VITE_MODULE_DELIVERY'),
   },
 };
 
