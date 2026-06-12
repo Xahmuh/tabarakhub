@@ -36,7 +36,7 @@ export const ACCESS_FEATURES: AccessFeature[] = [
   { id: 'corporate_codex', label: 'Corporate Codex', module: 'corporateCodex', description: 'Policies, circulars, and operating protocols.' },
   { id: 'quality_feedback', label: 'Quality Feedback', module: 'qualityFeedback', description: 'Anonymous feedback form and quality analytics.' },
   { id: 'employee_contributions', label: 'Team Contributions', module: 'employeeContributions', description: 'Employee-submitted tools, projects, and knowledge.' },
-  { id: 'delivery', label: 'Delivery Recording & Traceability', description: 'Delivery orders, driver costs, and block traceability.' },
+  { id: 'delivery', label: 'Delivery Recording & Traceability', module: 'delivery', description: 'Delivery orders, driver costs, and block traceability.' },
   { id: 'products', label: 'Product Catalogue', module: 'products', description: 'Product catalogue and item management.' },
   { id: 'block_analyzer', label: 'BH Block Analyzer', description: 'Block coverage and population analysis.' },
   { id: 'settings', label: 'Project Settings', module: 'settings', description: 'Identity, access, and system settings.' }
@@ -75,5 +75,7 @@ export const getEnabledAccessFeatures = (): AccessFeature[] => {
       description: 'Auto-registered module access. Defaults to no access until a manager approves it.'
     }));
 
-  return [...knownFeatures, ...automaticFeatures];
+  return [...knownFeatures, ...automaticFeatures].filter((feature, index, features) =>
+    features.findIndex(item => item.id === feature.id) === index
+  );
 };
