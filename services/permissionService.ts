@@ -1,6 +1,15 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { AppUser, FeaturePermission, Role, RolePermission } from '../types';
 
+export type AdminCreateUserInput = {
+  email: string;
+  password: string;
+  role: Role;
+  branchId?: string | null;
+  supervisorBranchIds?: string[];
+  isActive?: boolean;
+};
+
 export const permissionService = {
   listForBranch: async (branchId: string) => {
     const { data, error } = await supabaseClient.from('feature_permissions').select('*').eq('branch_id', branchId);
@@ -82,6 +91,16 @@ export const permissionService = {
     });
     if (error) throw error;
     return true;
+  },
+  adminCreateUser: async (input: AdminCreateUserInput): Promise<AppUser> => {
+    const { data, error } = await supabaseClient.functions.invoke('admin-create-user', {
+      body: input
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    const user = data?.user;
+    if (!user) throw new Error('User was created but no user payload was returned.');
+    return user as AppUser;
   },
 
   // --- Supervisor branch assignments ---

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { Loader2, RefreshCcw, Shield, UserCog, Users } from 'lucide-react';
+import { Loader2, RefreshCcw, Shield, UserCog, UserPlus, Users } from 'lucide-react';
 import { permissionService, branchService } from '../../services';
 import { AppUser, Branch, Role, RolePermission } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
@@ -18,6 +18,14 @@ const accessBadgeClass = (level: 'none' | 'read' | 'edit') =>
         : level === 'read'
             ? 'border-blue-200 bg-blue-50 text-blue-700'
             : 'border-slate-200 bg-slate-50 text-slate-400';
+
+const escapeHtml = (value: string | null | undefined) =>
+    String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 
 export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ currentUserId }) => {
     const [users, setUsers] = useState<AppUser[]>([]);
@@ -59,6 +67,110 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
     };
 
     useEffect(() => { load(); }, []);
+
+    const handleCreateUser = async () => {
+        const branchOptionsHtml = branchOptions.map(b =>
+            `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`
+        ).join('');
+        const supervisorOptionsHtml = branchOptions.map(b => `
+            <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
+                <input type="checkbox" value="${escapeHtml(b.id)}" class="swal-new-supervisor-branch h-4 w-4 accent-[#B91c1c]">
+                ${escapeHtml(b.name)} <span class="text-slate-400 font-medium">(${escapeHtml(b.code)})</span>
+            </label>`
+        ).join('');
+
+        const { value } = await Swal.fire({
+            title: '<span class="text-xl font-black tracking-tight">Add login user</span>',
+            html: `
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Email</label>
+                        <input id="swal-new-email" type="email" placeholder="user@example.com" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Temporary password</label>
+                        <input id="swal-new-password" type="password" placeholder="Minimum 8 characters" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                        <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">Share this password outside the app, then ask the user to change it.</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Role</label>
+                        <select id="swal-new-role" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                            ${ASSIGNABLE_ROLES.map(role => `<option value="${role}">${escapeHtml(ROLE_LABELS[role] || role)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div id="swal-new-branch-wrap" class="hidden">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Linked branch</label>
+                        <select id="swal-new-branch" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                            <option value="">Select branch...</option>
+                            ${branchOptionsHtml}
+                        </select>
+                    </div>
+                    <div id="swal-new-supervisor-wrap" class="hidden">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor branches</label>
+                        <div class="max-h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                            ${supervisorOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No branch logins found.</p>'}
+                        </div>
+                    </div>
+                    <label class="flex items-center gap-2 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-600">
+                        <input id="swal-new-active" type="checkbox" checked class="h-4 w-4 accent-[#B91c1c]">
+                        Active immediately
+                    </label>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Create user',
+            confirmButtonColor: '#B91c1c',
+            width: 560,
+            didOpen: () => {
+                const roleInput = document.getElementById('swal-new-role') as HTMLSelectElement | null;
+                const branchWrap = document.getElementById('swal-new-branch-wrap');
+                const supervisorWrap = document.getElementById('swal-new-supervisor-wrap');
+                const syncRoleFields = () => {
+                    const role = roleInput?.value;
+                    branchWrap?.classList.toggle('hidden', role !== 'branch');
+                    supervisorWrap?.classList.toggle('hidden', role !== 'supervisor');
+                };
+                roleInput?.addEventListener('change', syncRoleFields);
+                syncRoleFields();
+            },
+            preConfirm: () => {
+                const email = (document.getElementById('swal-new-email') as HTMLInputElement).value.trim().toLowerCase();
+                const password = (document.getElementById('swal-new-password') as HTMLInputElement).value;
+                const role = (document.getElementById('swal-new-role') as HTMLSelectElement).value as Role;
+                const branchId = (document.getElementById('swal-new-branch') as HTMLSelectElement).value || null;
+                const isActive = (document.getElementById('swal-new-active') as HTMLInputElement).checked;
+                const supervisorBranchIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-branch:checked')).map(i => i.value);
+
+                if (!email || !email.includes('@')) {
+                    Swal.showValidationMessage('Enter a valid email.');
+                    return false;
+                }
+                if (password.length < 8) {
+                    Swal.showValidationMessage('Temporary password must be at least 8 characters.');
+                    return false;
+                }
+                if (role === 'branch' && !branchId) {
+                    Swal.showValidationMessage('Branch users must be linked to a branch.');
+                    return false;
+                }
+
+                return { email, password, role, branchId, supervisorBranchIds, isActive };
+            }
+        });
+
+        if (!value) return;
+
+        setSavingKey('create-user');
+        try {
+            await permissionService.adminCreateUser(value);
+            await load();
+            Swal.fire('User created', 'The login user was created and linked to the selected role.', 'success');
+        } catch (e: any) {
+            Swal.fire('Create user failed', e?.message || 'Could not create the user.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
 
     const handleRoleChange = async (user: AppUser, newRole: Role) => {
         let branchId: string | null = user.branchId || null;
@@ -186,16 +298,26 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                         <Shield className="h-3.5 w-3.5" /> Role Permissions
                     </button>
                 </div>
-                <button onClick={load} className="btn-secondary text-[10px] uppercase tracking-widest">
-                    <RefreshCcw className="h-3.5 w-3.5" /> Refresh
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={handleCreateUser}
+                        disabled={savingKey === 'create-user'}
+                        className="btn-primary text-[10px] uppercase tracking-widest disabled:opacity-50"
+                    >
+                        {savingKey === 'create-user' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                        Add User
+                    </button>
+                    <button onClick={load} className="btn-secondary text-[10px] uppercase tracking-widest">
+                        <RefreshCcw className="h-3.5 w-3.5" /> Refresh
+                    </button>
+                </div>
             </div>
 
             {view === 'users' ? (
                 <div className="space-y-3">
                     <p className="text-sm font-medium text-slate-500">
                         Assign each login a role. Supervisors must be linked to the branches they oversee; branch logins must be linked to one branch.
-                        New logins are provisioned in Supabase Auth first, then appear here.
+                        Managers can create new logins here; temporary passwords are shown only while you type them.
                     </p>
                     {/* Desktop table */}
                     <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
