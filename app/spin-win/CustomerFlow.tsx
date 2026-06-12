@@ -530,6 +530,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
             : motionPermission === 'denied'
                 ? 'Blocked'
                 : 'Tap only';
+    const isWheelStep = step === 'review' || step === 'spin';
 
     if (error) {
         return (
@@ -549,14 +550,16 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     return (
         <div className="min-h-screen bg-slate-50 font-sans flex flex-col selection:bg-brand selection:text-white">
             {/* Header */}
-            <div className="bg-white p-4 sm:p-5 border-b border-slate-100 flex items-center justify-center space-x-3 shadow-sm sticky top-0 z-50">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 bg-brand rounded-lg flex items-center justify-center overflow-hidden shadow-inner">
-                    <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+            {!isWheelStep && (
+                <div className="bg-white p-4 sm:p-5 border-b border-slate-100 flex items-center justify-center space-x-3 shadow-sm sticky top-0 z-50">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-brand rounded-lg flex items-center justify-center overflow-hidden shadow-inner">
+                        <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+                    </div>
+                    <h1 className="text-lg sm:text-xl font-black tracking-tight">Tabarak <span className="text-brand">SPIN & WIN</span></h1>
                 </div>
-                <h1 className="text-lg sm:text-xl font-black tracking-tight">Tabarak <span className="text-brand">SPIN & WIN</span></h1>
-            </div>
+            )}
 
-            <div className="flex-1 flex flex-col p-4 sm:p-6 max-w-xl mx-auto w-full">
+            <div className={`flex-1 flex flex-col w-full ${isWheelStep ? '' : 'p-4 sm:p-6 max-w-xl mx-auto'}`}>
                 {/* Validating Token */}
                 {step === 'validate' && (
                     <div className="flex-1 flex flex-col items-center justify-center space-y-6 animate-pulse">
@@ -644,11 +647,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
 
                 {/* Review & Spin */}
                 {(step === 'review' || step === 'spin') && (
-                    <div className="relative -mx-4 -my-4 flex min-h-[calc(100svh-73px)] flex-col overflow-hidden bg-slate-950 text-white sm:-mx-6 sm:-my-6 animate-in fade-in duration-500">
+                    <div className="relative flex min-h-[100svh] flex-col overflow-hidden bg-slate-950 text-white animate-in fade-in duration-500">
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(220,38,38,0.28),transparent_34%),linear-gradient(180deg,#111827_0%,#020617_64%,#111827_100%)]" />
                         <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-red-700/25 to-transparent" />
 
-                        <div className="relative z-10 flex min-h-[calc(100svh-73px)] flex-col px-4 pb-5 pt-4 sm:px-6">
+                        <div className="relative z-10 flex min-h-[100svh] flex-col px-4 pb-5 pt-4 sm:px-6">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                     <p className="text-[10px] font-black uppercase tracking-[0.22em] text-red-200/70">
@@ -663,11 +666,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                                 </div>
                             </div>
 
-                            <div className="mt-4 overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.06] shadow-2xl">
+                            <div className="mt-4 rounded-[1.75rem] border border-white/10 bg-white shadow-2xl">
                                 <img
                                     src="/spin-header-v4.jpg"
                                     alt="Spin and Win"
-                                    className="h-[clamp(4.75rem,15svh,8rem)] w-full object-cover"
+                                    className="h-auto w-full rounded-[1.7rem] object-contain"
                                 />
                             </div>
 
