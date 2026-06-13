@@ -63,7 +63,6 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   icon,
   onClick,
   isPending,
-  badge,
   cta = 'Open',
   tone = 'default'
 }) => {
@@ -79,11 +78,6 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${classes.icon}`}>
             {icon}
           </div>
-          {badge && (
-            <span className={`rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${classes.badge}`}>
-              {badge}
-            </span>
-          )}
         </div>
         <div>
           <h3 className="text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-brand">{title}</h3>
@@ -128,7 +122,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     {
       key: 'pos',
       visible: canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
-      title: 'Lost Sales & Shortage',
+      title: 'Lost Sales & Shortage Log',
       description: 'Log out-of-stock items and customer requested deficits in real time.',
       icon: <PackageX className="h-5 w-5" />,
       onClick: () => handleTabChange('pos'),
@@ -138,7 +132,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     {
       key: 'dashboard-manager',
       visible: isManager && canOpenDashboard,
-      title: 'Performance Portal',
+      title: 'Performance Dashboard',
       description: 'Review lost sales, shortage trends, and branch performance with manager-level branch selection.',
       icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
@@ -148,7 +142,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     {
       key: 'dashboard-admin',
       visible: isWarehouse && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
-      title: 'Performance Portal',
+      title: 'Performance Dashboard',
       description: 'Review localized branch performance and inventory trends.',
       icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
@@ -168,7 +162,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     {
       key: 'dashboard-branch',
       visible: !isManager && !isWarehouse && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
-      title: 'Performance Portal',
+      title: 'Performance Dashboard',
       description: 'Review localized branch performance and inventory trends.',
       icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
