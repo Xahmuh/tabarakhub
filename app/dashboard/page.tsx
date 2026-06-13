@@ -2452,7 +2452,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               {/* --- Section 4: Deep Analytics Row --- */}
               <div className="grid grid-cols-1 gap-8 mb-20 items-stretch">
 
-                {/* TOP LOSS DRIVERS (Filtered Product Impact) */}
+                {/* Top Loss Items (Filtered Product Impact) */}
                 <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[640px]">
                   <div className="p-6 md:p-8 bg-slate-50/80 border-b border-slate-100">
                     <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
@@ -2461,7 +2461,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                           <Target size={20} />
                         </div>
                         <div className="min-w-0">
-                          <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase">Top Loss Drivers</h2>
+                          <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase">Top Loss Items</h2>
                           <p className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-[0.16em]">
                             Products creating the highest missed sales impact
                           </p>

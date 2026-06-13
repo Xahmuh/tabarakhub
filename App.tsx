@@ -6,6 +6,7 @@ import { Pharmacist, AuthState, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
 import { buildPermissionChecker } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
+import { spinWinService } from './services/spinWin';
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
@@ -45,6 +46,12 @@ const getRecoverableSpinToken = () => {
       return token;
     }
 
+    if (params.has('node') || params.has('branch')) {
+      sessionStorage.removeItem(SPIN_RETURN_KEY);
+      sessionStorage.removeItem(SPIN_DRAFT_KEY);
+      return null;
+    }
+
     const saved = JSON.parse(sessionStorage.getItem(SPIN_RETURN_KEY) || 'null') as { token?: string; url?: string; savedAt?: number } | null;
     if (!saved?.token || !saved.savedAt || Date.now() - saved.savedAt > SPIN_RETURN_TTL_MS) {
       sessionStorage.removeItem(SPIN_RETURN_KEY);
@@ -64,7 +71,7 @@ const getRecoverableSpinToken = () => {
 };
 
 const canControlMaintenance = (role?: string | null) =>
-  role === 'admin' || role === 'manager' || role === 'owner';
+  role === 'manager' || role === 'owner';
 
 const hexToRgbParts = (value: string, fallback: string) => {
   const normalized = value.trim().replace('#', '');
@@ -207,7 +214,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Legacy static branch QR links cannot safely mint public tokens in the browser.
+  // Legacy static branch QR links are exchanged server-side for short-lived secure tokens.
   useEffect(() => {
     if (isBhAnalyzerPage) return;
 
@@ -216,8 +223,20 @@ const App: React.FC = () => {
       const branchCode = params.get('node') || params.get('branch');
 
       if (branchCode && !customerToken) {
-        setCustomerFlowError('This QR link format is no longer supported. Please ask the branch team for a fresh secure QR code.');
-        setIsInitializing(false);
+        setCustomerFlowError(null);
+        try {
+          const session = await spinWinService.sessions.generateFromBranchCode(branchCode);
+          params.delete('node');
+          params.delete('branch');
+          params.set('token', session.token);
+
+          const nextUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+          window.history.replaceState({ spinToken: session.token }, '', nextUrl);
+          setCustomerToken(session.token);
+        } catch {
+          setCustomerFlowError('This QR code is not available right now. Please ask the branch team for help.');
+          setIsInitializing(false);
+        }
       }
     };
     handleStaticToken();
@@ -475,22 +494,7 @@ const App: React.FC = () => {
 
       <main className="flex-1 w-full max-w-[1400px] mx-auto px-5 md:px-8 py-6">
         {activeTab === 'command-center' ? (
-          <div className="space-y-6 page-enter">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Operations module</p>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Daily Command Center</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Risks, saved tasks, branch health, and pending work in one control view.</p>
-              </div>
-              <button
-                onClick={() => handleTabChange('selector')}
-                className="btn-secondary"
-              >
-                Back to Modules
-              </button>
-            </div>
-            <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
-          </div>
+          <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
         ) : activeTab === 'pos' ? (
           <POSPage branch={authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
         ) : activeTab === 'spin-win' ? (

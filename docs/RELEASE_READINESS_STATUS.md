@@ -32,9 +32,10 @@ Unified alerts exist.
 Persistent operations tasks exist.
 operations_task_events are append-only audit trail from normal client access.
 Operations task RLS hardening pass is complete in the repo.
+Static Spin & Win QR branch-code exchange is prepared in the repo.
 Typecheck passes locally.
 Production build passes locally.
-npm audit still fails on ExcelJS -> uuid.
+npm audit still fails on ExcelJS -> uuid and Vite/esbuild advisories.
 No lint/test scripts currently exist.
 ```
 
@@ -47,11 +48,13 @@ app_user_profiles are provisioned for admin, manager, accounts, and branch users
 FUNCTION_SECRET is set in Supabase Edge Function secrets.
 docs/POST_MIGRATION_SECURITY_CHECKS.sql passes.
 docs/OPERATIONS_TASK_SECURITY_CHECKS.sql passes.
+docs/SPIN_STATIC_QR_SECURITY_CHECKS.sql passes.
 Manual RLS/auth tests pass.
 Operations task manual tests pass.
+Static Spin & Win QR manual tests pass on the real deployment URL.
 Manual smoke tests pass on the real deployment URL.
 No frontend secrets are exposed.
-ExcelJS/uuid audit risk is resolved or formally accepted.
+ExcelJS/uuid and Vite/esbuild audit risks are resolved or formally accepted.
 ```
 
 ## Release Decision Rules

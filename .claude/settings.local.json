@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 -c ' *)",
       "Bash(Remove-Item *)",
-      "PowerShell(npm run typecheck)"
+      "PowerShell(npm run typecheck)",
+      "Bash(awk '/on conflict \\\\\\(block_number\\\\\\) do nothing/,0' A:/ACTIONS/tabarakhub/supabase/migrations/20260612190000_delivery_recording_traceability.sql)"
     ]
   }
 }

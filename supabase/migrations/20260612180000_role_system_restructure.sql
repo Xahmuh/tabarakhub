@@ -402,6 +402,15 @@ begin
   if anon_priv_count > 0 then
     raise exception 'anon must not have privileges on role tables';
   end if;
+
+  -- Safety: the app must keep at least one active manager, otherwise nobody can
+  -- administer roles from the UI. Warning (not exception) because fresh projects
+  -- provision app_user_profiles after this migration via service_role.
+  if not exists (
+    select 1 from public.app_user_profiles where role = 'manager' and is_active
+  ) then
+    raise warning 'No active manager profile exists. Promote one via service_role/SQL editor: update public.app_user_profiles set role = ''manager'', is_active = true where user_id = ''<auth-user-uuid>'';';
+  end if;
 end $$;
 
 notify pgrst, 'reload schema';

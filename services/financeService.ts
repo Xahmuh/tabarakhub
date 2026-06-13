@@ -220,8 +220,9 @@ export const financeService = {
     settings: {
       get: async (): Promise<CashFlowSettings> => {
         try {
-          const { data, error } = await supabaseClient.from('cash_flow_settings').select('*').eq('id', 'global').single();
+          const { data, error } = await supabaseClient.from('cash_flow_settings').select('*').eq('id', 'global').maybeSingle();
           if (error) throw error;
+          if (!data) return { safeThreshold: 1000, initialBalance: 0, forecastHorizon: 30 };
           return {
             safeThreshold: Number(data.safe_threshold),
             initialBalance: Number(data.initial_balance),

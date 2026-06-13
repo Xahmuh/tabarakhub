@@ -63,7 +63,10 @@ create table if not exists public.delivery_orders (
   pharmacist_id uuid references public.pharmacists(id) on delete set null,
   pharmacist_name text,
   driver_id uuid references public.delivery_drivers(id) on delete set null,
-  block_number text references public.delivery_blocks(block_number) on update cascade,
+  -- Intentionally NOT a foreign key: branches may record blocks that are not in the
+  -- directory yet ("Save anyway" flow); the data-quality panel surfaces them as
+  -- "Unknown block" (block_number set, area_name null) for the manager to add.
+  block_number text,
   area_name text,
   governorate text,
   is_outside_governorate boolean not null default false,
@@ -160,15 +163,9 @@ begin
       foreign key (driver_id) references public.delivery_drivers(id) on delete set null not valid;
   end if;
 
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'delivery_orders_block_number_fkey'
-      and conrelid = 'public.delivery_orders'::regclass
-  ) then
-    alter table public.delivery_orders
-      add constraint delivery_orders_block_number_fkey
-      foreign key (block_number) references public.delivery_blocks(block_number) on update cascade not valid;
-  end if;
+  -- Unknown blocks must be recordable (data-quality flow), so block_number is not an FK.
+  -- Drop it if an earlier deployment created it.
+  alter table public.delivery_orders drop constraint if exists delivery_orders_block_number_fkey;
 
   if not exists (
     select 1 from pg_constraint

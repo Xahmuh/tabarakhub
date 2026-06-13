@@ -179,6 +179,34 @@ export const spinWinService = {
     },
 
     sessions: {
+        generateFromBranchCode: async (branchCode: string) => {
+            try {
+                const { data, error } = await supabaseClient.rpc('generate_spin_session_from_branch_code', {
+                    p_branch_code: branchCode
+                });
+
+                if (error) {
+                    console.warn('Static QR exchange failed; showing customer-safe fallback.');
+                    throw error;
+                }
+
+                if (!data || data.length === 0) throw new Error('No session returned from server');
+
+                const result = data[0];
+
+                return {
+                    token: result.out_token,
+                    branchId: '',
+                    used: false,
+                    isMultiUse: false,
+                    expiresAt: result.out_expires_at,
+                    createdAt: result.out_created_at
+                } as SpinSession;
+            } catch {
+                console.warn('Static QR exchange unavailable.');
+                throw new Error('STATIC_QR_UNAVAILABLE');
+            }
+        },
         generate: async (branchId: string, isMultiUse: boolean = false) => {
             try {
                 const { data, error } = await supabaseClient.rpc('generate_spin_session', {

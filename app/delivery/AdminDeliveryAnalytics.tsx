@@ -117,11 +117,18 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       driverId: driverFilter || undefined,
       pharmacistId: pharmacistFilter || undefined,
       governorate: governorateFilter || undefined
-    }).then(data => { if (!cancelled) setOrders(data); })
+    }).then(data => {
+      if (cancelled) return;
+      const branchNames = new Map(branches.map(branch => [branch.id, branch.name]));
+      setOrders(data.map(order => ({
+        ...order,
+        branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch'
+      })));
+    })
       .catch(e => { console.error('Analytics load failed', e); if (!cancelled) setOrders([]); })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter]);
+  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter, branches]);
 
   const supervisorOptions = useMemo(() => {
     const names = new Set<string>();

@@ -377,8 +377,27 @@ export type DeliveryPaymentType = 'BP' | 'CARD' | 'CASH' | 'TALABAT';
 
 export interface DeliveryBlock {
   blockNumber: string;
+  areaId?: string | null;
   areaName: string;
   governorate: Governorate;
+  isActive: boolean;
+}
+
+export interface DeliveryArea {
+  id: string;
+  name: string;
+  governorate: Governorate;
+  notes?: string;
+  isActive: boolean;
+}
+
+export interface DeliverySupervisor {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  userId?: string | null;
+  notes?: string;
   isActive: boolean;
 }
 
@@ -392,7 +411,9 @@ export interface DeliveryDriver {
 
 export interface BranchClassification {
   branchId: string;
+  areaId?: string | null;
   area?: string;
+  supervisorId?: string | null;
   supervisorName?: string;
   supervisorUserId?: string | null;
   governorate?: Governorate | null;

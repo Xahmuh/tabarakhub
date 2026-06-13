@@ -40,6 +40,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [blockNotFound, setBlockNotFound] = useState(false);
 
   const isTalabat = paymentType === 'TALABAT';
+  const areaPreview = isTalabat
+    ? 'Not required for Talabat'
+    : resolvedBlock
+      ? `${resolvedBlock.areaName} | ${resolvedBlock.governorate}`
+      : blockNotFound && blockInput.trim()
+        ? 'Block not found'
+        : 'Enter block number';
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager ? undefined : yesterdayKey();
   const maxDate = isManager ? undefined : todayKey();
@@ -283,6 +290,20 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   <AlertTriangle className="h-3 w-3" /> Block not found in directory
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Area</label>
+              <div className={`flex min-h-[42px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${
+                resolvedBlock
+                  ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                  : blockNotFound && blockInput.trim()
+                    ? 'border-amber-100 bg-amber-50 text-amber-700'
+                    : 'border-slate-200 bg-slate-50 text-slate-400'
+              }`}>
+                {areaPreview}
+              </div>
+              <p className="mt-1 text-[10px] font-bold text-slate-400">Auto-filled from the block directory</p>
             </div>
           </div>
 

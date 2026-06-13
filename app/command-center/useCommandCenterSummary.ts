@@ -36,7 +36,38 @@ const emptySummary = (): CommandCenterSummary => ({
 
 const toErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null) {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      record.message,
+      record.details,
+      record.hint,
+      record.code ? `code ${record.code}` : null
+    ]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map(part => part.trim());
+
+    if (parts.length > 0) return parts.join(' | ');
+  }
   return String(error);
+};
+
+const isMissingCashFlowSetup = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as Record<string, unknown>;
+  const message = [record.message, record.details, record.hint]
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ')
+    .toLowerCase();
+
+  return record.code === '42P01'
+    || message.includes('does not exist')
+    || message.includes('schema cache')
+    || message.includes('cash_flow_settings')
+    || message.includes('cheques')
+    || message.includes('expenses')
+    || message.includes('revenues_actual')
+    || message.includes('revenues_expected');
 };
 
 const isReadAllRole = (role?: Role) => role === 'manager' || role === 'owner' || role === 'warehouse';
@@ -104,11 +135,11 @@ const fetchCashFlowSignals = async (): Promise<CashFlowFetchResult> => {
   ]);
 
   const warnings: string[] = [];
-  if (settingsResult.status === 'rejected') warnings.push(`Cash flow settings unavailable: ${toErrorMessage(settingsResult.reason)}`);
-  if (chequesResult.status === 'rejected') warnings.push(`Cheque schedule unavailable: ${toErrorMessage(chequesResult.reason)}`);
-  if (expensesResult.status === 'rejected') warnings.push(`Expense schedule unavailable: ${toErrorMessage(expensesResult.reason)}`);
-  if (actualResult.status === 'rejected') warnings.push(`Actual revenue records unavailable: ${toErrorMessage(actualResult.reason)}`);
-  if (expectedResult.status === 'rejected') warnings.push(`Expected revenue records unavailable: ${toErrorMessage(expectedResult.reason)}`);
+  if (settingsResult.status === 'rejected' && !isMissingCashFlowSetup(settingsResult.reason)) warnings.push(`Cash flow settings unavailable: ${toErrorMessage(settingsResult.reason)}`);
+  if (chequesResult.status === 'rejected' && !isMissingCashFlowSetup(chequesResult.reason)) warnings.push(`Cheque schedule unavailable: ${toErrorMessage(chequesResult.reason)}`);
+  if (expensesResult.status === 'rejected' && !isMissingCashFlowSetup(expensesResult.reason)) warnings.push(`Expense schedule unavailable: ${toErrorMessage(expensesResult.reason)}`);
+  if (actualResult.status === 'rejected' && !isMissingCashFlowSetup(actualResult.reason)) warnings.push(`Actual revenue records unavailable: ${toErrorMessage(actualResult.reason)}`);
+  if (expectedResult.status === 'rejected' && !isMissingCashFlowSetup(expectedResult.reason)) warnings.push(`Expected revenue records unavailable: ${toErrorMessage(expectedResult.reason)}`);
 
   const signals: CashFlowSignalData = {
     settings: settingsResult.status === 'fulfilled' ? settingsResult.value as CashFlowSettings : null,

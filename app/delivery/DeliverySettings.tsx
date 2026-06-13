@@ -1,20 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, Bike, Building2, MapPin, Plus, Search } from 'lucide-react';
+import { AlertTriangle, Bike, Building2, Map, MapPin, Plus, Search, UsersRound } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import {
-  Branch, BranchClassification, DeliveryBlock, DeliveryDriver, DeliveryOrder, Governorate
+  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliverySupervisor, Governorate
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 
-type SettingsTab = 'drivers' | 'blocks' | 'classification' | 'quality';
+type SettingsTab = 'drivers' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
+
+const escapeHtml = (value?: string | null) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 export const DeliverySettings: React.FC = () => {
   const [tab, setTab] = useState<SettingsTab>('drivers');
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [areas, setAreas] = useState<DeliveryArea[]>([]);
+  const [supervisors, setSupervisors] = useState<DeliverySupervisor[]>([]);
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [classifications, setClassifications] = useState<BranchClassification[]>([]);
@@ -24,16 +34,20 @@ export const DeliverySettings: React.FC = () => {
   const load = async () => {
     setIsLoading(true);
     try {
-      const [driverList, blockList, branchList, classList] = await Promise.all([
+      const [driverResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
         deliveryService.drivers.list(true),
+        deliveryService.areas.list(true),
+        deliveryService.supervisors.list(true),
         deliveryService.blocks.list(true),
         branchService.list(),
         deliveryService.classifications.list()
       ]);
-      setDrivers(driverList);
-      setBlocks(blockList);
-      setBranches(branchList.filter(b => b.role === 'branch'));
-      setClassifications(classList);
+      setDrivers(driverResult.status === 'fulfilled' ? driverResult.value : []);
+      setAreas(areaResult.status === 'fulfilled' ? areaResult.value : []);
+      setSupervisors(supervisorResult.status === 'fulfilled' ? supervisorResult.value : []);
+      setBlocks(blockResult.status === 'fulfilled' ? blockResult.value : []);
+      setBranches(branchResult.status === 'fulfilled' ? branchResult.value.filter(b => b.role === 'branch') : []);
+      setClassifications(classResult.status === 'fulfilled' ? classResult.value : []);
     } catch (e) {
       console.error('Delivery settings load failed', e);
     } finally {
@@ -42,6 +56,122 @@ export const DeliverySettings: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  // ----- Areas -----
+  const editArea = async (area?: DeliveryArea) => {
+    const { value } = await Swal.fire({
+      title: `<span class="text-xl font-black tracking-tight">${area ? 'Edit' : 'Add'} area</span>`,
+      html: `
+        <div class="space-y-3 text-left p-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area name</label>
+            <input id="swal-area-name" value="${escapeHtml(area?.name)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+          </div>
+          <div class="hidden">
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Governorate</label>
+            <select id="swal-area-gov" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              ${GOVERNORATES.map(g => `<option value="${g}" ${area?.governorate === g ? 'selected' : ''}>${g}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notes (optional)</label>
+            <textarea id="swal-area-notes" class="min-h-[80px] w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">${escapeHtml(area?.notes)}</textarea>
+          </div>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Save area',
+      confirmButtonColor: '#B91c1c',
+      preConfirm: () => {
+        const name = (document.getElementById('swal-area-name') as HTMLInputElement).value.trim();
+        const governorate = (document.getElementById('swal-area-gov') as HTMLSelectElement).value as Governorate;
+        const notes = (document.getElementById('swal-area-notes') as HTMLTextAreaElement).value.trim();
+        if (!name) {
+          Swal.showValidationMessage('Area name is required.');
+          return false;
+        }
+        return { name, governorate, notes };
+      }
+    });
+    if (!value) return;
+    try {
+      await deliveryService.areas.upsert({
+        id: area?.id,
+        name: value.name,
+        governorate: value.governorate,
+        notes: value.notes || undefined,
+        isActive: area?.isActive ?? true
+      });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Save failed', e?.message || 'Could not save area.', 'error');
+    }
+  };
+
+  const toggleArea = async (area: DeliveryArea) => {
+    try {
+      await deliveryService.areas.upsert({ ...area, isActive: !area.isActive });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Update failed', e?.message || 'Could not update area.', 'error');
+    }
+  };
+
+  // ----- Supervisors -----
+  const editSupervisor = async (supervisor?: DeliverySupervisor) => {
+    const { value } = await Swal.fire({
+      title: `<span class="text-xl font-black tracking-tight">${supervisor ? 'Edit' : 'Add'} supervisor</span>`,
+      html: `
+        <div class="space-y-3 text-left p-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Name</label>
+            <input id="swal-supervisor-name" value="${escapeHtml(supervisor?.name)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone (optional)</label>
+            <input id="swal-supervisor-phone" value="${escapeHtml(supervisor?.phone)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email (optional)</label>
+            <input id="swal-supervisor-email" value="${escapeHtml(supervisor?.email)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+          </div>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Save supervisor',
+      confirmButtonColor: '#B91c1c',
+      preConfirm: () => {
+        const name = (document.getElementById('swal-supervisor-name') as HTMLInputElement).value.trim();
+        const phone = (document.getElementById('swal-supervisor-phone') as HTMLInputElement).value.trim();
+        const email = (document.getElementById('swal-supervisor-email') as HTMLInputElement).value.trim();
+        if (!name) {
+          Swal.showValidationMessage('Supervisor name is required.');
+          return false;
+        }
+        return { name, phone, email };
+      }
+    });
+    if (!value) return;
+    try {
+      await deliveryService.supervisors.upsert({
+        id: supervisor?.id,
+        name: value.name,
+        phone: value.phone || undefined,
+        email: value.email || undefined,
+        isActive: supervisor?.isActive ?? true
+      });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Save failed', e?.message || 'Could not save supervisor.', 'error');
+    }
+  };
+
+  const toggleSupervisor = async (supervisor: DeliverySupervisor) => {
+    try {
+      await deliveryService.supervisors.upsert({ ...supervisor, isActive: !supervisor.isActive });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Update failed', e?.message || 'Could not update supervisor.', 'error');
+    }
+  };
 
   // ----- Drivers -----
   const editDriver = async (driver?: DeliveryDriver) => {
@@ -86,6 +216,15 @@ export const DeliverySettings: React.FC = () => {
 
   // ----- Blocks -----
   const editBlock = async (block?: DeliveryBlock) => {
+    const selectedAreaId = block?.areaId || areas.find(area =>
+      area.name.toLowerCase() === block?.areaName?.toLowerCase()
+      && area.governorate === block?.governorate
+    )?.id || '';
+    const areaOptions = areas.map(area => `
+      <option value="${area.id}" ${selectedAreaId === area.id ? 'selected' : ''}>
+        ${escapeHtml(area.name)} - ${area.governorate}${area.isActive ? '' : ' (inactive)'}
+      </option>
+    `).join('');
     const { value } = await Swal.fire({
       title: `<span class="text-xl font-black tracking-tight">${block ? `Edit block ${block.blockNumber}` : 'Add block'}</span>`,
       html: `
@@ -95,26 +234,38 @@ export const DeliverySettings: React.FC = () => {
             <input id="swal-block" value="${block?.blockNumber || ''}" ${block ? 'readonly' : ''} class="w-full p-3 ${block ? 'bg-slate-100 text-slate-400' : 'bg-slate-50'} border border-slate-200 rounded-lg text-sm font-bold">
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area name</label>
-            <input id="swal-area" value="${block?.areaName || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
-          </div>
-          <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Governorate</label>
-            <select id="swal-gov" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
-              ${GOVERNORATES.map(g => `<option value="${g}" ${block?.governorate === g ? 'selected' : ''}>${g}</option>`).join('')}
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area</label>
+            <select id="swal-area-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              <option value="">Select existing area</option>
+              ${areaOptions}
             </select>
+            <p class="mt-1 text-[10px] font-bold text-slate-400">Add areas first from the Areas tab.</p>
           </div>
         </div>`,
       showCancelButton: true,
       confirmButtonText: 'Save',
       confirmButtonColor: '#B91c1c',
-      preConfirm: () => ({
-        blockNumber: (document.getElementById('swal-block') as HTMLInputElement).value.trim(),
-        areaName: (document.getElementById('swal-area') as HTMLInputElement).value.trim(),
-        governorate: (document.getElementById('swal-gov') as HTMLSelectElement).value as Governorate
-      })
+      preConfirm: () => {
+        const blockNumber = (document.getElementById('swal-block') as HTMLInputElement).value.trim();
+        const areaId = (document.getElementById('swal-area-id') as HTMLSelectElement).value;
+        const area = areas.find(item => item.id === areaId);
+        if (!blockNumber) {
+          Swal.showValidationMessage('Block number is required.');
+          return false;
+        }
+        if (!area) {
+          Swal.showValidationMessage('Select an area first.');
+          return false;
+        }
+        return {
+          blockNumber,
+          areaId: area.id,
+          areaName: area.name,
+          governorate: area.governorate
+        };
+      }
     });
-    if (!value?.blockNumber || !value.areaName) return;
+    if (!value) return;
     try {
       await deliveryService.blocks.upsert({ ...value, isActive: block?.isActive ?? true });
       await load();
@@ -132,19 +283,42 @@ export const DeliverySettings: React.FC = () => {
   // ----- Branch classification -----
   const editClassification = async (branch: Branch) => {
     const current = classifications.find(c => c.branchId === branch.id);
+    const selectedAreaId = current?.areaId || areas.find(area =>
+      area.name.toLowerCase() === current?.area?.toLowerCase()
+      && (!current?.governorate || area.governorate === current.governorate)
+    )?.id || '';
+    const selectedSupervisorId = current?.supervisorId || supervisors.find(supervisor =>
+      supervisor.name.toLowerCase() === current?.supervisorName?.toLowerCase()
+    )?.id || '';
+    const areaOptions = areas.map(area => `
+      <option value="${area.id}" ${selectedAreaId === area.id ? 'selected' : ''}>
+        ${escapeHtml(area.name)} - ${area.governorate}${area.isActive ? '' : ' (inactive)'}
+      </option>
+    `).join('');
+    const supervisorOptions = supervisors.map(supervisor => `
+      <option value="${supervisor.id}" ${selectedSupervisorId === supervisor.id ? 'selected' : ''}>
+        ${escapeHtml(supervisor.name)}${supervisor.isActive ? '' : ' (inactive)'}
+      </option>
+    `).join('');
     const { value } = await Swal.fire({
       title: `<span class="text-xl font-black tracking-tight">${branch.name}</span>`,
       html: `
         <div class="space-y-3 text-left p-2">
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area</label>
-            <input id="swal-area" value="${current?.area || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+            <select id="swal-branch-area-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              <option value="">Not assigned</option>
+              ${areaOptions}
+            </select>
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Supervisor</label>
-            <input id="swal-supervisor" value="${current?.supervisorName || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+            <select id="swal-branch-supervisor-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              <option value="">Not assigned</option>
+              ${supervisorOptions}
+            </select>
           </div>
-          <div>
+          <div class="hidden">
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Governorate</label>
             <select id="swal-gov" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
               <option value="">— Not set —</option>
@@ -155,18 +329,28 @@ export const DeliverySettings: React.FC = () => {
       showCancelButton: true,
       confirmButtonText: 'Save',
       confirmButtonColor: '#B91c1c',
-      preConfirm: () => ({
-        area: (document.getElementById('swal-area') as HTMLInputElement).value.trim(),
-        supervisorName: (document.getElementById('swal-supervisor') as HTMLInputElement).value.trim(),
-        governorate: (document.getElementById('swal-gov') as HTMLSelectElement).value
-      })
+      preConfirm: () => {
+        const areaId = (document.getElementById('swal-branch-area-id') as HTMLSelectElement).value;
+        const supervisorId = (document.getElementById('swal-branch-supervisor-id') as HTMLSelectElement).value;
+        const area = areas.find(item => item.id === areaId);
+        const supervisor = supervisors.find(item => item.id === supervisorId);
+        return {
+          areaId: area?.id || null,
+          area: area?.name || undefined,
+          governorate: area?.governorate || null,
+          supervisorId: supervisor?.id || null,
+          supervisorName: supervisor?.name || undefined
+        };
+      }
     });
     if (value === undefined) return;
     try {
       await deliveryService.classifications.upsert({
         branchId: branch.id,
-        area: value.area || undefined,
-        supervisorName: value.supervisorName || undefined,
+        areaId: value.areaId,
+        area: value.area,
+        supervisorId: value.supervisorId,
+        supervisorName: value.supervisorName,
         governorate: (value.governorate || null) as Governorate | null
       });
       await load();
@@ -180,8 +364,10 @@ export const DeliverySettings: React.FC = () => {
       <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50 w-fit max-w-full overflow-x-auto">
         {([
           { id: 'drivers', label: 'Drivers', icon: Bike },
-          { id: 'blocks', label: 'Blocks & Areas', icon: MapPin },
-          { id: 'classification', label: 'Branch Classification', icon: Building2 },
+          { id: 'areas', label: 'Areas', icon: Map },
+          { id: 'supervisors', label: 'Supervisors', icon: UsersRound },
+          { id: 'blocks', label: 'Blocks', icon: MapPin },
+          { id: 'classification', label: 'Branch Assignment', icon: Building2 },
           { id: 'quality', label: 'Data Quality', icon: AlertTriangle }
         ] as Array<{ id: SettingsTab; label: string; icon: React.ElementType }>).map(t => (
           <button
@@ -227,6 +413,79 @@ export const DeliverySettings: React.FC = () => {
               </div>
             ))}
             {drivers.length === 0 && <p className="text-xs font-bold text-slate-400">No drivers yet — add the first one.</p>}
+          </div>
+        </section>
+      ) : tab === 'areas' ? (
+        <section className="operational-panel p-4 md:p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery areas</h3>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">Create areas first, then link blocks and branches to them.</p>
+            </div>
+            <button onClick={() => editArea()} className="btn-primary text-[10px] uppercase tracking-widest">
+              <Plus className="h-3.5 w-3.5" /> Add area
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {areas.map(area => (
+              <div key={area.id} className={`rounded-lg border p-3 ${area.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-800">{area.name}</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-400">{area.governorate}</p>
+                  </div>
+                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${area.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                    {area.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                {area.notes && <p className="mt-2 text-[11px] font-bold text-slate-400">{area.notes}</p>}
+                <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                  <button onClick={() => editArea(area)} className="text-slate-500 hover:text-brand">Edit</button>
+                  <button onClick={() => toggleArea(area)} className="text-slate-400 hover:text-brand">
+                    {area.isActive ? 'Deactivate' : 'Reactivate'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {areas.length === 0 && <p className="text-xs font-bold text-slate-400">No areas yet - add the first one.</p>}
+          </div>
+        </section>
+      ) : tab === 'supervisors' ? (
+        <section className="operational-panel p-4 md:p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery supervisors</h3>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">Create supervisors first, then assign branches to them.</p>
+            </div>
+            <button onClick={() => editSupervisor()} className="btn-primary text-[10px] uppercase tracking-widest">
+              <Plus className="h-3.5 w-3.5" /> Add supervisor
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {supervisors.map(supervisor => (
+              <div key={supervisor.id} className={`rounded-lg border p-3 ${supervisor.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-800">{supervisor.name}</p>
+                    {(supervisor.phone || supervisor.email) && (
+                      <p className="mt-1 text-[11px] font-bold text-slate-400">
+                        {[supervisor.phone, supervisor.email].filter(Boolean).join(' | ')}
+                      </p>
+                    )}
+                  </div>
+                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${supervisor.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                    {supervisor.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                  <button onClick={() => editSupervisor(supervisor)} className="text-slate-500 hover:text-brand">Edit</button>
+                  <button onClick={() => toggleSupervisor(supervisor)} className="text-slate-400 hover:text-brand">
+                    {supervisor.isActive ? 'Deactivate' : 'Reactivate'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {supervisors.length === 0 && <p className="text-xs font-bold text-slate-400">No supervisors yet - add the first one.</p>}
           </div>
         </section>
       ) : tab === 'blocks' ? (
@@ -278,13 +537,18 @@ export const DeliverySettings: React.FC = () => {
         </section>
       ) : tab === 'classification' ? (
         <section className="operational-panel p-4 md:p-5">
-          <h3 className="mb-1 text-sm font-black uppercase tracking-widest text-slate-700">Branch classification</h3>
+          <h3 className="mb-1 text-sm font-black uppercase tracking-widest text-slate-700">Branch assignment</h3>
           <p className="mb-4 text-[11px] font-medium text-slate-500">
             Branch → area, supervisor, governorate. The governorate drives the outside-governorate analysis; unclassified branches are excluded from it.
           </p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {branches.map(branch => {
               const c = classifications.find(x => x.branchId === branch.id);
+              const area = c?.areaId ? areas.find(item => item.id === c.areaId) : undefined;
+              const supervisor = c?.supervisorId ? supervisors.find(item => item.id === c.supervisorId) : undefined;
+              const areaName = c?.area || area?.name;
+              const supervisorName = c?.supervisorName || supervisor?.name;
+              const governorate = c?.governorate || area?.governorate;
               return (
                 <button
                   key={branch.id}
@@ -293,8 +557,8 @@ export const DeliverySettings: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-black text-slate-800">{branch.name}</p>
-                    {c?.governorate
-                      ? <span className="rounded-md border border-brand/10 bg-brand/5 px-2 py-0.5 text-[9px] font-black text-brand">{c.governorate}</span>
+                    {governorate
+                      ? <span className="rounded-md border border-brand/10 bg-brand/5 px-2 py-0.5 text-[9px] font-black text-brand">{governorate}</span>
                       : <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">UNCLASSIFIED</span>}
                   </div>
                   <p className="mt-1 text-[11px] font-bold text-slate-400">

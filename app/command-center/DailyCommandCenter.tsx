@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   Activity,
+  ArrowLeft,
   Building2,
   CheckCircle2,
   Clock,
@@ -67,6 +68,13 @@ const formatTime = (value?: string) => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
+const formatGeneratedAt = (value?: string) => {
+  if (!value) return 'Just now';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Just now';
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+};
+
 const statusOptions: ActionQueueStatus[] = ['open', 'in_progress', 'resolved', 'dismissed'];
 
 const EmptyState: React.FC<{ title: string; detail: string }> = ({ title, detail }) => (
@@ -76,6 +84,33 @@ const EmptyState: React.FC<{ title: string; detail: string }> = ({ title, detail
     </div>
     <p className="empty-state-title">{title}</p>
     <p className="empty-state-desc">{detail}</p>
+  </div>
+);
+
+const metricToneClasses = {
+  brand: 'border-brand/15 bg-brand/5 text-brand',
+  red: 'border-red-100 bg-red-50 text-red-700',
+  amber: 'border-amber-100 bg-amber-50 text-amber-700',
+  emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+  slate: 'border-slate-200 bg-slate-50 text-slate-500'
+};
+
+const CommandMetric: React.FC<{
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: React.ReactNode;
+  tone?: keyof typeof metricToneClasses;
+}> = ({ label, value, detail, icon, tone = 'slate' }) => (
+  <div className="bg-white p-4 md:p-5">
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${metricToneClasses[tone]}`}>
+        {icon}
+      </span>
+    </div>
+    <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{value}</p>
+    <p className="mt-1 text-xs font-bold text-slate-500">{detail}</p>
   </div>
 );
 
@@ -98,6 +133,10 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
   const canCreateTasks = canManageTasks;
   const digest = summary.yesterdayDigest;
   const isBranchUser = user?.role === 'branch';
+  const activeRiskCount = summary.todaysRisks.length;
+  const activeActionCount = summary.actionQueue.filter(action => action.status === 'open' || action.status === 'in_progress').length;
+  const savedTaskCount = summary.operationsTasks.length;
+  const watchedBranchCount = summary.branchHealth.filter(branch => branch.status !== 'healthy' && branch.status !== 'insufficient_data').length;
 
   const canUpdateSavedTask = (action: ActionQueueItem) => {
     if (!action.taskId) return false;
@@ -193,43 +232,92 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
   };
 
   return (
-    <section className="operational-panel mb-8 p-4 md:p-5 page-enter">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-brand text-white flex items-center justify-center shadow-sm shadow-brand/20">
-              <Activity className="w-5 h-5" />
+    <section className="mb-8 space-y-5 page-enter">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-5 md:p-6">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand text-white shadow-sm shadow-brand/20">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Operations module</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Daily Command Center</h2>
+                <p className="mt-1 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+                  Risks, saved tasks, branch health, and pending work in one control view.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl md:text-2xl font-black text-slate-950 tracking-tight">Daily Command Center</h3>
-              <p className="text-sm font-medium text-slate-500">Risks, saved tasks, and branch health from enabled modules.</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center xl:justify-end">
+              <span className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                Updated {formatGeneratedAt(summary.generatedAt)}
+              </span>
+              <button
+                type="button"
+                onClick={() => onNavigate?.('selector')}
+                className="btn-secondary text-xs"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={isLoading}
+                className="btn-secondary text-xs"
+              >
+                <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
             </div>
           </div>
         </div>
-        <button
-          onClick={refresh}
-          disabled={isLoading}
-          className="btn-secondary text-xs"
-        >
-          <RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-4">
+          <CommandMetric
+            label="Active risks"
+            value={activeRiskCount}
+            detail={`${summary.alerts.length} total alerts`}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            tone={activeRiskCount > 0 ? 'red' : 'emerald'}
+          />
+          <CommandMetric
+            label="Pending actions"
+            value={activeActionCount}
+            detail={`${summary.actionQueue.length} in queue`}
+            icon={<ClipboardList className="h-4 w-4" />}
+            tone={activeActionCount > 0 ? 'amber' : 'emerald'}
+          />
+          <CommandMetric
+            label="Saved tasks"
+            value={savedTaskCount}
+            detail="Persisted follow-up"
+            icon={<ListChecks className="h-4 w-4" />}
+            tone="brand"
+          />
+          <CommandMetric
+            label="Branch watch"
+            value={watchedBranchCount}
+            detail={`${summary.branchHealth.length} branches scored`}
+            icon={<Building2 className="h-4 w-4" />}
+            tone={watchedBranchCount > 0 ? 'amber' : 'slate'}
+          />
+        </div>
       </div>
 
       {summary.dataWarnings.length > 0 && (
-        <div className="mb-5 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+        <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm font-medium text-amber-800">
           {summary.dataWarnings.slice(0, 2).join(' | ')}
         </div>
       )}
 
       {notice && (
-        <div className={`mb-5 rounded-lg border p-4 text-sm font-bold ${notice.type === 'success' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
+        <div className={`rounded-lg border p-4 text-sm font-bold ${notice.type === 'success' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
           {notice.message}
         </div>
       )}
 
-      <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-5 rounded-lg border border-brand/15 bg-white p-4 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-brand">
@@ -304,7 +392,7 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
         </div>
 
         <div className="xl:col-span-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h4 className="text-sm font-black text-slate-700">Recovery shortlist</h4>
               <ListChecks className="h-4 w-4 text-slate-300" />
@@ -328,7 +416,7 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h4 className="text-sm font-black text-slate-700">Quick actions</h4>
               <ShieldCheck className="h-4 w-4 text-slate-300" />
@@ -367,10 +455,13 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        <div className="xl:col-span-4 operational-panel-muted p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-black text-slate-700">Today's Risks</h4>
-            <span className="text-xs font-bold text-slate-400">{summary.alerts.length} alerts</span>
+        <div className="xl:col-span-4 operational-panel p-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-black text-slate-800">Today's Risks</h4>
+              <p className="mt-1 text-xs font-medium text-slate-500">Signals that need operational attention today.</p>
+            </div>
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-500">{summary.alerts.length}</span>
           </div>
           <div className="space-y-3">
             {isLoading ? (
@@ -425,10 +516,15 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
           </div>
         </div>
 
-        <div className="xl:col-span-4 operational-panel-muted p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-black text-slate-700">Pending Actions</h4>
-            <ClipboardList className="w-4 h-4 text-slate-300" />
+        <div className="xl:col-span-4 operational-panel p-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-black text-slate-800">Pending Actions</h4>
+              <p className="mt-1 text-xs font-medium text-slate-500">Saved tasks and suggested follow-up work.</p>
+            </div>
+            <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
+              <ClipboardList className="h-4 w-4" />
+            </span>
           </div>
           <div className="space-y-3">
             {isLoading ? (
@@ -497,10 +593,15 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
         </div>
 
         <div className="xl:col-span-4 grid grid-cols-1 gap-4">
-          <div className="operational-panel-muted p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-black text-slate-700">Branch Health</h4>
-              <Building2 className="w-4 h-4 text-slate-300" />
+          <div className="operational-panel p-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-black text-slate-800">Branch Health</h4>
+                <p className="mt-1 text-xs font-medium text-slate-500">Branch-level status across visible signals.</p>
+              </div>
+              <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
+                <Building2 className="h-4 w-4" />
+              </span>
             </div>
             {isLoading ? (
               <div className="h-24 rounded-lg bg-slate-100 animate-pulse" />
@@ -532,10 +633,15 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
             )}
           </div>
 
-          <div className="operational-panel-muted p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-black text-slate-700">Pending Items</h4>
-              <ShieldCheck className="w-4 h-4 text-slate-300" />
+          <div className="operational-panel p-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-black text-slate-800">Pending Items</h4>
+                <p className="mt-1 text-xs font-medium text-slate-500">Module shortcuts with unresolved work.</p>
+              </div>
+              <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
+                <ShieldCheck className="h-4 w-4" />
+              </span>
             </div>
             {summary.pendingItems.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">

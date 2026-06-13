@@ -178,12 +178,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
 
                     setStep('info');
                 } else {
-                    const reason = result?.error || 'INVALID_OR_NOT_FOUND';
                     clearSpinRecovery();
-                    setError(`Security Check Failed: ${reason}. Please ask the pharmacist for a NEW QR code.`);
+                    setError('This reward session is not available right now. Please ask the branch team for a new QR code.');
                 }
-            } catch (err: any) {
-                setError(`Connection error: ${err.message || 'Check network'}`);
+            } catch {
+                setError('We could not verify this reward session. Please check your connection and try again.');
             }
         };
         validateToken();
@@ -236,8 +235,8 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                     }
                 }
             }
-        } catch (err: any) {
-            setError(`Error saving your details: ${err.message || 'Check connection'}`);
+        } catch {
+            setError('We could not save your details right now. Please check your connection and try again.');
         } finally {
             setIsLoading(false);
         }
@@ -301,8 +300,9 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                 clearSpinRecovery();
                 setError('This session is no longer valid. Please ask the pharmacist for a new QR code.');
             }
+            else if (msg.includes('SPIN_DAILY_LIMIT_REACHED')) setError('You have already played today. Please visit us again tomorrow.');
             else if (msg.includes('NO_PRIZES_CONFIGURED')) setError('No prizes are available right now.');
-            else setError(`Server Error: ${msg}`);
+            else setError('We could not complete the spin right now. Please ask the branch team for help.');
         } finally {
             setIsLoading(false);
         }
