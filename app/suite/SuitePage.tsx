@@ -29,6 +29,7 @@ interface ModuleCardProps {
   cta?: string;
   tone?: ModuleTone;
   iconSize?: 'default' | 'large';
+  iconPlacement?: 'framed' | 'background';
 }
 
 const moduleToneClasses: Record<ModuleTone, {
@@ -97,24 +98,36 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   isPending,
   cta = 'Open',
   tone = 'default',
-  iconSize = 'default'
+  iconSize = 'default',
+  iconPlacement = 'framed'
 }) => {
   const classes = moduleToneClasses[tone];
+  const hasBackgroundIcon = iconPlacement === 'background';
   const iconFrameClass = iconSize === 'large'
     ? 'h-16 w-24 rounded-xl border border-brand/10 bg-brand/5 text-brand group-hover:border-brand/20 group-hover:bg-brand/10 group-hover:text-brand'
     : `h-10 w-10 rounded-lg ${classes.icon}`;
+  const backgroundIcon = React.isValidElement<{ className?: string }>(icon)
+    ? React.cloneElement(icon, { className: 'h-28 w-36 sm:h-32 sm:w-40' })
+    : icon;
 
   return (
     <button
       onClick={onClick}
-      className={`group min-h-[184px] rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
+      className={`group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
     >
-      <div className="flex h-full flex-col justify-between gap-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className={`flex shrink-0 items-center justify-center transition-colors ${iconFrameClass}`}>
-            {icon}
-          </div>
+      {hasBackgroundIcon && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-brand/10 transition-colors duration-200 group-hover:text-brand/20">
+          {backgroundIcon}
         </div>
+      )}
+      <div className="relative z-10 flex h-full flex-col justify-between gap-5">
+        {!hasBackgroundIcon && (
+          <div className="flex items-start justify-between gap-4">
+            <div className={`flex shrink-0 items-center justify-center transition-colors ${iconFrameClass}`}>
+              {icon}
+            </div>
+          </div>
+        )}
         <div>
           <h3 className="text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-brand">{title}</h3>
           <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-500">{description}</p>
@@ -160,8 +173,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
       title: 'Lost Sales & Shortage Log',
       description: 'Log out-of-stock items and customer requested deficits in real time.',
-      icon: <LostSalesShortageIcon className="h-12 w-20" />,
-      iconSize: 'large',
+      icon: <LostSalesShortageIcon />,
+      iconPlacement: 'background',
       onClick: () => handleTabChange('pos'),
       isPending,
       badge: 'Entry'
