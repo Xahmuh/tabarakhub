@@ -173,7 +173,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span className="text-[10px] font-bold uppercase tracking-widest">Secure Connection</span>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest">{clientConfig.supportEmail}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Developed by Ahmed Elsherbini</span>
             </div>
           </div>
         </div>
