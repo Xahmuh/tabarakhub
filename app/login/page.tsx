@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, ShieldCheck, ShieldAlert, Loader2, Lock, Building2 } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, ShieldAlert, ShieldCheck, UserRound } from 'lucide-react';
 import { clientConfig } from '../../config/clientConfig';
 
 interface LoginPageProps {
@@ -11,14 +11,14 @@ const getLoginErrorMessage = (message?: string) => {
   const normalized = (message || '').toLowerCase();
 
   if (normalized.includes('invalid login credentials')) {
-    return 'The username or password was not accepted. Try the full email, or use the short code only if that Auth user exists.';
+    return 'The username or password was not accepted. Try the full email, or use the assigned login code.';
   }
 
   if (normalized.includes('not linked') || normalized.includes('branch profile')) {
     return 'This Auth user exists, but it is not linked to an active app profile. Add or activate the matching app_user_profiles row.';
   }
 
-  return message || 'Unable to sign in. Check the username, password, and Supabase Auth setup.';
+  return message || 'Unable to sign in. Check the username, password, and account setup.';
 };
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
@@ -26,7 +26,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -46,137 +46,149 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-white font-sans selection:bg-brand/10">
-      {/* Left Panel - Brand / Hero */}
-      <div className="hidden md:flex md:w-[55%] bg-slate-950 items-center justify-center p-16 relative overflow-hidden">
-        {/* Background effects */}
-        <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-full h-full opacity-[0.015] pointer-events-none">
-            <svg width="100%" height="100%"><defs><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="white" strokeWidth="1" /></pattern></defs><rect width="100%" height="100%" fill="url(#grid)" /></svg>
-          </div>
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-brand/10 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-brand/5 rounded-full blur-[100px]"></div>
-        </div>
-
-        <div className="relative z-10 max-w-xl">
-          <div className="w-20 h-20 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 mb-12 overflow-hidden ring-2 ring-white/10">
-            <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
-          </div>
-
-          <h1 className="text-6xl font-black tracking-tighter mb-8 leading-[1.05] text-brand">
-            Tabarak HUB
-          </h1>
-
-          <p className="text-slate-400 text-lg font-medium leading-relaxed mb-12 max-w-md">
-            Operational Platform
-          </p>
-
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center space-x-3 bg-emerald-500/10 border border-emerald-500/20 px-5 py-3 rounded-xl w-fit">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">End-to-End Encryption Active</span>
-            </div>
-            <div className="flex items-center space-x-3 bg-white/5 border border-white/10 px-5 py-3 rounded-xl w-fit">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">All Systems Operational</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 md:p-16 relative">
-        {/* Subtle background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-white pointer-events-none"></div>
-
-        <div className="w-full max-w-[420px] relative z-10">
-          {/* Mobile Logo */}
-          <div className="md:hidden flex items-center justify-center mb-10">
-            <div className="w-16 h-16 bg-brand rounded-2xl flex items-center justify-center shadow-xl shadow-brand/20 overflow-hidden">
-              <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
-            </div>
+    <div className="min-h-screen bg-slate-100 px-4 py-6 font-sans selection:bg-brand/10 md:px-8 md:py-10">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.10)] md:min-h-[calc(100vh-5rem)]">
+        <section className="relative hidden w-[48%] overflow-hidden bg-slate-950 text-white lg:flex">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,#111827_0%,#020617_62%,#3f0d12_100%)]" />
+          <div className="absolute inset-y-0 right-0 w-1 bg-brand" />
+          <div className="absolute inset-0 opacity-[0.055]">
+            <svg width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <pattern id="login-grid" width="42" height="42" patternUnits="userSpaceOnUse">
+                  <path d="M 42 0 L 0 0 0 42" fill="none" stroke="white" strokeWidth="1" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#login-grid)" />
+            </svg>
           </div>
 
-          <div className="mb-10">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Log in</h2>
-            <div className="mt-3 h-1 w-14 rounded-full bg-brand"></div>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
-                <Building2 className="w-3.5 h-3.5" />
-                <span>Email or Login Code</span>
-              </label>
-              <div className={`relative rounded-xl border-2 transition-all duration-300 ${focusedField === 'code' ? 'border-brand shadow-lg shadow-brand/5' : 'border-slate-100 hover:border-slate-200'}`}>
-                <input
-                  type="text"
-                  autoComplete="username"
-                  className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
-                  placeholder="admin or t01@tabarak.local"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  onFocus={() => setFocusedField('code')}
-                  onBlur={() => setFocusedField(null)}
-                  required
-                />
+          <div className="relative z-10 flex h-full w-full flex-col justify-between p-10 xl:p-12">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white shadow-sm">
+                <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="h-full w-full object-cover" />
               </div>
-              <p className="ml-1 text-xs font-medium text-slate-400">.</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
-                <Lock className="w-3.5 h-3.5" />
-                <span>Password</span>
-              </label>
-              <div className={`relative rounded-xl border-2 transition-all duration-300 ${focusedField === 'password' ? 'border-brand shadow-lg shadow-brand/5' : 'border-slate-100 hover:border-slate-200'}`}>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
-                  placeholder="Enter password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  required
-                />
+              <div>
+                <p className="text-2xl font-black tracking-tight text-white">Tabarak HUB</p>
+                <p className="mt-1 text-xs font-black uppercase tracking-[0.22em] text-red-200/75">Operational Platform</p>
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-50 text-brand p-4 rounded-xl text-sm font-medium border border-red-100 flex items-start space-x-3 animate-in fade-in slide-in-from-top-2">
-                <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
+            <div className="max-w-md">
+              <div className="mb-6 h-1 w-16 rounded-full bg-brand" />
+              <h1 className="text-5xl font-black leading-[0.98] tracking-tight text-white xl:text-6xl">
+                Controlled access for daily operations.
+              </h1>
+            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-brand hover:bg-brand-hover disabled:bg-slate-200 disabled:text-slate-400 text-white font-black py-4 rounded-xl transition-all duration-300 shadow-lg shadow-brand/20 hover:shadow-xl hover:shadow-brand/30 flex items-center justify-center space-x-3 active:scale-[0.99] mt-2"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <span className="text-sm tracking-widest uppercase">Sign In</span>
-                  <ChevronRight className="w-5 h-5" />
-                </>
+            <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">Mode</p>
+                <p className="mt-2 text-sm font-bold text-white">Dedicated client</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">Access</p>
+                <p className="mt-2 text-sm font-bold text-white">Role based</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="flex flex-1 items-center justify-center px-5 py-8 sm:px-8 lg:px-12">
+          <div className="w-full max-w-[420px]">
+            <div className="mb-9 flex items-center gap-4 lg:hidden">
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="h-full w-full object-cover" />
+              </div>
+              <div>
+                <p className="text-lg font-black tracking-tight text-slate-950">Tabarak HUB</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Operational Platform</p>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h2 className="text-3xl font-black tracking-tight text-slate-950">Log in</h2>
+              <div className="mt-3 h-1 w-14 rounded-full bg-brand" />
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="login-identifier" className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <UserRound className="h-3.5 w-3.5 text-brand" />
+                  <span>Email or login code</span>
+                </label>
+                <div className="group relative rounded-lg border border-slate-200 bg-white transition-colors focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10">
+                  <input
+                    id="login-identifier"
+                    type="text"
+                    autoComplete="username"
+                    className="h-[52px] w-full rounded-lg bg-transparent px-4 py-4 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-300"
+                    placeholder="Enter email or code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="login-password" className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  <Lock className="h-3.5 w-3.5 text-brand" />
+                  <span>Password</span>
+                </label>
+                <div className="group relative rounded-lg border border-slate-200 bg-white pr-12 transition-colors focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10">
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    className="h-[52px] w-full rounded-lg bg-transparent px-4 py-4 text-sm font-bold text-slate-950 outline-none placeholder:text-slate-300"
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-sm font-semibold leading-relaxed text-brand">
+                  <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                  <span>{error}</span>
+                </div>
               )}
-            </button>
-          </form>
 
-          <div className="mt-10 pt-8 border-t border-slate-100">
-            <div className="flex items-center justify-between text-slate-300">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Secure Connection</span>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex w-full items-center justify-center gap-3 rounded-lg bg-brand px-5 py-4 text-sm font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-brand/20 transition-all hover:bg-brand-hover hover:shadow-xl hover:shadow-brand/25 active:scale-[0.99] disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <span>Log in</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-8 flex flex-col gap-3 border-t border-slate-100 pt-6 text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span className="text-[10px] font-black uppercase tracking-[0.16em]">Secure connection</span>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest">Developed by Ahmed Elsherbini</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.16em]">Developed by Ahmed Elsherbini</span>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
