@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PackageX, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
+  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
 import { AuthState } from '../../types';
 import { Footer } from '../shared';
@@ -28,6 +28,7 @@ interface ModuleCardProps {
   badge?: string;
   cta?: string;
   tone?: ModuleTone;
+  iconSize?: 'default' | 'large';
 }
 
 const moduleToneClasses: Record<ModuleTone, {
@@ -57,6 +58,37 @@ const moduleToneClasses: Record<ModuleTone, {
   }
 };
 
+const LostSalesShortageIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    viewBox="0 0 128 96"
+    fill="none"
+    aria-hidden="true"
+    className={className}
+  >
+    <path
+      d="M29 14H99C109 14 117 22 117 32V58C117 68 109 76 99 76H82"
+      stroke="currentColor"
+      strokeWidth="9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M46 76H29C19 76 11 68 11 58V32C11 22 19 14 29 14"
+      stroke="currentColor"
+      strokeWidth="9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M64 47L91 88H37L64 47Z"
+      stroke="currentColor"
+      strokeWidth="9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const ModuleCard: React.FC<ModuleCardProps> = ({
   title,
   description,
@@ -64,9 +96,13 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   onClick,
   isPending,
   cta = 'Open',
-  tone = 'default'
+  tone = 'default',
+  iconSize = 'default'
 }) => {
   const classes = moduleToneClasses[tone];
+  const iconFrameClass = iconSize === 'large'
+    ? 'h-16 w-24 rounded-xl border border-brand/10 bg-brand/5 text-brand group-hover:border-brand/20 group-hover:bg-brand/10 group-hover:text-brand'
+    : `h-10 w-10 rounded-lg ${classes.icon}`;
 
   return (
     <button
@@ -75,7 +111,7 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
     >
       <div className="flex h-full flex-col justify-between gap-5">
         <div className="flex items-start justify-between gap-4">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${classes.icon}`}>
+          <div className={`flex shrink-0 items-center justify-center transition-colors ${iconFrameClass}`}>
             {icon}
           </div>
         </div>
@@ -124,7 +160,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       visible: canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
       title: 'Lost Sales & Shortage Log',
       description: 'Log out-of-stock items and customer requested deficits in real time.',
-      icon: <PackageX className="h-5 w-5" />,
+      icon: <LostSalesShortageIcon className="h-12 w-20" />,
+      iconSize: 'large',
       onClick: () => handleTabChange('pos'),
       isPending,
       badge: 'Entry'
