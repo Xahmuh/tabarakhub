@@ -666,11 +666,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                                 </div>
                             </div>
 
-                            <div className="mt-4 rounded-[1.75rem] border border-white/10 bg-white shadow-2xl">
+                            <div className="mt-4 aspect-[4/1] w-full overflow-hidden border border-white/10 bg-white shadow-2xl">
                                 <img
                                     src="/spin-header-v4.jpg"
                                     alt="Spin and Win"
-                                    className="h-auto w-full rounded-[1.7rem] object-contain"
+                                    className="block h-full w-full object-cover"
                                 />
                             </div>
 
