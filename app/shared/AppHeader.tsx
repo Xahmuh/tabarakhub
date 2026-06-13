@@ -47,7 +47,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             </div>
             <div>
               <h1 className="text-lg font-black leading-none tracking-tight text-slate-900">
-                {clientConfig.appName}<span className="text-brand">.</span>
+                Tabarak
               </h1>
               {clientConfig.environmentLabel && (
                 <span className="ml-2 text-[10px] font-bold text-slate-400">{clientConfig.environmentLabel}</span>

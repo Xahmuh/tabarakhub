@@ -555,7 +555,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                     <div className="w-8 h-8 sm:w-9 sm:h-9 bg-brand rounded-lg flex items-center justify-center overflow-hidden shadow-inner">
                         <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
                     </div>
-                    <h1 className="text-lg sm:text-xl font-black tracking-tight">Tabarak <span className="text-brand">SPIN & WIN</span></h1>
+                    <h1 className="text-lg sm:text-xl font-black tracking-tight">HUB <span className="text-brand">SPIN & WIN</span></h1>
                 </div>
             )}
 

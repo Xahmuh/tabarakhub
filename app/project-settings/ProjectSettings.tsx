@@ -27,7 +27,8 @@ import {
     UserCheck,
     SlidersHorizontal,
     RadioTower,
-    RotateCcw
+    RotateCcw,
+    Hash
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
@@ -186,13 +187,18 @@ const AccessGuide: React.FC = () => (
     </div>
 );
 
-export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+export const ProjectSettings: React.FC<{
+    onBack: () => void;
+    onSettingsChange?: (settings: MaintenanceSettings) => void;
+}> = ({ onBack, onSettingsChange }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('branches');
     const [branches, setBranches] = useState<Branch[]>([]);
     const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
     const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+    const [isSavingGuideline, setIsSavingGuideline] = useState(false);
+    const [isSavingFooter, setIsSavingFooter] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined);
 
@@ -206,7 +212,8 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
     const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
     const [isPharModalOpen, setIsPharModalOpen] = useState(false);
     const [branchForm, setBranchForm] = useState<Partial<Branch>>({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
-    const [pharForm, setPharForm] = useState<{ name: string; isActive: boolean; branchIds: string[]; id?: string }>({
+    const [pharForm, setPharForm] = useState<{ code: string; name: string; isActive: boolean; branchIds: string[]; id?: string }>({
+        code: '',
         name: '',
         isActive: true,
         branchIds: []
@@ -262,6 +269,7 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                 maintenanceMessage: maintenanceSettings.maintenanceMessage
             });
             setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
             Swal.fire({
                 icon: 'success',
                 title: nextEnabled ? 'Maintenance mode enabled' : 'Maintenance mode disabled',
@@ -292,6 +300,7 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                 isMaintenanceModeEnabled: maintenanceSettings.isMaintenanceModeEnabled
             });
             setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
             Swal.fire({
                 icon: 'success',
                 title: 'Maintenance page updated',
@@ -304,6 +313,76 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
             Swal.fire('Error', err.message || 'Failed to save maintenance page', 'error');
         } finally {
             setIsSavingMaintenance(false);
+        }
+    };
+
+    const handleSavePOSGuideline = async () => {
+        if (!maintenanceSettings || isSavingGuideline) return;
+        const requiredFields = [
+            maintenanceSettings.posGuidelineTitle,
+            maintenanceSettings.posGuidelineIntro,
+            maintenanceSettings.posGuidelineLostSalesEn,
+            maintenanceSettings.posGuidelineShortageEn,
+            maintenanceSettings.posGuidelineLostSalesAr,
+            maintenanceSettings.posGuidelineShortageAr
+        ];
+
+        if (requiredFields.some(value => !value.trim())) {
+            Swal.fire('Error', 'All instruction box fields are required', 'error');
+            return;
+        }
+
+        setIsSavingGuideline(true);
+        try {
+            const updated = await supabase.systemSettings.updateMaintenanceSettings({
+                posGuidelineEnabled: maintenanceSettings.posGuidelineEnabled,
+                posGuidelineTitle: maintenanceSettings.posGuidelineTitle,
+                posGuidelineIntro: maintenanceSettings.posGuidelineIntro,
+                posGuidelineLostSalesEn: maintenanceSettings.posGuidelineLostSalesEn,
+                posGuidelineShortageEn: maintenanceSettings.posGuidelineShortageEn,
+                posGuidelineLostSalesAr: maintenanceSettings.posGuidelineLostSalesAr,
+                posGuidelineShortageAr: maintenanceSettings.posGuidelineShortageAr
+            });
+            setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Instruction box updated',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2500
+            });
+        } catch (err: any) {
+            Swal.fire('Error', err.message || 'Failed to save instruction box', 'error');
+        } finally {
+            setIsSavingGuideline(false);
+        }
+    };
+
+    const handleSaveFooterSettings = async () => {
+        if (!maintenanceSettings || isSavingFooter) return;
+
+        setIsSavingFooter(true);
+        try {
+            const updated = await supabase.systemSettings.updateMaintenanceSettings({
+                footerLogoUrl: maintenanceSettings.footerLogoUrl,
+                footerText: maintenanceSettings.footerText
+            });
+            setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Footer updated',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2500
+            });
+        } catch (err: any) {
+            Swal.fire('Error', err.message || 'Failed to save footer settings', 'error');
+        } finally {
+            setIsSavingFooter(false);
         }
     };
 
@@ -364,12 +443,21 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
     };
 
     const handleSavePharmacist = async () => {
+        const normalizedCode = pharForm.code.trim().toUpperCase();
+        if (!normalizedCode) {
+            Swal.fire('Error', 'Pharmacist code is required', 'error');
+            return;
+        }
+        if (!/^[A-Z0-9_-]+$/.test(normalizedCode)) {
+            Swal.fire('Error', 'Pharmacist code can only contain letters, numbers, underscore, or dash', 'error');
+            return;
+        }
         if (!pharForm.name) {
             Swal.fire('Error', 'Pharmacist name is required', 'error');
             return;
         }
         try {
-            await supabase.pharmacists.upsert({ id: pharForm.id, name: pharForm.name, isActive: pharForm.isActive }, pharForm.branchIds);
+            await supabase.pharmacists.upsert({ id: pharForm.id, code: normalizedCode, name: pharForm.name, isActive: pharForm.isActive }, pharForm.branchIds);
             Swal.fire('Success', 'Pharmacist saved successfully', 'success');
             setIsPharModalOpen(false);
             loadData();
@@ -414,7 +502,8 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
     );
 
     const filteredPharmacists = pharmacists.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.code || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const selectedBranch = branches.find(branch => branch.id === selectedBranchForPerms);
@@ -536,7 +625,7 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                     <input
                                         type="text"
-                                        placeholder={activeTab === 'permissions' ? 'Find identity...' : 'Search records...'}
+                                        placeholder={activeTab === 'permissions' ? 'Find identity...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 pl-10 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
@@ -554,7 +643,7 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                             setBranchForm({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
                                             setIsBranchModalOpen(true);
                                         } else {
-                                            setPharForm({ name: '', isActive: true, branchIds: [] });
+                                            setPharForm({ code: '', name: '', isActive: true, branchIds: [] });
                                             setIsPharModalOpen(true);
                                         }
                                     }}
@@ -672,6 +761,9 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                                         <div className="min-w-0">
                                                             <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{phar.name}</h3>
                                                             <div className="mt-2 flex items-center gap-2">
+                                                                <span className="rounded-md bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">
+                                                                    {phar.code || 'No code'}
+                                                                </span>
                                                                 <span className={`h-2 w-2 rounded-full ${phar.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
                                                                 <span className={`rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
                                                                     phar.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
@@ -687,6 +779,7 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                                                 const { data } = await supabase.client.from('pharmacist_branches').select('branch_id').eq('pharmacist_id', phar.id);
                                                                 setPharForm({
                                                                     id: phar.id,
+                                                                    code: phar.code || '',
                                                                     name: phar.name,
                                                                     isActive: phar.isActive,
                                                                     branchIds: data?.map(d => d.branch_id) || []
@@ -706,10 +799,6 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                                             <Trash2 size={16} />
                                                         </button>
                                                     </div>
-                                                </div>
-                                                <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
-                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Assignment</p>
-                                                    <p className="mt-1 text-sm font-bold text-slate-600">Open profile to manage branch access</p>
                                                 </div>
                                             </article>
                                         ))}
@@ -931,6 +1020,216 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                                             </div>
                                         </aside>
                                     </div>
+
+                                    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                        <div className="mb-5 flex items-start gap-3">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand shadow-sm">
+                                                <FileText size={18} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black tracking-tight text-slate-900">Footer branding</h3>
+                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Control the logo and text shown in the application footer.</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.9fr]">
+                                            <div className="space-y-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Logo URL / path</label>
+                                                    <input
+                                                        type="text"
+                                                        value={maintenanceSettings.footerLogoUrl}
+                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, footerLogoUrl: e.target.value })}
+                                                        maxLength={500}
+                                                        placeholder="/logo.jpg"
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Footer text</label>
+                                                    <input
+                                                        type="text"
+                                                        value={maintenanceSettings.footerText}
+                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, footerText: e.target.value })}
+                                                        maxLength={120}
+                                                        placeholder="HUB"
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-black outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={handleSaveFooterSettings}
+                                                        disabled={isSavingFooter}
+                                                        className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
+                                                    >
+                                                        <Save size={18} />
+                                                        Save footer
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setMaintenanceSettings({ ...maintenanceSettings, footerLogoUrl: '', footerText: 'HUB' })}
+                                                        className="btn-secondary text-[10px] uppercase tracking-widest"
+                                                    >
+                                                        <RotateCcw size={16} />
+                                                        Reset footer
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Preview</p>
+                                                <div className="mt-3 rounded-lg border border-slate-200 px-4 py-4" style={{ backgroundColor: '#0f172a' }}>
+                                                    <div className="flex items-center gap-3">
+                                                        {maintenanceSettings.footerLogoUrl && (
+                                                            <div className="h-9 w-9 overflow-hidden rounded-lg bg-brand shadow-sm">
+                                                                <img src={maintenanceSettings.footerLogoUrl} alt="Footer logo preview" className="h-full w-full object-cover" />
+                                                            </div>
+                                                        )}
+                                                        <p className="text-2xl font-black leading-none text-white">{maintenanceSettings.footerText || 'HUB'}</p>
+                                                    </div>
+                                                </div>
+                                            </aside>
+                                        </div>
+                                    </section>
+
+                                    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                            <div className="flex items-start gap-3">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand shadow-sm">
+                                                    <ShoppingCart size={18} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-sm font-black tracking-tight text-slate-900">Lost Sales & Shortage instruction box</h3>
+                                                    <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-slate-500">
+                                                        Control the Attention / تنبيه message shown before branch users submit Lost Sales or Shortage records.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                    {maintenanceSettings.posGuidelineEnabled ? 'Enabled' : 'Disabled'}
+                                                </span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={maintenanceSettings.posGuidelineEnabled}
+                                                    onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineEnabled: e.target.checked })}
+                                                    className="sr-only peer"
+                                                />
+                                                <span className="relative h-6 w-11 rounded-full bg-slate-200 transition-colors peer-checked:bg-brand after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white" />
+                                            </label>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.9fr]">
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Title</label>
+                                                        <input
+                                                            type="text"
+                                                            value={maintenanceSettings.posGuidelineTitle}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineTitle: e.target.value })}
+                                                            maxLength={60}
+                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Intro message</label>
+                                                        <input
+                                                            type="text"
+                                                            value={maintenanceSettings.posGuidelineIntro}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineIntro: e.target.value })}
+                                                            maxLength={110}
+                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Lost Sales rule - English</label>
+                                                        <textarea
+                                                            value={maintenanceSettings.posGuidelineLostSalesEn}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineLostSalesEn: e.target.value })}
+                                                            maxLength={120}
+                                                            rows={2}
+                                                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-medium leading-5 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Shortage rule - English</label>
+                                                        <textarea
+                                                            value={maintenanceSettings.posGuidelineShortageEn}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineShortageEn: e.target.value })}
+                                                            maxLength={120}
+                                                            rows={2}
+                                                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-medium leading-5 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Lost Sales rule - Arabic</label>
+                                                        <textarea
+                                                            dir="rtl"
+                                                            value={maintenanceSettings.posGuidelineLostSalesAr}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineLostSalesAr: e.target.value })}
+                                                            maxLength={120}
+                                                            rows={2}
+                                                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-right text-sm font-bold leading-5 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Shortage rule - Arabic</label>
+                                                        <textarea
+                                                            dir="rtl"
+                                                            value={maintenanceSettings.posGuidelineShortageAr}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, posGuidelineShortageAr: e.target.value })}
+                                                            maxLength={120}
+                                                            rows={2}
+                                                            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-right text-sm font-bold leading-5 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={handleSavePOSGuideline}
+                                                    disabled={isSavingGuideline}
+                                                    className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    <Save size={18} />
+                                                    Save instruction box
+                                                </button>
+                                            </div>
+
+                                            <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Preview</p>
+                                                <div className="mt-3 overflow-hidden rounded-lg border border-brand/10 bg-white shadow-sm">
+                                                    <div className="border-b border-brand/10 bg-brand/5 px-4 py-3">
+                                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Before logging records</p>
+                                                        <h4 className="mt-1 text-xl font-black text-slate-950">{maintenanceSettings.posGuidelineTitle}</h4>
+                                                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{maintenanceSettings.posGuidelineIntro}</p>
+                                                    </div>
+                                                    <div className="p-4">
+                                                        <div className="mb-3 flex justify-center">
+                                                            <div className="flex items-center rounded-full border border-brand/10 bg-slate-50 p-1">
+                                                                <span className="rounded-full bg-brand px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-white">Lost Sales</span>
+                                                                <span className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Shortage</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid gap-3 md:grid-cols-2">
+                                                            <div className="rounded-lg border border-slate-200 p-3">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">English</p>
+                                                                <p className="mt-2 text-xs font-bold text-slate-700"><span className="text-brand">Lost Sales:</span> {maintenanceSettings.posGuidelineLostSalesEn}</p>
+                                                                <p className="mt-2 text-xs font-bold text-slate-700"><span className="text-brand">Shortage:</span> {maintenanceSettings.posGuidelineShortageEn}</p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-slate-200 p-3 text-right" dir="rtl">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">عربي</p>
+                                                                <p className="mt-2 text-xs font-bold text-slate-700"><span className="text-brand">Lost Sales:</span> {maintenanceSettings.posGuidelineLostSalesAr}</p>
+                                                                <p className="mt-2 text-xs font-bold text-slate-700"><span className="text-brand">Shortage:</span> {maintenanceSettings.posGuidelineShortageAr}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </aside>
+                                        </div>
+                                    </section>
                                 </div>
                             )}
                         </div>
@@ -1074,6 +1373,20 @@ export const ProjectSettings: React.FC<{ onBack: () => void }> = ({ onBack }) =>
                             <button onClick={() => setIsPharModalOpen(false)} className="w-9 h-9 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors"><X size={18} /></button>
                         </div>
                         <div className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pharmacist Code</label>
+                                <div className="relative">
+                                    <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
+                                    <input
+                                        type="text"
+                                        maxLength={32}
+                                        value={pharForm.code}
+                                        onChange={e => setPharForm({ ...pharForm, code: e.target.value.trim().toUpperCase() })}
+                                        placeholder="P001"
+                                        className="w-full bg-slate-50 border border-slate-200 p-3 pl-10 rounded-lg outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black uppercase"
+                                    />
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Official Full Name</label>
                                 <input

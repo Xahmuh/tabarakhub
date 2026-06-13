@@ -112,6 +112,7 @@ const App: React.FC = () => {
 
   const canUseFeature = (feature: string, minimum: 'read' | 'edit' = 'read', role = authState.user?.role) =>
     buildPermissionChecker(role, authState.permissions, authState.rolePermissions)(feature, minimum);
+  const shouldShowPOSGuideline = () => maintenanceSettings?.posGuidelineEnabled !== false;
 
   const isTabEnabled = (tab: AppTab | null, role = authState.user?.role) => {
     if (!tab || tab === 'selector') return true;
@@ -163,7 +164,7 @@ const App: React.FC = () => {
       return;
     }
     if (tab === 'pos') {
-      setShowPOSGuideline(true);
+      if (shouldShowPOSGuideline()) setShowPOSGuideline(true);
     }
     if (tab) {
       sessionStorage.setItem('tabarak_active_tab', tab);
@@ -444,7 +445,7 @@ const App: React.FC = () => {
           const newState = { ...authState, pharmacist };
           setAuthState(newState);
           setShowPharmacistSelector(false);
-          setShowPOSGuideline(true);
+          if (shouldShowPOSGuideline()) setShowPOSGuideline(true);
           sessionStorage.setItem('tabarak_active_tab', 'pos');
           startTransition(() => setActiveTab('pos'));
         }}
@@ -474,6 +475,7 @@ const App: React.FC = () => {
           checkPermission={checkPermission}
           handleTabChange={handleTabChange}
           logout={logout}
+          footerSettings={maintenanceSettings}
         />
       </div>
     );
@@ -541,7 +543,7 @@ const App: React.FC = () => {
             onBack={() => handleTabChange('selector')}
           />
         ) : activeTab === 'settings' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} />
+          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} />
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (
@@ -574,12 +576,13 @@ const App: React.FC = () => {
       </main>
 
       <div className="print:hidden">
-        <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} />
+        <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} settings={maintenanceSettings} />
       </div>
 
       <POSGuidelineModal
         isOpen={showPOSGuideline}
         onClose={() => setShowPOSGuideline(false)}
+        settings={maintenanceSettings}
       />
     </div>
   );

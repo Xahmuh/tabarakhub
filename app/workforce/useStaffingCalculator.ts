@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 export type Region = {
     id: string;
@@ -8,19 +8,23 @@ export type Region = {
     branchesRegular: number; // 2 shifts
 };
 
+const ZERO_RAMADAN_CONFIG = {
+    totalFemaleHours: 0,
+    totalMaleHours: 0,
+    maleDayValuation: 8,
+    femaleDayValuation: 6
+};
+
 export const useStaffingCalculator = (initialRegions: Region[]) => {
-    const [regions, setRegions] = useState<Region[]>(initialRegions);
+    const createCleanRegions = () => initialRegions.map(region => ({ ...region }));
+
+    const [regions, setRegions] = useState<Region[]>(createCleanRegions);
     const [includePublicHolidays, setIncludePublicHolidays] = useState(false);
     const [includeRamadan, setIncludeRamadan] = useState(false);
     const [includeAnnualLeave, setIncludeAnnualLeave] = useState(false);
     const [currentStaff, setCurrentStaff] = useState<number>(0);
-    const [leaveCycleMonths, setLeaveCycleMonths] = useState<number>(12); // Default 12 months
-    const [ramadanConfig, setRamadanConfig] = useState({
-        totalFemaleHours: 1000, // Total accumulated hours for all female staff
-        totalMaleHours: 1000,   // Total accumulated hours for all male staff
-        maleDayValuation: 8,  // 8 hours = 1 day for males
-        femaleDayValuation: 6 // 6 hours = 1 day for females
-    });
+    const [leaveCycleMonths, setLeaveCycleMonths] = useState<number>(0);
+    const [ramadanConfig, setRamadanConfig] = useState(ZERO_RAMADAN_CONFIG);
 
     // Constants
     const DAYS_IN_YEAR = 365;
@@ -29,8 +33,8 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
     const LEAVES_PUBLIC_HOLIDAYS = 14;
 
     const results = useMemo(() => {
-        // 1. Scale Timeframe and Leaves based on Cycle
-        const cycleRatio = leaveCycleMonths / 12;
+        const safeLeaveCycleMonths = Math.max(0, leaveCycleMonths || 0);
+        const cycleRatio = safeLeaveCycleMonths / 12;
         const cycleDays = DAYS_IN_YEAR * cycleRatio;
         const cycleWeeklyLeaves = 52 * cycleRatio; // 1 per week
         const cyclePublicHolidays = LEAVES_PUBLIC_HOLIDAYS * cycleRatio;
@@ -40,9 +44,8 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
             (includePublicHolidays ? cyclePublicHolidays : 0) +
             (includeAnnualLeave ? LEAVES_ANNUAL : 0);
 
-        const workingDaysInCycle = cycleDays - totalLeavesInCycle;
+        const workingDaysInCycle = Math.max(0, cycleDays - totalLeavesInCycle);
 
-        // 2. Calculate Total Demand for the Cycle
         let totalDailyShifts = 0;
         regions.forEach(region => {
             const shifts24h = region.branches24h * 3;
@@ -50,10 +53,39 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
             totalDailyShifts += (shifts24h + shiftsRegular);
         });
 
+        if (workingDaysInCycle <= 0 || totalDailyShifts <= 0) {
+            return {
+                totalDailyShifts,
+                totalPharmacistsNeeded: 0,
+                basePharmacistsNeeded: 0,
+                reliefForceSize: 0,
+                coverageRatio: 0,
+                workingDaysInCycle,
+                currentStaff,
+                leaveCycleMonths: safeLeaveCycleMonths,
+                staffingGap: 0,
+                strategy: {
+                    recommendedCycleMonths: 0,
+                    availableRelief: Math.max(0, currentStaff - totalDailyShifts),
+                    reliefCoverageRatio: 0,
+                    isUnderstaffed: false,
+                    isCriticallyUnderstaffed: false
+                },
+                ramadan: {
+                    totalHours: (ramadanConfig.totalFemaleHours || 0) + (ramadanConfig.totalMaleHours || 0),
+                    equivalentShifts: 0,
+                    coverageFTE: 0,
+                    breakdown: {
+                        femaleDaysOff: 0,
+                        maleDaysOff: 0
+                    },
+                    isActive: includeRamadan
+                }
+            };
+        }
+
         const totalShiftsInCycle = totalDailyShifts * cycleDays;
 
-        // 3. Headcount Calculation
-        // Required = Total Work needed / What one person can contribute
         const pharmacistsNeededRaw = totalShiftsInCycle / workingDaysInCycle;
         const basePharmacistsNeeded = Math.ceil(pharmacistsNeededRaw);
 
@@ -101,7 +133,7 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
             coverageRatio,
             workingDaysInCycle,
             currentStaff,
-            leaveCycleMonths,
+            leaveCycleMonths: safeLeaveCycleMonths,
             staffingGap,
             strategy: {
                 recommendedCycleMonths,
@@ -129,6 +161,16 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
         ));
     };
 
+    const resetCalculator = () => {
+        setRegions(createCleanRegions());
+        setIncludePublicHolidays(false);
+        setIncludeRamadan(false);
+        setIncludeAnnualLeave(false);
+        setCurrentStaff(0);
+        setLeaveCycleMonths(0);
+        setRamadanConfig(ZERO_RAMADAN_CONFIG);
+    };
+
     return {
         regions,
         setRegions,
@@ -145,6 +187,7 @@ export const useStaffingCalculator = (initialRegions: Region[]) => {
         setLeaveCycleMonths,
         ramadanConfig,
         setRamadanConfig,
+        resetCalculator,
         results
     };
 };

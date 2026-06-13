@@ -58,25 +58,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-brand/5 rounded-full blur-[100px]"></div>
         </div>
 
-        <div className="relative z-10 max-w-xl">
-          <div className="w-20 h-20 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 mb-12 overflow-hidden ring-2 ring-white/10">
+        <div className="relative z-10 flex max-w-xl flex-col items-center text-center">
+          <div className="mb-10 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-brand shadow-2xl shadow-brand/30 ring-2 ring-white/10">
             <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
           </div>
 
-          <h1 className="text-6xl font-black tracking-tighter mb-8 leading-[1.05] text-brand">
+          <h1 className="mb-5 text-center text-6xl font-black leading-[1.05] tracking-tighter text-brand">
             Tabarak HUB
           </h1>
 
-          <p className="text-slate-400 text-lg font-medium leading-relaxed mb-12 max-w-md">
+          <p className="mx-auto mb-10 max-w-md text-center text-lg font-medium leading-relaxed text-slate-400">
             Operational Platform
           </p>
 
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center space-x-3 bg-emerald-500/10 border border-emerald-500/20 px-5 py-3 rounded-xl w-fit">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="flex w-fit items-center space-x-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">End-to-End Encryption Active</span>
             </div>
-            <div className="flex items-center space-x-3 bg-white/5 border border-white/10 px-5 py-3 rounded-xl w-fit">
+            <div className="flex w-fit items-center space-x-3 rounded-xl border border-white/10 bg-white/5 px-5 py-3">
               <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">All Systems Operational</span>
             </div>
@@ -91,10 +91,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
         <div className="w-full max-w-[420px] relative z-10">
           {/* Mobile Logo */}
-          <div className="md:hidden flex items-center justify-center mb-10">
-            <div className="w-16 h-16 bg-brand rounded-2xl flex items-center justify-center shadow-xl shadow-brand/20 overflow-hidden">
+          <div className="mb-10 flex flex-col items-center justify-center text-center md:hidden">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-brand shadow-xl shadow-brand/20">
               <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
             </div>
+            <h1 className="mt-5 text-3xl font-black tracking-tight text-brand">Tabarak HUB</h1>
+            <p className="mt-1 text-xs font-black uppercase tracking-[0.2em] text-slate-400">Operational Platform</p>
           </div>
 
           <div className="mb-10">
@@ -168,7 +170,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </form>
 
           <div className="mt-10 pt-8 border-t border-slate-100">
-            <div className="flex items-center justify-between text-slate-300">
+            <div className="flex items-center justify-between text-brand">
               <div className="flex items-center space-x-2">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span className="text-[10px] font-bold uppercase tracking-widest">Secure Connection</span>

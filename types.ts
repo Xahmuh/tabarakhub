@@ -17,6 +17,7 @@ export interface Branch {
 export interface Pharmacist {
   id: string;
   branchId: string;
+  code?: string;
   name: string;
   isActive: boolean;
 }
@@ -72,6 +73,15 @@ export interface MaintenanceSettings {
   isMaintenanceModeEnabled: boolean;
   maintenanceTitle: string;
   maintenanceMessage: string;
+  posGuidelineEnabled: boolean;
+  posGuidelineTitle: string;
+  posGuidelineIntro: string;
+  posGuidelineLostSalesEn: string;
+  posGuidelineShortageEn: string;
+  posGuidelineLostSalesAr: string;
+  posGuidelineShortageAr: string;
+  footerLogoUrl: string;
+  footerText: string;
   updatedAt?: string;
   updatedBy?: string | null;
 }

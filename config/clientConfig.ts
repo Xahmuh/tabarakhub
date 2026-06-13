@@ -45,7 +45,7 @@ const readBoolean = (key: string, fallback = true): boolean => {
 
 export const clientConfig: ClientConfig = {
   appName: env.VITE_APP_NAME || 'Tabarak Hub',
-  clientName: env.VITE_CLIENT_NAME || 'Tabarak Pharmacy Group',
+  clientName: env.VITE_CLIENT_NAME || 'HUB',
   logoUrl: env.VITE_CLIENT_LOGO_URL || '/logo.jpg',
   primaryColor: env.VITE_PRIMARY_COLOR || '#B91c1c',
   primaryHoverColor: env.VITE_PRIMARY_HOVER_COLOR || '#991b1b',

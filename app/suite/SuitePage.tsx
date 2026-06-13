@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
-import { AuthState } from '../../types';
+import { AuthState, MaintenanceSettings } from '../../types';
 import { Footer } from '../shared';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
 import { ROLE_LABELS } from '../../lib/access';
@@ -15,9 +15,12 @@ interface SuitePageProps {
   checkPermission: (feature: string, minimum?: 'edit' | 'read') => boolean;
   handleTabChange: (tab: any) => void;
   logout: () => void;
+  footerSettings?: MaintenanceSettings | null;
 }
 
 type ModuleTone = 'default' | 'feature' | 'finance' | 'knowledge';
+type ModuleVariant = 'default' | 'brand';
+type ModuleBadgeStyle = 'hidden' | 'red';
 
 interface ModuleCardProps {
   title: string;
@@ -30,6 +33,8 @@ interface ModuleCardProps {
   tone?: ModuleTone;
   iconSize?: 'default' | 'large';
   iconPlacement?: 'framed' | 'background';
+  variant?: ModuleVariant;
+  badgeStyle?: ModuleBadgeStyle;
 }
 
 const moduleToneClasses: Record<ModuleTone, {
@@ -96,31 +101,59 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   icon,
   onClick,
   isPending,
+  badge,
   cta = 'Open',
   tone = 'default',
   iconSize = 'default',
-  iconPlacement = 'framed'
+  iconPlacement = 'framed',
+  variant = 'default',
+  badgeStyle = 'hidden'
 }) => {
   const classes = moduleToneClasses[tone];
   const hasBackgroundIcon = iconPlacement === 'background';
+  const isBrandVariant = variant === 'brand';
   const iconFrameClass = iconSize === 'large'
     ? 'h-16 w-24 rounded-xl border border-brand/10 bg-brand/5 text-brand group-hover:border-brand/20 group-hover:bg-brand/10 group-hover:text-brand'
     : `h-10 w-10 rounded-lg ${classes.icon}`;
   const backgroundIcon = React.isValidElement<{ className?: string }>(icon)
     ? React.cloneElement(icon, { className: 'h-28 w-36 sm:h-32 sm:w-40' })
     : icon;
+  const cardClass = isBrandVariant
+    ? 'group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/15 bg-white p-5 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/70 hover:bg-brand/90 hover:shadow-md hover:shadow-brand/20 active:scale-[0.99] focus-ring'
+    : 'group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring';
+  const contentClass = isBrandVariant
+    ? 'relative z-10 flex h-full flex-col items-center justify-center gap-4'
+    : 'relative z-10 flex h-full flex-col justify-between gap-5';
+  const backgroundIconClass = isBrandVariant
+    ? 'pointer-events-none absolute inset-0 flex items-center justify-center text-brand/10 transition-colors duration-200 group-hover:text-white/25'
+    : 'pointer-events-none absolute inset-0 flex items-center justify-center text-brand/10 transition-colors duration-200 group-hover:text-brand/20';
+  const titleClass = isBrandVariant
+    ? 'text-xl font-black text-slate-950 transition-colors duration-200 group-hover:text-white'
+    : 'text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-brand';
+  const descriptionClass = isBrandVariant
+    ? 'mt-2 max-w-[18rem] text-sm font-semibold leading-relaxed text-slate-500 transition-colors duration-200 group-hover:text-white/85'
+    : 'mt-1.5 text-sm font-medium leading-relaxed text-slate-500';
+  const ctaClass = isBrandVariant ? 'text-brand transition-colors duration-200 group-hover:text-white' : classes.cta;
+  const ctaContainerClass = isBrandVariant
+    ? 'flex items-center justify-center gap-2 text-xs font-bold'
+    : 'flex items-center gap-2 text-xs font-bold';
 
   return (
     <button
       onClick={onClick}
-      className={`group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
+      className={`${cardClass} ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
     >
+      {badge && badgeStyle === 'red' && (
+        <span className="absolute right-4 top-4 z-20 rounded-full bg-brand/85 px-2.5 py-1 text-[10px] font-black text-white shadow-sm ring-1 ring-brand/10">
+          {badge}
+        </span>
+      )}
       {hasBackgroundIcon && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-brand/10 transition-colors duration-200 group-hover:text-brand/20">
+        <div className={backgroundIconClass}>
           {backgroundIcon}
         </div>
       )}
-      <div className="relative z-10 flex h-full flex-col justify-between gap-5">
+      <div className={contentClass}>
         {!hasBackgroundIcon && (
           <div className="flex items-start justify-between gap-4">
             <div className={`flex shrink-0 items-center justify-center transition-colors ${iconFrameClass}`}>
@@ -129,12 +162,12 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
           </div>
         )}
         <div>
-          <h3 className="text-lg font-black tracking-tight text-slate-950 transition-colors group-hover:text-brand">{title}</h3>
-          <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-500">{description}</p>
+          <h3 className={titleClass}>{title}</h3>
+          <p className={descriptionClass}>{description}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold">
-          <span className={`h-px w-6 bg-current opacity-50 transition-all duration-200 group-hover:w-10 ${classes.cta}`}></span>
-          <span className={classes.cta}>{cta}</span>
+        <div className={ctaContainerClass}>
+          <span className={`h-px w-6 bg-current opacity-50 transition-all duration-200 group-hover:w-10 ${ctaClass}`}></span>
+          <span className={ctaClass}>{cta}</span>
         </div>
       </div>
     </button>
@@ -148,7 +181,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
   isPending,
   checkPermission,
   handleTabChange,
-  logout
+  logout,
+  footerSettings
 }) => {
   const role = authState.user?.role;
   const isOwner = role === 'owner';
@@ -175,6 +209,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       description: 'Log out-of-stock items and customer requested deficits in real time.',
       icon: <LostSalesShortageIcon />,
       iconPlacement: 'background',
+      variant: 'brand',
       onClick: () => handleTabChange('pos'),
       isPending,
       badge: 'Entry'
@@ -337,7 +372,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       icon: <Truck className="h-5 w-5" />,
       onClick: () => handleTabChange('delivery'),
       isPending,
-      badge: 'Delivery',
+      badge: 'new module',
+      badgeStyle: 'red',
       tone: 'feature'
     },
     {
@@ -359,7 +395,8 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       icon: <Radar className="h-5 w-5" />,
       onClick: () => handleTabChange('command-center'),
       isPending,
-      badge: 'Daily close',
+      badge: 'new module',
+      badgeStyle: 'red',
       cta: 'Open command center'
     }
   ];
@@ -401,7 +438,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-black text-slate-700">Modules</h3>
-            <p className="text-sm font-medium text-slate-400 mt-1">Choose a workflow. Every module keeps the Tabarak red brand accent.</p>
+            <p className="text-sm font-medium text-slate-400 mt-1">Choose a workflow</p>
           </div>
         </div>
 
@@ -423,7 +460,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
           </button>
         </div>
       </div>
-      <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} />
+      <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} settings={footerSettings} />
     </div>
   );
 };

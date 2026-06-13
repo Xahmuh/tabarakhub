@@ -1,20 +1,28 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { Pharmacist } from '../types';
 
+const PHARMACIST_COLUMNS = 'id, code, name, is_active';
+
+const normalizePharmacistCode = (code?: string | null) => code?.trim().toUpperCase() || '';
+
+const toPharmacist = (p: any, branchId?: string): Pharmacist => ({
+  id: p.id,
+  branchId: branchId || p.branch_id || '',
+  code: p.code || '',
+  name: p.name,
+  isActive: p.is_active
+});
+
 export const pharmacistService = {
   listAll: async () => {
     try {
       const { data, error } = await supabaseClient
         .from('pharmacists')
-        .select('*')
+        .select(PHARMACIST_COLUMNS)
         .eq('is_active', true)
-        .order('name');
+        .order('code');
       if (error) throw error;
-      return data.map(p => ({
-        id: p.id,
-        name: p.name,
-        isActive: p.is_active
-      }));
+      return (data || []).map(p => toPharmacist(p));
     } catch (e) {
       return [];
     }
@@ -23,27 +31,32 @@ export const pharmacistService = {
     try {
       const { data, error } = await supabaseClient
         .from('pharmacists')
-        .select('id, name, is_active')
+        .select(PHARMACIST_COLUMNS)
         .eq('is_active', true)
-        .order('name');
+        .order('code');
 
       if (error) throw error;
-      return (data || []).map((p: any) => ({ id: p.id, branchId, name: p.name, isActive: p.is_active }));
+      return (data || []).map((p: any) => toPharmacist(p, branchId));
     } catch (e) {
       return [];
     }
   },
   findById: async (id: string) => {
     try {
-      const { data, error } = await supabaseClient.from('pharmacists').select('*').eq('id', id).single();
+      const { data, error } = await supabaseClient.from('pharmacists').select(PHARMACIST_COLUMNS).eq('id', id).single();
       if (error) throw error;
-      return { id: data.id, name: data.name, isActive: data.is_active };
+      return toPharmacist(data);
     } catch (e) {
       return null;
     }
   },
   upsert: async (pharmacist: Partial<Pharmacist>, branchIds?: string[]) => {
+    const code = normalizePharmacistCode(pharmacist.code);
+    if (!code) throw new Error('Pharmacist code is required');
+    if (!/^[A-Z0-9_-]+$/.test(code)) throw new Error('Pharmacist code can only contain letters, numbers, underscore, or dash');
+
     const payload: any = {
+      code,
       name: pharmacist.name,
       is_active: pharmacist.isActive ?? true
     };

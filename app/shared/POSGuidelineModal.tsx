@@ -1,124 +1,145 @@
 import React from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
+import { MaintenanceSettings } from '../../types';
 
 interface POSGuidelineModalProps {
-    isOpen: boolean;
-    onClose: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  settings?: MaintenanceSettings | null;
 }
 
-export const POSGuidelineModal: React.FC<POSGuidelineModalProps> = ({ isOpen, onClose }) => {
-    if (!isOpen) return null;
+const DEFAULT_GUIDELINE_COPY = {
+  title: 'Attention / تنبيه',
+  intro: 'Choose the correct type before submitting to keep reports accurate.',
+  lostSalesEn: 'Actual customer request + item unavailable in branch.',
+  shortageEn: 'Daily missing stock, even without a customer request.',
+  lostSalesAr: 'طلب فعلي من عميل + الصنف غير متوفر داخل الفرع.',
+  shortageAr: 'نواقص يومية داخل الفرع حتى بدون طلب من عميل.'
+};
 
-    return (
-        <div
-            className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="pos-guideline-title"
-            aria-describedby="pos-guideline-description"
-        >
-            {/* Modal Container - Increased max-width to be wider */}
-            <div className="w-full max-w-5xl max-h-[90vh] bg-white shadow-[0_35px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col font-sans border border-white/20">
+export const POSGuidelineModal: React.FC<POSGuidelineModalProps> = ({ isOpen, onClose, settings }) => {
+  if (!isOpen || settings?.posGuidelineEnabled === false) return null;
 
-                {/* Red Header & Content Section */}
-                <div className="bg-[#b81c1d] p-8 md:p-12 relative overflow-y-auto overflow-x-hidden flex-1 custom-scrollbar">
-                    {/* Background Watermark - Warning Sign */}
-                    <div className="absolute top-0 right-0 -mr-16 -mt-16 opacity-10 pointer-events-none">
-                        <AlertTriangle size={400} className="text-white rotate-12" strokeWidth={3} />
-                    </div>
+  const copy = {
+    title: settings?.posGuidelineTitle || DEFAULT_GUIDELINE_COPY.title,
+    intro: settings?.posGuidelineIntro || DEFAULT_GUIDELINE_COPY.intro,
+    lostSalesEn: settings?.posGuidelineLostSalesEn || DEFAULT_GUIDELINE_COPY.lostSalesEn,
+    shortageEn: settings?.posGuidelineShortageEn || DEFAULT_GUIDELINE_COPY.shortageEn,
+    lostSalesAr: settings?.posGuidelineLostSalesAr || DEFAULT_GUIDELINE_COPY.lostSalesAr,
+    shortageAr: settings?.posGuidelineShortageAr || DEFAULT_GUIDELINE_COPY.shortageAr
+  };
 
-                    {/* Header Title & Close */}
-                    <div className="flex justify-between items-start mb-6 relative z-10">
-                        <h3 id="pos-guideline-title" className="text-3xl md:text-4xl font-bold text-white tracking-tight">Attention / تنبيه</h3>
-                        <button
-                            onClick={onClose}
-                            className="bg-white/10 hover:bg-white/20 text-white transition-all p-2 rounded-lg"
-                        >
-                            <X size={32} />
-                        </button>
-                    </div>
+  const englishGuidelines = [
+    { title: 'Lost Sales', detail: copy.lostSalesEn },
+    { title: 'Shortage', detail: copy.shortageEn }
+  ];
+  const arabicGuidelines = [
+    { title: 'Lost Sales', detail: copy.lostSalesAr },
+    { title: 'Shortage', detail: copy.shortageAr }
+  ];
 
-                    {/* Illustrative Toggle Switch (based on user image) */}
-                    <div className="flex justify-center mb-10 relative z-10">
-                        <div className="bg-slate-100/10 backdrop-blur-md p-1.5 rounded-[2rem] flex items-center shadow-inner border border-white/10">
-                            <div className="bg-white px-8 py-3 rounded-[1.5rem] shadow-xl flex items-center justify-center">
-                                <span className="text-[#b81c1d] font-black text-sm tracking-widest uppercase">Lost Sales</span>
-                            </div>
-                            <div className="px-8 py-3 flex items-center justify-center opacity-60">
-                                <span className="text-white font-black text-sm tracking-widest uppercase">Shortage</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Content Section (Optimized for Landscape Layout) */}
-                    <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-
-                        {/* Arabic Section (Right Side on Wide Screens) */}
-                        <div className="text-right space-y-6 lg:order-2">
-                            <h4 className="text-2xl font-bold text-white leading-tight">عزيزي الصيدلي</h4>
-                            <p id="pos-guideline-description" className="text-xl font-bold leading-relaxed text-white" dir="rtl">
-                                برجاء الانتباه جيدًا إلى الفرق بين تسجيل الأصناف كـ Lost Sales وتسجيلها كـ Shortage، وذلك لتجنب تسجيل بيانات غير دقيقة.
-                            </p>
-
-                            <div className="space-y-4 pt-2" dir="rtl">
-                                <p className="text-lg font-bold text-white border-r-4 border-white/30 pr-4">
-                                    • يتم تسجيل Lost Sales فقط في حالة وجود طلب فعلي من عميل على صنف غير متوفر داخل الفرع.
-                                </p>
-                                <p className="text-lg font-bold text-white border-r-4 border-white/30 pr-4">
-                                    • يتم تسجيل Shortage عند تسجيل النواقص اليومية داخل الفرع، سواء وُجد طلب من عميل أم لا.
-                                </p>
-                            </div>
-
-                            <div className="pt-4">
-                                <p className="text-lg font-bold text-white/90" dir="rtl">
-                                    الالتزام بالتسجيل الصحيح يساعد على دقة التقارير وتحسين إدارة المخزون.
-                                </p>
-                                <p className="text-xl font-bold text-white mt-2" dir="rtl">شاكرين تعاونكم.</p>
-                            </div>
-                        </div>
-
-                        {/* Middle Vertical Divider (Only visible on Large Screens) */}
-                        <div className="hidden lg:block absolute left-1/2 top-10 bottom-10 w-px bg-white/20 -translate-x-1/2"></div>
-
-                        {/* English Section (Left Side on Wide Screens) */}
-                        <div className="text-left space-y-6 lg:order-1">
-                            <h4 className="text-xl font-bold text-white leading-tight">Dear Pharmacist</h4>
-                            <p className="text-lg font-bold leading-relaxed text-white">
-                                Please pay close attention to the difference between recording items as Lost Sales and recording them as Shortages, in order to avoid inaccurate data entry.
-                            </p>
-
-                            <div className="space-y-4 pt-2">
-                                <p className="text-base font-bold text-white border-l-4 border-white/30 pl-4">
-                                    • Lost Sales should be recorded only when there is an actual customer request for an item that is not available in the branch.
-                                </p>
-                                <p className="text-base font-bold text-white border-l-4 border-white/30 pl-4">
-                                    • Shortage should be recorded for daily missing or out-of-stock items in the branch, regardless of customer demand.
-                                </p>
-                            </div>
-
-                            <div className="pt-4">
-                                <p className="text-base font-bold text-white/90">
-                                    Proper classification ensures accurate reporting and effective inventory management.
-                                </p>
-                                <p className="text-lg font-bold text-white mt-2">Thank you for your cooperation.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Footer Section */}
-                <div className="bg-white p-8 px-10 md:px-14 flex flex-col md:flex-row justify-between items-center gap-6 flex-shrink-0">
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Tabarak Hub © 2026</p>
-                    <div className="flex items-center">
-                        <button
-                            onClick={onClose}
-                            className="px-16 py-4 bg-[#b81c1d] hover:bg-[#8b1516] text-white font-bold text-2xl transition-all rounded-md active:scale-95 shadow-lg min-w-[240px]"
-                        >
-                            Acknowledged / تم الإطلاع علي التنبيه
-                        </button>
-                    </div>
-                </div>
-            </div>
+  return (
+    <div
+      className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm animate-in fade-in duration-300"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pos-guideline-title"
+      aria-describedby="pos-guideline-description"
+    >
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-xl border border-brand/10 bg-white shadow-[0_28px_90px_-28px_rgba(0,0,0,0.55)] animate-in zoom-in-95 duration-300">
+        <div className="pointer-events-none absolute -right-10 -top-12 text-brand/5">
+          <AlertTriangle size={220} strokeWidth={2.8} />
         </div>
-    );
+
+        <div className="relative flex items-start justify-between gap-4 border-b border-brand/10 bg-brand/5 px-5 py-4 md:px-7">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+              <AlertTriangle className="h-6 w-6" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Before logging records</p>
+              <h3 id="pos-guideline-title" className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+                {copy.title}
+              </h3>
+              <p id="pos-guideline-description" className="mt-1.5 text-sm font-semibold leading-relaxed text-slate-500">
+                {copy.intro}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-all hover:border-brand/30 hover:bg-brand/5 hover:text-brand focus-ring"
+            aria-label="Close attention message"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="relative px-5 py-4 md:px-7">
+          <div className="mx-auto flex w-fit items-center rounded-full border border-brand/10 bg-slate-50 p-1">
+            <div className="rounded-full bg-brand px-5 py-2 text-center shadow-sm">
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-white">Lost Sales</span>
+            </div>
+            <div className="px-5 py-2 text-center">
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Shortage</span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">English guide</p>
+              <h4 className="mt-1 text-lg font-black text-slate-950">Dear Pharmacist</h4>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
+                Please distinguish between Lost Sales and Shortage to avoid inaccurate records.
+              </p>
+              <div className="mt-3 space-y-2">
+                {englishGuidelines.map((item) => (
+                  <div key={item.title} className="rounded-lg border border-brand/10 bg-brand/5 px-3 py-2">
+                    <p className="text-xs font-black uppercase tracking-[0.12em] text-brand">{item.title}</p>
+                    <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4 text-right shadow-sm" dir="rtl">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">الدليل العربي</p>
+              <h4 className="mt-1 text-lg font-black text-slate-950">عزيزي الصيدلي</h4>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
+                برجاء التفرقة بين Lost Sales و Shortage لتجنب تسجيل بيانات غير دقيقة.
+              </p>
+              <div className="mt-3 space-y-2">
+                {arabicGuidelines.map((item) => (
+                  <div key={item.title} className="rounded-lg border border-brand/10 bg-brand/5 px-3 py-2">
+                    <p className="text-xs font-black uppercase tracking-[0.12em] text-brand">{item.title}</p>
+                    <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-center">
+            <p className="text-sm font-black text-amber-900">
+              {copy.lostSalesEn} = Lost Sales. {copy.shortageEn} = Shortage.
+            </p>
+            <p className="mt-1 text-sm font-black text-amber-900" dir="rtl">
+              {copy.lostSalesAr} = Lost Sales. {copy.shortageAr} = Shortage.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4 md:px-7">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Tabarak Hub 2026</p>
+          <button
+            onClick={onClose}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand/90 px-6 py-2.5 text-center text-sm font-black text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand active:scale-[0.98] focus-ring"
+          >
+            Acknowledged / تم الإطلاع
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };

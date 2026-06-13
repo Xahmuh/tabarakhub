@@ -2,22 +2,23 @@ import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
 import { buildPermissionChecker } from '../../lib/access';
-import { FeaturePermission, RolePermission } from '../../types';
+import { FeaturePermission, MaintenanceSettings, RolePermission } from '../../types';
 
 export interface FooterProps {
     onNavigate?: (tab: any) => void;
     permissions?: FeaturePermission[];
     rolePermissions?: RolePermission[];
     user?: any;
+    settings?: MaintenanceSettings | null;
 }
 
-export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermissions = [], user }) => {
-    const currentYear = new Date().getFullYear();
-
+export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermissions = [], user, settings }) => {
     const role = user?.role;
     const isManager = role === 'manager';
     const isOwner = role === 'owner';
     const isWarehouse = role === 'warehouse';
+    const footerLogoUrl = settings?.footerLogoUrl ?? '';
+    const footerText = settings?.footerText ?? 'HUB';
 
     const checkPermission = buildPermissionChecker(role, permissions, rolePermissions);
 
@@ -88,25 +89,24 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
     }
 
     return (
-        <footer className="w-full border-t border-slate-200/80 bg-white/80 mt-10 print:hidden">
+        <footer className="w-full border-t border-white/10 mt-10 text-white print:hidden" style={{ backgroundColor: clientConfig.accentColor }}>
             <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-4">
-                <div className="flex flex-col gap-3 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 text-sm text-white md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-brand rounded-lg overflow-hidden shadow-sm">
-                            <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
-                        </div>
-                        <div>
-                            <p className="font-black text-slate-900">{clientConfig.appName}</p>
-                            <p className="text-xs font-medium text-slate-400">&copy; {currentYear} {clientConfig.clientName}</p>
-                        </div>
+                        {footerLogoUrl && (
+                            <div className="w-8 h-8 bg-brand rounded-lg overflow-hidden shadow-sm">
+                                <img src={footerLogoUrl} alt="Footer logo" className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                        {footerText && <p className="text-2xl font-black leading-none text-white">{footerText}</p>}
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-500">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-emerald-700">
+                    <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-white">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-white">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                             Online
                         </span>
                         <span className="inline-flex items-center gap-1.5">
-                            <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
+                            <ShieldCheck className="h-3.5 w-3.5 text-white" />
                             {enabledModuleCount} modules enabled
                         </span>
                         <span>{clientConfig.country}</span>
