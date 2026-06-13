@@ -14,6 +14,7 @@ export interface Branch {
   whatsappNumber?: string;
   nhraLicenseNo?: string;
   crNumber?: string;
+  branchManagerName?: string;
 }
 
 export interface Pharmacist {

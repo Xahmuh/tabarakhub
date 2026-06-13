@@ -1,7 +1,7 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { Branch } from '../types';
 
-const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled';
+const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, branch_manager_name, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled';
 
 const toBranch = (b: any): Branch => ({
   id: b.id,
@@ -12,6 +12,7 @@ const toBranch = (b: any): Branch => ({
   whatsappNumber: b.whatsapp_number,
   nhraLicenseNo: b.nhra_license_no,
   crNumber: b.cr_number,
+  branchManagerName: b.branch_manager_name,
   isSpinEnabled: b.is_spin_enabled,
   isItemsEntryEnabled: b.is_items_entry_enabled,
   isKPIDashboardEnabled: b.is_kpi_dashboard_enabled
@@ -64,6 +65,7 @@ export const branchService = {
       whatsapp_number: branch.whatsappNumber,
       nhra_license_no: branch.nhraLicenseNo,
       cr_number: branch.crNumber,
+      branch_manager_name: branch.branchManagerName,
       is_spin_enabled: branch.isSpinEnabled,
       is_items_entry_enabled: branch.isItemsEntryEnabled,
       is_kpi_dashboard_enabled: branch.isKPIDashboardEnabled

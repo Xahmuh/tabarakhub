@@ -8,6 +8,9 @@ const BRANCH_SELECT = `
   role,
   google_maps_link,
   whatsapp_number,
+  nhra_license_no,
+  cr_number,
+  branch_manager_name,
   is_spin_enabled,
   is_items_entry_enabled,
   is_kpi_dashboard_enabled
@@ -20,6 +23,9 @@ const toBranch = (row: any): Branch => ({
   role: row.role,
   googleMapsLink: row.google_maps_link,
   whatsappNumber: row.whatsapp_number,
+  nhraLicenseNo: row.nhra_license_no,
+  crNumber: row.cr_number,
+  branchManagerName: row.branch_manager_name,
   isSpinEnabled: row.is_spin_enabled,
   isItemsEntryEnabled: row.is_items_entry_enabled,
   isKPIDashboardEnabled: row.is_kpi_dashboard_enabled

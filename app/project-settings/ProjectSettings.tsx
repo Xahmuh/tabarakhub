@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Settings,
     Plus,
@@ -31,7 +31,7 @@ import {
     Hash
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { Branch, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
+import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
 import Swal from 'sweetalert2';
 import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
@@ -136,6 +136,20 @@ const EmptyState: React.FC<{
     </div>
 );
 
+const BranchInfoItem: React.FC<{
+    label: string;
+    value?: string | null;
+    icon: React.ElementType;
+}> = ({ label, value, icon: Icon }) => (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <Icon size={13} className="shrink-0" />
+            <span className="truncate">{label}</span>
+        </div>
+        <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'Not assigned'}</p>
+    </div>
+);
+
 const ACCESS_LEVELS: Array<{
     level: 'none' | 'read' | 'edit';
     title: string;
@@ -193,6 +207,7 @@ export const ProjectSettings: React.FC<{
 }> = ({ onBack, onSettingsChange }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('branches');
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [branchClassifications, setBranchClassifications] = useState<BranchClassification[]>([]);
     const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
     const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -230,13 +245,15 @@ export const ProjectSettings: React.FC<{
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [b, p, settings] = await Promise.all([
+            const [b, p, c, settings] = await Promise.all([
                 supabase.branches.list(),
                 supabase.pharmacists.listAll(),
+                supabase.delivery.classifications.list(),
                 supabase.systemSettings.getMaintenanceSettings()
             ]);
             setBranches(b);
             setPharmacists(p);
+            setBranchClassifications(c);
             setMaintenanceSettings(settings);
         } catch (err) {
             console.error(err);
@@ -496,12 +513,25 @@ export const ProjectSettings: React.FC<{
         }
     };
 
-    const filteredBranches = branches.filter(b =>
-        b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (b.nhraLicenseNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (b.crNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const branchClassificationMap = useMemo(() => {
+        const map = new Map<string, BranchClassification>();
+        branchClassifications.forEach(classification => map.set(classification.branchId, classification));
+        return map;
+    }, [branchClassifications]);
+
+    const filteredBranches = branches.filter(b => {
+        const q = searchTerm.toLowerCase();
+        const classification = branchClassificationMap.get(b.id);
+        return (
+            b.name.toLowerCase().includes(q) ||
+            b.code.toLowerCase().includes(q) ||
+            (classification?.area || '').toLowerCase().includes(q) ||
+            (classification?.supervisorName || '').toLowerCase().includes(q) ||
+            (b.branchManagerName || '').toLowerCase().includes(q) ||
+            (b.nhraLicenseNo || '').toLowerCase().includes(q) ||
+            (b.crNumber || '').toLowerCase().includes(q)
+        );
+    });
 
     const filteredPharmacists = pharmacists.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -677,11 +707,15 @@ export const ProjectSettings: React.FC<{
                                 ) : (
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                                         {filteredBranches.map(branch => {
+                                            const classification = branchClassificationMap.get(branch.id);
                                             const enabledModules = [
                                                 branch.isItemsEntryEnabled && 'Items',
                                                 branch.isKPIDashboardEnabled && 'KPI',
                                                 branch.isSpinEnabled && 'Spin'
                                             ].filter(Boolean);
+                                            const areaName = classification?.area
+                                                ? `${classification.area}${classification.governorate ? ` / ${classification.governorate}` : ''}`
+                                                : undefined;
 
                                             return (
                                                 <article key={branch.id} className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
@@ -719,6 +753,16 @@ export const ProjectSettings: React.FC<{
                                                     </div>
 
                                                     <div className="mt-5 space-y-4">
+                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                            <BranchInfoItem label="Area" value={areaName} icon={Building2} />
+                                                            <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
+                                                            <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
+                                                            <BranchInfoItem label="CR No." value={branch.crNumber} icon={Hash} />
+                                                            <div className="sm:col-span-2">
+                                                                <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
+                                                            </div>
+                                                        </div>
+
                                                         <div className="grid grid-cols-3 gap-2">
                                                             {['Items', 'KPI', 'Spin'].map(module => {
                                                                 const enabled = enabledModules.includes(module);
@@ -730,28 +774,6 @@ export const ProjectSettings: React.FC<{
                                                                     </div>
                                                                 );
                                                             })}
-                                                        </div>
-
-                                                        <div className="flex min-h-[36px] items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500">
-                                                            <MessageCircle size={14} className="shrink-0 text-slate-300" />
-                                                            <span className="truncate">{branch.whatsappNumber || 'No support number saved'}</span>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                                                                    <FileText size={13} className="shrink-0" />
-                                                                    NHRA Lic No.
-                                                                </div>
-                                                                <p className="mt-1 truncate text-xs font-black text-slate-700">{branch.nhraLicenseNo || 'Not saved'}</p>
-                                                            </div>
-                                                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                                                                    <Hash size={13} className="shrink-0" />
-                                                                    CR Number
-                                                                </div>
-                                                                <p className="mt-1 truncate text-xs font-black text-slate-700">{branch.crNumber || 'Not saved'}</p>
-                                                            </div>
                                                         </div>
                                                     </div>
                                                 </article>
@@ -1306,6 +1328,16 @@ export const ProjectSettings: React.FC<{
                                     onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
                                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
                                     placeholder="e.g. Tabarak Jerdab Branch"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Manager Name</label>
+                                <input
+                                    type="text"
+                                    value={branchForm.branchManagerName || ''}
+                                    onChange={e => setBranchForm({ ...branchForm, branchManagerName: e.target.value })}
+                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                    placeholder="e.g. Branch manager full name"
                                 />
                             </div>
                             <div className="space-y-2">
