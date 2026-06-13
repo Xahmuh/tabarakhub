@@ -12,6 +12,8 @@ export interface Branch {
   isItemsEntryEnabled?: boolean;
   isKPIDashboardEnabled?: boolean;
   whatsappNumber?: string;
+  nhraLicenseNo?: string;
+  crNumber?: string;
 }
 
 export interface Pharmacist {

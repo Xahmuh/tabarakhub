@@ -498,7 +498,9 @@ export const ProjectSettings: React.FC<{
 
     const filteredBranches = branches.filter(b =>
         b.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.code.toLowerCase().includes(searchTerm.toLowerCase())
+        b.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.nhraLicenseNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (b.crNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const filteredPharmacists = pharmacists.filter(p =>
@@ -733,6 +735,23 @@ export const ProjectSettings: React.FC<{
                                                         <div className="flex min-h-[36px] items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500">
                                                             <MessageCircle size={14} className="shrink-0 text-slate-300" />
                                                             <span className="truncate">{branch.whatsappNumber || 'No support number saved'}</span>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                                                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                                                    <FileText size={13} className="shrink-0" />
+                                                                    NHRA Lic No.
+                                                                </div>
+                                                                <p className="mt-1 truncate text-xs font-black text-slate-700">{branch.nhraLicenseNo || 'Not saved'}</p>
+                                                            </div>
+                                                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                                                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                                                    <Hash size={13} className="shrink-0" />
+                                                                    CR Number
+                                                                </div>
+                                                                <p className="mt-1 truncate text-xs font-black text-slate-700">{branch.crNumber || 'Not saved'}</p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </article>
@@ -1298,6 +1317,28 @@ export const ProjectSettings: React.FC<{
                                     className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
                                     placeholder="+973 1234 5678"
                                 />
+                            </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">NHRA Lic No.</label>
+                                    <input
+                                        type="text"
+                                        value={branchForm.nhraLicenseNo || ''}
+                                        onChange={e => setBranchForm({ ...branchForm, nhraLicenseNo: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                        placeholder="Branch NHRA license"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number</label>
+                                    <input
+                                        type="text"
+                                        value={branchForm.crNumber || ''}
+                                        onChange={e => setBranchForm({ ...branchForm, crNumber: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                        placeholder="Branch commercial registration"
+                                    />
+                                </div>
                             </div>
                             <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
