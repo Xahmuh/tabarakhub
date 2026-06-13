@@ -98,8 +98,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </div>
 
           <div className="mb-10">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-3">Welcome back</h2>
-            <p className="text-slate-400 font-medium text-sm">Enter your Supabase Auth email or assigned short login code.</p>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Log in</h2>
+            <div className="mt-3 h-1 w-14 rounded-full bg-brand"></div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
