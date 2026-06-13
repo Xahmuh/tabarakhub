@@ -60,18 +60,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
         <div className="relative z-10 max-w-xl">
           <div className="w-20 h-20 bg-brand rounded-2xl flex items-center justify-center shadow-2xl shadow-brand/30 mb-12 overflow-hidden ring-2 ring-white/10">
-            <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
+            <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
           </div>
 
-          <h1 className="text-6xl font-black text-white tracking-tighter mb-3 leading-[1.05]">
-            {clientConfig.clientName}
+          <h1 className="text-6xl font-black tracking-tighter mb-8 leading-[1.05] text-brand">
+            Tabarak HUB
           </h1>
-          <h2 className="text-6xl font-black tracking-tighter mb-8 leading-[1.05]">
-            <span className="text-brand">{clientConfig.appName}</span>
-          </h2>
 
           <p className="text-slate-400 text-lg font-medium leading-relaxed mb-12 max-w-md">
-            Official operational platform for {clientConfig.clientName}.
+            Official operational platform.
           </p>
 
           <div className="flex flex-col space-y-4">
@@ -96,7 +93,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           {/* Mobile Logo */}
           <div className="md:hidden flex items-center justify-center mb-10">
             <div className="w-16 h-16 bg-brand rounded-2xl flex items-center justify-center shadow-xl shadow-brand/20 overflow-hidden">
-              <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
+              <img src={clientConfig.logoUrl} alt="Tabarak HUB logo" className="w-full h-full object-cover" />
             </div>
           </div>
 
