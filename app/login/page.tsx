@@ -68,7 +68,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
           </h1>
 
           <p className="text-slate-400 text-lg font-medium leading-relaxed mb-12 max-w-md">
-            Official operational platform.
+            Operational Platform
           </p>
 
           <div className="flex flex-col space-y-4">
