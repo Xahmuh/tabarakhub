@@ -29,9 +29,11 @@ interface BranchRecordingPageProps {
   branch: Branch;
   canEdit: boolean;
   isManager: boolean;
+  orderToEdit?: DeliveryOrder | null;
+  onEditDone?: () => void;
 }
 
-export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch, canEdit, isManager }) => {
+export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch, canEdit, isManager, orderToEdit, onEditDone }) => {
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
   const [todayOrders, setTodayOrders] = useState<DeliveryOrder[]>([]);
@@ -43,14 +45,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [orderDate, setOrderDate] = useState(todayKey());
   const [value, setValue] = useState('');
   const [paymentType, setPaymentType] = useState<DeliveryPaymentType>('CASH');
+
+
   const [pharmacistId, setPharmacistId] = useState<string | null>(null);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [isPharmacistLocked, setIsPharmacistLocked] = useState(false);
   const [isDriverLocked, setIsDriverLocked] = useState(false);
   const [locksHydrated, setLocksHydrated] = useState(false);
   const [blockInput, setBlockInput] = useState('');
-  const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
-  const [blockNotFound, setBlockNotFound] = useState(false);
   const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
   const [blockNotFound, setBlockNotFound] = useState(false);
 
@@ -221,6 +223,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       document.getElementById('delivery-order-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   };
+
+  useEffect(() => {
+    if (orderToEdit) {
+      handleEdit(orderToEdit);
+      onEditDone?.();
+    }
+  }, [orderToEdit]);
 
   const handleSubmit = async () => {
     if (isSubmitting) return;

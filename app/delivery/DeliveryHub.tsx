@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BarChart3, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2 } from 'lucide-react';
-import { Branch, Role } from '../../types';
+import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
 import { BranchDeliveryDashboard } from './BranchDeliveryDashboard';
@@ -40,6 +40,7 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
 
   const visibleTabs = tabs.filter(t => t.visible);
   const [activeTab, setActiveTab] = useState<HubTab>(visibleTabs[0]?.id || 'dashboard');
+  const [orderToEdit, setOrderToEdit] = useState<DeliveryOrder | null>(null);
 
   return (
     <div className="space-y-6 page-enter">
@@ -73,10 +74,13 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
       )}
 
       {activeTab === 'record' && canRecord && (
-        <BranchRecordingPage branch={user} canEdit={canRecord} isManager={isManager} />
+        <BranchRecordingPage branch={user} canEdit={canRecord} isManager={isManager} orderToEdit={orderToEdit} onEditDone={() => setOrderToEdit(null)} />
       )}
       {activeTab === 'dashboard' && isBranch && canReadDelivery && (
-        <BranchDeliveryDashboard branch={user} />
+        <BranchDeliveryDashboard branch={user} canEdit={canRecord} onEdit={canRecord ? (order) => {
+          setOrderToEdit(order);
+          setActiveTab('record');
+        } : undefined} />
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />

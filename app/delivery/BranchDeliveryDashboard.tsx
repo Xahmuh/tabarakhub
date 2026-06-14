@@ -6,6 +6,7 @@ import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
 import { exportOrdersToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
+import Swal from 'sweetalert2';
 
 type ViewMode = 'combined' | 'direct' | 'talabat';
 
@@ -22,9 +23,11 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: Reac
 
 interface BranchDeliveryDashboardProps {
   branch: Branch;
+  canEdit?: boolean;
+  onEdit?: (order: DeliveryOrder) => void;
 }
 
-export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = ({ branch }) => {
+export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = ({ branch, canEdit, onEdit }) => {
   const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
@@ -74,6 +77,24 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
       `${branch.name} — Delivery Orders — ${label}`,
       `Delivery_${branch.code}_${range.from}_${range.to}`
     ).catch(err => console.error(err));
+  };
+
+  const handleDelete = async (order: DeliveryOrder) => {
+    const confirm = await Swal.fire({
+      title: 'Delete this order?',
+      text: `Are you sure you want to delete this order (${order.valueBhd.toFixed(3)} BHD)?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, delete it',
+      confirmButtonColor: '#B91c1c'
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      await deliveryService.orders.delete(order.id);
+      setOrders(prev => prev.filter(o => o.id !== order.id));
+    } catch (e: any) {
+      Swal.fire('Delete failed', e?.message || 'Branch users can only delete their own active orders.', 'error');
+    }
   };
 
   return (
@@ -155,6 +176,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                   <th className="py-2 pr-3">Driver</th>
                   <th className="py-2 pr-3">Block</th>
                   <th className="py-2 pr-3">Area</th>
+                  {canEdit && <th className="py-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -172,6 +194,20 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                         <span className="ml-1.5 rounded-md border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-700">OUT</span>
                       )}
                     </td>
+                    {canEdit && (
+                      <td className="py-2 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {onEdit && (
+                            <button onClick={() => onEdit(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100" title="Edit" aria-label="Edit order">
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Delete" aria-label="Delete order">
+                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
