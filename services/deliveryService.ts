@@ -394,15 +394,18 @@ export const deliveryService = {
         blockNumber: b.block_number, areaId: b.area_id, areaName: b.area_name, governorate: b.governorate, isActive: b.is_active
       }));
     },
-    resolve: async (blockNumber: string): Promise<DeliveryBlock | null> => {
+    resolve: async (queryStr: string): Promise<DeliveryBlock | null> => {
+      const trimmed = queryStr.trim();
       const { data, error } = await supabaseClient
         .from('delivery_blocks')
         .select('*')
-        .eq('block_number', blockNumber.trim())
+        .or(`block_number.ilike.%${trimmed}%,area_name.ilike.%${trimmed}%`)
         .eq('is_active', true)
-        .maybeSingle();
-      if (error || !data) return null;
-      return { blockNumber: data.block_number, areaId: data.area_id, areaName: data.area_name, governorate: data.governorate, isActive: data.is_active };
+        .order('block_number')
+        .limit(1);
+      if (error || !data || data.length === 0) return null;
+      const b = data[0];
+      return { blockNumber: b.block_number, areaId: b.area_id, areaName: b.area_name, governorate: b.governorate, isActive: b.is_active };
     },
     upsert: async (block: DeliveryBlock) => {
       const { error } = await supabaseClient.from('delivery_blocks').upsert({

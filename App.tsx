@@ -176,7 +176,7 @@ const App: React.FC = () => {
     if (!tab || tab === 'selector') return true;
     switch (tab) {
       case 'command-center':
-        return canUseFeature('command_center', 'read', role);
+        return true;
       case 'pos':
         return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role) || canUseFeature('shortages', 'edit', role));
       case 'dashboard':

@@ -51,6 +51,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [blockInput, setBlockInput] = useState('');
   const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
   const [blockNotFound, setBlockNotFound] = useState(false);
+  const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
+  const [blockNotFound, setBlockNotFound] = useState(false);
 
   const isTalabat = paymentType === 'TALABAT';
   const areaPreview = isTalabat
@@ -59,7 +61,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       ? `${resolvedBlock.areaName} | ${resolvedBlock.governorate}`
       : blockNotFound && blockInput.trim()
         ? 'Block not found'
-        : 'Enter block number';
+        : 'Enter block number or area';
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager ? undefined : yesterdayKey();
   const maxDate = isManager ? undefined : todayKey();
@@ -255,7 +257,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
       driverId,
-      blockNumber: isTalabat ? null : blockInput.trim() || null
+      blockNumber: isTalabat ? null : (resolvedBlock ? resolvedBlock.blockNumber : blockInput.trim()) || null
     };
 
     setIsSubmitting(true);
@@ -448,12 +450,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Block {isTalabat ? '(not required for Talabat)' : ''}
+                Block or Area {isTalabat ? '(not required for Talabat)' : ''}
               </label>
               <input
                 type="text"
-                inputMode="numeric"
-                placeholder={isTalabat ? 'Disabled for Talabat' : 'e.g. 905'}
+                inputMode="text"
+                placeholder={isTalabat ? 'Disabled for Talabat' : 'e.g. 905 or Manama'}
                 value={isTalabat ? '' : blockInput}
                 disabled={isTalabat}
                 onChange={e => setBlockInput(e.target.value)}
