@@ -24,16 +24,17 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
   const isOwner = role === 'owner';
   const isBranch = role === 'branch';
   const canManageDelivery = isManager;
-  const canReadDeliveryAnalytics = canManageDelivery || isOwner || role === 'supervisor';
-  const canReadDeliveryCoverage = canReadDeliveryAnalytics || isBranch;
+  const canReadDelivery = checkPermission('delivery', 'read');
+  const canReadDeliveryAnalytics = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor');
+  const canReadDeliveryCoverage = canReadDeliveryAnalytics || (canReadDelivery && isBranch);
   const canRecord = isBranch && checkPermission('delivery', 'edit');
 
   const tabs: Array<{ id: HubTab; label: string; icon: React.ElementType; visible: boolean }> = [
     { id: 'record', label: 'Record', icon: ClipboardList, visible: canRecord },
-    { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch },
+    { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch && canReadDelivery },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, visible: canReadDeliveryAnalytics },
     { id: 'coverage', label: 'Block Coverage', icon: MapPinned, visible: canReadDeliveryCoverage },
-    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canManageDelivery || isOwner },
+    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) },
     { id: 'settings', label: 'Delivery Settings', icon: Settings2, visible: canManageDelivery }
   ];
 
@@ -74,16 +75,16 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
       {activeTab === 'record' && canRecord && (
         <BranchRecordingPage branch={user} canEdit={canRecord} isManager={isManager} />
       )}
-      {activeTab === 'dashboard' && isBranch && (
+      {activeTab === 'dashboard' && isBranch && canReadDelivery && (
         <BranchDeliveryDashboard branch={user} />
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />
       )}
       {activeTab === 'coverage' && canReadDeliveryCoverage && (
-        <DeliveryCoverage lockedBranchId={isBranch ? user.id : null} canCreateTask={!isBranch && canManageDelivery} />
+        <DeliveryCoverage lockedBranchId={isBranch ? user.id : null} canCreateTask={!isBranch && canManageDelivery} branchView={isBranch} />
       )}
-      {activeTab === 'profitability' && (canManageDelivery || isOwner) && (
+      {activeTab === 'profitability' && canReadDelivery && (canManageDelivery || isOwner) && (
         <DeliveryProfitability canEdit={canManageDelivery} />
       )}
       {activeTab === 'settings' && canManageDelivery && (

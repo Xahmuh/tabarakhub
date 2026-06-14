@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Spinner } from './Spinner';
+import { SpinWheelMark } from './SpinWheelMark';
 import { spinWinService } from '../../services/spinWin';
 import { SpinPrize, SpinSession, Customer, Branch } from '../../types';
 import { clientConfig, isDemoMode } from '../../config/clientConfig';
@@ -618,9 +619,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
             {/* Header */}
             {!isWheelStep && (
                 <div className="bg-white p-4 sm:p-5 border-b border-slate-100 flex items-center justify-center space-x-3 shadow-sm sticky top-0 z-50">
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-brand rounded-lg flex items-center justify-center overflow-hidden shadow-inner">
-                        <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
-                    </div>
+                    <SpinWheelMark size="sm" className="shrink-0" />
                     <h1 className="text-lg sm:text-xl font-black tracking-tight">hub <span className="text-brand">SPIN & WIN</span></h1>
                 </div>
             )}
@@ -732,11 +731,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                                 </div>
                             </div>
 
-                            <div className="mt-4 aspect-[4/1] w-full overflow-hidden border border-white/10 bg-white shadow-2xl">
+                            <div className="mt-4 aspect-[4/1] w-full overflow-hidden border border-white/10 bg-[#a90417] shadow-2xl">
                                 <img
                                     src="/spin-header-v4.jpg"
                                     alt="Spin and Win"
-                                    className="block h-full w-full object-cover"
+                                    className="block h-full w-full object-contain"
                                 />
                             </div>
 

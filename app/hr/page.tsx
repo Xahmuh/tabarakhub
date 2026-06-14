@@ -43,6 +43,7 @@ import confetti from 'canvas-confetti';
 // --- CONFIGURATION ---
 const HR_GOOGLE_SCRIPT_URL = (import.meta.env.VITE_HR_GOOGLE_SCRIPT_URL || '').trim();
 const HR_CONFIG_ERROR_MESSAGE = 'HR Google Script URL is not configured for this dedicated-client deployment.';
+const isHrGoogleScriptConfigured = Boolean(HR_GOOGLE_SCRIPT_URL);
 
 const getHrGoogleScriptUrl = () => {
     if (!HR_GOOGLE_SCRIPT_URL) {
@@ -59,6 +60,8 @@ const translations = {
         service_title: "How can we help you?",
         login_title: "Welcome Back",
         login_desc: "Enter your CPR to access HR self-service portal",
+        hr_config_missing_title: "HR lookup is not configured",
+        hr_config_missing_desc: "Ask a manager/admin to add VITE_HR_GOOGLE_SCRIPT_URL for this dedicated-client deployment before CPR verification can run.",
         cpr_label: "CPR Number",
         btn_continue: "Verify Identity",
         btn_logout: "Sign Out",
@@ -117,6 +120,8 @@ const translations = {
         step_label_3: "Delivery",
     },
     ar: {
+        hr_config_missing_title: "إعدادات الموارد البشرية غير مكتملة",
+        hr_config_missing_desc: "يرجى من المدير إضافة رابط VITE_HR_GOOGLE_SCRIPT_URL لهذا الإصدار قبل تشغيل التحقق بالرقم الشخصي.",
         portal_name: "الخدمات الذاتية للموظفين",
         service_title: "كيف يمكننا مساعدتك؟",
         login_title: "مرحباً بعودتك",
@@ -367,6 +372,10 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
             showToast(t.toast_cpr_missing, 'warning');
             return;
         }
+        if (!isHrGoogleScriptConfigured) {
+            showToast(HR_CONFIG_ERROR_MESSAGE, 'error');
+            return;
+        }
         setIsAuthenticating(true);
         try {
             const response = await fetch(getHrGoogleScriptUrl(), {
@@ -610,9 +619,21 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                         </div>
                                     </div>
 
+                                    {!isHrGoogleScriptConfigured && (
+                                        <div className={`rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 ${isRtl ? 'text-right' : ''}`}>
+                                            <div className={`flex gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                                <div>
+                                                    <p className="text-sm font-bold">{t.hr_config_missing_title}</p>
+                                                    <p className="mt-1 text-xs leading-5 text-amber-800">{t.hr_config_missing_desc}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <button
                                         onClick={handleLogin}
-                                        disabled={isAuthenticating || !cpr.trim()}
+                                        disabled={isAuthenticating || !cpr.trim() || !isHrGoogleScriptConfigured}
                                         className="w-full h-11 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         {isAuthenticating ? <Loader2 className="w-4 h-4 animate-spin" /> : (

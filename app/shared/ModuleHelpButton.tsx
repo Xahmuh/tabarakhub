@@ -4,14 +4,18 @@ import {
   BarChart3,
   BookOpenCheck,
   CheckCircle2,
+  ChevronRight,
   ClipboardList,
+  Compass,
   FileText,
   HelpCircle,
   Landmark,
   LayoutGrid,
   Lightbulb,
+  ListChecks,
   MapPinned,
   MessageSquareText,
+  MousePointerClick,
   PieChart,
   PlayCircle,
   QrCode,
@@ -42,6 +46,8 @@ export type ModuleHelpKey =
   | 'employee-contributions'
   | 'block-analyzer'
   | 'delivery';
+
+type ModuleHelpTab = 'overview' | 'workflow' | 'features' | 'checks';
 
 type ModuleHelpContent = {
   title: string;
@@ -285,9 +291,25 @@ interface ModuleHelpButtonProps {
   className?: string;
 }
 
+const HELP_TABS: Array<{
+  id: ModuleHelpTab;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { id: 'overview', label: 'Overview', description: 'Purpose and outcomes', icon: Compass },
+  { id: 'workflow', label: 'Workflow', description: 'Animated quick start', icon: PlayCircle },
+  { id: 'features', label: 'Features', description: 'Everything included', icon: LayoutGrid },
+  { id: 'checks', label: 'Checks', description: 'Safe operating habits', icon: ListChecks }
+];
+
 export const ModuleHelpButton: React.FC<ModuleHelpButtonProps> = ({ moduleKey, className = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ModuleHelpTab>('overview');
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [selectedFeatureIndex, setSelectedFeatureIndex] = useState(0);
   const content = useMemo(() => moduleKey ? MODULE_HELP_CONTENT[moduleKey] : null, [moduleKey]);
+  const activeTabMeta = HELP_TABS.find((tab) => tab.id === activeTab) ?? HELP_TABS[0];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -298,16 +320,240 @@ export const ModuleHelpButton: React.FC<ModuleHelpButtonProps> = ({ moduleKey, c
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveTab('overview');
+    setActiveStepIndex(0);
+    setSelectedFeatureIndex(0);
+  }, [isOpen, moduleKey]);
+
   if (!content) return null;
 
   const Icon = content.icon;
+  const ActiveTabIcon = activeTabMeta.icon;
+  const activeStep = content.steps[activeStepIndex] ?? content.steps[0];
+  const selectedFeature = content.features[selectedFeatureIndex] ?? content.features[0];
+  const safeChecks = [
+    `Confirm the right role and branch scope before using ${content.title}.`,
+    'Check filters, dates, and selected records before saving or exporting.',
+    'Keep entries clear enough for managers to review without extra context.',
+    content.tip
+  ];
+  const overviewStats = [
+    { label: 'Features', value: content.features.length.toString() },
+    { label: 'Workflow steps', value: content.steps.length.toString() },
+    { label: 'Mode', value: content.eyebrow.replace(' module', '') }
+  ];
+
+  const renderTabPanel = () => {
+    if (activeTab === 'workflow') {
+      return (
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-2">
+            {content.steps.map((step, index) => {
+              const isActive = index === activeStepIndex;
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => setActiveStepIndex(index)}
+                  className={`module-help-step group flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-all ${
+                    isActive
+                      ? 'border-brand/40 bg-brand/5 shadow-sm shadow-brand/10'
+                      : 'border-slate-200 bg-white hover:border-brand/25 hover:bg-brand/5'
+                  }`}
+                  style={{ animationDelay: `${index * 70}ms` }}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                    isActive ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-brand group-hover:text-white'
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-sm font-black ${isActive ? 'text-brand' : 'text-slate-800'}`}>
+                      Step {index + 1}
+                    </span>
+                    <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">{step}</span>
+                  </span>
+                  <ChevronRight className={`mt-1 h-4 w-4 shrink-0 transition-transform ${isActive ? 'translate-x-0.5 text-brand' : 'text-slate-300 group-hover:text-brand'}`} />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="operational-panel-muted flex min-h-[320px] flex-col justify-between p-5">
+            <div>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-950 text-white shadow-sm">
+                  <MousePointerClick className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Selected action</p>
+                  <h3 className="text-base font-black text-slate-950">Step {activeStepIndex + 1} guidance</h3>
+                </div>
+              </div>
+              <p className="text-lg font-black leading-8 text-slate-950">{activeStep}</p>
+            </div>
+            <div className="mt-6 rounded-lg border border-brand/10 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Operator note</p>
+              <p className="mt-2 text-sm font-bold leading-6 text-slate-700">{content.tip}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'features') {
+      return (
+        <div className="grid min-h-0 gap-4 xl:grid-cols-[1fr_0.9fr]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {content.features.map((feature, index) => {
+              const isSelected = index === selectedFeatureIndex;
+              return (
+                <button
+                  key={feature}
+                  type="button"
+                  onClick={() => setSelectedFeatureIndex(index)}
+                  className={`module-help-step group flex min-h-[94px] items-start gap-3 rounded-lg border p-4 text-left transition-all ${
+                    isSelected
+                      ? 'border-brand/45 bg-brand/5 shadow-sm shadow-brand/10'
+                      : 'border-slate-200 bg-white hover:border-brand/25 hover:bg-slate-50'
+                  }`}
+                  style={{ animationDelay: `${index * 45}ms` }}
+                >
+                  <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    isSelected ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-brand/10 group-hover:text-brand'
+                  }`}>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black leading-5 text-slate-900">{feature}</span>
+                    <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">Tap to focus this capability.</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="operational-panel-muted p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Feature focus</p>
+            <h3 className="mt-2 text-xl font-black leading-7 text-slate-950">{selectedFeature}</h3>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
+              Use this capability inside {content.title} as part of the normal operating flow. Confirm the active filters and role scope before taking any action.
+            </p>
+            <div className="mt-5 space-y-2">
+              {content.steps.slice(0, 3).map((step, index) => (
+                <div key={step} className="flex items-start gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-950 text-[10px] font-black text-white">{index + 1}</span>
+                  <p className="text-xs font-bold leading-5 text-slate-600">{step}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'checks') {
+      return (
+        <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+          <div className="space-y-3">
+            {safeChecks.map((check, index) => (
+              <div
+                key={check}
+                className="module-help-step flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4"
+                style={{ animationDelay: `${index * 65}ms` }}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+                <p className="text-sm font-bold leading-6 text-slate-700">{check}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-amber-700 ring-1 ring-amber-100">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Safety rule</p>
+                <h3 className="text-base font-black text-amber-950">Operate with clean data</h3>
+              </div>
+            </div>
+            <p className="mt-4 text-sm font-bold leading-6 text-amber-900">
+              This guide helps users understand the module. It does not bypass role permissions, branch scoping, approval rules, or existing security policies.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="operational-panel-muted p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand text-white shadow-sm shadow-brand/20">
+              <Icon className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">{content.eyebrow}</p>
+              <h3 className="text-lg font-black text-slate-950">{content.title}</h3>
+            </div>
+          </div>
+          <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">{content.summary}</p>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            {overviewStats.map((stat) => (
+              <div key={stat.label} className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-lg font-black text-slate-950">{stat.value}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('workflow')}
+            className="module-help-step group rounded-lg border border-slate-200 bg-white p-4 text-left transition-all hover:border-brand/30 hover:bg-brand/5"
+          >
+            <PlayCircle className="h-5 w-5 text-brand" />
+            <h4 className="mt-3 text-sm font-black text-slate-950">Follow the workflow</h4>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Open the animated steps and click each action to understand the daily flow.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('features')}
+            className="module-help-step group rounded-lg border border-slate-200 bg-white p-4 text-left transition-all hover:border-brand/30 hover:bg-brand/5"
+            style={{ animationDelay: '70ms' }}
+          >
+            <LayoutGrid className="h-5 w-5 text-brand" />
+            <h4 className="mt-3 text-sm font-black text-slate-950">Explore all features</h4>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Review every included tool and focus the capability you need.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('checks')}
+            className="module-help-step group rounded-lg border border-slate-200 bg-white p-4 text-left transition-all hover:border-brand/30 hover:bg-brand/5 sm:col-span-2"
+            style={{ animationDelay: '140ms' }}
+          >
+            <ShieldCheck className="h-5 w-5 text-brand" />
+            <h4 className="mt-3 text-sm font-black text-slate-950">Review safe operating checks</h4>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">Use the checklist before saving, exporting, approving, or sharing module data.</p>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-brand/15 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-brand shadow-sm shadow-brand/5 transition-all hover:border-brand/40 hover:bg-brand/5 active:scale-[0.99] focus-ring ${className}`.trim()}
+        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-black uppercase tracking-[0.12em] text-white shadow-md transition-all hover:bg-slate-800 hover:shadow-lg active:scale-[0.99] focus-ring ${className}`.trim()}
         aria-label="How to use this module"
       >
         <HelpCircle className="h-4 w-4" />
@@ -315,22 +561,30 @@ export const ModuleHelpButton: React.FC<ModuleHelpButtonProps> = ({ moduleKey, c
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm print:hidden" role="dialog" aria-modal="true" aria-label={`How to use ${content.title}`}>
+        <div
+          className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm print:hidden sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`How to use ${content.title}`}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsOpen(false);
+          }}
+        >
           <style>{`
             @keyframes moduleHelpStepIn {
-              from { opacity: 0; transform: translateY(10px); }
+              from { opacity: 0; transform: translateY(12px); }
               to { opacity: 1; transform: translateY(0); }
             }
             .module-help-step {
               opacity: 0;
-              animation: moduleHelpStepIn 360ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+              animation: moduleHelpStepIn 320ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
             }
           `}</style>
-          <div className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_90px_-28px_rgba(15,23,42,0.55)]">
-            <div className="flex items-start justify-between gap-4 border-b border-brand/10 bg-brand/5 px-5 py-4 md:px-6">
+          <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_28px_90px_-28px_rgba(15,23,42,0.55)]">
+            <div className="flex items-start justify-between gap-4 border-b border-brand/10 bg-brand/5 px-4 py-4 md:px-6">
               <div className="flex min-w-0 items-center gap-4">
                 <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-white text-brand shadow-sm ring-1 ring-brand/10">
-                  <div className="absolute -right-1 -top-1 h-5 w-5 rounded-md bg-brand/90" />
+                  <div className="absolute -right-1 -top-1 h-5 w-5 rounded-md bg-brand/90 shadow-sm shadow-brand/20" />
                   <Icon className="relative h-7 w-7" />
                 </div>
                 <div className="min-w-0">
@@ -349,74 +603,76 @@ export const ModuleHelpButton: React.FC<ModuleHelpButtonProps> = ({ moduleKey, c
               </button>
             </div>
 
-            <div className="max-h-[calc(90vh-96px)] overflow-y-auto p-5 md:p-6">
-              <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-                <section className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand text-white shadow-sm shadow-brand/20">
-                      <LayoutGrid className="h-5 w-5" />
+            <div className="grid min-h-0 flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+              <aside className="border-b border-slate-200 bg-slate-50/70 p-3 lg:border-b-0 lg:border-r lg:p-4">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-1" role="tablist" aria-label="Module help sections">
+                  {HELP_TABS.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex min-h-[74px] items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all ${
+                          isActive
+                            ? 'border-brand/40 bg-white text-brand shadow-sm shadow-brand/10'
+                            : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-white'
+                        }`}
+                      >
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                          isActive ? 'bg-brand text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'
+                        }`}>
+                          <TabIcon className="h-5 w-5" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-xs font-black uppercase tracking-[0.12em]">{tab.label}</span>
+                          <span className={`mt-1 hidden text-[11px] font-semibold leading-4 sm:block ${isActive ? 'text-brand/70' : 'text-slate-400'}`}>
+                            {tab.description}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              <div className="min-h-0 overflow-y-auto p-4 scrollbar-thin md:p-6" role="tabpanel" aria-label={activeTabMeta.label}>
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-950 text-white">
+                      <ActiveTabIcon className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Included features</p>
-                      <h3 className="text-sm font-black text-slate-950">What this module covers</h3>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Interactive guide</p>
+                      <h3 className="text-lg font-black text-slate-950">{activeTabMeta.label}</h3>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {content.features.map((feature) => (
-                      <span key={feature} className="inline-flex items-center gap-2 rounded-lg border border-brand/10 bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-brand" />
-                        {feature}
-                      </span>
-                    ))}
+                    <span className="badge badge-brand">{content.features.length} features</span>
+                    <span className="badge badge-neutral">{content.steps.length} steps</span>
                   </div>
-                  <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-3 py-3 text-xs font-bold leading-5 text-amber-900">
-                    {content.tip}
-                  </div>
-                </section>
-
-                <section className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm">
-                      <PlayCircle className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brand">Animated quick start</p>
-                      <h3 className="text-sm font-black text-slate-950">Use it step by step</h3>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    {content.steps.map((step, index) => (
-                      <div
-                        key={step}
-                        className="module-help-step flex gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3"
-                        style={{ animationDelay: `${index * 95}ms` }}
-                      >
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-xs font-black text-white">
-                          {index + 1}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold leading-6 text-slate-800">{step}</p>
-                        </div>
-                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-300" />
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <div className="mt-5 flex flex-col gap-3 rounded-lg border border-brand/10 bg-brand/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-brand ring-1 ring-brand/10">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <p className="text-sm font-bold leading-6 text-slate-700">
-                    Keep using the module normally. This guide is only a quick operating reference and does not change permissions or data.
-                  </p>
                 </div>
-                <button type="button" onClick={() => setIsOpen(false)} className="btn-primary shrink-0 text-xs uppercase tracking-widest">
-                  Got it
-                </button>
+
+                {renderTabPanel()}
               </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-brand/10 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6">
+              <div className="flex items-center gap-3">
+                <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/5 text-brand ring-1 ring-brand/10 sm:flex">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <p className="text-xs font-bold leading-5 text-slate-600">
+                  This guide is an operating reference only. It does not change permissions, branch scoping, approvals, or saved data.
+                </p>
+              </div>
+              <button type="button" onClick={() => setIsOpen(false)} className="btn-primary shrink-0 text-xs uppercase tracking-widest">
+                Got it
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>

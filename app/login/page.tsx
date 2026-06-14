@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, ShieldCheck, ShieldAlert, Loader2, Lock, Building2 } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ShieldAlert, Loader2, Lock, Building2, Eye, EyeOff } from 'lucide-react';
 import { clientConfig } from '../../config/clientConfig';
 import { MaintenanceSettings } from '../../types';
 
@@ -32,6 +32,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const loginBadges = (settings?.loginBadges || []).filter(Boolean).slice(0, 6);
   const hubLogoUrl = settings?.hubLogoUrl?.trim() || HUB_LOGO_URL;
   const pharmacyLogoUrl = settings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
@@ -70,7 +71,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
           <img
             src={hubLogoUrl}
             alt="Tabarak HUB logo"
-            className="login-hub-wordmark w-full max-w-[720px] object-contain xl:max-w-[820px]"
+            className="login-hub-wordmark w-full max-w-[360px] object-contain xl:max-w-[410px]"
           />
 
           {loginBadges.length > 0 && (
@@ -133,7 +134,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
                     type="text"
                     autoComplete="username"
                     className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
-                    placeholder="T001 or email"
+                    placeholder="Type your code or Email"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     onFocus={() => setFocusedField('code')}
@@ -150,9 +151,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
                 </label>
                 <div className={`relative rounded-xl border-2 transition-all duration-300 ${focusedField === 'password' ? 'border-brand shadow-lg shadow-brand/5' : 'border-slate-100 hover:border-slate-200'}`}>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
-                    className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
+                    className="w-full rounded-xl bg-transparent px-5 py-4 pr-16 text-base font-bold text-slate-900 outline-none placeholder:text-slate-300"
                     placeholder="Enter password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -160,6 +161,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
                     onBlur={() => setFocusedField(null)}
                     required
                   />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setShowPassword(current => !current)}
+                    className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg bg-brand text-white transition-colors hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand/25"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" strokeWidth={2} /> : <Eye className="h-5 w-5" strokeWidth={2} />}
+                  </button>
                 </div>
               </div>
 

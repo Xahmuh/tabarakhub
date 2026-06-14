@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef, createContext, useCo
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { BackToModulesButton } from '../shared';
+import { loadBahrainBlockGeometry } from '../delivery/bahrainBlockGeometry';
 
 const DataContext = createContext();
 
@@ -45,6 +46,430 @@ const ProgressBar = ({ pct, color }) => (
     <div style={{width:`${pct}%`,background:color,height:"100%",borderRadius:9999,transition:"width .5s ease"}}/>
   </div>
 );
+
+// ─── BAHRAIN BLOCK MAP ───────────────────────────────────────────────────────
+const ANALYZER_MAP_W = 900;
+const ANALYZER_MAP_H = 620;
+const ANALYZER_MAP_PAD = 20;
+
+const normalizeMapBlock = value => String(value ?? "").trim();
+
+const ringsFromGeometry = (geometry) => {
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") return geometry.coordinates || [];
+  if (geometry.type === "MultiPolygon") return (geometry.coordinates || []).flat();
+  return [];
+};
+
+const blockMapTone = (info) => {
+  if (!info) {
+    return {
+      label: "Not registered",
+      fill: "#e5e7eb",
+      hoverFill: "#cbd5e1",
+      stroke: "#cbd5e1",
+      text: "#64748b",
+    };
+  }
+  if (info.status === "gap") {
+    return {
+      label: "Coverage gap",
+      fill: "#fee2e2",
+      hoverFill: "#fecaca",
+      stroke: "#dc2626",
+      text: "#b91c1c",
+    };
+  }
+  if (info.count >= 5) {
+    return {
+      label: "Dense coverage",
+      fill: "#0f766e",
+      hoverFill: "#115e59",
+      stroke: "#134e4a",
+      text: "#0f766e",
+    };
+  }
+  if (info.count >= 2) {
+    return {
+      label: "Covered",
+      fill: "#7dd3fc",
+      hoverFill: "#38bdf8",
+      stroke: "#0284c7",
+      text: "#0369a1",
+    };
+  }
+  return {
+    label: info.count === 0 ? "Covered, no detail" : "Light coverage",
+    fill: info.count === 0 ? "#fef3c7" : "#bbf7d0",
+    hoverFill: info.count === 0 ? "#fde68a" : "#86efac",
+    stroke: info.count === 0 ? "#d97706" : "#16a34a",
+    text: info.count === 0 ? "#b45309" : "#15803d",
+  };
+};
+
+function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
+  const { coverageData, pharmacyMap, areaNames } = useContext(DataContext);
+  const [geometry, setGeometry] = useState(null);
+  const [mapError, setMapError] = useState("");
+  const [hoveredBlock, setHoveredBlock] = useState("");
+  const [selectedBlock, setSelectedBlock] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    loadBahrainBlockGeometry()
+      .then(dataset => {
+        if (!mounted) return;
+        setGeometry(dataset);
+        setMapError(dataset?.available ? "" : (dataset?.error || "Bahrain block geometry is unavailable."));
+      })
+      .catch(error => {
+        if (mounted) setMapError(error?.message || "Bahrain block geometry is unavailable.");
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const coverageIndex = useMemo(() => {
+    const index = new Map();
+    GOVS.forEach(gov => {
+      const zones = coverageData[gov] || {};
+      Object.entries(zones).forEach(([zone, data]) => {
+        (data.covered || []).forEach(block => {
+          const key = normalizeMapBlock(block);
+          const pharmacies = pharmacyMap[key] || [];
+          index.set(key, {
+            blockNumber: key,
+            gov,
+            zone,
+            status: "covered",
+            count: pharmacies.length,
+            pharmacies,
+            area: areaNames[key] || pharmacies[0]?.area || "",
+          });
+        });
+        (data.gaps || []).forEach(block => {
+          const key = normalizeMapBlock(block);
+          index.set(key, {
+            blockNumber: key,
+            gov,
+            zone,
+            status: "gap",
+            count: 0,
+            pharmacies: [],
+            area: areaNames[key] || "",
+          });
+        });
+      });
+    });
+    return index;
+  }, [coverageData, pharmacyMap, areaNames]);
+
+  const registeredStats = useMemo(() => {
+    const rows = Array.from(coverageIndex.values()).filter(info => activeGov === "all" || info.gov === activeGov);
+    const covered = rows.filter(info => info.status === "covered").length;
+    const gaps = rows.filter(info => info.status === "gap").length;
+    const pharmacies = rows.reduce((sum, info) => sum + info.count, 0);
+    return { total: rows.length, covered, gaps, pharmacies };
+  }, [activeGov, coverageIndex]);
+
+  const bounds = useMemo(() => {
+    if (!geometry?.available) return null;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    for (const feature of geometry.byBlock.values()) {
+      for (const ring of ringsFromGeometry(feature.geometry)) {
+        for (const [lng, lat] of ring) {
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+          minLng = Math.min(minLng, lng);
+          maxLng = Math.max(maxLng, lng);
+          minLat = Math.min(minLat, lat);
+          maxLat = Math.max(maxLat, lat);
+        }
+      }
+    }
+    if (!Number.isFinite(minLng)) return null;
+    return { minLng, maxLng, minLat, maxLat };
+  }, [geometry]);
+
+  const project = useMemo(() => {
+    if (!bounds) return null;
+    const spanLng = bounds.maxLng - bounds.minLng || 1;
+    const spanLat = bounds.maxLat - bounds.minLat || 1;
+    const scale = Math.min(
+      (ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) / spanLng,
+      (ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) / spanLat
+    );
+    const offsetX = ANALYZER_MAP_PAD + ((ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) - spanLng * scale) / 2;
+    const offsetY = ANALYZER_MAP_PAD + ((ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) - spanLat * scale) / 2;
+    return ([lng, lat]) => ({
+      x: offsetX + (lng - bounds.minLng) * scale,
+      y: offsetY + (bounds.maxLat - lat) * scale,
+    });
+  }, [bounds]);
+
+  const paths = useMemo(() => {
+    if (!geometry?.available || !project) return [];
+
+    const rows = [];
+    for (const feature of geometry.byBlock.values()) {
+      const blockNumber = normalizeMapBlock(feature.blockNumber);
+      const info = coverageIndex.get(blockNumber);
+      if (activeGov !== "all" && info?.gov !== activeGov) continue;
+
+      let d = "";
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      for (const ring of ringsFromGeometry(feature.geometry)) {
+        const points = ring
+          .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat))
+          .map(point => {
+            const projected = project(point);
+            minX = Math.min(minX, projected.x);
+            maxX = Math.max(maxX, projected.x);
+            minY = Math.min(minY, projected.y);
+            maxY = Math.max(maxY, projected.y);
+            return `${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
+          });
+        if (points.length > 0) d += `M${points.join("L")}Z`;
+      }
+
+      if (d) {
+        rows.push({
+          blockNumber,
+          info,
+          d,
+          bbox: {
+            minX: Number.isFinite(minX) ? minX : 0,
+            maxX: Number.isFinite(maxX) ? maxX : 0,
+            minY: Number.isFinite(minY) ? minY : 0,
+            maxY: Number.isFinite(maxY) ? maxY : 0,
+          },
+        });
+      }
+    }
+
+    const statusRank = { gap: 2, covered: 3 };
+    return rows.sort((a, b) => (statusRank[a.info?.status] || 1) - (statusRank[b.info?.status] || 1));
+  }, [activeGov, coverageIndex, geometry, project]);
+
+  const activePath = useMemo(() => {
+    const selected = selectedBlock || hoveredBlock;
+    if (selected) return paths.find(path => path.blockNumber === selected) || null;
+    if (highlightedBlock) return paths.find(path => path.blockNumber.includes(highlightedBlock)) || null;
+    return null;
+  }, [highlightedBlock, hoveredBlock, paths, selectedBlock]);
+
+  const matchedRegisteredCount = useMemo(
+    () => new Set(paths.filter(path => path.info).map(path => path.blockNumber)).size,
+    [paths]
+  );
+  const unmatchedRegisteredCount = Math.max(registeredStats.total - matchedRegisteredCount, 0);
+  const selectedInfo = activePath?.info;
+  const selectedTone = blockMapTone(selectedInfo);
+
+  return (
+    <section className="glass-card rounded-2xl overflow-hidden mb-6">
+      <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+        <div>
+          <h3 className="font-bold text-gray-900 text-sm">Bahrain Block Map</h3>
+          <p className="text-xs text-gray-400 mt-1">
+            Pharmacy coverage by block{activeGov !== "all" ? ` · ${activeGov} Governorate` : ""}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+          {[
+            { label: "Registered", value: registeredStats.total, color: "#4f46e5" },
+            { label: "Covered", value: registeredStats.covered, color: "#059669" },
+            { label: "Gaps", value: registeredStats.gaps, color: "#dc2626" },
+            { label: "Pharmacies", value: registeredStats.pharmacies, color: "#0369a1" },
+          ].map(item => (
+            <div key={item.label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 min-w-[104px]">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{item.label}</div>
+              <div className="text-sm font-black tabular-nums" style={{ color:item.color }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {mapError ? (
+        <div className="m-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Bahrain map could not be loaded. Matrix and zone views are still available. {mapError}
+        </div>
+      ) : !geometry ? (
+        <div className="p-5">
+          <div className="h-[420px] rounded-xl bg-gray-100 animate-pulse" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 p-4 sm:p-5">
+          <div className="relative min-h-[420px] rounded-xl border border-gray-100 bg-slate-50 overflow-hidden">
+            <svg
+              viewBox={`0 0 ${ANALYZER_MAP_W} ${ANALYZER_MAP_H}`}
+              role="img"
+              aria-label="Bahrain pharmacy coverage by block"
+              className="h-[420px] sm:h-[520px] w-full"
+            >
+              <rect width={ANALYZER_MAP_W} height={ANALYZER_MAP_H} fill="#f8fafc" />
+              <g>
+                {paths.map(path => {
+                  const tone = blockMapTone(path.info);
+                  const isSelected = selectedBlock === path.blockNumber;
+                  const isHovered = hoveredBlock === path.blockNumber;
+                  const isHighlighted = highlightedBlock && path.blockNumber.includes(highlightedBlock);
+                  const active = isSelected || isHovered || isHighlighted;
+                  return (
+                    <path
+                      key={path.blockNumber}
+                      d={path.d}
+                      fill={active ? tone.hoverFill : tone.fill}
+                      stroke={isSelected ? "#111827" : isHighlighted ? "#f59e0b" : tone.stroke}
+                      strokeWidth={isSelected ? 2.4 : isHighlighted ? 1.8 : 0.65}
+                      vectorEffect="non-scaling-stroke"
+                      className="transition-colors duration-150"
+                      style={{ cursor:"pointer" }}
+                      onMouseEnter={() => setHoveredBlock(path.blockNumber)}
+                      onMouseLeave={() => setHoveredBlock("")}
+                      onClick={() => setSelectedBlock(current => current === path.blockNumber ? "" : path.blockNumber)}
+                    >
+                      <title>
+                        {`Block ${path.blockNumber}${path.info?.area ? ` · ${path.info.area}` : ""} · ${tone.label}`}
+                      </title>
+                    </path>
+                  );
+                })}
+              </g>
+              {activePath && (
+                <g pointerEvents="none">
+                  <circle
+                    cx={(activePath.bbox.minX + activePath.bbox.maxX) / 2}
+                    cy={(activePath.bbox.minY + activePath.bbox.maxY) / 2}
+                    r="16"
+                    fill="#111827"
+                    opacity="0.92"
+                  />
+                  <text
+                    x={(activePath.bbox.minX + activePath.bbox.maxX) / 2}
+                    y={(activePath.bbox.minY + activePath.bbox.maxY) / 2 + 4}
+                    fill="white"
+                    textAnchor="middle"
+                    fontSize="13"
+                    fontWeight="800"
+                  >
+                    {activePath.blockNumber}
+                  </text>
+                </g>
+              )}
+            </svg>
+            <div className="absolute left-3 bottom-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+              <div className="flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                {[
+                  { label: "Gap", color:"#dc2626" },
+                  { label: "1 pharmacy", color:"#22c55e" },
+                  { label: "2-4", color:"#38bdf8" },
+                  { label: "5+", color:"#0f766e" },
+                  { label: "Not registered", color:"#cbd5e1" },
+                ].map(item => (
+                  <span key={item.label} className="inline-flex items-center gap-1.5">
+                    <span style={{ background:item.color }} className="h-2.5 w-2.5 rounded-sm" />
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-xl border border-gray-100 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Selected Block</p>
+                <h4 className="mt-1 text-2xl font-black text-gray-900">
+                  {activePath ? activePath.blockNumber : "None"}
+                </h4>
+              </div>
+              {selectedBlock && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedBlock("")}
+                  className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-bold text-gray-500 hover:bg-gray-50"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {activePath ? (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-lg border px-3 py-2" style={{ borderColor:selectedTone.stroke, background:`${selectedTone.fill}66` }}>
+                  <div className="text-xs font-black" style={{ color:selectedTone.text }}>{selectedTone.label}</div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {selectedInfo?.gov || "Unassigned"}{selectedInfo?.zone ? ` · ${selectedInfo.zone}` : ""}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Area</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">{selectedInfo?.area || "No area name registered"}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-gray-50 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Pharmacies</p>
+                    <p className="mt-1 text-lg font-black text-gray-900">{selectedInfo?.count || 0}</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Map Match</p>
+                    <p className="mt-1 text-lg font-black text-gray-900">Yes</p>
+                  </div>
+                </div>
+
+                {selectedInfo?.pharmacies?.length > 0 ? (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Registered Pharmacies</p>
+                    <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                      {selectedInfo.pharmacies.slice(0, 8).map((pharmacy, index) => (
+                        <div key={`${pharmacy.name}-${index}`} className="rounded-lg border border-gray-100 px-3 py-2">
+                          <p className="text-xs font-bold text-gray-800 leading-snug">{pharmacy.name}</p>
+                          <p className="mt-1 text-[11px] text-gray-400">{pharmacy.group || "Independent"} · {pharmacy.type || "Pharmacy"}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedInfo.pharmacies.length > 8 && (
+                      <p className="mt-2 text-xs font-semibold text-gray-400">
+                        +{selectedInfo.pharmacies.length - 8} more pharmacies
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500">
+                    {selectedInfo?.status === "gap"
+                      ? "No pharmacy is registered in this block."
+                      : "This polygon is available on the Bahrain map but is not registered in the analyzer dataset."}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 space-y-3 text-sm text-gray-500">
+                <div className="rounded-lg bg-gray-50 px-3 py-3">
+                  <p className="font-semibold text-gray-700">Map polygons loaded</p>
+                  <p className="mt-1 text-xs text-gray-400">{paths.length} visible blocks from {geometry.featureCount} Bahrain polygons.</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 px-3 py-3">
+                  <p className="font-semibold text-gray-700">Registered map matches</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {matchedRegisteredCount} matched{unmatchedRegisteredCount ? ` · ${unmatchedRegisteredCount} without polygon` : ""}.
+                  </p>
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ─── BLOCK POPUP ─────────────────────────────────────────────────────────────
 // Fixed position popup — positioned via getBoundingClientRect, no portal needed
@@ -1146,6 +1571,17 @@ export function BlockCoverageAnalyzer({ onBack }) {
     ? Object.entries(coverageData)
     : [[activeGov, coverageData[activeGov]]];
 
+  const registeredBlockCount = useMemo(() => {
+    const blocks = new Set();
+    Object.values(coverageData).forEach(zones => {
+      Object.values(zones).forEach(data => {
+        (data.covered || []).forEach(block => blocks.add(String(block)));
+        (data.gaps || []).forEach(block => blocks.add(String(block)));
+      });
+    });
+    return blocks.size;
+  }, [coverageData]);
+
   return (
     <DataContext.Provider value={{ coverageData, pharmacyMap, areaNames }}>
       <AddPharmacyModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddPharmacy} coverageData={coverageData} />
@@ -1160,7 +1596,7 @@ export function BlockCoverageAnalyzer({ onBack }) {
             </div>
             <div>
               <h1 className="text-lg font-bold text-gray-900">Block Coverage Analyzer</h1>
-              <p className="text-xs text-gray-400">Bahrain Pharmacy Gap Analysis · 478 registered blocks</p>
+              <p className="text-xs text-gray-400">Bahrain Pharmacy Gap Analysis · {registeredBlockCount} registered blocks</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1227,6 +1663,7 @@ export function BlockCoverageAnalyzer({ onBack }) {
 
         {displayMode!=="population" && <SummaryStats view={activeGov}/>}
         {displayMode!=="population" && <GovBar activeGov={activeGov} setActiveGov={setActiveGov}/>}
+        {displayMode!=="population" && <BahrainAnalyzerMap activeGov={activeGov} highlightedBlock={searchHL}/>}
 
         {displayMode==="gaps_only" && <GapsOnlyView govFilter={activeGov}/>}
 

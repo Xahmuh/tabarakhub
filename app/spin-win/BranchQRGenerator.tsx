@@ -35,6 +35,465 @@ interface BranchQRGeneratorProps {
     onBack: () => void;
 }
 
+const escapeHtml = (value: string | number | null | undefined) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+const getPrintableCustomerUrl = (url: string) => url.length > 88 ? `${url.slice(0, 85)}...` : url;
+
+const getQrPrintImageDataUrl = async (qrElement: HTMLDivElement) => {
+    const qrSvg = qrElement.querySelector('svg');
+    if (qrSvg) {
+        const clone = qrSvg.cloneNode(true) as SVGSVGElement;
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        clone.setAttribute('width', '720');
+        clone.setAttribute('height', '720');
+        clone.setAttribute('shape-rendering', 'crispEdges');
+        clone.removeAttribute('class');
+
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+    }
+
+    return toPng(qrElement, {
+        cacheBust: true,
+        pixelRatio: 4,
+        backgroundColor: '#ffffff',
+    });
+};
+
+const buildSpinWinPosterHtml = ({
+    branchName,
+    branchCode,
+    generatedAt,
+    modeLabel,
+    printableUrl,
+    qrDataUrl,
+}: {
+    branchName: string;
+    branchCode: string;
+    generatedAt: string;
+    modeLabel: string;
+    printableUrl: string;
+    qrDataUrl: string;
+}) => `
+    <!doctype html>
+    <html>
+        <head>
+            <title>Spin &amp; Win Poster - ${branchName}</title>
+            <meta charset="utf-8" />
+            <style>
+                @page {
+                    size: A4;
+                    margin: 0;
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
+                html,
+                body {
+                    width: 210mm;
+                    min-height: 297mm;
+                    margin: 0;
+                    background: #111827;
+                    color: #0f172a;
+                    font-family: Inter, Arial, Helvetica, sans-serif;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+
+                .sheet {
+                    position: relative;
+                    width: 210mm;
+                    height: 297mm;
+                    overflow: hidden;
+                    background: #ffffff;
+                }
+
+                .hero {
+                    position: relative;
+                    height: 116mm;
+                    padding: 17mm 18mm 0;
+                    overflow: hidden;
+                    background:
+                        linear-gradient(135deg, #7f1d1d 0%, #b91c1c 46%, #ef4444 100%);
+                    color: #ffffff;
+                }
+
+                .hero::after {
+                    content: "";
+                    position: absolute;
+                    inset: auto -22mm -42mm auto;
+                    width: 104mm;
+                    height: 104mm;
+                    border-radius: 999px;
+                    background: conic-gradient(from -20deg, #fef3c7 0 16%, #dc2626 16% 32%, #f59e0b 32% 48%, #fef3c7 48% 64%, #dc2626 64% 80%, #f59e0b 80% 100%);
+                    border: 5mm solid rgba(255, 255, 255, 0.2);
+                    opacity: 0.24;
+                }
+
+                .brand-row {
+                    position: relative;
+                    z-index: 2;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10mm;
+                }
+
+                .brand {
+                    display: flex;
+                    align-items: center;
+                    gap: 4mm;
+                    font-size: 10pt;
+                    font-weight: 900;
+                    letter-spacing: 0.16em;
+                    text-transform: uppercase;
+                }
+
+                .brand-mark {
+                    display: grid;
+                    width: 13mm;
+                    height: 13mm;
+                    place-items: center;
+                    border-radius: 3mm;
+                    background: #ffffff;
+                    color: #b91c1c;
+                    font-size: 16pt;
+                    font-weight: 900;
+                    line-height: 1;
+                }
+
+                .branch-pill {
+                    max-width: 74mm;
+                    border: 0.3mm solid rgba(255, 255, 255, 0.34);
+                    border-radius: 999px;
+                    padding: 2.6mm 4mm;
+                    background: rgba(255, 255, 255, 0.13);
+                    font-size: 8.5pt;
+                    font-weight: 800;
+                    letter-spacing: 0.08em;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    text-transform: uppercase;
+                    white-space: nowrap;
+                }
+
+                .headline {
+                    position: relative;
+                    z-index: 2;
+                    max-width: 132mm;
+                    margin-top: 21mm;
+                }
+
+                .eyebrow {
+                    margin: 0 0 4mm;
+                    font-size: 8pt;
+                    font-weight: 900;
+                    letter-spacing: 0.26em;
+                    opacity: 0.72;
+                    text-transform: uppercase;
+                }
+
+                h1 {
+                    margin: 0;
+                    font-size: 39pt;
+                    font-weight: 950;
+                    letter-spacing: 0;
+                    line-height: 0.95;
+                }
+
+                .subtitle {
+                    max-width: 112mm;
+                    margin: 5mm 0 0;
+                    color: rgba(255, 255, 255, 0.82);
+                    font-size: 13pt;
+                    font-weight: 700;
+                    line-height: 1.35;
+                }
+
+                .content {
+                    position: relative;
+                    z-index: 5;
+                    padding: 0 18mm 15mm;
+                }
+
+                .qr-card {
+                    display: grid;
+                    grid-template-columns: 1fr 60mm;
+                    gap: 11mm;
+                    align-items: center;
+                    min-height: 94mm;
+                    margin-top: -28mm;
+                    border: 0.35mm solid #fee2e2;
+                    border-radius: 7mm;
+                    padding: 10mm;
+                    background: #ffffff;
+                    box-shadow: 0 8mm 24mm rgba(127, 29, 29, 0.18);
+                }
+
+                .scan-copy {
+                    min-width: 0;
+                }
+
+                .scan-label {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2mm;
+                    border-radius: 999px;
+                    padding: 2mm 3.5mm;
+                    background: #fef2f2;
+                    color: #991b1b;
+                    font-size: 8pt;
+                    font-weight: 900;
+                    letter-spacing: 0.14em;
+                    text-transform: uppercase;
+                }
+
+                h2 {
+                    margin: 5mm 0 0;
+                    color: #111827;
+                    font-size: 25pt;
+                    font-weight: 950;
+                    letter-spacing: 0;
+                    line-height: 1;
+                }
+
+                .scan-description {
+                    margin: 4mm 0 0;
+                    color: #475569;
+                    font-size: 10.5pt;
+                    font-weight: 600;
+                    line-height: 1.5;
+                }
+
+                .mode-row {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 2.5mm;
+                    margin-top: 6mm;
+                }
+
+                .mode-chip {
+                    border-radius: 999px;
+                    padding: 2.2mm 3.3mm;
+                    background: #0f172a;
+                    color: #ffffff;
+                    font-size: 8pt;
+                    font-weight: 850;
+                }
+
+                .mode-chip.secondary {
+                    background: #f1f5f9;
+                    color: #334155;
+                }
+
+                .qr-frame {
+                    display: grid;
+                    place-items: center;
+                    border: 0.55mm solid #111827;
+                    border-radius: 6mm;
+                    padding: 4mm;
+                    background: #ffffff;
+                }
+
+                .qr-frame img {
+                    display: block;
+                    width: 52mm;
+                    height: 52mm;
+                    object-fit: contain;
+                }
+
+                .url-box {
+                    margin-top: 5mm;
+                    border: 0.3mm dashed #cbd5e1;
+                    border-radius: 3mm;
+                    padding: 3mm;
+                    background: #f8fafc;
+                    color: #475569;
+                    font-size: 7pt;
+                    font-weight: 700;
+                    line-height: 1.35;
+                    overflow-wrap: anywhere;
+                }
+
+                .steps {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 3mm;
+                    margin-top: 8mm;
+                }
+
+                .step {
+                    min-height: 31mm;
+                    border: 0.3mm solid #e2e8f0;
+                    border-radius: 4mm;
+                    padding: 4mm;
+                    background: #ffffff;
+                }
+
+                .step-number {
+                    display: grid;
+                    width: 8mm;
+                    height: 8mm;
+                    place-items: center;
+                    border-radius: 999px;
+                    background: #dc2626;
+                    color: #ffffff;
+                    font-size: 8pt;
+                    font-weight: 950;
+                }
+
+                .step-title {
+                    margin: 3mm 0 0;
+                    color: #111827;
+                    font-size: 9pt;
+                    font-weight: 900;
+                }
+
+                .step-text {
+                    margin: 1.5mm 0 0;
+                    color: #64748b;
+                    font-size: 7.3pt;
+                    font-weight: 650;
+                    line-height: 1.35;
+                }
+
+                .footer {
+                    position: absolute;
+                    right: 18mm;
+                    bottom: 12mm;
+                    left: 18mm;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8mm;
+                    border-top: 0.35mm solid #e2e8f0;
+                    padding-top: 5mm;
+                    color: #64748b;
+                    font-size: 7.5pt;
+                    font-weight: 750;
+                }
+
+                .footer strong {
+                    color: #b91c1c;
+                    font-size: 12pt;
+                    letter-spacing: 0.08em;
+                }
+
+                .print-note {
+                    text-align: right;
+                }
+            </style>
+        </head>
+        <body>
+            <main class="sheet">
+                <section class="hero">
+                    <div class="brand-row">
+                        <div class="brand">
+                            <div class="brand-mark">T</div>
+                            <span>Tabarak Pharmacy</span>
+                        </div>
+                        <div class="branch-pill">${branchName}${branchCode ? ` / ${branchCode}` : ''}</div>
+                    </div>
+
+                    <div class="headline">
+                        <p class="eyebrow">Customer rewards</p>
+                        <h1>Spin &amp; Win</h1>
+                        <p class="subtitle">Scan the QR code, rate your branch experience, spin the wheel, and claim your reward voucher.</p>
+                    </div>
+                </section>
+
+                <section class="content">
+                    <div class="qr-card">
+                        <div class="scan-copy">
+                            <span class="scan-label">Scan here</span>
+                            <h2>Your reward starts here</h2>
+                            <p class="scan-description">Open the campaign on your phone and complete the steps during your visit.</p>
+                            <div class="mode-row">
+                                <span class="mode-chip">${modeLabel}</span>
+                                <span class="mode-chip secondary">Branch scoped</span>
+                            </div>
+                            <div class="url-box">${printableUrl}</div>
+                        </div>
+                        <div class="qr-frame">
+                            <img src="${qrDataUrl}" alt="Spin and Win QR code" id="qrImg" />
+                        </div>
+                    </div>
+
+                    <div class="steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <p class="step-title">Scan</p>
+                            <p class="step-text">Open the branch reward link from this QR.</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <p class="step-title">Rate</p>
+                            <p class="step-text">Share quick feedback for the branch experience.</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <p class="step-title">Spin</p>
+                            <p class="step-text">Spin the wheel once the flow is ready.</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <p class="step-title">Redeem</p>
+                            <p class="step-text">Use the voucher in branch or through WhatsApp.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <footer class="footer">
+                    <strong>HUB</strong>
+                    <span>${branchName}${branchCode ? ` - ${branchCode}` : ''}</span>
+                    <span class="print-note">Generated ${generatedAt}</span>
+                </footer>
+            </main>
+            <script>
+                let printed = false;
+                function startPrint() {
+                    if (printed) return;
+                    printed = true;
+                    setTimeout(function () {
+                        window.focus();
+                        window.print();
+                    }, 350);
+                }
+
+                window.addEventListener('afterprint', function () {
+                    setTimeout(function () {
+                        window.close();
+                    }, 250);
+                });
+
+                window.addEventListener('load', function () {
+                    var images = Array.prototype.slice.call(document.images || []);
+                    if (!images.length) {
+                        startPrint();
+                        return;
+                    }
+                    Promise.all(images.map(function (img) {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise(function (resolve) {
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                        });
+                    })).then(startPrint);
+                });
+
+                setTimeout(startPrint, 2500);
+            </script>
+        </body>
+    </html>
+`;
+
 export const BranchQRGenerator: React.FC<BranchQRGeneratorProps> = ({ branch, onBack }) => {
     const [qrType, setQrType] = useState<'static' | 'single' | 'multi'>('static');
     const qrRef = React.useRef<HTMLDivElement>(null);
@@ -157,100 +616,26 @@ Free delivery to all areas of Bahrain`);
         if (!qrRef.current) return;
         setIsLoading(true);
         try {
-            const qrDataUrl = await toPng(qrRef.current, {
-                cacheBust: true,
-                pixelRatio: 4,
-                backgroundColor: '#ffffff',
-            });
-
-            const baseUrl = window.location.origin;
-            const bgUrl = `${baseUrl}/poster-bg.jpg`;
+            const qrDataUrl = await getQrPrintImageDataUrl(qrRef.current);
 
             const printWindow = window.open('', '_blank');
-            if (printWindow) {
-                printWindow.document.write(`
-                    <html>
-                        <head>
-                            <title>Spin & Win Poster - ${branch.name}</title>
-                            <style>
-                                @page { 
-                                    size: 200mm 200mm; 
-                                    margin: 0; 
-                                    }
-                                @media print {
-                                    html, body {
-                                        width: 200mm;
-                                        height: 200mm;
-                                    }
-                                }
-                                body { 
-                                    margin: 0; 
-                                    padding: 0;
-                                    display: block;
-                                    width: 200mm;
-                                    height: 200mm;
-                                    -webkit-print-color-adjust: exact;
-                                    print-color-adjust: exact;
-                                }
-                                .poster-container {
-                                    width: 200mm;
-                                    height: 200mm;
-                                    position: relative;
-                                    overflow: hidden;
-                                }
-                                .bg-image {
-                                    width: 200mm;
-                                    height: 200mm;
-                                    position: absolute;
-                                    top: 0;
-                                    left: 0;
-                                    z-index: 1;
-                                }
-                                .qr-overlay {
-                                    position: absolute;
-                                    top: 130px;
-                                    left: 50%;
-                                    transform: translateX(-50%);
-                                    width: 320px;
-                                    height: 320px;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    z-index: 10;
-                                }
-                                .qr-overlay img {
-                                    width: 280px;
-                                    height: 280px;
-                                }
-                            </style>
-                        </head>
-                        <body>
-                            <div class="poster-container">
-                                <img src="${bgUrl}" class="bg-image" id="bgImg" />
-                                <div class="qr-overlay">
-                                    <img src="${qrDataUrl}" id="qrImg" />
-                                </div>
-                            </div>
-                            <script>
-                                function checkLoaded() {
-                                    const bg = document.getElementById('bgImg');
-                                    const qr = document.getElementById('qrImg');
-                                    if (bg.complete && qr.complete) {
-                                        setTimeout(() => {
-                                            window.print();
-                                            window.close();
-                                        }, 1000);
-                                    } else {
-                                        setTimeout(checkLoaded, 100);
-                                    }
-                                }
-                                window.onload = checkLoaded;
-                            </script>
-                        </body>
-                    </html>
-                `);
-                printWindow.document.close();
+            if (!printWindow) {
+                setError('Could not open the PDF print window. Please allow pop-ups for this site.');
+                return;
             }
+
+            const posterHtml = buildSpinWinPosterHtml({
+                branchName: escapeHtml(branch.name || 'Branch'),
+                branchCode: escapeHtml(branch.code || ''),
+                generatedAt: escapeHtml(new Date().toLocaleString()),
+                modeLabel: escapeHtml(qrType === 'static' ? 'Permanent branch QR' : qrType === 'multi' ? 'Multi-use campaign' : 'Single customer session'),
+                printableUrl: escapeHtml(getPrintableCustomerUrl(customerUrl)),
+                qrDataUrl,
+            });
+
+            printWindow.document.open();
+            printWindow.document.write(posterHtml);
+            printWindow.document.close();
         } catch (err) {
             console.error('PDF generation failed', err);
             setError('Could not generate PDF.');

@@ -2,7 +2,7 @@
 import React from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, Brush
+  BarChart, Bar, Cell, Brush, ComposedChart, Line, ReferenceLine
 } from 'recharts';
 
 const COLORS = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444'];
@@ -30,11 +30,16 @@ const ChartWrapper: React.FC<{
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
+    const uniquePayload = payload.filter((entry: any, index: number, items: any[]) => {
+      const entryKey = entry.dataKey ?? entry.name;
+      return items.findIndex((item: any) => (item.dataKey ?? item.name) === entryKey) === index;
+    });
+
     return (
       <div className="bg-slate-900/95 border border-slate-800 p-4 rounded-2xl shadow-2xl backdrop-blur-xl ring-1 ring-white/10">
         <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">{label}</p>
         <div className="space-y-3">
-          {payload.map((entry: any, index: number) => {
+          {uniquePayload.map((entry: any, index: number) => {
             let displayName = entry.name;
             if (displayName === 'value') displayName = 'BHD LOSS';
             else if (displayName === 'count') displayName = 'LOST CUSTOMERS';
@@ -137,31 +142,37 @@ export const ShortageTrendChart: React.FC<{ data: any[] }> = ({ data }) => (
 export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => {
   if (!data.length) {
     return (
-      <div className="flex min-h-[340px] w-full items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">No trend data available</p>
+      <div className="flex min-h-[380px] w-full items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">No trend data available</p>
       </div>
     );
   }
 
+  const firstValue = Number(data[0]?.value) || 0;
+  const lastValue = Number(data[data.length - 1]?.value) || 0;
+  const trendColor = lastValue > firstValue ? '#ef4444' : lastValue < firstValue ? '#22c55e' : '#38bdf8';
+  const averageValue = data.reduce((sum, item) => sum + (Number(item.value) || 0), 0) / Math.max(1, data.length);
+
   return (
-    <ChartWrapper height={380}>
-      <AreaChart data={data} margin={{ top: 18, right: 18, left: 4, bottom: 4 }}>
+    <ChartWrapper height={430}>
+      <ComposedChart data={data} margin={{ top: 22, right: 20, left: 8, bottom: 8 }}>
         <defs>
-          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.18} />
-            <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+          <linearGradient id="stockImpactGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={trendColor} stopOpacity={0.22} />
+            <stop offset="72%" stopColor={trendColor} stopOpacity={0.04} />
+            <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
           </linearGradient>
-          <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.12} />
-            <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+          <linearGradient id="stockVolumeGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.45} />
+            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.08} />
           </linearGradient>
         </defs>
-        <CartesianGrid vertical={false} strokeDasharray="6 6" stroke="rgba(15,23,42,0.06)" />
+        <CartesianGrid vertical={true} strokeDasharray="3 8" stroke="rgba(148,163,184,0.14)" />
         <XAxis
           dataKey="name"
           axisLine={false}
           tickLine={false}
-          tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }}
+          tick={{ fill: '#64748b', fontSize: 10, fontWeight: 900 }}
           dy={12}
           minTickGap={24}
         />
@@ -169,58 +180,73 @@ export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => {
           yAxisId="impact"
           axisLine={false}
           tickLine={false}
-          tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 800 }}
-          tickFormatter={(val) => Number(val).toFixed(1)}
-          width={56}
+          tick={{ fill: '#64748b', fontSize: 10, fontWeight: 900 }}
+          tickFormatter={(val) => `${Number(val).toFixed(1)}`}
+          width={62}
         />
         <YAxis
           yAxisId="customers"
           orientation="right"
+          hide
           axisLine={false}
           tickLine={false}
-          tick={{ fill: '#f59e0b', fontSize: 10, fontWeight: 800 }}
-          tickFormatter={(val) => Math.round(Number(val)).toString()}
-          width={42}
         />
         <Tooltip
           content={<CustomTooltip />}
-          cursor={{ stroke: '#0f172a', strokeWidth: 1.5, strokeDasharray: '5 5' }}
+          cursor={{ stroke: trendColor, strokeWidth: 1.5, strokeDasharray: '4 6' }}
+        />
+        {averageValue > 0 && (
+          <ReferenceLine
+            yAxisId="impact"
+            y={averageValue}
+            stroke="#64748b"
+            strokeDasharray="7 7"
+            strokeOpacity={0.55}
+          />
+        )}
+        <Bar
+          yAxisId="customers"
+          dataKey="count"
+          name="count"
+          fill="url(#stockVolumeGradient)"
+          radius={[5, 5, 0, 0]}
+          barSize={18}
+          opacity={0.8}
+          animationDuration={900}
         />
         <Area
           yAxisId="impact"
           type="monotone"
           dataKey="value"
           name="value"
-          stroke="#16a34a"
-          strokeWidth={3}
+          stroke={trendColor}
+          strokeWidth={2}
           fillOpacity={1}
-          fill="url(#colorValue)"
-          activeDot={{ r: 5, fill: '#16a34a', stroke: '#ffffff', strokeWidth: 3 }}
+          fill="url(#stockImpactGradient)"
+          dot={false}
+          activeDot={{ r: 6, fill: trendColor, stroke: '#ffffff', strokeWidth: 3 }}
           animationDuration={1200}
         />
-        <Area
-          yAxisId="customers"
+        <Line
+          yAxisId="impact"
           type="monotone"
-          dataKey="count"
-          name="count"
-          stroke="#f59e0b"
-          strokeWidth={2.5}
-          fillOpacity={1}
-          fill="url(#colorCount)"
-          activeDot={{ r: 4, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }}
-          animationDuration={1600}
+          dataKey="value"
+          stroke={trendColor}
+          strokeWidth={4}
+          dot={false}
+          activeDot={false}
+          animationDuration={1400}
         />
-        {data.length > 5 && (
+        {data.length > 8 && (
           <Brush
             dataKey="name"
-            height={28}
-            stroke="#cbd5e1"
-            fill="#f8fafc"
-            className="opacity-70"
+            height={30}
+            stroke="#334155"
+            fill="#020617"
             travellerWidth={10}
           />
         )}
-      </AreaChart>
+      </ComposedChart>
     </ChartWrapper>
   );
 };

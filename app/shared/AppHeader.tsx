@@ -67,14 +67,18 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {canShowSwitcher && (
           <div className="order-3 flex w-full justify-center md:order-none md:w-auto">
-            <div className="flex rounded-lg border border-slate-200/50 bg-slate-100/60 p-1">
+            <div className="relative inline-flex items-center gap-1 rounded-2xl border border-slate-200/60 bg-white/50 p-1.5 shadow-inner backdrop-blur-md">
               {isModuleEnabled('sales') && (checkPermission('lost_sales') || checkPermission('shortages')) && (
                 <button
                   type="button"
                   onClick={() => onTabChange('pos')}
-                  className={`flex items-center space-x-2 rounded-md px-4 py-2 text-xs font-bold transition-all duration-200 ${activeTab === 'pos' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
+                    activeTab === 'pos' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  <ShoppingCart className="h-3.5 w-3.5" />
+                  <ShoppingCart className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'pos' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
                   <span>Items Entry</span>
                 </button>
               )}
@@ -82,9 +86,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => onTabChange('dashboard')}
-                  className={`flex items-center space-x-2 rounded-md px-4 py-2 text-xs font-bold transition-all duration-200 ${activeTab === 'dashboard' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
+                    activeTab === 'dashboard' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  <LayoutDashboard className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
                   <span>Dashboard</span>
                 </button>
               )}
@@ -92,9 +100,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => onTabChange('settings')}
-                  className={`flex items-center space-x-2 rounded-md px-4 py-2 text-xs font-bold transition-all duration-200 ${activeTab === 'settings' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
+                    activeTab === 'settings' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  <Settings className="h-3.5 w-3.5" />
+                  <Settings className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
                   <span>Settings</span>
                 </button>
               )}

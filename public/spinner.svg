@@ -4,20 +4,46 @@
       .cls-1{fill:#e52f49;}
       .cls-2{fill:#dc2c48;}
       .frame{filter:drop-shadow(0 34px 52px rgba(220,44,72,.22));transform-box:fill-box;transform-origin:center;animation:frameBreath 2.4s ease-in-out infinite;}
-      .sq{transform-box:fill-box;transform-origin:center;animation:squarePulse 1.55s ease-in-out infinite;}
+      .sq{
+        transform-box:fill-box;
+        transform-origin:center;
+        opacity:.42;
+        animation:squareWave 1.35s cubic-bezier(.2,.8,.2,1) infinite;
+      }
       .sq-1{animation-delay:0ms;}
-      .sq-2{animation-delay:90ms;}
-      .sq-3{animation-delay:180ms;}
-      .sq-4{animation-delay:270ms;}
-      .sq-5{animation-delay:360ms;}
-      .sq-6{animation-delay:450ms;}
-      .sq-7{animation-delay:540ms;}
-      .sq-8{animation-delay:630ms;}
-      .sq-9{animation-delay:720ms;}
-      @keyframes squarePulse{
-        0%,100%{opacity:.56;transform:scale(.86);}
-        42%{opacity:1;transform:scale(1.07);}
-        70%{opacity:.78;transform:scale(.96);}
+      .sq-2{animation-delay:110ms;}
+      .sq-3{animation-delay:220ms;}
+      .sq-4{animation-delay:330ms;}
+      .sq-5{animation-delay:440ms;}
+      .sq-6{animation-delay:550ms;}
+      .sq-7{animation-delay:660ms;}
+      .sq-8{animation-delay:770ms;}
+      .sq-9{animation-delay:880ms;}
+      @keyframes squareWave{
+        0%,100%{
+          opacity:.38;
+          fill:#dc2c48;
+          filter:drop-shadow(0 0 0 rgba(229,47,73,0));
+          transform:translateY(0) scale(.78);
+        }
+        32%{
+          opacity:1;
+          fill:#ff4b63;
+          filter:drop-shadow(0 18px 22px rgba(229,47,73,.42));
+          transform:translateY(-18px) scale(1.12);
+        }
+        54%{
+          opacity:.9;
+          fill:#e52f49;
+          filter:drop-shadow(0 10px 16px rgba(229,47,73,.28));
+          transform:translateY(0) scale(1.02);
+        }
+        76%{
+          opacity:.56;
+          fill:#dc2c48;
+          filter:drop-shadow(0 0 0 rgba(229,47,73,0));
+          transform:translateY(10px) scale(.9);
+        }
       }
       @keyframes frameBreath{
         0%,100%{transform:scale(1);filter:drop-shadow(0 24px 38px rgba(220,44,72,.18));}

@@ -15,6 +15,7 @@ The operations task workflow also requires client-project RLS validation before 
 ExcelJS/uuid audit risk remains open (runtime/product; accepted temporarily for staging only, Option A — 2026-06-13).
 Vite/esbuild audit risk remains open (build-tool/dev; esbuild@0.28.1 override attempted 2026-06-13 and reverted because it broke the production build — no safe non-breaking fix exists today).
 npm audit exact output and risk categories must stay documented in docs/ACCEPTED_SECURITY_RISKS.md.
+Superseding local remediation prepared on 2026-06-14: Vite/esbuild high findings are removed by upgrading Vite to 8.0.16 and @vitejs/plugin-react to 6.0.2; ExcelJS/uuid moderate findings are removed by overriding transitive uuid to 11.1.1. npm audit --audit-level=moderate now returns 0 vulnerabilities in the local prepared diff. This still requires explicit diff approval and commit before it is part of main.
 Demo deployment still needs validation against the smoke test plan.
 Post-migration security checks must be run per client Supabase project.
 Operations task security checks must be run per client Supabase project.
@@ -43,6 +44,7 @@ Branch pharmacist scoping must be verified: branch workflows must show only acti
 The prior local-only migration gaps for 20260613103000_delivery_area_supervisor_references.sql, 20260613131500_add_branch_manager_name.sql, and 20260613134500_add_delivery_driver_codes.sql have been applied and recorded on the linked Supabase project. Delivery area/supervisor, branch manager name, and delivery driver code workflows still need focused QA before production.
 The branch login approval migration 20260614090000_branch_login_approvals.sql has been applied to the linked Supabase project; branch pending/approve/reject/expire/fail-closed and role/RLS validation must still pass before production.
 HR Google Apps Script access must be configured through VITE_HR_GOOGLE_SCRIPT_URL only for non-secret public browser calls, or moved behind a trusted server/Supabase Function before production use.
+HR CPR login remains blocked in dedicated-client builds until VITE_HR_GOOGLE_SCRIPT_URL is set to the published Google Apps Script `/exec` URL, the frontend is rebuilt/redeployed, and a real CPR lookup confirms the endpoint response shape.
 AI insights are existing optional scope only. They must remain disabled unless VITE_MODULE_AI_INSIGHTS=true, AI_INSIGHTS_ENABLED=true, and server-only provider secrets are configured.
 Edge Function CORS must be configured per client with ALLOWED_ORIGIN or CLIENT_APP_URL; wildcard CORS is not used or acceptable for production. Browser-called functions are prepared to fail closed for disallowed origins; exact localhost fallback is development-only when no production origin is configured. Deploy/redeploy Edge Functions only after explicit deployment approval.
 Email Edge Functions require verified sender/recipient/dashboard secrets and must not use placeholder sender addresses or dashboard URLs. Protected email functions check x-function-secret before configuration validation and reject placeholder/example values.

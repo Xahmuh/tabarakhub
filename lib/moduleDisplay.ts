@@ -17,8 +17,8 @@ export const DEFAULT_MODULE_DISPLAY_ITEMS: ModuleDisplayItemSetting[] = [
   { key: 'feedback-admin', order: 140, badge: 'Analytics', badgeStyle: 'hidden' },
   { key: 'employee-contributions', order: 150, badge: 'Ideas', badgeStyle: 'hidden' },
   { key: 'delivery', order: 160, badge: 'new module', badgeStyle: 'red' },
-  { key: 'block-analyzer', order: 170, badge: 'Analytics', badgeStyle: 'hidden' },
-  { key: 'command-center', order: 180, badge: 'new module', badgeStyle: 'red' }
+  { key: 'command-center', order: 165, badge: 'new module', badgeStyle: 'red' },
+  { key: 'block-analyzer', order: 170, badge: 'Analytics', badgeStyle: 'hidden' }
 ];
 
 export const MODULE_DISPLAY_LABELS: Record<string, string> = {

@@ -55,7 +55,6 @@ import { LostSale, Branch, Product, Shortage } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { isManagerRole } from '../../lib/access';
-import styles from './dashboard.module.css';
 
 const createExcelWorkbook = async () => {
   if (!isModuleEnabled('excelExport')) {
@@ -385,7 +384,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     // Close dropdowns on outside click
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.export-dropdown-container')) {
+      if (!target.closest('.dashboard-dropdown-container')) {
+        setIsBranchDropdownOpen(false);
+        setIsDatePickerOpen(false);
         setIsExportDropdownOpen(false);
       }
     };
@@ -486,6 +487,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     const transferRevenue = transferSales.reduce((acc, s) => acc + (Number(s.totalValue) || 0), 0);
     const transferPercentage = sales.length > 0 ? (transferCount / sales.length) * 100 : 0;
 
+    const recoveredSales = sales.filter(s => !!s.alternativeGiven || !!s.internalTransfer);
+    const recoveryCount = recoveredSales.length;
+    const recoveryRevenue = recoveredSales.reduce((acc, s) => acc + (Number(s.totalValue) || 0), 0);
+    const recoveryPercentage = sales.length > 0 ? (recoveryCount / sales.length) * 100 : 0;
+    const recoveryValueShare = totalRevenue > 0 ? (recoveryRevenue / totalRevenue) * 100 : 0;
+
+    const noRecoverySales = sales.filter(s => !s.alternativeGiven && !s.internalTransfer);
+    const noRecoveryCount = noRecoverySales.length;
+    const noRecoveryRevenue = noRecoverySales.reduce((acc, s) => acc + (Number(s.totalValue) || 0), 0);
+    const noRecoveryPercentage = sales.length > 0 ? (noRecoveryCount / sales.length) * 100 : 0;
+
     return {
       totalRevenue,
       totalUnits,
@@ -500,7 +512,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       altPercentage,
       transferCount,
       transferRevenue,
-      transferPercentage
+      transferPercentage,
+      recoveryCount,
+      recoveryRevenue,
+      recoveryPercentage,
+      recoveryValueShare,
+      noRecoveryCount,
+      noRecoveryRevenue,
+      noRecoveryPercentage
     };
   }, [sales]);
 
@@ -658,15 +677,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     }, null);
     const firstValue = Number(performanceTrend[0]?.value) || 0;
     const lastValue = Number(performanceTrend[performanceTrend.length - 1]?.value) || 0;
+    const deltaAbs = lastValue - firstValue;
     const delta = firstValue > 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
+    const lowDay = performanceTrend.reduce<{ name: string; value: number; count: number } | null>((low, item) => {
+      const value = Number(item.value) || 0;
+      const count = Number(item.count) || 0;
+      return !low || value < low.value ? { name: item.name, value, count } : low;
+    }, null);
 
     return {
       totalImpact,
       totalSessions,
       averageImpact: totalSessions > 0 ? totalImpact / totalSessions : 0,
       peakDay,
+      lowDay,
+      firstValue,
+      lastValue,
+      deltaAbs,
       delta,
-      dayCount: performanceTrend.length
+      dayCount: performanceTrend.length,
+      trendLabel: delta > 0 ? 'Rising exposure' : delta < 0 ? 'Exposure cooling' : 'Flat exposure'
     };
   }, [performanceTrend]);
 
@@ -680,6 +710,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     const lowCount = shortages.filter(s => s.status === 'Low').length;
     const criticalCount = shortages.filter(s => s.status === 'Critical').length;
     const outOfStockCount = shortages.filter(s => s.status === 'Out of Stock').length;
+    const totalCount = shortages.length;
+    const uniqueSkuCount = new Set(shortages.map(s => s.productName)).size;
+    const salesProductSet = new Set(sales.map(s => s.productName));
+    const lostSaleLinkedCount = shortages.filter(s => salesProductSet.has(s.productName)).length;
+    const lostSaleLinkedPercentage = totalCount > 0 ? (lostSaleLinkedCount / totalCount) * 100 : 0;
+    const activeRiskCount = criticalCount + outOfStockCount;
+    const riskScore = totalCount > 0
+      ? Math.round(((lowCount * 1) + (criticalCount * 2) + (outOfStockCount * 3)) / (totalCount * 3) * 100)
+      : 0;
 
     // Top Products in Shortage
     const productFrequency: Record<string, number> = {};
@@ -689,7 +728,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     const topProducts = Object.entries(productFrequency)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 30)
-      .map(([name, count]) => ({ name, count }));
+      .map(([name, count]) => ({
+        name,
+        count,
+        isPriority: salesProductSet.has(name) || count >= 3
+      }));
 
     // Shortage by Branch
     const branchDistribution: Record<string, number> = {};
@@ -697,12 +740,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       const bName = branches.find(b => b.id === s.branchId)?.name || 'Unknown';
       branchDistribution[bName] = (branchDistribution[bName] || 0) + 1;
     });
+    const topBranch = Object.entries(branchDistribution).sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
 
     // Shortage by Pharmacist
     const pharmacistActivity: Record<string, number> = {};
     shortages.forEach(s => {
       pharmacistActivity[s.pharmacistName] = (pharmacistActivity[s.pharmacistName] || 0) + 1;
     });
+    const topPharmacist = Object.entries(pharmacistActivity).sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
 
     // Shortage Trend (Temporal Distribution)
     const trendCounts: Record<string, { total: number, low: number, critical: number, oos: number, _ts: string }> = {};
@@ -762,9 +807,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
 
     return {
+      totalCount,
+      uniqueSkuCount,
       lowCount,
       criticalCount,
       outOfStockCount,
+      activeRiskCount,
+      riskScore,
+      lostSaleLinkedCount,
+      lostSaleLinkedPercentage,
+      topBranch,
+      topPharmacist,
       topProducts,
       branchDistribution,
       pharmacistActivity,
@@ -1401,6 +1454,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     : viewMode === 'expanded'
       ? PackageX
       : LayoutGrid;
+  const branchSearchQuery = branchSearchTerm.trim().toLowerCase();
+  const filteredBranches = branches.filter((branch) =>
+    `${branch.name} ${branch.code}`.toLowerCase().includes(branchSearchQuery)
+  );
+  const activeDateLabel: Record<DashboardDateType, string> = {
+    all: 'All Time',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    '7d': 'Last 7 Days',
+    month: 'Last Month',
+    custom: 'Custom Period'
+  };
+  const dateRangeOptions: Array<{ id: DashboardDateType; label: string; sub: string }> = [
+    { id: 'all', label: 'All Time', sub: 'Total historical archive' },
+    { id: 'today', label: 'Today', sub: 'Active duty records' },
+    { id: 'yesterday', label: 'Yesterday', sub: 'Previous day performance' },
+    { id: '7d', label: 'Last 7 Days', sub: 'Weekly operating window' },
+    { id: 'month', label: 'Last Month', sub: '30-day fiscal cycle' },
+    { id: 'custom', label: 'Choose Period', sub: 'Manual calendar range' }
+  ];
 
     return (
       <div className="min-h-screen bg-white font-sans selection:bg-red-100">
@@ -1423,92 +1496,180 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
             <div className="flex flex-wrap lg:flex-nowrap items-center gap-3">
               {isCanSelectBranch && (
-                <div className="relative">
-                  <button onClick={() => setIsBranchDropdownOpen(!isBranchDropdownOpen)}
-                    className="flex items-center gap-3 px-5 py-3.5 bg-white border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-red-200 transition-all">
-                    <MapPin size={15} className="text-red-600" />
-                    <span className="max-w-[120px] truncate">{activeBranchLabel}</span>
-                    <ChevronDown size={13} className={`transition-transform duration-500 ${isBranchDropdownOpen ? 'rotate-180' : ''}`} />
+                <div className="relative dashboard-dropdown-container">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDatePickerOpen(false);
+                      setIsExportDropdownOpen(false);
+                      setIsBranchDropdownOpen(!isBranchDropdownOpen);
+                    }}
+                    className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 text-left transition-all duration-200 ${
+                      isBranchDropdownOpen
+                        ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
+                        : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
+                    }`}
+                  >
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      isBranchDropdownOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
+                    }`}>
+                      <MapPin size={15} strokeWidth={2.7} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[8px] font-black uppercase tracking-[0.18em] text-slate-400">Branch Scope</span>
+                      <span className="block max-w-[150px] truncate text-[10px] font-black uppercase tracking-[0.08em] text-slate-800">{activeBranchLabel}</span>
+                    </span>
+                    <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isBranchDropdownOpen ? 'rotate-180 text-red-700' : ''}`} />
                   </button>
                 {isBranchDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-3 w-80 bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-4 z-[100] animate-in zoom-in-95 duration-300">
-                    <div className="mb-4">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <div className="absolute top-full right-0 z-[100] mt-2 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/10 animate-in zoom-in-95 duration-200">
+                    <div className="border-b border-slate-100 bg-white px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-red-600">Branch Scope</p>
+                          <p className="mt-1 truncate text-sm font-black tracking-tight text-slate-900">{activeBranchLabel}</p>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-slate-500">
+                          {branches.length} nodes
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <div className="relative mb-2.5">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                         <input
                           type="text"
                           placeholder="Search branches..."
                           value={branchSearchTerm}
                           onChange={(e) => setBranchSearchTerm(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-100 pl-9 pr-4 py-2.5 rounded-xl text-[10px] font-black uppercase outline-none focus:border-red-200 transition-all"
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-xs font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
-                    </div>
                     <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1 pr-1">
                       <button
+                        type="button"
                         onClick={() => {
                           setSelectedBranch('all');
                           setIsBranchDropdownOpen(false);
                           setBranchSearchTerm('');
                         }}
-                        className={`w-full text-left p-4 rounded-xl transition-all group ${selectedBranch === 'all' ? 'bg-red-900 text-white shadow-lg' : 'hover:bg-slate-50'}`}
+                        className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                          selectedBranch === 'all'
+                            ? 'border-red-200 bg-red-50 text-red-900'
+                            : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                        }`}
                       >
-                        <p className="text-[10px] font-black uppercase tracking-widest">Global Central Console</p>
-                        <p className={`text-[8px] font-bold uppercase mt-1 tracking-tighter ${selectedBranch === 'all' ? 'text-white/60' : 'text-slate-400'}`}>All Branches Combined</p>
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                            selectedBranch === 'all' ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-red-700'
+                          }`}>
+                            <MonitorCheck size={16} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs font-black">Global Central Console</span>
+                            <span className={`mt-0.5 block text-[10px] font-bold ${
+                              selectedBranch === 'all' ? 'text-red-500' : 'text-slate-400'
+                            }`}>All branches combined</span>
+                          </span>
+                        </span>
+                        {selectedBranch === 'all' ? (
+                          <ShieldCheck size={17} className="shrink-0" />
+                        ) : (
+                          <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                        )}
                       </button>
 
-                      <div className="h-px bg-slate-100 my-2 mx-2"></div>
+                      <div className="mx-1 my-2 h-px bg-slate-100"></div>
 
-                      {branches
-                        .filter(b => b.name.toLowerCase().includes(branchSearchTerm.toLowerCase()))
-                        .map(b => (
+                      {filteredBranches.map(b => {
+                        const isSelected = selectedBranch === b.id;
+                        return (
                           <button
                             key={b.id}
+                            type="button"
                             onClick={() => {
                               setSelectedBranch(b.id);
                               setIsBranchDropdownOpen(false);
                               setBranchSearchTerm('');
                             }}
-                            className={`w-full text-left p-4 rounded-xl transition-all ${selectedBranch === b.id ? 'bg-red-900 text-white shadow-lg' : 'hover:bg-slate-50'}`}
+                            className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                              isSelected
+                                ? 'border-red-200 bg-red-50 text-red-900'
+                                : 'border-transparent text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                            }`}
                           >
-                            <p className="text-[10px] font-black uppercase tracking-widest">{b.name}</p>
-                            <p className={`text-[8px] font-bold uppercase mt-1 tracking-tighter ${selectedBranch === b.id ? 'text-white/60' : 'text-slate-400'}`}>Pharmacy Branch Node</p>
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black uppercase ${
+                                isSelected ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-slate-500'
+                              }`}>
+                                {b.code?.slice(0, 2) || 'BR'}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-black">{b.name}</span>
+                                <span className={`mt-0.5 block text-[10px] font-bold ${
+                                  isSelected ? 'text-red-500' : 'text-slate-400'
+                                }`}>Pharmacy branch node</span>
+                              </span>
+                            </span>
+                            {isSelected ? (
+                              <ShieldCheck size={17} className="shrink-0" />
+                            ) : (
+                              <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                            )}
                           </button>
-                        ))
-                      }
+                        );
+                      })}
 
-                      {branches.filter(b => b.name.toLowerCase().includes(branchSearchTerm.toLowerCase())).length === 0 && (
-                        <div className="py-8 text-center">
-                          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No branches found</p>
+                      {filteredBranches.length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-7 text-center">
+                          <p className="text-xs font-black text-slate-500">No branches found</p>
+                          <p className="mt-1 text-[10px] font-bold text-slate-400">Try another branch name or code</p>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-              <div className="relative">
-                <button onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                  className="flex items-center gap-3 px-5 py-3.5 bg-white border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-700 hover:border-red-200 transition-all">
-                  <CalendarDays size={15} className="text-red-600" />
-                <span>{dateType === 'today' ? 'Today' : dateType === 'yesterday' ? 'Yesterday' : dateType === '7d' ? 'Last 7 Days' : dateType === 'month' ? 'Last Month' : dateType === 'custom' ? 'Custom Period' : 'Archive View'}</span>
-                <ChevronDown size={14} />
+              <div className="relative dashboard-dropdown-container">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBranchDropdownOpen(false);
+                    setIsExportDropdownOpen(false);
+                    setIsDatePickerOpen(!isDatePickerOpen);
+                  }}
+                  className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 transition-all duration-200 ${
+                    isDatePickerOpen
+                      ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
+                      : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
+                  }`}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                    isDatePickerOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
+                  }`}>
+                    <CalendarDays size={15} strokeWidth={2.7} />
+                  </span>
+                <span className="min-w-0 text-left">
+                  <span className="block text-[8px] font-black uppercase tracking-[0.18em] text-slate-400">Date Range</span>
+                  <span className="block text-[10px] font-black uppercase tracking-[0.08em] text-slate-800">{activeDateLabel[dateType]}</span>
+                </span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isDatePickerOpen ? 'rotate-180 text-red-700' : ''}`} />
               </button>
               {isDatePickerOpen && (
-                <div className={`absolute top-full right-0 mt-3 bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-4 z-[100] animate-in slide-in-from-top-5 duration-300 ${dateType === 'custom' ? 'w-auto' : 'w-72'}`}>
+                <div className={`absolute top-full right-0 z-[100] mt-2 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/10 animate-in slide-in-from-top-5 duration-200 ${dateType === 'custom' ? 'w-[330px]' : 'w-[310px]'}`}>
+                  <div className="border-b border-slate-100 bg-white px-4 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-red-600">Date Range</p>
+                    <p className="mt-1 text-sm font-black tracking-tight text-slate-900">{activeDateLabel[dateType]}</p>
+                  </div>
+                  <div className="p-3">
                   {dateType !== 'custom' ? (
-                    <div className="grid grid-cols-1 gap-1.5">
-                      {[
-                        { id: 'all', label: 'All Time', sub: 'Total Historical Archive' },
-                        { id: 'today', label: 'Today', sub: 'Active Duty Records' },
-                        { id: 'yesterday', label: 'Yesterday', sub: 'Previous Day Performance' },
-                        { id: '7d', label: 'Last 7 Days', sub: 'Weekly Performance' },
-                        { id: 'month', label: 'Last Month', sub: '30-Day Fiscal Cycle' },
-                        { id: 'custom', label: 'Choose Period', sub: 'Manual Calendar Protocol' }
-                      ].map(t => (
-                        <button key={t.id} onClick={() => {
+                    <div className="grid grid-cols-1 gap-1">
+                      {dateRangeOptions.map(t => (
+                        <button key={t.id} type="button" onClick={() => {
                           // إعادة تعيين التواريخ عند التغيير من custom
                           if (dateType === 'custom' && t.id !== 'custom') {
                             setStartDate('');
@@ -1516,40 +1677,52 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                             setManualStart('');
                             setManualEnd('');
                           }
-                          setDateType(t.id as any);
+                          setDateType(t.id);
                           if (t.id !== 'custom') setIsDatePickerOpen(false);
                         }}
-                          className={`w-full text-left p-4 rounded-xl transition-all ${dateType === t.id ? 'bg-red-900 text-white shadow-lg' : 'hover:bg-slate-50'}`}>
-                          <p className="text-[10px] font-black uppercase tracking-widest">{t.label}</p>
-                          <p className={`text-[8px] font-bold ${dateType === t.id ? 'text-white/60' : 'text-slate-400'} uppercase mt-1 tracking-tighter`}>{t.sub}</p>
+                          className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                            dateType === t.id
+                              ? 'border-red-200 bg-red-50 text-red-900'
+                              : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                          }`}>
+                          <span>
+                            <span className="block text-xs font-black">{t.label}</span>
+                            <span className={`mt-0.5 block text-[10px] font-bold ${dateType === t.id ? 'text-red-500' : 'text-slate-400'}`}>{t.sub}</span>
+                          </span>
+                          {dateType === t.id ? (
+                            <ShieldCheck size={17} className="shrink-0" />
+                          ) : (
+                            <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                          )}
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="w-[280px] p-2 space-y-4">
+                    <div className="space-y-4">
                       <div className="space-y-3">
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">From (DD-MM-YYYY)</label>
+                          <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">From (DD-MM-YYYY)</label>
                           <input
                             type="text"
                             placeholder="01-01-2026"
                             value={manualStart}
                             onChange={(e) => setManualStart(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl text-[10px] font-black outline-none focus:border-red-600 transition-all"
+                            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
                           />
                         </div>
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">To (DD-MM-YYYY)</label>
+                          <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">To (DD-MM-YYYY)</label>
                           <input
                             type="text"
                             placeholder="31-01-2026"
                             value={manualEnd}
                             onChange={(e) => setManualEnd(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl text-[10px] font-black outline-none focus:border-red-600 transition-all"
+                            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
                           />
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => {
                           const s = parseManualDate(manualStart);
                           const e = parseManualDate(manualEnd);
@@ -1561,11 +1734,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                             showToast("Invalid date format. Please use DD-MM-YYYY (e.g., 09-01-2026). Check month (1-12), day (1-31), and valid date.", 'error');
                           }
                         }}
-                        className="w-full bg-slate-900 text-white p-3.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] shadow-lg hover:bg-red-800 transition-all"
+                        className="w-full rounded-lg bg-red-600 p-3 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm shadow-red-600/20 transition-all hover:bg-red-700"
                       >
                         Confirm Period
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setManualStart('');
                           setManualEnd('');
@@ -1574,36 +1748,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                           setDateType('all');
                           setIsDatePickerOpen(false);
                         }}
-                        className="w-full text-slate-400 text-[8px] font-black uppercase tracking-widest hover:text-red-600 transition-colors"
+                        className="w-full rounded-lg border border-slate-200 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50/40 hover:text-red-600"
                       >
                         Reset Filter
                       </button>
                     </div>
                   )}
+                  </div>
                 </div>
               )}
             </div>
 
               {isModuleEnabled('excelExport') && (
-              <div className="relative export-dropdown-container">
+              <div className="relative dashboard-dropdown-container export-dropdown-container">
                 <button
-                  onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-                  className="flex items-center gap-2.5 px-6 py-3.5 bg-red-700 hover:bg-red-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-700/20 hover:-translate-y-0.5"
+                  type="button"
+                  onClick={() => {
+                    setIsBranchDropdownOpen(false);
+                    setIsDatePickerOpen(false);
+                    setIsExportDropdownOpen(!isExportDropdownOpen);
+                  }}
+                  className="flex h-12 items-center gap-2.5 rounded-2xl bg-red-700 px-5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-700/25 transition-all hover:-translate-y-0.5 hover:bg-red-800"
                 >
-                <Download size={18} />
+                <Download size={17} />
                 <span>Export</span>
                 <ChevronDown size={14} className={`transition-transform duration-300 ${isExportDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isExportDropdownOpen && (
-                <div className="absolute top-full right-0 mt-3 w-80 bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-3 z-[100] animate-in zoom-in-95 duration-300">
-                  <div className="space-y-1.5">
+                <div className="absolute top-full right-0 z-[100] mt-3 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 animate-in zoom-in-95 duration-300">
+                  <div className="border-b border-slate-100 bg-slate-950 px-5 py-4 text-white">
+                    <p className="text-[9px] font-black uppercase tracking-[0.28em] text-red-200">Export Center</p>
+                    <p className="mt-1 text-sm font-black uppercase tracking-tight">Download Excel Workbooks</p>
+                  </div>
+                  <div className="space-y-1.5 p-3">
                     <button
-                      onClick={exportLostSales}
-                      className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all group flex items-center justify-between"
+                      type="button"
+                      onClick={() => {
+                        setIsExportDropdownOpen(false);
+                        exportLostSales();
+                      }}
+                      className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-red-100 hover:bg-red-50/60"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center text-red-600">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-700">
                           <Banknote size={16} />
                         </div>
                         <div>
@@ -1615,11 +1803,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                     </button>
 
                     <button
-                      onClick={exportShortage}
-                      className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all group flex items-center justify-between"
+                      type="button"
+                      onClick={() => {
+                        setIsExportDropdownOpen(false);
+                        exportShortage();
+                      }}
+                      className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-amber-100 hover:bg-amber-50/70"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
                           <PackageX size={16} />
                         </div>
                         <div>
@@ -1631,11 +1823,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                     </button>
 
                     <button
-                      onClick={exportCombined}
-                      className="w-full text-left p-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white hover:bg-red-900 transition-all group flex items-center justify-between"
+                      type="button"
+                      onClick={() => {
+                        setIsExportDropdownOpen(false);
+                        exportCombined();
+                      }}
+                      className="group flex w-full items-center justify-between rounded-2xl bg-slate-900 p-4 text-left text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/15 transition-all hover:bg-red-900"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center text-white">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white">
                           <FileSpreadsheet size={16} />
                         </div>
                         <div>
@@ -1660,31 +1856,48 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
 
           {/* Tabs Navigation */}
-          <div className="flex justify-center mb-10">
-            <div className="tab-nav p-1.5 rounded-2xl">
+          <div className="mb-10 flex justify-center">
+            <div className="relative inline-flex flex-wrap items-center justify-center gap-1 rounded-2xl border border-slate-200/60 bg-white/50 p-1.5 shadow-inner backdrop-blur-md">
               {salesPerm !== 'none' && (
                 <button
+                  type="button"
                   onClick={() => changeViewMode('standard')}
-                  className={`tab-item px-7 py-3 rounded-xl ${viewMode === 'standard' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
+                    viewMode === 'standard' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  Revenue Lost Analysis
+                  <TrendingDown className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'standard' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
+                  <span>Revenue Lost Analysis</span>
                 </button>
               )}
               {shortagesPerm !== 'none' && (
                 <button
+                  type="button"
                   onClick={() => changeViewMode('expanded')}
-                  className={`tab-item px-7 py-3 rounded-xl ${viewMode === 'expanded' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
+                    viewMode === 'expanded' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  Inventory Shortages
+                  <PackageX className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'expanded' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
+                  <span>Inventory Shortages</span>
                 </button>
               )}
               {isManagerRole(user.role) && (
                 <button
+                  type="button"
                   onClick={() => changeViewMode('products')}
-                  className={`tab-item px-7 py-3 rounded-xl flex items-center gap-2 ${viewMode === 'products' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
+                    viewMode === 'products' 
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
                 >
-                  <Package size={16} />
-                  Product Catalogue
+                  <Package className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'products' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
+                  <span>Product Catalogue</span>
                 </button>
               )}
             </div>
@@ -1718,68 +1931,225 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                   </section>
 
                   {/* --- Section 2.2: Pharmacist Recovery KPIs --- */}
-                  <div className="mt-16">
-                    <div className="flex items-center space-x-4 mb-6">
-                      <div className="h-px bg-slate-100 flex-1"></div>
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] whitespace-nowrap">Recovery & Transfer Performance</h3>
-                      <div className="h-px bg-slate-100 flex-1"></div>
+                  <div className="mt-16 mb-20">
+                    <div className="mb-6 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.32em] text-red-600">Recovery & Transfer Performance</p>
+                        <h3 className="mt-2 text-2xl font-black tracking-tighter text-slate-950">Recovered value, transfer usage, and unresolved exposure</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {[
+                          { key: 'no_recovery' as const, label: 'No recovery', tone: 'red' },
+                          { key: 'alt_given' as const, label: 'Alt given', tone: 'emerald' },
+                          { key: 'transferred' as const, label: 'Transfer', tone: 'blue' },
+                        ].map(({ key, label, tone }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setPerformanceLogFilter(performanceLogFilter === key ? null : key);
+                              setPerformanceLogPage(1);
+                            }}
+                            className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all duration-300 ${
+                              performanceLogFilter === key
+                                ? tone === 'red'
+                                  ? 'border-red-500 bg-red-600 text-white shadow-lg shadow-red-500/20'
+                                  : tone === 'emerald'
+                                    ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                                    : 'border-blue-500 bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                                : tone === 'red'
+                                  ? 'border-red-100 bg-red-50 text-red-700 hover:border-red-200 hover:bg-red-100'
+                                  : tone === 'emerald'
+                                    ? 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:border-emerald-200 hover:bg-emerald-100'
+                                    : 'border-blue-100 bg-blue-50 text-blue-700 hover:border-blue-200 hover:bg-blue-100'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-                      {/* % Alt Given */}
-                      <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl flex flex-col items-center text-center group hover:-translate-y-1 transition-all duration-500">
-                        <div className="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                          <Sparkles size={24} />
-                        </div>
-                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">% Alt Given</p>
-                        <p className="text-2xl font-black text-white tracking-tighter">{aggregateMetrics.altPercentage.toFixed(1)}%</p>
-                        <div className="mt-4 w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className={styles.progressBarAlt}
-                            style={{ '--progress-width': `${aggregateMetrics.altPercentage}%` } as React.CSSProperties}
-                          ></div>
-                        </div>
-                      </div>
+                    <section className="overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+                      <div className="grid grid-cols-1 xl:grid-cols-[1.08fr_0.92fr]">
+                        <div className="relative overflow-hidden bg-slate-950 p-6 text-white sm:p-8">
+                          <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl"></div>
+                          <div className="absolute bottom-0 left-0 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl"></div>
 
-                      {/* Alt Recovery Revenue */}
-                      <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl flex flex-col items-center text-center group hover:-translate-y-1 transition-all duration-500">
-                        <div className="w-12 h-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/20">
-                          <Banknote size={24} />
-                        </div>
-                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Alt Recovery Revenue</p>
-                        <div className="flex items-end gap-1">
-                          <p className="text-[10px] font-black text-emerald-500 mb-1.5">BHD</p>
-                          <p className="text-2xl font-black text-white tracking-tighter">{aggregateMetrics.altRevenue.toFixed(3)}</p>
-                        </div>
-                        <p className="text-[8px] text-white/30 font-bold uppercase mt-2">{aggregateMetrics.altCount} Success Cases</p>
-                      </div>
+                          <div className="relative z-10 flex flex-col gap-7">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white/60">
+                                  <ShieldCheck size={13} />
+                                  Recovery health
+                                </div>
+                                <div className="mt-5 flex items-end gap-3">
+                                  <p className="text-6xl font-black leading-none tracking-tighter tabular-nums">{aggregateMetrics.recoveryPercentage.toFixed(1)}%</p>
+                                  <div className="pb-2">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Recovered cases</p>
+                                    <p className="mt-1 text-xs font-bold text-white/45">{aggregateMetrics.recoveryCount} of {aggregateMetrics.incidentCount} incidents</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-right">
+                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35">Recovered value</p>
+                                <div className="mt-1 flex items-end justify-end gap-1">
+                                  <span className="pb-1 text-[10px] font-black text-emerald-300">BHD</span>
+                                  <span className="text-2xl font-black tracking-tighter tabular-nums">{aggregateMetrics.recoveryRevenue.toFixed(3)}</span>
+                                </div>
+                                <p className="mt-1 text-[10px] font-bold text-white/35">{aggregateMetrics.recoveryValueShare.toFixed(1)}% of exposure value</p>
+                              </div>
+                            </div>
 
-                      {/* % Transfer Used */}
-                      <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl flex flex-col items-center text-center group hover:-translate-y-1 transition-all duration-500">
-                        <div className="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                          <RefreshCcw size={24} />
-                        </div>
-                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">% Transfer Used</p>
-                        <p className="text-2xl font-black text-white tracking-tighter">{aggregateMetrics.transferPercentage.toFixed(1)}%</p>
-                        <div className="mt-4 w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className={styles.progressBarTransfer}
-                            style={{ '--progress-width': `${aggregateMetrics.transferPercentage}%` } as React.CSSProperties}
-                          ></div>
-                        </div>
-                      </div>
+                            <div>
+                              <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-white/35">
+                                <span>Recovered</span>
+                                <span>Open exposure</span>
+                              </div>
+                              <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-1000"
+                                  style={{ width: `${Math.min(100, aggregateMetrics.recoveryPercentage)}%` }}
+                                ></div>
+                              </div>
+                            </div>
 
-                      {/* Transfer Revenue */}
-                      <div className="bg-slate-900 p-6 rounded-[2rem] border border-slate-800 shadow-xl flex flex-col items-center text-center group hover:-translate-y-1 transition-transform duration-500 transform-gpu">
-                        <div className="w-12 h-12 bg-emerald-500 text-white rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/20">
-                          <Truck size={24} />
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                              {[
+                                { label: 'Alt given', value: `${aggregateMetrics.altPercentage.toFixed(1)}%`, detail: `${aggregateMetrics.altCount} cases`, icon: <Sparkles size={16} />, tone: 'text-emerald-300 bg-emerald-400/10 border-emerald-400/15' },
+                                { label: 'Transfer used', value: `${aggregateMetrics.transferPercentage.toFixed(1)}%`, detail: `${aggregateMetrics.transferCount} requests`, icon: <RefreshCcw size={16} />, tone: 'text-blue-300 bg-blue-400/10 border-blue-400/15' },
+                                { label: 'No recovery', value: `${aggregateMetrics.noRecoveryPercentage.toFixed(1)}%`, detail: `${aggregateMetrics.noRecoveryCount} incidents`, icon: <AlertTriangle size={16} />, tone: 'text-red-300 bg-red-400/10 border-red-400/15' },
+                              ].map(item => (
+                                <div key={item.label} className={`rounded-2xl border p-4 ${item.tone}`}>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/45">{item.label}</p>
+                                    {item.icon}
+                                  </div>
+                                  <p className="mt-4 text-2xl font-black tracking-tighter text-white tabular-nums">{item.value}</p>
+                                  <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/35">{item.detail}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Transfer Revenue</p>
-                        <div className="flex items-end gap-1">
-                          <p className="text-[10px] font-black text-emerald-500 mb-1.5">BHD</p>
-                          <p className="text-2xl font-black text-white tracking-tighter">{aggregateMetrics.transferRevenue.toFixed(3)}</p>
+
+                        <div className="p-6 sm:p-8">
+                          <div className="grid grid-cols-1 gap-4">
+                            {[
+                              {
+                                label: 'Alternative Recovery',
+                                description: 'Pharmacist saved demand with a substitute item.',
+                                percent: aggregateMetrics.altPercentage,
+                                revenue: aggregateMetrics.altRevenue,
+                                count: aggregateMetrics.altCount,
+                                icon: <Sparkles size={19} />,
+                                color: 'emerald',
+                                filter: 'alt_given' as const,
+                              },
+                              {
+                                label: 'Stock Transfer',
+                                description: 'Branch routed demand through internal stock movement.',
+                                percent: aggregateMetrics.transferPercentage,
+                                revenue: aggregateMetrics.transferRevenue,
+                                count: aggregateMetrics.transferCount,
+                                icon: <Truck size={19} />,
+                                color: 'blue',
+                                filter: 'transferred' as const,
+                              },
+                            ].map(item => (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => {
+                                  setPerformanceLogFilter(performanceLogFilter === item.filter ? null : item.filter);
+                                  setPerformanceLogPage(1);
+                                }}
+                                className={`group rounded-[1.5rem] border p-5 text-left transition-all duration-300 ${
+                                  performanceLogFilter === item.filter
+                                    ? item.color === 'emerald'
+                                      ? 'border-emerald-300 bg-emerald-50 shadow-lg shadow-emerald-100'
+                                      : 'border-blue-300 bg-blue-50 shadow-lg shadow-blue-100'
+                                    : 'border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white hover:shadow-lg hover:shadow-slate-100'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex min-w-0 items-start gap-3">
+                                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                                      item.color === 'emerald' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+                                    }`}>
+                                      {item.icon}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-black uppercase tracking-tight text-slate-900">{item.label}</p>
+                                      <p className="mt-1 text-xs font-bold leading-5 text-slate-400">{item.description}</p>
+                                    </div>
+                                  </div>
+                                  <ArrowUpRight className={`mt-1 shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 ${
+                                    item.color === 'emerald' ? 'text-emerald-500' : 'text-blue-500'
+                                  }`} size={17} />
+                                </div>
+                                <div className="mt-5 grid grid-cols-3 gap-3">
+                                  <div>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Usage</p>
+                                    <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">{item.percent.toFixed(1)}%</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Cases</p>
+                                    <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">{item.count}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">BHD</p>
+                                    <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">{item.revenue.toFixed(1)}</p>
+                                  </div>
+                                </div>
+                                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-1000 ${item.color === 'emerald' ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                    style={{ width: `${Math.min(100, item.percent)}%` }}
+                                  ></div>
+                                </div>
+                              </button>
+                            ))}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPerformanceLogFilter(performanceLogFilter === 'no_recovery' ? null : 'no_recovery');
+                                setPerformanceLogPage(1);
+                              }}
+                              className={`rounded-[1.5rem] border p-5 text-left transition-all duration-300 ${
+                                performanceLogFilter === 'no_recovery'
+                                  ? 'border-red-300 bg-red-50 shadow-lg shadow-red-100'
+                                  : 'border-red-100 bg-white hover:border-red-200 hover:bg-red-50'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white">
+                                    <AlertTriangle size={19} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-black uppercase tracking-tight text-slate-900">Unresolved Recovery Exposure</p>
+                                    <p className="mt-1 text-xs font-bold leading-5 text-slate-400">Cases still showing no substitute or transfer path.</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-2xl font-black tracking-tighter text-red-700 tabular-nums">{aggregateMetrics.noRecoveryCount}</p>
+                                  <p className="text-[9px] font-black uppercase tracking-[0.14em] text-red-400">cases</p>
+                                </div>
+                              </div>
+                              <div className="mt-5 flex items-end justify-between gap-3">
+                                <div>
+                                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Exposure value</p>
+                                  <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">BHD {aggregateMetrics.noRecoveryRevenue.toFixed(3)}</p>
+                                </div>
+                                <div className="rounded-xl bg-red-100 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
+                                  {aggregateMetrics.noRecoveryPercentage.toFixed(1)}%
+                                </div>
+                              </div>
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-[8px] text-white/30 font-bold uppercase mt-2">{aggregateMetrics.transferCount} Stock Requests</p>
                       </div>
                     </section>
                   </div>
@@ -2026,39 +2396,176 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         {
           viewMode === 'expanded' ? (
             <>
-              {/* --- Section 2.4: Shortage analytical Intelligence Engine --- */}
+              {/* --- Section 2.4: Inventory Gap Command Center --- */}
               {user.isKPIDashboardEnabled !== false && (
-                <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-                  <StrategicKPI label="Low Stock Items" value={shortageMetrics.lowCount} icon={<Box size={20} />} critical={true} description="stock below Minimum level" unit="SKU" />
-                  <StrategicKPI label="Critical Escalations" value={shortageMetrics.criticalCount} icon={<AlertTriangle size={20} />} critical={true} description="last Piece on shelf" unit="SKU" />
-                  <StrategicKPI label="Absolute Stockouts" value={shortageMetrics.outOfStockCount} icon={<PackageX size={20} />} critical={true} description="Zero Stock" unit="SKU" />
+                <section className="mb-10 overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+                  <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr]">
+                    <div className="relative overflow-hidden bg-slate-950 p-6 text-white sm:p-8">
+                      <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-red-500/15 blur-3xl"></div>
+                      <div className="absolute -bottom-20 left-0 h-52 w-52 rounded-full bg-amber-400/10 blur-3xl"></div>
+
+                      <div className="relative z-10">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white/60">
+                          <PackageX size={13} />
+                          Inventory risk score
+                        </div>
+                        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                          <div>
+                            <div className="flex items-end gap-2">
+                              <p className="text-6xl font-black leading-none tracking-tighter tabular-nums">{shortageMetrics.riskScore}</p>
+                              <p className="pb-2 text-sm font-black uppercase tracking-[0.18em] text-white/35">/ 100</p>
+                            </div>
+                            <p className="mt-3 max-w-md text-sm font-bold leading-6 text-white/55">
+                              {shortageMetrics.activeRiskCount} urgent inventory gaps from {shortageMetrics.totalCount} reports across {shortageMetrics.uniqueSkuCount} SKUs.
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-right">
+                            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Linked to lost sales</p>
+                            <p className="mt-1 text-2xl font-black tracking-tighter text-red-200 tabular-nums">{shortageMetrics.lostSaleLinkedPercentage.toFixed(1)}%</p>
+                            <p className="mt-1 text-[10px] font-bold text-white/35">{shortageMetrics.lostSaleLinkedCount} correlated reports</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-8">
+                          <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-white/35">
+                            <span>Low</span>
+                            <span>Critical</span>
+                            <span>Out of stock</span>
+                          </div>
+                          <div className="flex h-4 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="bg-yellow-400 transition-all duration-1000"
+                              style={{ width: `${(shortageMetrics.lowCount / Math.max(1, shortageMetrics.totalCount)) * 100}%` }}
+                            ></div>
+                            <div
+                              className="bg-red-500 transition-all duration-1000"
+                              style={{ width: `${(shortageMetrics.criticalCount / Math.max(1, shortageMetrics.totalCount)) * 100}%` }}
+                            ></div>
+                            <div
+                              className="bg-slate-200 transition-all duration-1000"
+                              style={{ width: `${(shortageMetrics.outOfStockCount / Math.max(1, shortageMetrics.totalCount)) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          {[
+                            { status: 'Low' as const, label: 'Low stock', value: shortageMetrics.lowCount, color: 'yellow' },
+                            { status: 'Critical' as const, label: 'Critical', value: shortageMetrics.criticalCount, color: 'red' },
+                            { status: 'Out of Stock' as const, label: 'Stockout', value: shortageMetrics.outOfStockCount, color: 'slate' },
+                          ].map(item => (
+                            <button
+                              key={item.status}
+                              type="button"
+                              onClick={() => {
+                                setShortageStatusFilter(shortageStatusFilter === item.status ? null : item.status);
+                                setBranchPage(1);
+                              }}
+                              className={`rounded-2xl border p-4 text-left transition-all duration-300 ${
+                                shortageStatusFilter === item.status
+                                  ? item.color === 'yellow'
+                                    ? 'border-yellow-300 bg-yellow-400 text-slate-950 shadow-lg shadow-yellow-500/20'
+                                    : item.color === 'red'
+                                      ? 'border-red-400 bg-red-500 text-white shadow-lg shadow-red-500/20'
+                                      : 'border-white bg-white text-slate-950 shadow-lg shadow-white/10'
+                                  : item.color === 'yellow'
+                                    ? 'border-yellow-300/15 bg-yellow-400/10 text-yellow-200 hover:bg-yellow-400/15'
+                                    : item.color === 'red'
+                                      ? 'border-red-400/15 bg-red-400/10 text-red-200 hover:bg-red-400/15'
+                                      : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                              }`}
+                            >
+                              <p className="text-[9px] font-black uppercase tracking-[0.18em] opacity-70">{item.label}</p>
+                              <p className="mt-3 text-3xl font-black tracking-tighter tabular-nums">{item.value}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 sm:p-8">
+                      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-600">Inventory Gaps</p>
+                          <h2 className="mt-2 text-2xl font-black tracking-tighter text-slate-950">Shortage severity and accountability</h2>
+                        </div>
+                        {shortageStatusFilter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShortageStatusFilter(null);
+                              setBranchPage(1);
+                            }}
+                            className="w-fit rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 hover:bg-white"
+                          >
+                            Clear filter
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {[
+                          { label: 'Unique SKUs', value: shortageMetrics.uniqueSkuCount, detail: 'Products currently affected', icon: <Package size={18} />, tone: 'bg-slate-50 text-slate-700 border-slate-100' },
+                          { label: 'Urgent gaps', value: shortageMetrics.activeRiskCount, detail: 'Critical plus stockout cases', icon: <AlertTriangle size={18} />, tone: 'bg-red-50 text-red-700 border-red-100' },
+                          { label: 'Top branch', value: shortageMetrics.topBranch[1], detail: String(shortageMetrics.topBranch[0]), icon: <MonitorCheck size={18} />, tone: 'bg-blue-50 text-blue-700 border-blue-100' },
+                          { label: 'Top reporter', value: shortageMetrics.topPharmacist[1], detail: String(shortageMetrics.topPharmacist[0]), icon: <UserCheck size={18} />, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                        ].map(item => (
+                          <div key={item.label} className={`rounded-[1.5rem] border p-5 ${item.tone}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.18em] opacity-60">{item.label}</p>
+                                <p className="mt-3 text-3xl font-black tracking-tighter text-slate-950 tabular-nums">{item.value}</p>
+                              </div>
+                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/70">
+                                {item.icon}
+                              </div>
+                            </div>
+                            <p className="mt-3 truncate text-xs font-bold text-slate-400" title={item.detail}>{item.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </section>
               )}
 
               {/* --- Section 2.5: Branch Shortages Module (UPPER PRIMARY POSITION) --- */}
-              <section className="bg-white rounded-[2.8rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col mb-8">
-                <div className="px-8 py-6 border-b border-slate-50 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-50/30">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 shrink-0">
-                      <AlertTriangle size={20} />
+              <section className="mb-8 flex flex-col overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white">
+                        <AlertTriangle size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-950">Live Gap Register</h2>
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Branch-level inventory reports with lost-sales correlation</p>
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                            <Database size={12} />
+                            {filteredShortages.length} / {shortages.length} records
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
+                            <MapPin size={12} />
+                            {activeBranchLabel || 'Selected Branch'}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                            <CalendarDays size={12} />
+                            {dateType === 'today' ? 'Today' : dateType === 'yesterday' ? 'Yesterday' : dateType === '7d' ? 'Last 7 Days' : dateType === 'month' ? 'Last Month' : dateType === 'custom' ? 'Custom Period' : 'All Time'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Branch Shortages</h2>
-                      <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Live Inventory Gap Reports</p>
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => {
                           setShortageStatusFilter(shortageStatusFilter === 'Low' ? null : 'Low');
                           setBranchPage(1);
                         }}
-                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Low'
-                          ? 'bg-yellow-400 text-white shadow-lg'
-                          : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                        className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Low'
+                          ? 'border-yellow-400 bg-yellow-400 text-slate-950 shadow-lg shadow-yellow-500/20'
+                          : 'border-yellow-100 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
                           }`}
                       >
                         Low
@@ -2068,9 +2575,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                           setShortageStatusFilter(shortageStatusFilter === 'Critical' ? null : 'Critical');
                           setBranchPage(1);
                         }}
-                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Critical'
-                          ? 'bg-red-500 text-white shadow-lg'
-                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Critical'
+                          ? 'border-red-500 bg-red-600 text-white shadow-lg shadow-red-500/20'
+                          : 'border-red-100 bg-red-50 text-red-700 hover:bg-red-100'
                           }`}
                       >
                         Critical
@@ -2080,9 +2587,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                           setShortageStatusFilter(shortageStatusFilter === 'Out of Stock' ? null : 'Out of Stock');
                           setBranchPage(1);
                         }}
-                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Out of Stock'
-                          ? 'bg-slate-900 text-white shadow-lg'
-                          : 'bg-slate-800 text-white/50 hover:bg-slate-900 hover:text-white'
+                        className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${shortageStatusFilter === 'Out of Stock'
+                          ? 'border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-900/20'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
                           }`}
                       >
                         OOS
@@ -2093,16 +2600,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                             setShortageStatusFilter(null);
                             setBranchPage(1);
                           }}
-                          className="p-2 bg-slate-100 text-slate-400 rounded-lg hover:bg-slate-200 transition-colors"
+                          className="rounded-xl border border-slate-200 bg-white p-2 text-slate-400 transition-colors hover:bg-slate-100"
                         >
                           <RefreshCcw size={14} />
                         </button>
                       )}
                     </div>
-                  </div>
+                </div>
                 </div>
 
-                <div className="p-6 md:p-8 overflow-x-auto min-h-[820px] flex flex-col">
+                <div className="flex min-h-[820px] flex-col overflow-x-auto p-6 md:p-8">
                   {shortages.length === 0 ? (
                     <div className="text-center py-10">
                       <p className="text-slate-300 font-black uppercase tracking-widest text-sm">No Shortages Reported</p>
@@ -2282,170 +2789,246 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               </section>
 
               {/* --- Section 2.6: Shortage Intelligence Split --- */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                {/* Hot Shortage SKUs (Paginated - Left Side) */}
-                <div className="lg:col-span-2 bg-white rounded-[2.8rem] p-10 border border-slate-100 shadow-sm flex flex-col min-h-[600px]">
-                  <div className="flex items-center justify-between mb-10">
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase flex items-center">
-                        <Zap className="mr-3 text-brand" size={24} /> Hot Shortage SKUs
-                      </h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase mt-1 tracking-widest">Recurring inventory gaps across global nodes</p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => setHotShortagePage(p => Math.max(1, p - 1))} // منع الصفحة 0
-                        disabled={hotShortagePage === 1}
-                        className="p-3 bg-slate-50 rounded-xl hover:bg-slate-900 hover:text-white transition-all disabled:opacity-20 shadow-sm"
-                        aria-label="Previous batch"
-                      >
-                        <ChevronLeft size={18} />
-                      </button>
-                      <div className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black tabular-nums shadow-lg">
-                        BATCH {hotShortagePage} / {Math.max(1, Math.ceil(shortageMetrics.topProducts.length / 5))}
+              <div className="mb-8 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
+                {/* Hot Shortage SKUs */}
+                <div className="flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-100 bg-slate-50/80 p-5 md:p-6">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white shadow-sm shadow-red-600/20">
+                          <Zap size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-700">Shortage heat list</p>
+                          <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">Hot Shortage SKUs</h3>
+                          <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Recurring inventory gaps ranked by report frequency</p>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => setHotShortagePage(p => Math.min(Math.max(1, Math.ceil(shortageMetrics.topProducts.length / 5)), p + 1))}
-                        disabled={hotShortagePage === Math.ceil(shortageMetrics.topProducts.length / 5)}
-                        className="p-3 bg-slate-50 rounded-xl hover:bg-slate-900 hover:text-white transition-all disabled:opacity-20 shadow-sm"
-                        aria-label="Next batch"
-                      >
-                        <ChevronRight size={18} />
-                      </button>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          onClick={() => setHotShortagePage(p => Math.max(1, p - 1))}
+                          disabled={hotShortagePage === 1}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                          aria-label="Previous batch"
+                        >
+                          <ChevronLeft size={17} />
+                        </button>
+                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 tabular-nums">
+                          {hotShortagePage} / {Math.max(1, Math.ceil(shortageMetrics.topProducts.length / 5))}
+                        </div>
+                        <button
+                          onClick={() => setHotShortagePage(p => Math.min(Math.max(1, Math.ceil(shortageMetrics.topProducts.length / 5)), p + 1))}
+                          disabled={hotShortagePage === Math.ceil(shortageMetrics.topProducts.length / 5)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-all hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                          aria-label="Next batch"
+                        >
+                          <ChevronRight size={17} />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex-1 space-y-4">
-                    {shortageMetrics.topProducts.slice((hotShortagePage - 1) * 5, hotShortagePage * 5).map((p, i) => (
-                      <div key={i} className="flex items-center justify-between p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 hover:border-brand hover:bg-white transition-all group cursor-default">
-                        <div className="flex items-center space-x-4 overflow-hidden">
-                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black text-[10px] md:text-xs shadow-sm transition-colors ${p.isPriority ? 'bg-brand text-white' : 'bg-white text-slate-300'}`}>
-                            {(hotShortagePage - 1) * 5 + i + 1}
+                  <div className="flex-1 divide-y divide-slate-100">
+                    {shortageMetrics.topProducts.slice((hotShortagePage - 1) * 5, hotShortagePage * 5).map((p, i) => {
+                      const rank = (hotShortagePage - 1) * 5 + i + 1;
+                      const maxCount = Math.max(1, shortageMetrics.topProducts[0]?.count || 1);
+                      const width = `${Math.min(100, Math.max(6, (p.count / maxCount) * 100))}%`;
+
+                      return (
+                        <div key={p.name} className="group grid gap-4 p-5 transition-colors hover:bg-slate-50/70 md:grid-cols-[56px_minmax(0,1fr)_150px] md:items-center">
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-lg text-sm font-black tabular-nums ${p.isPriority ? 'bg-red-600 text-white shadow-sm shadow-red-600/20' : 'border border-slate-200 bg-white text-slate-400'}`}>
+                            {rank}
                           </div>
-                          <div>
-                            <span className="font-black text-slate-900 text-sm md:text-base tracking-tight block">{p.name}</span>
-                            <div className="flex items-center mt-1 space-x-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">High Volatility SKU</span>
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-black text-slate-950 md:text-base" title={p.name}>{p.name}</p>
+                              {p.isPriority && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-red-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+                                  Priority
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full border border-slate-100 bg-white">
+                              <div className="h-full rounded-full bg-red-600 transition-all duration-700" style={{ width }}></div>
                             </div>
                           </div>
+                          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left md:text-right">
+                            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Reports</p>
+                            <p className="mt-1 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{p.count}</p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Reporting Frequency</p>
-                          <span className="px-5 py-2 bg-slate-900 text-white rounded-xl text-[11px] font-black uppercase tracking-wider group-hover:bg-brand transition-colors shadow-sm">{p.count} Reports</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {shortageMetrics.topProducts.length === 0 && (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-200 py-10">
-                        <Package size={64} className="mb-4 opacity-10" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.5em] opacity-30">Zero recurring gaps identified</span>
+                      <div className="flex min-h-[360px] flex-col items-center justify-center p-10 text-center text-slate-300">
+                        <Package size={54} className="mb-4 opacity-20" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em]">Zero recurring gaps identified</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Right Side Column (Stacked Logs) */}
-                <div className="flex flex-col gap-8">
-                  {/* Node Reporting Log */}
-                  <div className="flex-1 bg-white rounded-[2.8rem] p-10 border border-slate-100 shadow-sm flex flex-col min-h-[350px]">
-                    <div className="flex items-center justify-between mb-8">
-                      <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Branch Sales Log</h3>
-                        <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest"></p>
+                {/* Right Side Column */}
+                <div className="flex flex-col gap-5">
+                  {/* Branch Sales Log */}
+                  <div className="flex min-h-[275px] flex-1 flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-white p-5">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Branch workload</p>
+                        <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Branch Sales Log</h3>
                       </div>
-                      <MonitorCheck className="text-brand shrink-0" size={24} />
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
+                        <MonitorCheck size={18} />
+                      </div>
                     </div>
-                    <div className="space-y-6 flex-1 pr-2 overflow-y-auto custom-scrollbar">
-                      {Object.entries(shortageMetrics.branchDistribution).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 5).map(([name, count], i) => (
-                        <div key={i} className="group cursor-default">
-                          <div className="flex justify-between items-end mb-2">
-                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight truncate max-w-[140px]">{name}</span>
-                            <span className="text-[10px] font-black text-slate-900 tabular-nums">{count} reports</span>
+                    <div className="flex-1 space-y-3 overflow-y-auto p-4 pr-3 custom-scrollbar">
+                      {Object.entries(shortageMetrics.branchDistribution).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 5).map(([name, count], i) => {
+                        const percent = (Number(count) / Math.max(1, shortages.length)) * 100;
+
+                        return (
+                          <div key={name} className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 transition-colors hover:border-red-100 hover:bg-white">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-black uppercase tracking-tight text-slate-700" title={name}>{name}</p>
+                                <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Rank #{i + 1} / {percent.toFixed(1)}%</p>
+                              </div>
+                              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-900 tabular-nums">
+                                {count}
+                              </span>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white ring-1 ring-slate-100">
+                              <div className="h-full rounded-full bg-slate-900 transition-all duration-700" style={{ width: `${Math.min(100, percent)}%` }}></div>
+                            </div>
                           </div>
-                          <div className="w-full h-2 bg-slate-50 rounded-full overflow-hidden border border-slate-100 relative">
-                            <div
-                              className={styles.progressBarBranch}
-                              style={{ '--progress-width': `${(Number(count) / Math.max(1, shortages.length)) * 100}%` } as React.CSSProperties}
-                            ></div>
-                          </div>
+                        );
+                      })}
+                      {Object.keys(shortageMetrics.branchDistribution).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">No branch records</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
 
-
-                  {/* Pharmacist Accountability (Bottom of Right Stack) */}
-                  <div className="flex-1 bg-white rounded-[2.8rem] p-10 border border-slate-100 shadow-sm flex flex-col min-h-[350px]">
-                    <div className="flex items-center justify-between mb-8">
-                      <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Responsibility Tracking</h3>
-                        <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Team Sales Accountability</p>
+                  {/* Responsibility Tracking */}
+                  <div className="flex min-h-[275px] flex-1 flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-white p-5">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">Team accountability</p>
+                        <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Responsibility Tracking</h3>
                       </div>
-                      <UserCheck className="text-brand shrink-0" size={24} />
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                        <UserCheck size={18} />
+                      </div>
                     </div>
-                    <div className="space-y-4 flex-1 pr-2 overflow-y-auto custom-scrollbar">
-                      {Object.entries(shortageMetrics.pharmacistActivity).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 5).map(([name, count], i) => (
-                        <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-[1.2rem] border border-slate-50 hover:border-brand transition-all group">
-                          <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight truncate max-w-[120px]">{name}</span>
-                          <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black tabular-nums">{count} Logged</span>
+                    <div className="flex-1 space-y-3 overflow-y-auto p-4 pr-3 custom-scrollbar">
+                      {Object.entries(shortageMetrics.pharmacistActivity).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 5).map(([name, count], i) => {
+                        const maxCount = Math.max(1, Number(shortageMetrics.topPharmacist[1]) || 1);
+                        const percent = (Number(count) / maxCount) * 100;
+
+                        return (
+                          <div key={name} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3 transition-colors hover:border-emerald-100 hover:bg-white">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] font-black text-slate-500 tabular-nums">
+                              {i + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-[11px] font-black uppercase tracking-tight text-slate-700" title={name}>{name}</p>
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white ring-1 ring-slate-100">
+                                <div className="h-full rounded-full bg-emerald-600 transition-all duration-700" style={{ width: `${Math.min(100, percent)}%` }}></div>
+                              </div>
+                            </div>
+                            <span className="rounded-md bg-slate-950 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.1em] text-white tabular-nums">
+                              {count} Logged
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {Object.keys(shortageMetrics.pharmacistActivity).length === 0 && (
+                        <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">No responsibility records</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* --- Section 2.7: Shortage Trend Dynamic Matrix --- */}
-              <section className="w-full bg-white rounded-[2.8rem] border border-slate-100 shadow-sm overflow-hidden group mb-20 p-8 md:p-12 relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none"></div>
+              <section className="mb-20 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 bg-slate-50/80 p-5 md:p-6">
+                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
+                        <TrendingUp size={20} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Inventory volatility</p>
+                        <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Shortage Trend Matrix</h2>
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Daily low, critical, and out-of-stock movement</p>
+                      </div>
+                    </div>
 
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 relative z-10">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 group-hover:bg-brand transition-colors">
-                      <TrendingUp size={20} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Shortage Trend Matrix</h2>
-                      <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">Inventory Gap Volatility analysis</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="underline decoration-red-500/30 decoration-2 underline-offset-4">
-                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Out of Stock Count</span>
+                    <div className="grid w-full grid-cols-2 gap-2 xl:max-w-2xl xl:grid-cols-4">
+                      {[
+                        { label: 'Low stock', value: shortageMetrics.lowCount, dot: 'bg-yellow-500', tone: 'text-yellow-700' },
+                        { label: 'Critical', value: shortageMetrics.criticalCount, dot: 'bg-amber-500', tone: 'text-amber-700' },
+                        { label: 'Out of stock', value: shortageMetrics.outOfStockCount, dot: 'bg-red-600', tone: 'text-red-700' },
+                        { label: 'Avg critical hrs', value: shortageMetrics.avgCriticalHours.toFixed(1), dot: 'bg-slate-950', tone: 'text-slate-950' },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${item.dot}`}></span>
+                            <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{item.label}</p>
+                          </div>
+                          <p className={`mt-2 text-xl font-black tracking-tight tabular-nums ${item.tone}`}>{item.value}</p>
                         </div>
-                        <div className="w-2 h-2 rounded-full bg-red-500 shrink-0"></div>
-                      </div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Zero Inventory Incidents</p>
-                    </div>
-                    <div className="w-px h-8 bg-slate-100 italic"></div>
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="underline decoration-amber-500/30 decoration-2 underline-offset-4">
-                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Critical Escalations</span>
-                        </div>
-                        <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></div>
-                      </div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Last Piece Thresholds</p>
-                    </div>
-                    <div className="w-px h-8 bg-slate-100 italic"></div>
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="underline decoration-yellow-500/30 decoration-2 underline-offset-4">
-                          <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Low Stock Items</span>
-                        </div>
-                        <div className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"></div>
-                      </div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Below Min. Level</p>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="relative h-[350px] w-full">
-                  <ShortageTrendChart data={shortageMetrics.trendTimeline} />
+                <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="p-4 md:p-6">
+                    <div className="relative h-[360px] rounded-lg border border-slate-100 bg-white p-3 shadow-inner shadow-slate-100/70">
+                      <ShortageTrendChart data={shortageMetrics.trendTimeline} />
+                    </div>
+                  </div>
+
+                  <aside className="border-t border-slate-100 bg-white p-5 xl:border-l xl:border-t-0">
+                    <div className="mb-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Matrix readout</p>
+                      <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Risk concentration</h3>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-red-100 bg-red-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-red-700">Risk score</p>
+                          <AlertTriangle size={16} className="text-red-700" />
+                        </div>
+                        <p className="mt-2 text-3xl font-black tracking-tight text-red-700 tabular-nums">{shortageMetrics.riskScore}%</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">Linked to lost sales</p>
+                          <ArrowUpRight size={16} className="text-slate-500" />
+                        </div>
+                        <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{shortageMetrics.lostSaleLinkedPercentage.toFixed(1)}%</p>
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{shortageMetrics.lostSaleLinkedCount} matched SKUs</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Trend days</p>
+                          <p className="mt-2 text-xl font-black text-slate-950 tabular-nums">{shortageMetrics.trendTimeline.length}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Active risk</p>
+                          <p className="mt-2 text-xl font-black text-slate-950 tabular-nums">{shortageMetrics.activeRiskCount}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </aside>
                 </div>
               </section>
 
@@ -2675,73 +3258,97 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               </section>
 
               {/* --- Section 3.1: STOCK-STYLE TREND ANALYSIS --- */}
-              <section className="w-full bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden group mb-20">
-                <div className="px-6 py-6 md:px-8 md:py-7 bg-slate-50/70 border-b border-slate-100">
-                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-                    <div className="flex items-center min-w-0">
-                      <div className="w-11 h-11 bg-slate-900 rounded-xl flex items-center justify-center text-white mr-4 group-hover:bg-brand transition-colors shrink-0">
-                        <TrendingUp size={20} />
+              <section className="mb-20 overflow-hidden rounded-[2.5rem] border border-slate-800 bg-slate-950 shadow-2xl shadow-slate-900/20">
+                <div className="border-b border-white/10 px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex min-w-0 items-start gap-4">
+                      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white ${
+                        operationalTrendSummary.delta > 0 ? 'bg-red-600' : operationalTrendSummary.delta < 0 ? 'bg-emerald-600' : 'bg-sky-600'
+                      }`}>
+                        {operationalTrendSummary.delta > 0 ? <TrendingUp size={22} /> : <TrendingDown size={22} />}
                       </div>
                       <div className="min-w-0">
-                        <h2 className="text-lg md:text-xl font-black text-slate-900 tracking-tight uppercase">Operational Trend Matrix</h2>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-[0.16em]">Daily revenue impact and affected-customer trend</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-xl font-black uppercase tracking-tight text-white md:text-2xl">Operational Trend Matrix</h2>
+                          <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Loss Index</span>
+                        </div>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Daily BHD exposure with customer-volume bars</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm w-full xl:max-w-3xl divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-                      <div className="px-5 py-4">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Total Impact</p>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-[10px] font-black text-emerald-600 uppercase">BHD</span>
-                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.totalImpact.toFixed(3)}</span>
+                    <div className="grid w-full grid-cols-2 gap-3 xl:max-w-2xl xl:grid-cols-4">
+                      {[
+                        { label: 'Last close', value: operationalTrendSummary.lastValue.toFixed(3), prefix: 'BHD', tone: 'text-white' },
+                        { label: 'Change', value: `${operationalTrendSummary.delta >= 0 ? '+' : ''}${operationalTrendSummary.deltaAbs.toFixed(3)}`, prefix: 'BHD', tone: operationalTrendSummary.delta > 0 ? 'text-red-300' : operationalTrendSummary.delta < 0 ? 'text-emerald-300' : 'text-sky-300' },
+                        { label: 'Volume', value: String(operationalTrendSummary.totalSessions), prefix: 'CX', tone: 'text-amber-200' },
+                        { label: 'Days', value: String(operationalTrendSummary.dayCount), prefix: 'D', tone: 'text-slate-200' },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                          <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                          <div className="mt-2 flex items-baseline gap-1.5">
+                            <span className="text-[9px] font-black uppercase text-slate-500">{item.prefix}</span>
+                            <span className={`text-xl font-black tracking-tighter tabular-nums ${item.tone}`}>{item.value}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="px-5 py-4">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Affected Sessions</p>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.totalSessions}</span>
-                          <span className="text-[10px] font-black text-amber-600 uppercase">Customers</span>
-                        </div>
-                      </div>
-                      <div className="px-5 py-4">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">Average Loss</p>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-[10px] font-black text-emerald-600 uppercase">BHD</span>
-                          <span className="text-xl font-black text-slate-900 tracking-tight tabular-nums">{operationalTrendSummary.averageImpact.toFixed(3)}</span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 md:p-8">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.14em]">BHD Revenue Impact</span>
+                <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1fr)_340px]">
+                  <div className="p-4 md:p-6">
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
+                          operationalTrendSummary.delta > 0
+                            ? 'border-red-400/20 bg-red-400/10 text-red-200'
+                            : operationalTrendSummary.delta < 0
+                              ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                              : 'border-sky-400/20 bg-sky-400/10 text-sky-200'
+                        }`}>
+                          <span className={`h-2 w-2 rounded-full ${operationalTrendSummary.delta > 0 ? 'bg-red-400' : operationalTrendSummary.delta < 0 ? 'bg-emerald-400' : 'bg-sky-400'}`}></span>
+                          {operationalTrendSummary.trendLabel}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                          <span className="h-2 w-2 rounded-sm bg-slate-500"></span>
+                          Volume bars
+                        </span>
                       </div>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-[0.14em]">Lost Customers</span>
+                      <div className={`w-fit rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${
+                        operationalTrendSummary.delta > 0 ? 'border-red-400/20 bg-red-400/10 text-red-200' : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'
+                      }`}>
+                        {operationalTrendSummary.delta >= 0 ? '+' : ''}{operationalTrendSummary.delta.toFixed(1)}%
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-                        Peak: <span className="text-slate-900">{operationalTrendSummary.peakDay?.name || 'No data'}</span>
-                      </span>
-                      <span className={`rounded-full border px-3 py-1.5 ${operationalTrendSummary.delta > 0 ? 'border-red-200 bg-red-50 text-red-600' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                        {operationalTrendSummary.delta >= 0 ? '+' : ''}{operationalTrendSummary.delta.toFixed(1)}%
-                      </span>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-                        {operationalTrendSummary.dayCount} Days
-                      </span>
+
+                    <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-2 shadow-inner shadow-black/30 md:p-4">
+                      <OperationalTrendChart data={performanceTrend} />
                     </div>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-slate-100 bg-white p-2 md:p-4 shadow-inner shadow-slate-100/60">
-                    <OperationalTrendChart data={performanceTrend} />
-                  </div>
+                  <aside className="border-t border-white/10 p-6 xl:border-l xl:border-t-0">
+                    <div className="mb-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Market tape</p>
+                      <h3 className="mt-2 text-lg font-black tracking-tight text-white">Operational exposure movement</h3>
+                    </div>
+
+                    <div className="space-y-3">
+                      {[
+                        { label: 'Total exposure', value: `BHD ${operationalTrendSummary.totalImpact.toFixed(3)}`, icon: <BarChart3 size={16} />, color: 'text-white' },
+                        { label: 'Average per customer', value: `BHD ${operationalTrendSummary.averageImpact.toFixed(3)}`, icon: <Activity size={16} />, color: 'text-slate-200' },
+                        { label: 'Peak session', value: `${operationalTrendSummary.peakDay?.name || 'No data'} · BHD ${(operationalTrendSummary.peakDay?.value || 0).toFixed(3)}`, icon: <ArrowUpRight size={16} />, color: 'text-red-200' },
+                        { label: 'Lowest session', value: `${operationalTrendSummary.lowDay?.name || 'No data'} · BHD ${(operationalTrendSummary.lowDay?.value || 0).toFixed(3)}`, icon: <TrendingDown size={16} />, color: 'text-emerald-200' },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[9px] font-black uppercase tracking-[0.17em] text-slate-500">{item.label}</p>
+                            <span className="text-slate-500">{item.icon}</span>
+                          </div>
+                          <p className={`mt-2 text-sm font-black tabular-nums ${item.color}`}>{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </aside>
                 </div>
               </section>
 

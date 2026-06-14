@@ -6,3 +6,4 @@ export * from './BranchQRGenerator';
 export * from './Spinner';
 export * from './VoucherRedeemer';
 export * from './SpinHeatmapCalendar';
+export * from './SpinWheelMark';

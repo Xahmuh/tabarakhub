@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import { MaintenanceSettings } from '../../types';
 
 interface POSGuidelineModalProps {
@@ -29,114 +29,74 @@ export const POSGuidelineModal: React.FC<POSGuidelineModalProps> = ({ isOpen, on
     shortageAr: settings?.posGuidelineShortageAr || DEFAULT_GUIDELINE_COPY.shortageAr
   };
 
-  const englishGuidelines = [
-    { title: 'Lost Sales', detail: copy.lostSalesEn },
-    { title: 'Shortage', detail: copy.shortageEn }
-  ];
-  const arabicGuidelines = [
-    { title: 'Lost Sales', detail: copy.lostSalesAr },
-    { title: 'Shortage', detail: copy.shortageAr }
+  const guidelineItems = [
+    {
+      title: 'Lost Sales',
+      english: copy.lostSalesEn,
+      arabic: copy.lostSalesAr
+    },
+    {
+      title: 'Shortage',
+      english: copy.shortageEn,
+      arabic: copy.shortageAr
+    }
   ];
 
   return (
     <div
-      className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm animate-in fade-in duration-300"
+      className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="pos-guideline-title"
       aria-describedby="pos-guideline-description"
     >
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-xl border border-brand/10 bg-white shadow-[0_28px_90px_-28px_rgba(0,0,0,0.55)] animate-in zoom-in-95 duration-300">
-        <div className="pointer-events-none absolute -right-10 -top-12 text-brand/5">
-          <AlertTriangle size={220} strokeWidth={2.8} />
-        </div>
-
-        <div className="relative flex items-start justify-between gap-4 border-b border-brand/10 bg-brand/5 px-5 py-4 md:px-7">
+      <div className="relative w-full max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/15 animate-in zoom-in-95 duration-200">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-              <AlertTriangle className="h-6 w-6" strokeWidth={2.5} />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
+              <Info className="h-5 w-5" strokeWidth={2.4} />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Before logging records</p>
-              <h3 id="pos-guideline-title" className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Before logging records</p>
+              <h3 id="pos-guideline-title" className="mt-1 text-xl font-black tracking-tight text-slate-950">
                 {copy.title}
               </h3>
-              <p id="pos-guideline-description" className="mt-1.5 text-sm font-semibold leading-relaxed text-slate-500">
+              <p id="pos-guideline-description" className="mt-1.5 text-sm font-semibold leading-6 text-slate-500">
                 {copy.intro}
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-all hover:border-brand/30 hover:bg-brand/5 hover:text-brand focus-ring"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-ring"
             aria-label="Close attention message"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="relative px-5 py-4 md:px-7">
-          <div className="mx-auto flex w-fit items-center rounded-full border border-brand/10 bg-slate-50 p-1">
-            <div className="rounded-full bg-brand px-5 py-2 text-center shadow-sm">
-              <span className="text-xs font-black uppercase tracking-[0.16em] text-white">Lost Sales</span>
-            </div>
-            <div className="px-5 py-2 text-center">
-              <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Shortage</span>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">English guide</p>
-              <h4 className="mt-1 text-lg font-black text-slate-950">Dear Pharmacist</h4>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
-                Please distinguish between Lost Sales and Shortage to avoid inaccurate records.
-              </p>
-              <div className="mt-3 space-y-2">
-                {englishGuidelines.map((item) => (
-                  <div key={item.title} className="rounded-lg border border-brand/10 bg-brand/5 px-3 py-2">
-                    <p className="text-xs font-black uppercase tracking-[0.12em] text-brand">{item.title}</p>
-                    <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{item.detail}</p>
-                  </div>
-                ))}
+        <div className="space-y-3 px-5 py-4">
+          {guidelineItems.map((item) => (
+            <section key={item.title} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-brand" />
+                <h4 className="text-sm font-black text-slate-950">{item.title}</h4>
               </div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{item.english}</p>
+              <p className="mt-1 text-sm font-bold leading-6 text-slate-500" dir="rtl">{item.arabic}</p>
             </section>
-
-            <section className="rounded-lg border border-slate-200 bg-white p-4 text-right shadow-sm" dir="rtl">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">الدليل العربي</p>
-              <h4 className="mt-1 text-lg font-black text-slate-950">عزيزي الصيدلي</h4>
-              <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
-                برجاء التفرقة بين Lost Sales و Shortage لتجنب تسجيل بيانات غير دقيقة.
-              </p>
-              <div className="mt-3 space-y-2">
-                {arabicGuidelines.map((item) => (
-                  <div key={item.title} className="rounded-lg border border-brand/10 bg-brand/5 px-3 py-2">
-                    <p className="text-xs font-black uppercase tracking-[0.12em] text-brand">{item.title}</p>
-                    <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-center">
-            <p className="text-sm font-black text-amber-900">
-              {copy.lostSalesEn} = Lost Sales. {copy.shortageEn} = Shortage.
-            </p>
-            <p className="mt-1 text-sm font-black text-amber-900" dir="rtl">
-              {copy.lostSalesAr} = Lost Sales. {copy.shortageAr} = Shortage.
-            </p>
-          </div>
+          ))}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4 md:px-7">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Tabarak Hub 2026</p>
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-4">
           <button
+            type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand/90 px-6 py-2.5 text-center text-sm font-black text-white shadow-sm shadow-brand/20 transition-all hover:bg-brand active:scale-[0.98] focus-ring"
+            className="btn-primary min-h-10 px-5 text-xs uppercase tracking-[0.14em]"
           >
-            Acknowledged / تم الإطلاع
+            Got it
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { spinWinService } from '../../services/spinWin';
 import { Branch } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
@@ -21,9 +21,12 @@ import {
     Download,
     Search,
     ArrowLeft,
-    MessageCircle
+    MessageCircle,
+    BarChart3,
+    ShieldCheck
 } from 'lucide-react';
 import { supabaseClient } from '../../lib/supabaseClient';
+import { SpinWheelMark } from './SpinWheelMark';
 
 interface BranchDashboardProps {
     branch: Branch;
@@ -74,26 +77,26 @@ const KPICard: React.FC<{
 
     if (isPrimary) {
         return (
-            <div className="bg-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-10 -mt-10"></div>
-                <div className="flex items-center justify-between mb-4">
-                    <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider">{label}</p>
-                    <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center">{icon}</div>
+            <div className="relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-5 text-white shadow-sm">
+                <div className="absolute inset-x-0 top-0 h-1 bg-red-600" />
+                <div className="mb-4 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/50">{label}</p>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-red-200">{icon}</div>
                 </div>
-                <div className="text-4xl font-black tracking-tight tabular-nums">{value}</div>
-                {subtext && <p className="text-xs font-medium text-white/40 mt-2">{subtext}</p>}
+                <div className="text-3xl font-black tracking-tight tabular-nums">{value}</div>
+                {subtext && <p className="mt-2 text-xs font-bold text-white/40">{subtext}</p>}
             </div>
         );
     }
 
     return (
-        <div className={`bg-white rounded-2xl p-6 border ${c.border}`}>
-            <div className="flex items-center justify-between mb-4">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                <div className={`w-9 h-9 ${c.bg} rounded-lg flex items-center justify-center ${c.text}`}>{icon}</div>
+        <div className={`rounded-lg border bg-white p-5 shadow-sm ${c.border}`}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${c.bg} ${c.text}`}>{icon}</div>
             </div>
-            <div className="text-3xl font-black tracking-tight tabular-nums text-slate-900">{value}</div>
-            {subtext && <p className="text-xs font-medium text-slate-400 mt-2">{subtext}</p>}
+            <div className="text-2xl font-black tracking-tight tabular-nums text-slate-950">{value}</div>
+            {subtext && <p className="mt-2 text-xs font-bold text-slate-400">{subtext}</p>}
         </div>
     );
 };
@@ -235,18 +238,34 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
         link.click();
     };
 
+    const dateLabel = filters.dateType === 'today' ? 'Today' : filters.dateType === '7d' ? 'Last 7 Days' : filters.dateType === 'month' ? 'Last Month' : filters.dateType === 'custom' ? 'Custom Period' : 'All Time';
+    const filteredHistory = useMemo(() => {
+        const search = filters.searchTerm.trim().toLowerCase();
+        if (!search) return history;
+
+        return history.filter(s =>
+            s.voucher_code?.toLowerCase().includes(search) ||
+            String(s.customer?.phone || '').toLowerCase().includes(search) ||
+            `${s.customer?.first_name || ''} ${s.customer?.last_name || ''}`.toLowerCase().includes(search) ||
+            s.prize?.name?.toLowerCase().includes(search)
+        );
+    }, [history, filters.searchTerm]);
+    const totalSpins = stats?.spins?.length || history.length || 0;
+    const redeemedCount = stats?.redeemsCount || history.filter(s => s.redeemed_at).length || 0;
+    const pendingCount = Math.max(0, totalSpins - redeemedCount);
+    const conversionRate = totalSpins > 0 ? ((redeemedCount / totalSpins) * 100).toFixed(1) : '0.0';
+    const latestSpin = history[0];
+
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+            <div className="flex min-h-[400px] items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-red-600" />
             </div>
         );
     }
 
-    const dateLabel = filters.dateType === 'today' ? 'Today' : filters.dateType === '7d' ? 'Last 7 Days' : filters.dateType === 'month' ? 'Last Month' : filters.dateType === 'custom' ? 'Custom Period' : 'All Time';
-
     return (
-        <div className="max-w-6xl mx-auto p-4 lg:p-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
+        <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
             {/* Notification */}
             {notification && (
                 <div className="fixed top-6 right-6 z-[100] w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 p-5 animate-in slide-in-from-right duration-500">
@@ -270,26 +289,42 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
                 </div>
             )}
 
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-8">
-                <div>
-                    <button onClick={onBack} className="inline-flex items-center gap-2 text-slate-400 hover:text-red-600 mb-3 transition-colors group">
-                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                        <span className="text-xs font-bold uppercase tracking-widest">Back to Spin & Win Suite</span>
-                    </button>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Branch Dashboard</h2>
-                    <p className="text-slate-400 text-sm font-medium">{branch.name}</p>
-                </div>
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_330px]">
+                    <div className="p-5 md:p-6 lg:p-7">
+                        <button onClick={onBack} className="mb-5 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-500 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-700">
+                            <ArrowLeft className="h-4 w-4" />
+                            Back to Spin & Win Suite
+                        </button>
 
-                <div className="relative z-50">
-                    <button onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:border-red-200 transition-all shadow-sm">
-                        <Calendar size={14} className="text-red-600" />
-                        <span>{dateLabel}</span>
-                        <ChevronDown size={12} />
-                    </button>
-                    {isDatePickerOpen && (
-                        <div className={`absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-[100] animate-in slide-in-from-top-3 duration-200 ${filters.dateType === 'custom' ? 'w-64' : 'w-52'}`}>
+                        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                            <div className="flex gap-4">
+                                <SpinWheelMark size="md" className="shrink-0" />
+                                <div>
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span className="rounded-full border border-red-100 bg-red-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-red-700">
+                                            Branch insight
+                                        </span>
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                                            {branch.code || 'No code'}
+                                        </span>
+                                    </div>
+                                    <h2 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Branch Dashboard</h2>
+                                    <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">{branch.name}</p>
+                                </div>
+                            </div>
+
+                            <div className="relative z-50">
+                                <button onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+                                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-700 shadow-sm transition-all hover:border-red-200 hover:bg-white md:w-auto">
+                                    <span className="flex items-center gap-2">
+                                        <Calendar size={14} className="text-red-600" />
+                                        {dateLabel}
+                                    </span>
+                                    <ChevronDown size={12} />
+                                </button>
+                                {isDatePickerOpen && (
+                                    <div className={`absolute right-0 top-full z-[100] mt-2 rounded-lg border border-slate-100 bg-white p-2 shadow-xl animate-in slide-in-from-top-3 duration-200 ${filters.dateType === 'custom' ? 'w-64' : 'w-52'}`}>
                             {filters.dateType !== 'custom' ? (
                                 <div className="space-y-0.5">
                                     {[
@@ -327,32 +362,86 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
                                         className="w-full text-slate-400 text-[10px] font-bold hover:text-red-600 transition-colors">Reset</button>
                                 </div>
                             )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    )}
+
+                        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Current period</p>
+                                <p className="mt-2 text-sm font-black text-slate-950">{dateLabel}</p>
+                            </div>
+                            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Redeemed</p>
+                                <p className="mt-2 text-sm font-black text-emerald-800">{redeemedCount} verified claims</p>
+                            </div>
+                            <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Pending</p>
+                                <p className="mt-2 text-sm font-black text-amber-800">{pendingCount} open vouchers</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside className="border-t border-slate-200 bg-slate-950 p-5 text-white lg:border-l lg:border-t-0 md:p-6">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-200/70">Live signal</p>
+                                <h3 className="mt-1 text-xl font-black tracking-tight">Branch reward health</h3>
+                            </div>
+                            <div className="rounded-lg bg-white/10 p-3 text-red-200">
+                                <BarChart3 className="h-5 w-5" />
+                            </div>
+                        </div>
+                        <div className="mt-6 space-y-3">
+                            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs font-bold text-white/45">Conversion</span>
+                                    <span className="text-lg font-black tabular-nums">{conversionRate}%</span>
+                                </div>
+                                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                    <div className="h-full rounded-full bg-red-500" style={{ width: `${Math.min(100, Number(conversionRate))}%` }} />
+                                </div>
+                            </div>
+                            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                                <p className="text-xs font-bold text-white/45">Latest activity</p>
+                                <p className="mt-2 text-sm font-black text-white">{latestSpin ? (latestSpin.customer?.first_name || 'Customer spin') : 'No spins yet'}</p>
+                                <p className="mt-1 text-xs font-semibold text-white/40">{latestSpin ? new Date(latestSpin.created_at).toLocaleString() : 'Waiting for first session'}</p>
+                            </div>
+                            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-white/60">
+                                <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                                Branch-scoped data only
+                            </div>
+                        </div>
+                    </aside>
                 </div>
-            </div>
+            </section>
 
             {/* KPI Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <KPICard label="Total Spins" value={stats?.spins?.length || 0} icon={<RefreshCcw size={16} />} isPrimary subtext="Total Filtered" />
-                <KPICard label="Conversion" value={`${stats?.spins?.length > 0 ? ((stats?.redeemsCount || 0) / stats.spins.length * 100).toFixed(1) : '0.0'}%`} icon={<Target size={16} />} color="red" subtext={`${stats?.redeemsCount || 0} redeemed`} />
-                <KPICard label="Redeemed" value={stats?.redeemsCount || 0} icon={<CheckCircle size={16} />} color="emerald" subtext="Verified claims" />
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <KPICard label="Total Spins" value={totalSpins} icon={<RefreshCcw size={16} />} isPrimary subtext="Filtered branch activity" />
+                <KPICard label="Conversion" value={`${conversionRate}%`} icon={<Target size={16} />} color="red" subtext={`${redeemedCount} redeemed`} />
+                <KPICard label="Redeemed" value={redeemedCount} icon={<CheckCircle size={16} />} color="emerald" subtext="Verified claims" />
                 <KPICard label="Unique Users" value={stats?.uniqueCustomersToday || 0} icon={<Users size={16} />} color="blue" subtext="Active visitors" />
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-slate-50 flex flex-wrap items-center justify-between gap-4">
-                    <div className="relative flex-1 min-w-[200px] max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/70 p-5">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Voucher activity</p>
+                        <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">Branch spin history</h3>
+                    </div>
+                    <div className="relative min-w-[220px] flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
                         <input
-                            className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:border-red-500 text-xs font-semibold text-slate-900 transition-all"
-                            placeholder="Search vouchers, phones..."
+                            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-xs font-semibold text-slate-900 outline-none transition-all focus:border-red-500"
+                            placeholder="Search voucher, phone, customer, prize..."
                             value={filters.searchTerm}
                             onChange={(e) => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
                         />
                     </div>
-                    <button onClick={exportData} className="bg-slate-900 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors active:scale-[0.98]">
+                    <button onClick={exportData} className="flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-xs font-bold text-white transition-colors hover:bg-red-700 active:scale-[0.98]">
                         <Download className="w-3.5 h-3.5" /> Export
                     </button>
                 </div>
@@ -370,12 +459,7 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {history
-                                .filter(s =>
-                                    !filters.searchTerm ||
-                                    s.voucher_code.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-                                    s.customer?.phone?.includes(filters.searchTerm)
-                                )
+                            {filteredHistory
                                 .map((s) => (
                                     <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="px-5 py-4">
@@ -452,10 +536,18 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
                                         </td>
                                     </tr>
                                 ))}
-                            {history.length === 0 && (
+                            {filteredHistory.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="p-10 text-center text-slate-400 text-sm font-medium">
-                                        No activity recorded for this period
+                                    <td colSpan={6} className="p-10 text-center">
+                                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-slate-50 text-slate-300">
+                                            <Search className="h-6 w-6" />
+                                        </div>
+                                        <p className="mt-4 text-sm font-black text-slate-500">
+                                            {history.length === 0 ? 'No activity recorded for this period' : 'No matching vouchers found'}
+                                        </p>
+                                        <p className="mt-1 text-xs font-semibold text-slate-400">
+                                            {history.length === 0 ? 'New customer spins will appear here automatically.' : 'Try another voucher code, phone, customer, or prize name.'}
+                                        </p>
                                     </td>
                                 </tr>
                             )}

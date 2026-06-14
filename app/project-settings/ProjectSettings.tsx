@@ -687,134 +687,170 @@ export const ProjectSettings: React.FC<{
     }).length;
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] p-4 md:p-6 lg:p-8 animate-in fade-in duration-500">
-            <div className="mx-auto max-w-7xl space-y-6">
-                <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex min-w-0 items-start gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-brand text-white shadow-sm shadow-brand/10">
-                                <Settings className="h-6 w-6" />
+        <div className="min-h-screen bg-[#f6f8fb] p-4 md:p-6 lg:p-8 animate-in fade-in duration-500">
+            <div className="mx-auto max-w-[1500px] space-y-6">
+                <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 p-5 md:p-7">
+                        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex min-w-0 items-start gap-4 md:gap-5">
+                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/15">
+                                    <Settings className="h-6 w-6" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">Control center</p>
+                                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${maintenanceEnabled ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            {maintenanceEnabled ? 'Maintenance on' : 'Live'}
+                                        </span>
+                                    </div>
+                                    <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Settings & Permissions</h1>
+                                    <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-slate-500 md:text-base">
+                                        Manage branches, staff records, login roles, module access, and domain maintenance from one operational surface.
+                                    </p>
+                                </div>
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">Control center</p>
-                                <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Settings & Permissions</h1>
-                                <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
-                                    Manage branches, staff records, login roles, module access, and domain maintenance from one operational surface.
-                                </p>
+                            <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center">
+                                <button
+                                    onClick={loadData}
+                                    disabled={isLoading}
+                                    className="btn-secondary rounded-xl text-[10px] uppercase tracking-widest"
+                                >
+                                    <RotateCcw size={16} className={isLoading ? 'animate-spin' : ''} />
+                                    Refresh
+                                </button>
+                                <BackToModulesButton onClick={onBack} />
                             </div>
                         </div>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <button
-                                onClick={loadData}
-                                disabled={isLoading}
-                                className="btn-secondary text-[10px] uppercase tracking-widest"
-                            >
-                                <RotateCcw size={16} className={isLoading ? 'animate-spin' : ''} />
-                                Refresh
-                            </button>
-                            <BackToModulesButton onClick={onBack} />
-                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 bg-slate-50/60 p-4 md:grid-cols-2 xl:grid-cols-4">
+                        <StatTile label="Branches" value={branchCount} icon={Store} tone="brand" />
+                        <StatTile label="Classified branches" value={`${classifiedBranchCount}/${branchCount}`} icon={Building2} />
+                        <StatTile label="Active people" value={activePharmacistCount} icon={UserCheck} tone="emerald" />
+                        <StatTile label="Domain status" value={maintenanceEnabled ? 'Paused' : 'Live'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
                     </div>
                 </header>
 
-                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <StatTile label="Branches" value={branchCount} icon={Store} tone="brand" />
-                    <StatTile label="Classified branches" value={`${classifiedBranchCount}/${branchCount}`} icon={Building2} />
-                    <StatTile label="Active people" value={activePharmacistCount} icon={UserCheck} tone="emerald" />
-                    <StatTile label="Domain status" value={maintenanceEnabled ? 'Paused' : 'Live'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
-                </section>
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-[330px_minmax(0,1fr)]">
+                    <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Control areas</p>
+                                    <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">Operations map</h2>
+                                </div>
+                                <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">{visibleSettingsTabs.length}</span>
+                            </div>
 
-                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-7">
-                    {visibleSettingsTabs.map(tab => {
-                        const meta = TAB_META[tab];
-                        const Icon = meta.icon;
-                        const isActive = activeTab === tab;
+                            <nav className="space-y-2" aria-label="Settings sections">
+                                {visibleSettingsTabs.map(tab => {
+                                    const meta = TAB_META[tab];
+                                    const Icon = meta.icon;
+                                    const isActive = activeTab === tab;
 
-                        return (
-                            <button
-                                key={tab}
-                                onClick={() => {
-                                    setActiveTab(tab);
-                                    if (tab === 'permissions') setSearchTerm('');
-                                }}
-                                className={`rounded-lg border p-4 text-left shadow-sm transition-all focus-ring ${
-                                    isActive
-                                        ? 'border-brand/30 bg-white shadow-brand/10'
-                                        : 'border-slate-200 bg-white hover:border-brand/20 hover:bg-brand/5'
-                                }`}
-                            >
-                                <div className="flex items-start gap-3">
-                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
-                                        isActive ? 'border-brand/10 bg-brand text-white' : 'border-slate-200 bg-slate-50 text-slate-400'
-                                    }`}>
-                                        <Icon size={18} />
+                                    return (
+                                        <button
+                                            key={tab}
+                                            onClick={() => {
+                                                setActiveTab(tab);
+                                                if (tab === 'permissions') setSearchTerm('');
+                                            }}
+                                            className={`w-full rounded-xl border p-3 text-left transition-all focus-ring ${
+                                                isActive
+                                                    ? 'border-brand/30 bg-brand/5 text-brand shadow-sm shadow-brand/10'
+                                                    : 'border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+                                                    isActive ? 'border-brand/10 bg-brand text-white' : 'border-slate-200 bg-white text-slate-400'
+                                                }`}>
+                                                    <Icon size={18} />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="truncate text-sm font-black tracking-tight">{meta.label}</span>
+                                                        {tab === 'system' && maintenanceEnabled && (
+                                                            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-700">On</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-slate-400">{meta.description}</p>
+                                                </div>
+                                                <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isActive ? 'translate-x-0 text-brand' : 'text-slate-300'}`} />
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+                        </section>
+
+                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Current workspace</p>
+                            <div className="mt-4 flex items-start gap-3 rounded-xl border border-brand/10 bg-brand/5 p-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
+                                    <ActiveTabIcon size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black tracking-tight text-slate-950">{activeTabMeta.label}</h3>
+                                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{activeTabMeta.description}</p>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+
+                    <section className="min-w-0 space-y-5">
+                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+                            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                                        <ActiveTabIcon size={19} />
                                     </div>
                                     <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-sm font-black tracking-tight ${isActive ? 'text-brand' : 'text-slate-900'}`}>{meta.label}</span>
-                                            {tab === 'system' && maintenanceEnabled && (
-                                                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-700">On</span>
-                                            )}
-                                        </div>
-                                        <p className="mt-1 text-xs font-medium leading-5 text-slate-500">{meta.description}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Workspace</p>
+                                        <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">{activeTabMeta.label}</h2>
+                                        <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{activeTabMeta.description}</p>
                                     </div>
                                 </div>
-                            </button>
-                        );
-                    })}
-                </section>
 
-                <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-                                <ActiveTabIcon size={18} />
-                            </div>
-                            <div className="min-w-0">
-                                <h2 className="text-lg font-black tracking-tight text-slate-950">{activeTabMeta.label}</h2>
-                                <p className="text-sm font-medium leading-6 text-slate-500">{activeTabMeta.description}</p>
-                            </div>
-                        </div>
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                    {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && activeTab !== 'delivery-zones' && activeTab !== 'module-layout' && (
+                                        <div className="relative min-w-0 md:w-80">
+                                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder={activeTab === 'permissions' ? 'Find branch...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
+                                                value={searchTerm}
+                                                onChange={e => setSearchTerm(e.target.value)}
+                                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-10 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
+                                            />
+                                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400 shadow-sm">
+                                                {visibleRecordCount}
+                                            </span>
+                                        </div>
+                                    )}
 
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                            {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && activeTab !== 'delivery-zones' && activeTab !== 'module-layout' && (
-                                <div className="relative min-w-0 md:w-80">
-                                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder={activeTab === 'permissions' ? 'Find branch...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
-                                        value={searchTerm}
-                                        onChange={e => setSearchTerm(e.target.value)}
-                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 pl-10 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
-                                    />
-                                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-white px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-400 shadow-sm">
-                                        {visibleRecordCount}
-                                    </span>
+                                    {canManageSettings && (activeTab === 'branches' || activeTab === 'pharmacists') && (
+                                        <button
+                                            onClick={() => {
+                                                if (activeTab === 'branches') {
+                                                    setBranchForm({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
+                                                    setIsBranchModalOpen(true);
+                                                } else {
+                                                    setPharForm({ code: '', name: '', isActive: true, branchIds: [] });
+                                                    setIsPharModalOpen(true);
+                                                }
+                                            }}
+                                            className="btn-primary whitespace-nowrap rounded-xl text-[10px] uppercase tracking-widest"
+                                        >
+                                            <Plus size={18} />
+                                            Add {activeTab === 'branches' ? 'Branch' : 'Person'}
+                                        </button>
+                                    )}
                                 </div>
-                            )}
+                            </div>
+                        </section>
 
-                            {canManageSettings && (activeTab === 'branches' || activeTab === 'pharmacists') && (
-                                <button
-                                    onClick={() => {
-                                        if (activeTab === 'branches') {
-                                            setBranchForm({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
-                                            setIsBranchModalOpen(true);
-                                        } else {
-                                            setPharForm({ code: '', name: '', isActive: true, branchIds: [] });
-                                            setIsPharModalOpen(true);
-                                        }
-                                    }}
-                                    className="btn-primary whitespace-nowrap text-[10px] uppercase tracking-widest"
-                                >
-                                    <Plus size={18} />
-                                    Add {activeTab === 'branches' ? 'Branch' : 'Person'}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </section>
-
-                <div className="operational-panel overflow-hidden min-h-[560px]">
+                        <div className="operational-panel overflow-hidden min-h-[560px] rounded-2xl">
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center h-[560px] space-y-4">
                             <div className="w-12 h-12 border-4 border-slate-100 border-t-brand rounded-full animate-spin"></div>
@@ -997,7 +1033,7 @@ export const ProjectSettings: React.FC<{
                             )}
 
                             {activeTab === 'access-control' && (
-                                <AccessControlSection currentUserId={currentUserId} />
+                                <AccessControlSection currentUserId={currentUserId} settings={maintenanceSettings} />
                             )}
 
                             {activeTab === 'permissions' && (
@@ -1082,6 +1118,9 @@ export const ProjectSettings: React.FC<{
                                                                                 <h4 className="text-sm font-black tracking-tight text-slate-950">{feature.label}</h4>
                                                                                 <span className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${accessTone}`}>{currentPerm}</span>
                                                                             </div>
+                                                                            {feature.description && (
+                                                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{feature.description}</p>
+                                                                            )}
                                                                             <div className="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
                                                                                 {(['none', 'read', 'edit'] as const).map(level => (
                                                                                     <button
@@ -1619,6 +1658,8 @@ export const ProjectSettings: React.FC<{
                             )}
                         </div>
                     )}
+                        </div>
+                    </section>
                 </div>
             </div>
 

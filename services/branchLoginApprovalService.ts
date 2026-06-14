@@ -25,6 +25,12 @@ const APPROVAL_SELECT = `
 
 const PENDING_POLL_MS = 3000;
 
+const isMissingOpenRequestRpc = (error: any) => {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return code === '42883' || code === 'PGRST202' || message.includes('branch_login_approval_open_request');
+};
+
 const fallbackHash = (value: string) => {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
@@ -121,6 +127,19 @@ export const branchLoginApprovalService = {
 
     const deviceInfo = input.deviceInfo || await collectBranchLoginDeviceInfo();
     await branchLoginApprovalService.expireOldBranchLoginApprovals();
+
+    const { data: openedRequest, error: openRequestError } = await supabaseClient.rpc('branch_login_approval_open_request' as any, {
+      p_target_branch_id: input.branchId,
+      p_device_fingerprint_hash: deviceInfo.deviceFingerprintHash,
+      p_device_label: deviceInfo.deviceLabel,
+      p_browser_name: deviceInfo.browserName,
+      p_os_name: deviceInfo.osName,
+      p_user_agent_hash: deviceInfo.userAgentHash
+    });
+
+    if (!openRequestError && openedRequest) return mapApproval(openedRequest);
+    if (openRequestError && !isMissingOpenRequestRpc(openRequestError)) throw openRequestError;
+
     const payload = {
       user_id: sessionData.session.user.id,
       branch_id: input.branchId,

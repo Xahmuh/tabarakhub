@@ -41,6 +41,8 @@ interface ManagerDashboardProps {
     onBack: () => void;
 }
 
+const REWARD_COLOR_SWATCHES = ['#B91c1c', '#F43F5E', '#EA580C', '#D97706', '#059669', '#2563EB', '#7C3AED', '#0F172A'];
+
 const KPICard: React.FC<{
     label: string;
     value: string | number;
@@ -98,6 +100,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
         isActive: true,
         color: '#F43F5E'
     });
+    const [rewardSearchTerm, setRewardSearchTerm] = useState('');
+    const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
+    const [rewardSort, setRewardSort] = useState<'weight-desc' | 'weight-asc' | 'name-asc'>('weight-desc');
 
     const [isAddingBranch, setIsAddingBranch] = useState(false);
     const [newBranch, setNewBranch] = useState({
@@ -355,6 +360,24 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
 
         return { active, inactive, totalWeight, highestWeightPrize };
     }, [prizes]);
+    const filteredRewards = useMemo(() => {
+        const query = rewardSearchTerm.trim().toLowerCase();
+        return prizes
+            .filter(prize => {
+                const matchesSearch = !query || prize.name.toLowerCase().includes(query);
+                const matchesStatus =
+                    rewardStatusFilter === 'all' ||
+                    (rewardStatusFilter === 'active' && prize.isActive) ||
+                    (rewardStatusFilter === 'paused' && !prize.isActive);
+                return matchesSearch && matchesStatus;
+            })
+            .sort((a, b) => {
+                if (rewardSort === 'name-asc') return a.name.localeCompare(b.name);
+                const aWeight = Number(a.probabilityWeight || 0);
+                const bWeight = Number(b.probabilityWeight || 0);
+                return rewardSort === 'weight-asc' ? aWeight - bWeight : bWeight - aWeight;
+            });
+    }, [prizes, rewardSearchTerm, rewardSort, rewardStatusFilter]);
 
     return (
         <div className="max-w-[1600px] mx-auto p-4 lg:p-10 animate-in fade-in duration-700 relative">
@@ -665,10 +688,11 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 </p>
                                             </div>
                                             <button
-                                                onClick={() => setIsAddingPrize(true)}
-                                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-xs font-black uppercase tracking-widest text-white shadow-sm shadow-red-900/10 transition-all hover:bg-red-700 active:scale-[0.98]"
+                                                onClick={() => setIsAddingPrize(prev => !prev)}
+                                                className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-black uppercase tracking-widest shadow-sm transition-all active:scale-[0.98] ${isAddingPrize ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'bg-red-600 text-white shadow-red-900/10 hover:bg-red-700'}`}
                                             >
-                                                <Plus className="h-4 w-4" /> Add Reward
+                                                {isAddingPrize ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                                {isAddingPrize ? 'Close Form' : 'Add Reward'}
                                             </button>
                                         </div>
                                     </div>
@@ -706,6 +730,56 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                                    <div className="relative min-w-0 flex-1">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            value={rewardSearchTerm}
+                                            onChange={event => setRewardSearchTerm(event.target.value)}
+                                            placeholder="Search reward name..."
+                                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pl-10 text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                                        <div className="relative">
+                                            <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            <select
+                                                value={rewardStatusFilter}
+                                                onChange={event => setRewardStatusFilter(event.target.value as typeof rewardStatusFilter)}
+                                                className="h-11 w-full min-w-[150px] appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-9 text-xs font-black uppercase tracking-widest text-slate-600 outline-none transition-all focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                aria-label="Filter rewards by status"
+                                            >
+                                                <option value="all">All Rewards</option>
+                                                <option value="active">Live Only</option>
+                                                <option value="paused">Paused Only</option>
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                                        </div>
+
+                                        <div className="relative">
+                                            <Target className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                            <select
+                                                value={rewardSort}
+                                                onChange={event => setRewardSort(event.target.value as typeof rewardSort)}
+                                                className="h-11 w-full min-w-[170px] appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-9 text-xs font-black uppercase tracking-widest text-slate-600 outline-none transition-all focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                aria-label="Sort rewards"
+                                            >
+                                                <option value="weight-desc">Highest Weight</option>
+                                                <option value="weight-asc">Lowest Weight</option>
+                                                <option value="name-asc">Name A-Z</option>
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-500">
+                                        {filteredRewards.length} visible
                                     </div>
                                 </div>
                             </div>
@@ -751,6 +825,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 value={newPrize.probabilityWeight}
                                                 onChange={(e) => setNewPrize(p => ({ ...p, probabilityWeight: Number(e.target.value || 0) }))}
                                             />
+                                            <input
+                                                type="range"
+                                                min={1}
+                                                max={100}
+                                                value={Number(newPrize.probabilityWeight || 1)}
+                                                onChange={(e) => setNewPrize(p => ({ ...p, probabilityWeight: Number(e.target.value) }))}
+                                                className="h-2 w-full cursor-pointer accent-red-600"
+                                                aria-label="Reward probability weight"
+                                            />
                                         </div>
 
                                         <div className="space-y-2">
@@ -764,6 +847,18 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 />
                                                 <span className="text-xs font-black uppercase tabular-nums text-slate-500">{newPrize.color || '#F43F5E'}</span>
                                             </div>
+                                            <div className="grid grid-cols-4 gap-1.5">
+                                                {REWARD_COLOR_SWATCHES.map(swatch => (
+                                                    <button
+                                                        key={swatch}
+                                                        type="button"
+                                                        onClick={() => setNewPrize(p => ({ ...p, color: swatch }))}
+                                                        className={`h-7 rounded-lg border transition-all ${newPrize.color === swatch ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-white hover:border-slate-300'}`}
+                                                        style={{ backgroundColor: swatch }}
+                                                        aria-label={`Use reward color ${swatch}`}
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
 
                                         <div className="space-y-2">
@@ -776,6 +871,32 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 {newPrize.isActive ? 'Active' : 'Paused'}
                                                 <span className={`h-2.5 w-2.5 rounded-full ${newPrize.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                                             </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-slate-100 bg-white p-4 sm:p-5">
+                                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ backgroundColor: newPrize.color || '#F43F5E' }}>
+                                                        <Trophy className="h-5 w-5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Preview</p>
+                                                        <h5 className="mt-1 truncate text-lg font-black tracking-tight text-slate-950">{newPrize.name || 'Reward name preview'}</h5>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 sm:w-56">
+                                                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Weight</p>
+                                                        <p className="text-xl font-black tabular-nums text-slate-950">{Number(newPrize.probabilityWeight || 0)}</p>
+                                                    </div>
+                                                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Status</p>
+                                                        <p className={`text-sm font-black ${newPrize.isActive ? 'text-emerald-600' : 'text-slate-400'}`}>{newPrize.isActive ? 'Live' : 'Paused'}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -804,9 +925,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                     <h4 className="mt-5 text-lg font-black tracking-tight text-slate-950">No rewards configured</h4>
                                     <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-6 text-slate-500">Add the first reward to activate the wheel prize engine for branch QR sessions.</p>
                                 </div>
+                            ) : filteredRewards.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
+                                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400">
+                                        <Search className="h-7 w-7" />
+                                    </div>
+                                    <h4 className="mt-5 text-lg font-black tracking-tight text-slate-950">No rewards match the current view</h4>
+                                    <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-6 text-slate-500">Clear the search or switch the status filter to see more configured rewards.</p>
+                                </div>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                                    {prizes.map((prize) => {
+                                    {filteredRewards.map((prize) => {
                                         const weight = Number(prize.probabilityWeight || 0);
                                         const share = rewardControlMetrics.totalWeight > 0 ? (weight / rewardControlMetrics.totalWeight) * 100 : 0;
                                         const color = prize.color || '#B91c1c';
@@ -850,6 +979,15 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                                     value={editForm.probabilityWeight || 0}
                                                                     onChange={e => setEditForm(p => ({ ...p, probabilityWeight: Number(e.target.value || 0) }))}
                                                                 />
+                                                                <input
+                                                                    type="range"
+                                                                    min={0}
+                                                                    max={100}
+                                                                    value={Number(editForm.probabilityWeight || 0)}
+                                                                    onChange={e => setEditForm(p => ({ ...p, probabilityWeight: Number(e.target.value) }))}
+                                                                    className="h-2 w-full cursor-pointer accent-red-600"
+                                                                    aria-label="Edit reward probability weight"
+                                                                />
                                                             </div>
                                                         </div>
 
@@ -863,6 +1001,18 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                                     onChange={(e) => setEditForm(p => ({ ...p, color: e.target.value }))}
                                                                 />
                                                                 <span className="text-xs font-black uppercase tabular-nums text-slate-500">{editForm.color || '#F43F5E'}</span>
+                                                            </div>
+                                                            <div className="grid grid-cols-8 gap-1.5">
+                                                                {REWARD_COLOR_SWATCHES.map(swatch => (
+                                                                    <button
+                                                                        key={swatch}
+                                                                        type="button"
+                                                                        onClick={() => setEditForm(p => ({ ...p, color: swatch }))}
+                                                                        className={`h-7 rounded-lg border transition-all ${editForm.color === swatch ? 'border-slate-900 ring-2 ring-slate-900/10' : 'border-white hover:border-slate-300'}`}
+                                                                        style={{ backgroundColor: swatch }}
+                                                                        aria-label={`Use reward color ${swatch}`}
+                                                                    />
+                                                                ))}
                                                             </div>
                                                         </div>
 
@@ -904,28 +1054,31 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex shrink-0 items-center gap-1">
+                                                                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                                                                     <button
                                                                         onClick={() => togglePrizeStatus(prize)}
-                                                                        className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all ${prize.isActive ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-300 hover:bg-slate-100'}`}
+                                                                        className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest transition-all ${prize.isActive ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
                                                                         title={prize.isActive ? 'Deactivate' : 'Activate'}
                                                                         aria-label={prize.isActive ? 'Deactivate reward' : 'Activate reward'}
                                                                     >
                                                                         <Activity className="h-3.5 w-3.5" />
+                                                                        {prize.isActive ? 'Pause' : 'Live'}
                                                                     </button>
                                                                     <button
                                                                         onClick={() => startEditing(prize)}
-                                                                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-900"
+                                                                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-slate-50 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-900"
                                                                         aria-label="Edit reward"
                                                                     >
                                                                         <Edit2 className="h-3.5 w-3.5" />
+                                                                        Edit
                                                                     </button>
                                                                     <button
                                                                         onClick={() => handleDeletePrize(prize.id)}
-                                                                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-300 transition-all hover:bg-red-50 hover:text-red-600"
+                                                                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-slate-50 px-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-red-50 hover:text-red-600"
                                                                         aria-label="Delete reward"
                                                                     >
                                                                         <Trash2 className="h-3.5 w-3.5" />
+                                                                        Delete
                                                                     </button>
                                                                 </div>
                                                             </div>

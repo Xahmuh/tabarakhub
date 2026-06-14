@@ -119,9 +119,11 @@ interface DeliveryCoverageProps {
   lockedBranchId?: string | null;
   /** Manager-only: allow creating operations tasks from insights. */
   canCreateTask?: boolean;
+  /** Branch-facing coverage keeps the surface limited to overview + block map. */
+  branchView?: boolean;
 }
 
-export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranchId, canCreateTask = false }) => {
+export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranchId, canCreateTask = false, branchView = false }) => {
   const advancedEnabled = isModuleEnabled('deliveryCoverageAdvanced');
   const [preset, setPreset] = useState<CoveragePreset>('30d');
   const [customFrom, setCustomFrom] = useState(toDateKey(new Date()));
@@ -162,6 +164,10 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
       ? branchProfiles.filter(profile => profile.branchId === effectiveBranchFilter)
       : branchProfiles,
     [branchProfiles, effectiveBranchFilter]
+  );
+  const activeBranchProfiles = useMemo(
+    () => visibleBranchProfiles.filter(profile => profile.isDeliveryEnabled !== false),
+    [visibleBranchProfiles]
   );
 
   useEffect(() => {
@@ -227,6 +233,27 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
   }, [range.from, range.to, effectiveBranchFilter]);
+
+  const coverageSections = useMemo(
+    () => ([
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: true },
+      { id: 'matrix', label: 'Block Map', icon: MapPinned, show: true },
+      { id: 'governorate', label: 'Governorate KPIs', icon: BarChart3, show: !branchView },
+      { id: 'catchment', label: 'Branch Catchment', icon: Layers, show: !branchView },
+      { id: 'campaign', label: 'Campaign', icon: Target, show: !branchView && advancedEnabled },
+      { id: 'overlap', label: 'Overlap', icon: ShieldAlert, show: !branchView && advancedEnabled },
+      { id: 'capacity', label: 'Capacity', icon: AlertTriangle, show: !branchView && advancedEnabled },
+      { id: 'expansion', label: 'Expansion Review', icon: ArrowUpRight, show: !branchView && advancedEnabled },
+      { id: 'quality', label: 'Data Quality', icon: Info, show: !branchView }
+    ] as Array<{ id: CoverageSection; label: string; icon: React.ElementType; show: boolean }>).filter(item => item.show),
+    [advancedEnabled, branchView]
+  );
+
+  useEffect(() => {
+    if (!coverageSections.some(item => item.id === section)) {
+      setSection('overview');
+    }
+  }, [coverageSections, section]);
 
   // Create an operations task from a coverage insight (manager-only), with a
   // duplicate warning if an open/in_progress task already exists for it.
@@ -303,6 +330,12 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
 
   const geoAvailable = geometryStatus === 'available' && !!geometry?.available;
 
+  useEffect(() => {
+    if (branchView && geoAvailable && view !== 'map') {
+      setView('map');
+    }
+  }, [branchView, geoAvailable, view]);
+
   // How many served blocks in this period have real geometry.
   const geoMatch = useMemo(() => {
     if (!geometry?.available || !summary) return { matched: 0, total: 0, unmatched: 0 };
@@ -317,8 +350,8 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   );
 
   const profileByBranch = useMemo(
-    () => new Map(visibleBranchProfiles.map(profile => [profile.branchId, profile])),
-    [visibleBranchProfiles]
+    () => new Map(activeBranchProfiles.map(profile => [profile.branchId, profile])),
+    [activeBranchProfiles]
   );
 
   const zoneAnalysis = useMemo((): { metrics: DeliveryZoneQualityMetrics; byBlock: Map<string, DeliveryBlockZoneAnalysis> } => {
@@ -326,11 +359,11 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     const byBlock = new Map<string, DeliveryBlockZoneAnalysis>();
     if (!summary) return { metrics, byBlock };
 
-    metrics.totalBranchProfiles = visibleBranchProfiles.length;
+    metrics.totalBranchProfiles = activeBranchProfiles.length;
     metrics.missingBranchProfiles = summary.branchCoverage.filter(branch => !profileByBranch.has(branch.branchId)).length;
 
     const duplicateMap = new Map<string, string[]>();
-    for (const profile of visibleBranchProfiles) {
+    for (const profile of activeBranchProfiles) {
       const block = profile.originBlockNumber?.trim();
       if (!block) {
         metrics.missingOriginBlock += 1;
@@ -391,7 +424,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     }
 
     return { metrics, byBlock };
-  }, [geometry, profileByBranch, summary, visibleBranchProfiles]);
+  }, [activeBranchProfiles, geometry, profileByBranch, summary]);
 
   const handlePeriod = (p: CoveragePreset) => setPreset(p);
 
@@ -528,19 +561,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
         <>
           {/* Section tabs */}
           <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/50 bg-slate-100/60 p-1 print:hidden">
-            {([
-              { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: true },
-              { id: 'matrix', label: 'Block Map', icon: MapPinned, show: true },
-              { id: 'governorate', label: 'Governorate KPIs', icon: BarChart3, show: true },
-              { id: 'catchment', label: 'Branch Catchment', icon: Layers, show: true },
-              { id: 'campaign', label: 'Campaign', icon: Target, show: advancedEnabled },
-              { id: 'overlap', label: 'Overlap', icon: ShieldAlert, show: advancedEnabled },
-              { id: 'capacity', label: 'Capacity', icon: AlertTriangle, show: advancedEnabled },
-              { id: 'expansion', label: 'Expansion Review', icon: ArrowUpRight, show: advancedEnabled },
-              { id: 'quality', label: 'Data Quality', icon: Info, show: true }
-            ] as Array<{ id: CoverageSection; label: string; icon: React.ElementType; show: boolean }>)
-              .filter(t => t.show)
-              .map(t => (
+            {coverageSections.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setSection(t.id)}
@@ -584,7 +605,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                   {geometryStatus === 'loading' || (geoAvailable && view === 'map') ? 'Bahrain block coverage map' : 'Bahrain block coverage matrix'}
                 </h3>
               </div>
-              {geoAvailable && (
+              {geoAvailable && !branchView && (
                 <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50 print:hidden">
                   <button
                     onClick={() => setView('map')}
@@ -608,7 +629,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
               <BlockCoverageMap
                 dataset={geometry}
                 blocks={mappableBlocks}
-                branchProfiles={visibleBranchProfiles}
+                branchProfiles={activeBranchProfiles}
                 blockZoneAnalysis={zoneAnalysis.byBlock}
                 zoneMetrics={zoneAnalysis.metrics}
                 summary={summary}
@@ -712,20 +733,22 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           </section>
 
           {/* Top + low blocks */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <section className="operational-panel p-4 md:p-5">
-              <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Top served blocks</h3>
-              <BlockTable blocks={summary.topBlocks} onSelect={setSelectedBlock} emptyLabel="No located orders." />
-            </section>
-            <section className="operational-panel p-4 md:p-5">
-              <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Low / weak-demand blocks</h3>
-              {summary.lowBlocks.length === 0 ? (
-                <p className="py-6 text-center text-xs font-bold text-slate-400">Not enough distinct blocks to rank weak demand.</p>
-              ) : (
-                <BlockTable blocks={summary.lowBlocks} onSelect={setSelectedBlock} emptyLabel="No data." />
-              )}
-            </section>
-          </div>
+          {!branchView && (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <section className="operational-panel p-4 md:p-5">
+                <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Top served blocks</h3>
+                <BlockTable blocks={summary.topBlocks} onSelect={setSelectedBlock} emptyLabel="No located orders." />
+              </section>
+              <section className="operational-panel p-4 md:p-5">
+                <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Low / weak-demand blocks</h3>
+                {summary.lowBlocks.length === 0 ? (
+                  <p className="py-6 text-center text-xs font-bold text-slate-400">Not enough distinct blocks to rank weak demand.</p>
+                ) : (
+                  <BlockTable blocks={summary.lowBlocks} onSelect={setSelectedBlock} emptyLabel="No data." />
+                )}
+              </section>
+            </div>
+          )}
           </>
           )}
 
@@ -972,7 +995,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           </>
           )}
 
-          {section === 'overview' && (
+          {section === 'overview' && !branchView && (
           <>
           {/* Recommendations */}
           <section className="operational-panel p-4 md:p-5">

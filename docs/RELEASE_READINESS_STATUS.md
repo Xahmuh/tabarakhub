@@ -54,8 +54,8 @@ Spin Static QR SQL/API security checks now pass after applying 20260614150000_ha
 Customer Engagement Generator / Generate QR & Link redesign is implemented locally. Authenticated browser QA was attempted on 2026-06-14, but the available in-app browser reached only the login page and no authorized manager/admin/owner browser session or usable credentials were available. Static/Single/Multi generator UI, responsive layout, copy/download behavior, and Talabat/WhatsApp panels remain pending for authenticated browser validation. Limited public static QR smoke passed locally through branch-code URL load, token exchange, and customer details screen without login or observed console errors; no customer details, Google return, spin, or voucher completion were executed.
 Typecheck passes locally.
 Production build passes locally.
-npm audit still fails (exit 1) on ExcelJS -> uuid (2 moderate) and Vite/esbuild (3 high) advisories: 5 vulnerabilities total as of 2026-06-13.
-Safe Vite/esbuild remediation was attempted (esbuild@0.28.1 override) and reverted because it broke the production build; ExcelJS/uuid accepted temporarily for staging only (Option A). See docs/ACCEPTED_SECURITY_RISKS.md.
+npm audit remediation is prepared locally as of 2026-06-14. Vite/esbuild high findings are removed by upgrading Vite to 8.0.16 and @vitejs/plugin-react to 6.0.2. ExcelJS/uuid moderate findings are removed by overriding transitive uuid to 11.1.1. Verification passed for typecheck, production build, npm ls, npm audit --audit-level=moderate, UUID require smoke, ExcelJS workbook write smoke, and local login browser smoke. This remediation is pending explicit diff approval and commit.
+The earlier esbuild@0.28.1 override attempt remains rejected because it broke the production build on the PDF bundle.
 No lint/test scripts currently exist (no `lint` or `test` npm script in package.json).
 AI insights are optional existing scope and default disabled for production validation unless configured.
 HR Google Apps Script endpoint is no longer hardcoded and must be configured per client if used.
@@ -95,7 +95,7 @@ Storage bucket policies are hardened so no bucket allows unauthenticated writes 
 No frontend secrets are exposed.
 Previously known approved local migration gaps were resolved on the linked Supabase project: the seven schema-present/manual-applied migrations have been repaired as applied, and 20260613103000, 20260613131500, 20260613134500, 20260614150000, 20260614173000, 20260614190000, 20260614193000, 20260614200000, and 20260614203000 have been applied and recorded. Re-check migration history for each future target Supabase project before deployment.
 Legacy `public.branches` placeholder row `code/name/role = manager` must be archived or removed only after explicit backup-retention approval because it is referenced by `legacy_branch_password_backups`.
-ExcelJS/uuid and Vite/esbuild audit risks are resolved or formally accepted.
+Prepared npm audit remediation is approved/committed, or any future dependency risk is formally accepted.
 ```
 
 ## Release Decision Rules

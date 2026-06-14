@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Clock3, Loader2, RefreshCcw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Globe2, Loader2, RefreshCcw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { supabase } from '../../lib/supabase';
 import { branchLoginApprovalService } from '../../services/branchLoginApprovalService';
@@ -159,7 +159,7 @@ export const BranchLoginApprovalsSection: React.FC<BranchLoginApprovalsSectionPr
                 Manager approval is {approvalRequired ? 'active' : 'inactive'}
               </h3>
               <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-                When active, branch accounts must wait for an authorized manager, owner, or admin after entering the correct password.
+                When active, branch accounts must wait for approval the first time a device/IP combination is used. Approved devices can enter again until the IP or device changes.
               </p>
               {settingsError && (
                 <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
@@ -198,7 +198,7 @@ export const BranchLoginApprovalsSection: React.FC<BranchLoginApprovalsSectionPr
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Branch login approvals</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">Pending branch sign-ins</h3>
               <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-                Branch users with correct passwords wait here until an authorized admin, manager, or owner approves the current login request.
+                New branch login attempts from an untrusted device or IP appear here with the captured network IP and device details.
               </p>
             </div>
           </div>
@@ -269,8 +269,11 @@ export const BranchLoginApprovalsSection: React.FC<BranchLoginApprovalsSectionPr
                       </p>
                     </div>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Network / fingerprint</p>
-                      <p className="mt-1 text-slate-800">Last IP: {request.lastIp || 'Not available from browser client'}</p>
+                      <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        <Globe2 className="h-3.5 w-3.5" />
+                        Network / fingerprint
+                      </p>
+                      <p className="mt-1 text-slate-800">Request IP: {request.lastIp || 'Not captured by Supabase request headers'}</p>
                       <p className="mt-1 break-all text-[11px] text-slate-400">
                         Device hash: {request.deviceFingerprintHash || 'Not available'}
                       </p>
