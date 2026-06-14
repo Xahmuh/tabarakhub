@@ -70,7 +70,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
           <img
             src={hubLogoUrl}
             alt="Tabarak HUB logo"
-            className="login-hub-wordmark w-full max-w-[860px] object-contain xl:max-w-[980px]"
+            className="login-hub-wordmark w-full max-w-[720px] object-contain xl:max-w-[820px]"
           />
 
           {loginBadges.length > 0 && (
