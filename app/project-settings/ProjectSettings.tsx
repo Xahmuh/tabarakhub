@@ -29,7 +29,9 @@ import {
     RadioTower,
     RotateCcw,
     Hash,
-    KeyRound
+    KeyRound,
+    MapPinned,
+    LayoutGrid
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
@@ -38,6 +40,10 @@ import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { getSystemSettingsErrorMessage } from '../../services/systemSettingsService';
 import { BranchLoginApprovalsSection } from './BranchLoginApprovalsSection';
+import { DeliveryZonesSection } from './DeliveryZonesSection';
+import { ModuleDisplaySettingsSection } from './ModuleDisplaySettingsSection';
+import { BackToModulesButton } from '../shared';
+import { clientConfig } from '../../config/clientConfig';
 
 const FEATURE_ICON_MAP: Partial<Record<AccessFeatureId, React.ElementType>> = {
     command_center: RadioTower,
@@ -62,7 +68,11 @@ const FEATURES = getEnabledAccessFeatures().map(feature => ({
     icon: FEATURE_ICON_MAP[feature.id as AccessFeatureId] || Lock
 }));
 
-type SettingsTab = 'branches' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
+const DEFAULT_HUB_LOGO_URL = '/tabarak-logo.svg';
+const DEFAULT_PHARMACY_LOGO_URL = clientConfig.logoUrl;
+const DEFAULT_LOADING_SPINNER_URL = '/spinner.svg';
+
+type SettingsTab = 'branches' | 'module-layout' | 'delivery-zones' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
 
 const TAB_META: Record<SettingsTab, {
     label: string;
@@ -73,6 +83,16 @@ const TAB_META: Record<SettingsTab, {
         label: 'Branches',
         description: 'Operational pharmacy branches only',
         icon: Building2
+    },
+    'module-layout': {
+        label: 'Module Layout',
+        description: 'Order launcher cards and module badges',
+        icon: LayoutGrid
+    },
+    'delivery-zones': {
+        label: 'Delivery Zones',
+        description: 'Branch origin blocks, service rings, and delivery radius settings',
+        icon: MapPinned
     },
     pharmacists: {
         label: 'People',
@@ -212,13 +232,15 @@ export const ProjectSettings: React.FC<{
     onBack: () => void;
     onSettingsChange?: (settings: MaintenanceSettings) => void;
     currentRole?: Role;
-}> = ({ onBack, onSettingsChange, currentRole = 'manager' }) => {
-    const canManageSettings = currentRole === 'manager';
+}> = ({ onBack, onSettingsChange, currentRole = 'admin' }) => {
+    const canManageSettings = currentRole === 'admin' || currentRole === 'manager';
+    const canManageDeliveryZones = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
     const canApproveLoginRequests = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => canManageSettings ? 'branches' : 'login-approvals');
     const [branches, setBranches] = useState<Branch[]>([]);
     const [branchClassifications, setBranchClassifications] = useState<BranchClassification[]>([]);
     const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
+    const [pharmacistAssignmentsByBranch, setPharmacistAssignmentsByBranch] = useState<Record<string, string[]>>({});
     const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
     const [maintenanceSettingsError, setMaintenanceSettingsError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -255,9 +277,9 @@ export const ProjectSettings: React.FC<{
     }, []);
 
     const visibleSettingsTabs = useMemo(
-        () => (['branches', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'] as SettingsTab[])
-            .filter(tab => canManageSettings || (tab === 'login-approvals' && canApproveLoginRequests)),
-        [canApproveLoginRequests, canManageSettings]
+        () => (['branches', 'module-layout', 'delivery-zones', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'] as SettingsTab[])
+            .filter(tab => canManageSettings || (tab === 'delivery-zones' && canManageDeliveryZones) || (tab === 'login-approvals' && canApproveLoginRequests)),
+        [canApproveLoginRequests, canManageDeliveryZones, canManageSettings]
     );
 
     useEffect(() => {
@@ -270,14 +292,25 @@ export const ProjectSettings: React.FC<{
         setIsLoading(true);
         setMaintenanceSettingsError(null);
         try {
-            const [b, p, c] = await Promise.all([
+            const [b, p, c, assignmentResult] = await Promise.all([
                 supabase.branches.list(),
                 supabase.pharmacists.listAll(),
-                supabase.delivery.classifications.list()
+                supabase.delivery.classifications.list(),
+                supabase.client.from('pharmacist_branches').select('branch_id, pharmacist_id')
             ]);
             setBranches(b);
             setPharmacists(p);
             setBranchClassifications(c);
+            if (assignmentResult.error) {
+                setPharmacistAssignmentsByBranch({});
+            } else {
+                const assignmentMap = (assignmentResult.data || []).reduce<Record<string, string[]>>((map, assignment) => {
+                    if (!assignment.branch_id || !assignment.pharmacist_id) return map;
+                    map[assignment.branch_id] = [...(map[assignment.branch_id] || []), assignment.pharmacist_id];
+                    return map;
+                }, {});
+                setPharmacistAssignmentsByBranch(assignmentMap);
+            }
             try {
                 const settings = await supabase.systemSettings.getMaintenanceSettings();
                 setMaintenanceSettings(settings);
@@ -413,6 +446,10 @@ export const ProjectSettings: React.FC<{
         setIsSavingFooter(true);
         try {
             const updated = await supabase.systemSettings.updateMaintenanceSettings({
+                pharmacyLogoUrl: maintenanceSettings.pharmacyLogoUrl,
+                hubLogoUrl: maintenanceSettings.hubLogoUrl,
+                browserIconUrl: maintenanceSettings.browserIconUrl,
+                loadingSpinnerUrl: maintenanceSettings.loadingSpinnerUrl,
                 footerLogoUrl: maintenanceSettings.footerLogoUrl,
                 footerText: maintenanceSettings.footerText
             });
@@ -420,14 +457,14 @@ export const ProjectSettings: React.FC<{
             onSettingsChange?.(updated);
             Swal.fire({
                 icon: 'success',
-                title: 'Footer updated',
+                title: 'Branding updated',
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
                 timer: 2500
             });
         } catch (err: any) {
-            Swal.fire('Error', err.message || 'Failed to save footer settings', 'error');
+            Swal.fire('Error', err.message || 'Failed to save branding settings', 'error');
         } finally {
             setIsSavingFooter(false);
         }
@@ -466,8 +503,13 @@ export const ProjectSettings: React.FC<{
             Swal.fire('Error', 'Code and Name are required', 'error');
             return;
         }
+        const branchManagerName = branchForm.branchManagerName?.trim() || '';
+        if (branchManagerName && !pharmacists.some(pharmacist => pharmacist.isActive && pharmacist.name === branchManagerName)) {
+            Swal.fire('Select registered pharmacist', 'Branch Manager Name must be selected from active registered pharmacists.', 'warning');
+            return;
+        }
         try {
-            await supabase.branches.upsert({ ...branchForm, role: 'branch' });
+            await supabase.branches.upsert({ ...branchForm, branchManagerName, role: 'branch' });
             Swal.fire('Success', 'Branch saved successfully', 'success');
             setIsBranchModalOpen(false);
             loadData();
@@ -596,6 +638,27 @@ export const ProjectSettings: React.FC<{
         (p.code || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const selectedBranchAssignedPharmacistIds = useMemo(
+        () => new Set(branchForm.id ? (pharmacistAssignmentsByBranch[branchForm.id] || []) : []),
+        [branchForm.id, pharmacistAssignmentsByBranch]
+    );
+
+    const branchManagerOptions = useMemo(() => {
+        return pharmacists
+            .filter(pharmacist => pharmacist.isActive)
+            .slice()
+            .sort((a, b) => {
+                const assignmentRank = Number(selectedBranchAssignedPharmacistIds.has(b.id)) - Number(selectedBranchAssignedPharmacistIds.has(a.id));
+                if (assignmentRank !== 0) return assignmentRank;
+                return (a.code || '').localeCompare(b.code || '') || a.name.localeCompare(b.name);
+            });
+    }, [pharmacists, selectedBranchAssignedPharmacistIds]);
+
+    const currentBranchManagerName = branchForm.branchManagerName?.trim() || '';
+    const selectedBranchManagerOption = branchManagerOptions.find(pharmacist => pharmacist.name === currentBranchManagerName);
+    const selectedBranchManagerOptionValue = selectedBranchManagerOption?.id || currentBranchManagerName;
+    const assignedBranchManagerOptionCount = branchManagerOptions.filter(pharmacist => selectedBranchAssignedPharmacistIds.has(pharmacist.id)).length;
+
     const selectedBranch = branches.find(branch => branch.id === selectedBranchForPerms);
     const activeTabMeta = TAB_META[activeTab];
     const ActiveTabIcon = activeTabMeta.icon;
@@ -603,6 +666,14 @@ export const ProjectSettings: React.FC<{
     const classifiedBranchCount = branchClassifications.filter(classification => classification.governorate).length;
     const activePharmacistCount = pharmacists.filter(pharmacist => pharmacist.isActive).length;
     const maintenanceEnabled = maintenanceSettings?.isMaintenanceModeEnabled === true;
+    const pharmacyPreviewLogoUrl = maintenanceSettings?.pharmacyLogoUrl?.trim() || DEFAULT_PHARMACY_LOGO_URL;
+    const hubPreviewLogoUrl = maintenanceSettings?.hubLogoUrl?.trim() || DEFAULT_HUB_LOGO_URL;
+    const browserPreviewIconUrl = maintenanceSettings?.browserIconUrl?.trim() || pharmacyPreviewLogoUrl;
+    const loadingSpinnerPreviewUrl = maintenanceSettings?.loadingSpinnerUrl?.trim() || DEFAULT_LOADING_SPINNER_URL;
+    const configuredFooterLogoUrl = maintenanceSettings?.footerLogoUrl?.trim() ?? '';
+    const footerPreviewLogoUrl = configuredFooterLogoUrl || hubPreviewLogoUrl;
+    const footerPreviewText = maintenanceSettings?.footerText?.trim() ?? 'HUB';
+    const showFooterPreviewText = Boolean(footerPreviewText) && footerPreviewText.toLowerCase() !== 'hub';
     const visibleRecordCount = activeTab === 'branches'
         ? filteredBranches.length
         : activeTab === 'pharmacists'
@@ -641,12 +712,7 @@ export const ProjectSettings: React.FC<{
                                 <RotateCcw size={16} className={isLoading ? 'animate-spin' : ''} />
                                 Refresh
                             </button>
-                            <button
-                                onClick={onBack}
-                                className="btn-secondary text-[10px] uppercase tracking-widest"
-                            >
-                                Return to Dashboard
-                            </button>
+                            <BackToModulesButton onClick={onBack} />
                         </div>
                     </div>
                 </header>
@@ -658,7 +724,7 @@ export const ProjectSettings: React.FC<{
                     <StatTile label="Domain status" value={maintenanceEnabled ? 'Paused' : 'Live'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
                 </section>
 
-                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6">
+                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-7">
                     {visibleSettingsTabs.map(tab => {
                         const meta = TAB_META[tab];
                         const Icon = meta.icon;
@@ -711,7 +777,7 @@ export const ProjectSettings: React.FC<{
                         </div>
 
                         <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                            {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && (
+                            {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && activeTab !== 'delivery-zones' && activeTab !== 'module-layout' && (
                                 <div className="relative min-w-0 md:w-80">
                                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                     <input
@@ -757,7 +823,25 @@ export const ProjectSettings: React.FC<{
                     ) : (
                         <div className="p-5 md:p-6">
                             {activeTab === 'login-approvals' && (
-                                <BranchLoginApprovalsSection />
+                                <BranchLoginApprovalsSection
+                                    settings={maintenanceSettings}
+                                    settingsError={maintenanceSettingsError}
+                                    onSettingsChange={updatedSettings => {
+                                        setMaintenanceSettings(updatedSettings);
+                                        onSettingsChange?.(updatedSettings);
+                                    }}
+                                />
+                            )}
+
+                            {activeTab === 'module-layout' && (
+                                <ModuleDisplaySettingsSection
+                                    settings={maintenanceSettings}
+                                    settingsError={maintenanceSettingsError}
+                                    onSettingsChange={updatedSettings => {
+                                        setMaintenanceSettings(updatedSettings);
+                                        onSettingsChange?.(updatedSettings);
+                                    }}
+                                />
                             )}
 
                             {activeTab === 'branches' && (
@@ -842,6 +926,10 @@ export const ProjectSettings: React.FC<{
                                         })}
                                     </div>
                                 )
+                            )}
+
+                            {activeTab === 'delivery-zones' && (
+                                <DeliveryZonesSection branches={branches} canEdit={canManageDeliveryZones} />
                             )}
 
                             {activeTab === 'pharmacists' && (
@@ -1150,15 +1238,65 @@ export const ProjectSettings: React.FC<{
                                                 <FileText size={18} />
                                             </div>
                                             <div>
-                                                <h3 className="text-sm font-black tracking-tight text-slate-900">Footer branding</h3>
-                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Control the logo and text shown in the application footer.</p>
+                                                <h3 className="text-sm font-black tracking-tight text-slate-900">Branding & logos</h3>
+                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Control the logos used in login, header, loading, footer, and the browser tab.</p>
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.9fr]">
                                             <div className="space-y-4">
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pharmacy logo URL / path</label>
+                                                        <input
+                                                            type="text"
+                                                            value={maintenanceSettings.pharmacyLogoUrl}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, pharmacyLogoUrl: e.target.value })}
+                                                            maxLength={500}
+                                                            placeholder="/logo.jpg"
+                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                        <p className="text-xs font-semibold leading-5 text-slate-400">Used in login, header, loading, and fallback browser icon.</p>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Browser icon URL / path</label>
+                                                        <input
+                                                            type="text"
+                                                            value={maintenanceSettings.browserIconUrl}
+                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, browserIconUrl: e.target.value })}
+                                                            maxLength={500}
+                                                            placeholder="/logo.jpg"
+                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                        />
+                                                        <p className="text-xs font-semibold leading-5 text-slate-400">Shown in the browser tab favicon.</p>
+                                                    </div>
+                                                </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Logo URL / path</label>
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">HUB logo URL / path</label>
+                                                    <input
+                                                        type="text"
+                                                        value={maintenanceSettings.hubLogoUrl}
+                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, hubLogoUrl: e.target.value })}
+                                                        maxLength={500}
+                                                        placeholder="/tabarak-logo.svg"
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                    />
+                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Used for the large animated HUB logo on login and as the default footer logo.</p>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Loading spinner URL / path</label>
+                                                    <input
+                                                        type="text"
+                                                        value={maintenanceSettings.loadingSpinnerUrl}
+                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, loadingSpinnerUrl: e.target.value })}
+                                                        maxLength={500}
+                                                        placeholder="/spinner.svg"
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                    />
+                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Used during app loading and public reward-flow verification.</p>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Footer logo override URL / path</label>
                                                     <input
                                                         type="text"
                                                         value={maintenanceSettings.footerLogoUrl}
@@ -1167,6 +1305,7 @@ export const ProjectSettings: React.FC<{
                                                         placeholder="/logo.jpg"
                                                         className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
                                                     />
+                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Leave empty to use the HUB logo.</p>
                                                 </div>
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Footer text</label>
@@ -1186,28 +1325,82 @@ export const ProjectSettings: React.FC<{
                                                         className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
                                                     >
                                                         <Save size={18} />
-                                                        Save footer
+                                                        Save branding
                                                     </button>
                                                     <button
-                                                        onClick={() => setMaintenanceSettings({ ...maintenanceSettings, footerLogoUrl: '', footerText: 'HUB' })}
+                                                        onClick={() => setMaintenanceSettings({
+                                                            ...maintenanceSettings,
+                                                            pharmacyLogoUrl: DEFAULT_PHARMACY_LOGO_URL,
+                                                            hubLogoUrl: DEFAULT_HUB_LOGO_URL,
+                                                            browserIconUrl: DEFAULT_PHARMACY_LOGO_URL,
+                                                            loadingSpinnerUrl: DEFAULT_LOADING_SPINNER_URL,
+                                                            footerLogoUrl: '',
+                                                            footerText: 'HUB'
+                                                        })}
                                                         className="btn-secondary text-[10px] uppercase tracking-widest"
                                                     >
                                                         <RotateCcw size={16} />
-                                                        Reset footer
+                                                        Reset branding
                                                     </button>
                                                 </div>
                                             </div>
 
                                             <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Preview</p>
+                                                <div className="mt-3 grid grid-cols-1 gap-3">
+                                                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login / Header</p>
+                                                        <div className="mt-3 flex items-center gap-3">
+                                                            <img
+                                                                src={pharmacyPreviewLogoUrl}
+                                                                alt="Pharmacy logo preview"
+                                                                className="h-11 w-11 rounded-lg object-cover"
+                                                            />
+                                                            <p className="text-lg font-black text-slate-950">Tabarak Pharmacy</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="rounded-lg border border-slate-200 px-4 py-5" style={{ backgroundColor: '#0f172a' }}>
+                                                        <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-white/40">HUB hero</p>
+                                                        <img
+                                                            src={hubPreviewLogoUrl}
+                                                            alt="HUB logo preview"
+                                                            className="h-20 w-full object-contain"
+                                                        />
+                                                        <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.18em] text-white">Developed by Ahmed Elsherbini</p>
+                                                    </div>
+                                                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Browser icon</p>
+                                                        <div className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                                            <img
+                                                                src={browserPreviewIconUrl}
+                                                                alt="Browser icon preview"
+                                                                className="h-6 w-6 rounded object-cover"
+                                                            />
+                                                            <span className="text-xs font-black text-slate-700">hub | Tabarak Pharmacy</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading spinner</p>
+                                                        <div className="mt-3 flex items-center gap-3">
+                                                            <img
+                                                                src={loadingSpinnerPreviewUrl}
+                                                                alt="Loading spinner preview"
+                                                                className="h-14 w-14 object-contain"
+                                                            />
+                                                            <span className="text-xs font-bold leading-5 text-slate-500">Used while the app connects.</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                                 <div className="mt-3 rounded-lg border border-slate-200 px-4 py-4" style={{ backgroundColor: '#0f172a' }}>
                                                     <div className="flex items-center gap-3">
-                                                        {maintenanceSettings.footerLogoUrl && (
-                                                            <div className="h-9 w-9 overflow-hidden rounded-lg bg-brand shadow-sm">
-                                                                <img src={maintenanceSettings.footerLogoUrl} alt="Footer logo preview" className="h-full w-full object-cover" />
-                                                            </div>
+                                                        <img
+                                                            src={footerPreviewLogoUrl}
+                                                            alt="HUB logo preview"
+                                                            className="h-12 w-32 object-contain object-left brightness-0 invert"
+                                                        />
+                                                        {showFooterPreviewText && (
+                                                            <p className="text-2xl font-black leading-none text-white">{footerPreviewText}</p>
                                                         )}
-                                                        <p className="text-2xl font-black leading-none text-white">{maintenanceSettings.footerText || 'HUB'}</p>
                                                     </div>
                                                 </div>
                                             </aside>
@@ -1438,16 +1631,18 @@ export const ProjectSettings: React.FC<{
                     aria-labelledby="branch-modal-title"
                     aria-describedby="branch-modal-description"
                 >
-                    <div className="bg-white w-full max-w-xl rounded-lg shadow-xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
+                    <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-slate-100 bg-white shadow-xl animate-in zoom-in-95 duration-300">
                         <span id="branch-modal-description" className="sr-only">Configuration form for operational pharmacy branches.</span>
-                        <div className="p-6 border-b flex items-center justify-between bg-slate-50">
-                            <div>
+                        <div className="shrink-0 border-b bg-slate-50 p-4 sm:p-5">
+                            <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
                                 <h3 id="branch-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">Branch</h3>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Configure an operational pharmacy branch</p>
                             </div>
-                            <button onClick={() => setIsBranchModalOpen(false)} className="w-9 h-9 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors"><X size={18} /></button>
+                            <button onClick={() => setIsBranchModalOpen(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white transition-colors hover:bg-slate-100"><X size={18} /></button>
+                            </div>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Code</label>
                                 <input
@@ -1470,13 +1665,35 @@ export const ProjectSettings: React.FC<{
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Manager Name</label>
-                                <input
-                                    type="text"
-                                    value={branchForm.branchManagerName || ''}
-                                    onChange={e => setBranchForm({ ...branchForm, branchManagerName: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                    placeholder="e.g. Branch manager full name"
-                                />
+                                <select
+                                    value={selectedBranchManagerOptionValue}
+                                    onChange={e => {
+                                        const selectedPharmacist = branchManagerOptions.find(pharmacist => pharmacist.id === e.target.value);
+                                        setBranchForm({ ...branchForm, branchManagerName: selectedPharmacist?.name || '' });
+                                    }}
+                                    disabled={branchManagerOptions.length === 0}
+                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all disabled:cursor-not-allowed disabled:text-slate-400"
+                                >
+                                    <option value="">{branchManagerOptions.length === 0 ? 'Register active pharmacists first' : 'Select registered pharmacist'}</option>
+                                    {currentBranchManagerName && !selectedBranchManagerOption && (
+                                        <option value={currentBranchManagerName}>
+                                            Current: {currentBranchManagerName} (not in active registered pharmacists)
+                                        </option>
+                                    )}
+                                    {branchManagerOptions.map(pharmacist => {
+                                        const isAssignedToBranch = selectedBranchAssignedPharmacistIds.has(pharmacist.id);
+                                        return (
+                                            <option key={pharmacist.id} value={pharmacist.id}>
+                                                {pharmacist.code ? `${pharmacist.code} - ` : ''}{pharmacist.name}{isAssignedToBranch ? ' - assigned to this branch' : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <p className="text-[10px] font-bold text-slate-400">
+                                    {branchManagerOptions.length === 0
+                                        ? 'Add active pharmacist profiles before assigning a branch manager.'
+                                        : `${assignedBranchManagerOptionCount} assigned pharmacist${assignedBranchManagerOptionCount === 1 ? '' : 's'} listed first for this branch.`}
+                                </p>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Support WhatsApp Number</label>
@@ -1558,7 +1775,7 @@ export const ProjectSettings: React.FC<{
                                 </label>
                             </div>
                         </div>
-                        <div className="p-6 bg-slate-50 flex gap-4">
+                        <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-4 sm:p-5 flex gap-4">
                             <button onClick={handleSaveBranch} className="btn-primary flex-1 text-[10px] uppercase tracking-widest"><Save size={18} /> Save Branch</button>
                         </div>
                     </div>

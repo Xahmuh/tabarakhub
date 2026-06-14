@@ -3,9 +3,6 @@ import {
     Calendar,
     Search,
     Plus,
-    Trash2,
-    FileEdit,
-    Filter,
     ArrowUpRight,
     ArrowDownRight,
     Clock,
@@ -20,13 +17,13 @@ import {
     Bell,
     ChevronDown,
     ChevronUp,
-    ChevronRight,
     MapPin,
     CalendarDays
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { CashDifference, Role, DifferenceStatus, DifferenceType, Branch } from '../../types';
 import Swal from 'sweetalert2';
+import { isManagerRole } from '../../lib/access';
 
 interface BranchCashDifferenceTrackerProps {
     branchId?: string;
@@ -42,6 +39,48 @@ const escapeHtml = (value: string | null | undefined) =>
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+
+const formatBhd = (value: number) =>
+    `${value.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} BHD`;
+
+type CashStatTone = 'red' | 'emerald' | 'amber' | 'blue' | 'slate';
+
+const CashStatCard = ({
+    icon: Icon,
+    label,
+    value,
+    detail,
+    tone
+}: {
+    icon: React.ElementType;
+    label: string;
+    value: string;
+    detail: string;
+    tone: CashStatTone;
+}) => {
+    const toneClass: Record<CashStatTone, string> = {
+        red: 'bg-red-50 text-red-700 border-red-100',
+        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+        amber: 'bg-amber-50 text-amber-700 border-amber-100',
+        blue: 'bg-blue-50 text-blue-700 border-blue-100',
+        slate: 'bg-slate-50 text-slate-700 border-slate-200'
+    };
+
+    return (
+        <div className="operational-panel p-4 md:p-5">
+            <div className="flex items-start justify-between gap-4">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${toneClass[tone]}`}>
+                    <Icon className="h-5 w-5" />
+                </div>
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+                    {detail}
+                </span>
+            </div>
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
+            <p className="mt-1 text-xl font-black tracking-tight text-slate-950">{value}</p>
+        </div>
+    );
+};
 
 export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerProps> = ({
     branchId,
@@ -61,7 +100,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     const [alertsPage, setAlertsPage] = useState(1); // Pagination for alerts
 
     // --- Date Filter States ---
-    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>(role === 'manager' || role === 'owner' ? 'all' : 'today');
+    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>(isManagerRole(role) || role === 'owner' || role === 'accounts' ? 'all' : 'today');
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -112,7 +151,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                     console.error("Failed to fetch metadata", e);
                 }
             }
-            if (role === 'manager' || role === 'owner') {
+            if (isManagerRole(role) || role === 'owner' || role === 'accounts') {
                 const bList = await supabase.branches.list();
                 setBranches(bList);
             }
@@ -153,7 +192,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             ${pharmacists.map(p => `<option value="${escapeHtml(p)}"></option>`).join('')}
           </datalist>
 
-          ${(role === 'manager' || role === 'owner') && !branchId ? `
+          ${(isManagerRole(role) || role === 'owner' || role === 'accounts') && !branchId ? `
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Branch</label>
               <select id="swal-branch" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold appearance-none">
@@ -320,7 +359,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     };
 
     const handleUpdateStatus = async (diff: CashDifference) => {
-        if (role !== 'manager') return;
+        if (!isManagerRole(role)) return;
 
         const { value: result } = await Swal.fire({
             title: `<span class="text-2xl font-black uppercase tracking-tighter">Review Difference</span>`,
@@ -486,7 +525,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
     // Add all branches to groupedByBranch even if they have no logs (for accounts dashboard)
     // Filter to show only branches with role='branch'
-    if (role === 'manager' || role === 'owner') {
+    if (isManagerRole(role) || role === 'owner' || role === 'accounts') {
         branches
             .filter(branch => branch.role === 'branch')
             .forEach(branch => {
@@ -538,117 +577,175 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
         return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const dateFilterLabel = dateType === 'today'
+        ? 'Today'
+        : dateType === 'yesterday'
+            ? 'Yesterday'
+            : dateType === '7d'
+                ? 'Last 7 Days'
+                : dateType === 'month'
+                    ? 'Last Month'
+                    : dateType === 'custom'
+                        ? 'Custom Period'
+                        : 'All Time';
+    const statusFilterLabel = filterStatus === 'All'
+        ? 'All statuses'
+        : filterStatus === 'Open'
+            ? 'Pending'
+            : filterStatus === 'Closed'
+                ? 'Reconciled'
+                : filterStatus;
+    const totalShortages = filteredDifferences
+        .filter(d => d.differenceType === 'Shortage')
+        .reduce((acc, curr) => acc + Math.abs(curr.difference), 0);
+    const totalIncreases = filteredDifferences
+        .filter(d => d.differenceType === 'Increase')
+        .reduce((acc, curr) => acc + curr.difference, 0);
+    const netDifference = totalIncreases - totalShortages;
+    const pendingCount = filteredDifferences.filter(d => d.status === 'Open').length;
+    const closedCount = filteredDifferences.filter(d => d.status === 'Closed').length;
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header & Actions */}
-            <div className="operational-panel p-5 md:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                <div className="flex items-center space-x-4">
-                    <div>
-                        <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-slate-900 mb-1 uppercase">Financial Registry</h2>
-                    </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
-                    <div className="relative group flex-1 sm:w-80">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-brand transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Find records..."
-                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black tracking-widest uppercase focus:bg-white focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all outline-none"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+            {/* Controls */}
+            <div className="operational-panel p-4 md:p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Reconciliation control</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                                {dateFilterLabel}
+                            </span>
+                            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                                {statusFilterLabel}
+                            </span>
+                            <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                {filteredDifferences.length} records
+                            </span>
+                        </div>
                     </div>
 
-                    <div className="relative">
-                        <button onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                            className="btn-secondary text-[10px] uppercase tracking-widest">
-                            <CalendarDays size={16} className="text-brand" />
-                            <span>{dateType === 'today' ? 'Today' : dateType === 'yesterday' ? 'Yesterday' : dateType === '7d' ? 'Last 7 Days' : dateType === 'month' ? 'Last Month' : dateType === 'custom' ? 'Custom' : 'Archive'}</span>
-                            <ChevronDown size={14} />
-                        </button>
-                        {isDatePickerOpen && (
-                            <div className={`absolute top-full right-0 mt-3 bg-white rounded-lg shadow-xl border border-slate-100 p-3 z-[100] animate-in slide-in-from-top-5 duration-300 ${dateType === 'custom' ? 'w-auto' : 'w-72'}`}>
-                                {dateType !== 'custom' ? (
-                                    <div className="grid grid-cols-1 gap-1.5">
-                                        {[
-                                            { id: 'all', label: 'All Time', sub: 'Total Historical Archive' },
-                                            { id: 'today', label: 'Today', sub: 'Active Duty Records' },
-                                            { id: 'yesterday', label: 'Yesterday', sub: 'Previous Day Performance' },
-                                            { id: '7d', label: 'Last 7 Days', sub: 'Weekly Performance' },
-                                            { id: 'month', label: 'Last Month', sub: '30-Day Fiscal Cycle' },
-                                            { id: 'custom', label: 'Choose Period', sub: 'Manual Calendar Protocol' }
-                                        ].map(t => (
-                                            <button key={t.id} onClick={() => {
-                                                if (dateType === 'custom' && t.id !== 'custom') {
-                                                    setStartDate(''); setEndDate(''); setManualStart(''); setManualEnd('');
-                                                }
-                                                setDateType(t.id as any);
-                                                if (t.id !== 'custom') setIsDatePickerOpen(false);
-                                            }}
-                                                className={`w-full text-left p-3 rounded-lg transition-colors ${dateType === t.id ? 'bg-brand text-white shadow-sm shadow-brand/10' : 'hover:bg-slate-50'}`}>
-                                                <p className="text-[10px] font-black uppercase tracking-widest">{t.label}</p>
-                                                <p className={`text-[8px] font-bold ${dateType === t.id ? 'text-white/60' : 'text-slate-400'} uppercase mt-1 tracking-tighter`}>{t.sub}</p>
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="w-[280px] p-2 space-y-4">
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">From (DD-MM-YYYY)</label>
-                                                <input type="text" placeholder="01-01-2026" value={manualStart} onChange={(e) => setManualStart(e.target.value)}
-                                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] font-black outline-none focus:border-brand/40 transition-all" />
-                                            </div>
-                                            <div>
-                                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">To (DD-MM-YYYY)</label>
-                                                <input type="text" placeholder="31-01-2026" value={manualEnd} onChange={(e) => setManualEnd(e.target.value)}
-                                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] font-black outline-none focus:border-brand/40 transition-all" />
-                                            </div>
+                    <div className="grid w-full gap-3 xl:max-w-5xl xl:grid-cols-[minmax(220px,1fr)_auto_auto_auto]">
+                        <div className="relative group">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-brand" />
+                            <input
+                                type="text"
+                                placeholder="Search branch or pharmacist..."
+                                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-xs font-bold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+                                className="btn-secondary h-10 w-full justify-center text-[10px] uppercase tracking-widest xl:w-auto"
+                            >
+                                <CalendarDays size={16} className="text-brand" />
+                                <span>{dateFilterLabel}</span>
+                                <ChevronDown size={14} />
+                            </button>
+                            {isDatePickerOpen && (
+                                <div className={`absolute right-0 top-full z-[100] mt-3 rounded-lg border border-slate-100 bg-white p-3 shadow-xl animate-in slide-in-from-top-5 duration-300 ${dateType === 'custom' ? 'w-auto' : 'w-72'}`}>
+                                    {dateType !== 'custom' ? (
+                                        <div className="grid grid-cols-1 gap-1.5">
+                                            {[
+                                                { id: 'all', label: 'All Time', sub: 'Total historical archive' },
+                                                { id: 'today', label: 'Today', sub: 'Active duty records' },
+                                                { id: 'yesterday', label: 'Yesterday', sub: 'Previous day performance' },
+                                                { id: '7d', label: 'Last 7 Days', sub: 'Weekly performance' },
+                                                { id: 'month', label: 'Last Month', sub: '30-day fiscal cycle' },
+                                                { id: 'custom', label: 'Choose Period', sub: 'Manual date range' }
+                                            ].map(t => (
+                                                <button key={t.id} onClick={() => {
+                                                    if (dateType === 'custom' && t.id !== 'custom') {
+                                                        setStartDate(''); setEndDate(''); setManualStart(''); setManualEnd('');
+                                                    }
+                                                    setDateType(t.id as any);
+                                                    if (t.id !== 'custom') setIsDatePickerOpen(false);
+                                                }}
+                                                    className={`w-full rounded-lg p-3 text-left transition-colors ${dateType === t.id ? 'bg-brand text-white shadow-sm shadow-brand/10' : 'hover:bg-slate-50'}`}>
+                                                    <p className="text-[10px] font-black uppercase tracking-widest">{t.label}</p>
+                                                    <p className={`mt-1 text-[9px] font-bold ${dateType === t.id ? 'text-white/65' : 'text-slate-400'}`}>{t.sub}</p>
+                                                </button>
+                                            ))}
                                         </div>
-                                        <button onClick={() => {
-                                            const s = parseManualDate(manualStart);
-                                            const e = parseManualDate(manualEnd);
-                                            if (s && e) { setStartDate(s); setEndDate(e); setIsDatePickerOpen(false); }
-                                            else { Swal.fire('Error', 'Invalid date format (DD-MM-YYYY)', 'error'); }
-                                        }}
-                                            className="btn-primary w-full text-[9px] uppercase tracking-widest">
-                                            Confirm Period
-                                        </button>
-                                        <button onClick={() => { setManualStart(''); setManualEnd(''); setStartDate(''); setEndDate(''); setDateType('all'); setIsDatePickerOpen(false); }}
-                                            className="w-full text-slate-400 text-[8px] font-black uppercase tracking-widest hover:text-brand transition-colors">
-                                            Reset Filter
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    ) : (
+                                        <div className="w-[280px] space-y-4 p-2">
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="mb-1 ml-1 block text-[8px] font-black uppercase tracking-widest text-slate-400">From (DD-MM-YYYY)</label>
+                                                    <input type="text" placeholder="01-01-2026" value={manualStart} onChange={(e) => setManualStart(e.target.value)}
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-[10px] font-black outline-none transition-all focus:border-brand/40" />
+                                                </div>
+                                                <div>
+                                                    <label className="mb-1 ml-1 block text-[8px] font-black uppercase tracking-widest text-slate-400">To (DD-MM-YYYY)</label>
+                                                    <input type="text" placeholder="31-01-2026" value={manualEnd} onChange={(e) => setManualEnd(e.target.value)}
+                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-[10px] font-black outline-none transition-all focus:border-brand/40" />
+                                                </div>
+                                            </div>
+                                            <button onClick={() => {
+                                                const s = parseManualDate(manualStart);
+                                                const e = parseManualDate(manualEnd);
+                                                if (s && e) { setStartDate(s); setEndDate(e); setIsDatePickerOpen(false); }
+                                                else { Swal.fire('Error', 'Invalid date format (DD-MM-YYYY)', 'error'); }
+                                            }}
+                                                className="btn-primary w-full text-[9px] uppercase tracking-widest">
+                                                Confirm Period
+                                            </button>
+                                            <button onClick={() => { setManualStart(''); setManualEnd(''); setStartDate(''); setEndDate(''); setDateType('all'); setIsDatePickerOpen(false); }}
+                                                className="w-full text-[8px] font-black uppercase tracking-widest text-slate-400 transition-colors hover:text-brand">
+                                                Reset Filter
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex rounded-lg border border-slate-200 bg-slate-100/70 p-1">
+                            {[
+                                { id: 'All', label: 'All' },
+                                { id: 'Open', label: 'Pending' },
+                                { id: 'Reviewed', label: 'Reviewed' },
+                                { id: 'Closed', label: 'Closed' }
+                            ].map(status => (
+                                <button
+                                    key={status.id}
+                                    onClick={() => setFilterStatus(status.id as DifferenceStatus | 'All')}
+                                    className={`whitespace-nowrap rounded-md px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition-all ${filterStatus === status.id ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                >
+                                    {status.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            {role !== 'owner' && (
+                                <button
+                                    onClick={() => handleAddLog()}
+                                    className="btn-primary h-10 justify-center text-[10px] uppercase tracking-widest"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    <span>Log Difference</span>
+                                </button>
+                            )}
+
+                            <button
+                                onClick={handleExportExcel}
+                                className="btn-secondary h-10 justify-center text-[10px] uppercase tracking-widest"
+                            >
+                                <FileDown className="h-4 w-4" />
+                                <span>Export CSV</span>
+                            </button>
+                        </div>
                     </div>
-
-                    {role !== 'owner' && (
-                        <button
-                            onClick={() => handleAddLog()}
-                            className="btn-primary text-[10px] uppercase tracking-widest"
-                        >
-                            <Plus className="w-4 h-4" />
-                            <span>Log Difference</span>
-                        </button>
-                    )}
-
-                    {(role === 'manager' || role === 'owner') && (
-                        <button
-                            onClick={handleExportExcel}
-                            className="btn-secondary text-[10px] uppercase tracking-widest"
-                        >
-                            <FileDown className="w-4 h-4" />
-                            <span>Bulk Export</span>
-                        </button>
-                    )}
                 </div>
             </div>
 
             {/* Accounts Notification & Pending Center */}
-            {role === 'manager' && pendingLogs.length > 0 && (
+            {isManagerRole(role) && pendingLogs.length > 0 && (
                 <div className="operational-panel p-5 md:p-6">
                     <div className="flex items-center justify-between mb-5">
                         <div className="flex items-center space-x-4">
@@ -731,59 +828,46 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                 </div>
             )}
 
-            {/* Summary Cards (Quick Stats) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="operational-panel p-5 flex items-center space-x-4">
-                    <div className="p-3 bg-red-50 rounded-lg text-red-500">
-                        <ArrowDownRight className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Shortages</p>
-                        <p className="text-xl font-black text-slate-900">
-                            {filteredDifferences.filter(d => d.differenceType === 'Shortage').reduce((acc, curr) => acc + Math.abs(curr.difference), 0).toLocaleString(undefined, { minimumFractionDigits: 3 })} BHD
-                        </p>
-                    </div>
-                </div>
-                <div className="operational-panel p-5 flex items-center space-x-4">
-                    <div className="p-3 bg-emerald-50 rounded-lg text-emerald-500">
-                        <ArrowUpRight className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Increases</p>
-                        <p className="text-xl font-black text-slate-900">
-                            {filteredDifferences.filter(d => d.differenceType === 'Increase').reduce((acc, curr) => acc + curr.difference, 0).toLocaleString(undefined, { minimumFractionDigits: 3 })} BHD
-                        </p>
-                    </div>
-                </div>
-                <div className="operational-panel p-5 flex items-center space-x-4">
-                    <div className="p-3 bg-amber-50 rounded-lg text-amber-500">
-                        <Clock className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pending Reviews</p>
-                        <p className="text-xl font-black text-slate-900">
-                            {filteredDifferences.filter(d => d.status === 'Open').length} Cases
-                        </p>
-                    </div>
-                </div>
-                <div className="operational-panel p-5 flex items-center space-x-4">
-                    <div className="p-3 bg-blue-50 rounded-lg text-blue-500">
-                        <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Closed Cases</p>
-                        <p className="text-xl font-black text-slate-900">
-                            {filteredDifferences.filter(d => d.status === 'Closed').length} Cases
-                        </p>
-                    </div>
-                </div>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <CashStatCard
+                    icon={ArrowDownRight}
+                    label="Total shortages"
+                    value={formatBhd(totalShortages)}
+                    detail={`${filteredDifferences.filter(d => d.differenceType === 'Shortage').length} cases`}
+                    tone="red"
+                />
+                <CashStatCard
+                    icon={ArrowUpRight}
+                    label="Total increases"
+                    value={formatBhd(totalIncreases)}
+                    detail={`${filteredDifferences.filter(d => d.differenceType === 'Increase').length} cases`}
+                    tone="emerald"
+                />
+                <CashStatCard
+                    icon={Wallet}
+                    label="Net variance"
+                    value={`${netDifference >= 0 ? '+' : '-'}${formatBhd(Math.abs(netDifference))}`}
+                    detail={netDifference >= 0 ? 'net increase' : 'net shortage'}
+                    tone={netDifference >= 0 ? 'emerald' : 'red'}
+                />
+                <CashStatCard
+                    icon={Clock}
+                    label="Pending review"
+                    value={`${pendingCount} Cases`}
+                    detail={`${closedCount} closed`}
+                    tone="amber"
+                />
             </div>
 
-            {(role === 'manager' || role === 'owner') ? (
+            {(isManagerRole(role) || role === 'owner' || role === 'accounts') ? (
                 <div className="space-y-4">
-                    {sortedBranches.map((branch, index) => {
+                    {sortedBranches.map((branch) => {
                         const logs = groupedByBranch[branch];
                         const isNew = hasNewLogs(branch);
+                        const branchShortages = logs.filter(log => log.differenceType === 'Shortage').reduce((acc, log) => acc + Math.abs(log.difference), 0);
+                        const branchIncreases = logs.filter(log => log.differenceType === 'Increase').reduce((acc, log) => acc + log.difference, 0);
+                        const branchOpen = logs.filter(log => log.status === 'Open').length;
                         return (
                             <div key={branch} className={`rounded-lg border shadow-sm overflow-hidden transition-colors ${isNew ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-white'}`}>
                                 <div
@@ -791,9 +875,6 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                     className={`w-full flex items-center justify-between p-6 hover:bg-slate-100/50 transition-all border-b border-slate-100 cursor-pointer ${isNew ? 'bg-red-50/50' : 'bg-slate-50'}`}
                                 >
                                     <div className="flex items-center space-x-4">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm ${isNew ? 'bg-red-100 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                            #{index + 1}
-                                        </div>
                                         <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
                                             <MapPin className="w-5 h-5 text-emerald-600" />
                                         </div>
@@ -805,7 +886,20 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="hidden items-center gap-2 lg:flex">
+                                            <span className="rounded-md border border-red-100 bg-red-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-red-700">
+                                                Short {formatBhd(branchShortages)}
+                                            </span>
+                                            <span className="rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                                                Over {formatBhd(branchIncreases)}
+                                            </span>
+                                            {branchOpen > 0 && (
+                                                <span className="rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-amber-700">
+                                                    {branchOpen} open
+                                                </span>
+                                            )}
+                                        </div>
                                         <div onClick={(e) => e.stopPropagation()}>
                                             <button
                                                 onClick={(e) => {
@@ -989,38 +1083,12 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                 </div >
             ) : (
                 <div className="operational-panel overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center space-x-4 text-xs font-black uppercase tracking-widest">
-                            <div className="tab-nav">
-                                <button
-                                    onClick={() => setFilterStatus('All')}
-                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'All' ? 'tab-item-brand' : ''}`}
-                                >
-                                    All Records
-                                </button>
-                                <button
-                                    onClick={() => setFilterStatus('Open')}
-                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'Open' ? 'tab-item-brand' : ''}`}
-                                >
-                                    Pending
-                                </button>
-                                <button
-                                    onClick={() => setFilterStatus('Closed')}
-                                    className={`tab-item text-[10px] uppercase tracking-widest ${filterStatus === 'Closed' ? 'tab-item-brand' : ''}`}
-                                >
-                                    Reconciled
-                                </button>
-                            </div>
-
-                            <div className="h-4 w-px bg-slate-200" />
-
-                            <button
-                                onClick={handleExportExcel}
-                                className="btn-secondary text-[9px] uppercase tracking-widest"
-                            >
-                                <FileDown className="w-3.5 h-3.5" />
-                                <span>Export CSV</span>
-                            </button>
+                    <div className="flex items-center justify-between border-b border-slate-100 p-5">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Filtered records</p>
+                            <p className="mt-1 text-sm font-bold text-slate-900">
+                                {filteredDifferences.length} cash difference {filteredDifferences.length === 1 ? 'record' : 'records'}
+                            </p>
                         </div>
                     </div>
 
@@ -1098,7 +1166,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                             <div className="flex justify-center flex-col items-center space-y-2">
                                                 <button
                                                     onClick={() => handleUpdateStatus(d)}
-                                                    disabled={role !== 'manager'}
+                                                    disabled={!isManagerRole(role)}
                                                     className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center space-x-1.5 transition-all
                                 ${d.status === 'Open' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
                                                              d.status === 'Reviewed' ? 'bg-blue-50 text-blue-600 border border-blue-100' :

@@ -12,6 +12,7 @@ import {
     Users
 } from 'lucide-react';
 import { Region, useStaffingCalculator } from './useStaffingCalculator';
+import { BackToModulesButton } from '../shared';
 
 const INITIAL_REGIONS: Region[] = [
     { id: 'r1', name: 'Region 1', branches24h: 0, branchesRegular: 0 },
@@ -186,13 +187,7 @@ export const WorkforcePage: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
                             Clear model
                         </button>
                         {onBack && (
-                            <button
-                                type="button"
-                                onClick={onBack}
-                                className="inline-flex items-center rounded-lg bg-slate-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-colors hover:bg-slate-800"
-                            >
-                                Back to Modules
-                            </button>
+                            <BackToModulesButton onClick={onBack} />
                         )}
                     </div>
                 </div>

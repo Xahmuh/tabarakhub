@@ -72,7 +72,7 @@ export const getEnabledAccessFeatures = (): AccessFeature[] => {
       id: moduleKey,
       label: formatModuleLabel(moduleKey),
       module: moduleKey,
-      description: 'Auto-registered module access. Defaults to no access until a manager approves it.'
+      description: 'Auto-registered module access. Defaults to no access until an admin approves it.'
     }));
 
   return [...knownFeatures, ...automaticFeatures].filter((feature, index, features) =>

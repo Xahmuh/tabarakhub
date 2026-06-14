@@ -3,7 +3,7 @@ import { toPng } from 'html-to-image';
 import { Spinner } from './Spinner';
 import { spinWinService } from '../../services/spinWin';
 import { SpinPrize, SpinSession, Customer, Branch } from '../../types';
-import { isDemoMode } from '../../config/clientConfig';
+import { clientConfig, isDemoMode } from '../../config/clientConfig';
 import {
     Phone,
     Mail,
@@ -13,7 +13,6 @@ import {
     Share2,
     CheckCircle2,
     AlertCircle,
-    QrCode,
     Smartphone,
     MessageCircle,
     Download,
@@ -26,6 +25,8 @@ import {
 
 interface CustomerFlowProps {
     token: string;
+    logoUrl?: string;
+    spinnerUrl?: string;
 }
 
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
@@ -127,7 +128,7 @@ const saveSpinRecoveryState = (draft: Omit<SpinFlowDraft, 'savedAt'> & { url: st
     }
 };
 
-export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
+export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = clientConfig.logoUrl, spinnerUrl = '/spinner.svg' }) => {
     const [step, setStep] = useState<'validate' | 'info' | 'review' | 'spin' | 'result'>('validate');
     const [session, setSession] = useState<(SpinSession & { branches?: { name?: string, google_maps_link?: string, whatsapp_number?: string } }) | null>(null);
     const voucherRef = useRef<HTMLDivElement>(null);
@@ -258,11 +259,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         }
 
         switch (step) {
-            case 'info': document.title = "Register Entry"; break;
-            case 'review': document.title = "Unlock Prize"; break;
-            case 'spin': document.title = "Lucky Spinner"; break;
-            case 'result': document.title = "You Won!"; break;
-            default: document.title = "Tabarak Reward Hub";
+            case 'info': document.title = `Register Entry | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
+            case 'review': document.title = `Unlock Prize | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
+            case 'spin': document.title = `Lucky Spinner | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
+            case 'result': document.title = `You Won! | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
+            default: document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
         }
     }, [step, skipRating, token]);
 
@@ -618,9 +619,9 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
             {!isWheelStep && (
                 <div className="bg-white p-4 sm:p-5 border-b border-slate-100 flex items-center justify-center space-x-3 shadow-sm sticky top-0 z-50">
                     <div className="w-8 h-8 sm:w-9 sm:h-9 bg-brand rounded-lg flex items-center justify-center overflow-hidden shadow-inner">
-                        <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+                        <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
                     </div>
-                    <h1 className="text-lg sm:text-xl font-black tracking-tight">HUB <span className="text-brand">SPIN & WIN</span></h1>
+                    <h1 className="text-lg sm:text-xl font-black tracking-tight">hub <span className="text-brand">SPIN & WIN</span></h1>
                 </div>
             )}
 
@@ -628,8 +629,8 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                 {/* Validating Token */}
                 {step === 'validate' && (
                     <div className="flex-1 flex flex-col items-center justify-center space-y-6 animate-pulse">
-                        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center">
-                            <QrCode className="w-8 h-8 text-slate-300" />
+                        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-slate-100">
+                            <img src={spinnerUrl} alt="Loading" className="h-20 w-20 object-contain" />
                         </div>
                         <div className="text-center">
                             <h3 className="text-lg font-bold text-slate-900">Verifying Token</h3>
@@ -750,6 +751,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                                         motionTiltY={wheelMotion.tiltY}
                                         motionNudge={wheelMotion.nudge}
                                         isMotionActive={motionPermission === 'enabled' && wheelMotion.strength > 8}
+                                        logoUrl={logoUrl}
                                     />
                                     {step === 'review' && (
                                         <div className="absolute inset-0 z-30 flex items-center justify-center">

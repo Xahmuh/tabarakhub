@@ -95,16 +95,16 @@ export const authService = {
       return { user: null, pharmacist: null, permissions: [] };
     }
 
-    // Legacy safety: retired accounts users map onto the warehouse model.
-    // Admin remains distinct so maintenance/admin access keeps working on
-    // deployments that still carry legacy admin profiles.
-    const normalizedRole: Role = profile.role === 'accounts'
-      ? 'warehouse'
+    // Legacy safety: old "manager" profiles are presented as Admin in the app,
+    // while the database helper functions still accept manager during migration.
+    const normalizedRole: Role = profile.role === 'manager'
+      ? 'admin'
       : profile.role as Role;
 
     if (normalizedRole !== 'branch') {
       const identityUser: Branch = {
         id: data.session.user.id,
+        userId: data.session.user.id,
         code: normalizedRole.toUpperCase(),
         name: normalizedRole.toUpperCase(),
         role: normalizedRole
@@ -121,7 +121,7 @@ export const authService = {
       return { user: null, pharmacist: null, permissions: [] };
     }
 
-    return { user: toBranch(branchRow), pharmacist: null, permissions: [] };
+    return { user: { ...toBranch(branchRow), userId: data.session.user.id }, pharmacist: null, permissions: [] };
   },
 
   getSession: async () => {

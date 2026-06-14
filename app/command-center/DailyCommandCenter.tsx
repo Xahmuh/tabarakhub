@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   Activity,
-  ArrowLeft,
   Building2,
   CheckCircle2,
   Clock,
@@ -16,10 +15,14 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { Branch } from '../../types';
+import { BackToModulesButton } from '../shared';
 import { useCommandCenterSummary } from './useCommandCenterSummary';
 import { operationsTaskService } from './operationsTaskService';
 import { exportYesterdayLostSales, exportYesterdayOperationsPack, exportYesterdayShortages } from './yesterdayExports';
 import { ActionQueueItem, ActionQueueStatus, BranchHealthStatus, CommandCenterSeverity, CommandCenterSourceModule, TodayRisk } from './types';
+import { isManagerRole } from '../../lib/access';
+import { isModuleEnabled } from '../../config/clientConfig';
+import { BranchCoverageMapWidget } from './BranchCoverageMapWidget';
 
 interface DailyCommandCenterProps {
   user: Branch | null;
@@ -131,7 +134,7 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
     status: ActionQueueStatus;
     comment: string;
   } | null>(null);
-  const canManageTasks = user?.role === 'manager';
+  const canManageTasks = isManagerRole(user?.role);
   const canCreateTasks = canManageTasks;
   const digest = summary.yesterdayDigest;
   const isBranchUser = user?.role === 'branch';
@@ -254,14 +257,7 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
               <span className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 Updated {formatGeneratedAt(summary.generatedAt)}
               </span>
-              <button
-                type="button"
-                onClick={() => onNavigate?.('selector')}
-                className="btn-secondary text-xs"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
+              <BackToModulesButton onClick={() => onNavigate?.('selector')} />
               <button
                 type="button"
                 onClick={refresh}
@@ -316,6 +312,10 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
         <div className={`rounded-lg border p-4 text-sm font-bold ${notice.type === 'success' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
           {notice.message}
         </div>
+      )}
+
+      {user && isModuleEnabled('delivery') && (
+        <BranchCoverageMapWidget user={user} onOpenDelivery={() => onNavigate?.('delivery')} />
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">

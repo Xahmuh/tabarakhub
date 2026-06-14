@@ -2,9 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
-type AssignableRole = "manager" | "owner" | "supervisor" | "warehouse" | "branch";
+type AssignableRole = "admin" | "branch" | "supervisor" | "warehouse" | "accounts";
 
-const assignableRoles: AssignableRole[] = ["manager", "owner", "supervisor", "warehouse", "branch"];
+const assignableRoles: AssignableRole[] = ["admin", "branch", "supervisor", "warehouse", "accounts"];
 
 serve(async (req) => {
   const json = (body: Record<string, unknown>, status = 200) =>
@@ -55,8 +55,12 @@ serve(async (req) => {
     .eq("user_id", requester.id)
     .maybeSingle();
 
-  if (requesterError || !requesterProfile?.is_active || requesterProfile.role !== "manager") {
-    return json({ error: "Only active managers can create users" }, 403);
+  if (
+    requesterError ||
+    !requesterProfile?.is_active ||
+    !["admin", "manager"].includes(requesterProfile.role)
+  ) {
+    return json({ error: "Only active admins can create users" }, 403);
   }
 
   let body: any;
@@ -70,7 +74,7 @@ serve(async (req) => {
   const password = String(body.password || "");
   const role = String(body.role || "") as AssignableRole;
   const branchId = body.branchId ? String(body.branchId) : null;
-  const isActive = body.isActive !== false;
+  const requestedIsActive = body.isActive !== false;
   const supervisorBranchIds = Array.isArray(body.supervisorBranchIds)
     ? body.supervisorBranchIds.map((id: unknown) => String(id)).filter(Boolean)
     : [];
@@ -86,6 +90,8 @@ serve(async (req) => {
   if (!assignableRoles.includes(role)) {
     return json({ error: "Invalid role" }, 400);
   }
+
+  const isActive = role === "admin" ? true : requestedIsActive;
 
   if (role === "branch" && !branchId) {
     return json({ error: "Branch role requires a linked branch" }, 400);
@@ -118,7 +124,7 @@ serve(async (req) => {
     password,
     email_confirm: true,
     user_metadata: {
-      created_by_manager_id: requester.id,
+      created_by_admin_id: requester.id,
       created_from: "tabarak_hub_access_control",
     },
   });

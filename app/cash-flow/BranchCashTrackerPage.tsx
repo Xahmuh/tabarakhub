@@ -1,7 +1,7 @@
 import React from 'react';
-import { Wallet, Landmark } from 'lucide-react';
 import { BranchCashDifferenceTracker } from './BranchCashDifferenceTracker';
 import { Role } from '../../types';
+import { BackToModulesButton } from '../shared';
 
 interface BranchCashTrackerPageProps {
     onBack: () => void;
@@ -17,32 +17,21 @@ export const BranchCashTrackerPage: React.FC<BranchCashTrackerPageProps> = ({
     pharmacistName
 }) => {
     return (
-        <div className="min-h-screen bg-white">
-            <div className="max-w-[1600px] mx-auto px-5 md:px-8 py-8">
+        <div className="min-h-screen bg-slate-50">
+            <div className="mx-auto max-w-[1600px] px-5 py-8 md:px-8">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 mb-8">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-brand rounded-lg flex items-center justify-center text-white shadow-sm shadow-brand/10">
-                            <Wallet size={24} />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
-                                Branch Cash Discrepancies
-                            </h1>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2 italic">
-                                Log and track daily cash discrepancies between POS and cash count
-                            </p>
-                        </div>
+                <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Finance module</p>
+                        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                            Branch Cash Discrepancies
+                        </h1>
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                            Log and reconcile daily differences between POS cash and drawer count.
+                        </p>
                     </div>
 
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={onBack}
-                            className="btn-secondary text-[10px] uppercase tracking-widest"
-                        >
-                            <span>Back to Operational Suite</span>
-                        </button>
-                    </div>
+                    <BackToModulesButton onClick={onBack} />
                 </div>
 
                 {/* Main Content */}

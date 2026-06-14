@@ -6,6 +6,8 @@ import { contributionService } from '../../services/contributionService';
 import { EmployeeContribution, ContributionType } from '../../types';
 import { ContributionCard, AddContributionModal } from './components';
 import Swal from 'sweetalert2';
+import { isManagerRole } from '../../lib/access';
+import { BackToModulesButton } from '../shared';
 
 interface Props {
   userRole?: string;
@@ -26,7 +28,7 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
   const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<'All' | string>('All');
 
-  const isManager = userRole === 'manager' || userRole === 'master';
+  const isManager = isManagerRole(userRole) || userRole === 'master';
 
   const loadData = async () => {
     setIsLoading(true);
@@ -140,12 +142,7 @@ export const EmployeeContributionsPage: React.FC<Props> = ({ userRole, branchCod
             </button>
           )}
           {onBack && (
-            <button 
-              onClick={onBack}
-              className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
-            >
-              Back to Suite
-            </button>
+            <BackToModulesButton onClick={onBack} />
           )}
         </div>
       </div>

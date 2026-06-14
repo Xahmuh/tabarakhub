@@ -12,6 +12,7 @@ interface BranchLoginApprovalWaitingPageProps {
   onExpired: (approval: BranchLoginApproval) => void;
   onVerificationError: () => void;
   onCancel: () => void;
+  logoUrl?: string;
 }
 
 const formatTime = (value?: string | null) => {
@@ -37,12 +38,14 @@ export const BranchLoginApprovalWaitingPage: React.FC<BranchLoginApprovalWaiting
   onRejected,
   onExpired,
   onVerificationError,
-  onCancel
+  onCancel,
+  logoUrl
 }) => {
   const [currentRequest, setCurrentRequest] = useState(request);
   const [countdown, setCountdown] = useState(() => formatCountdown(request.expiresAt));
   const displayBranchName = branchName || currentRequest.branchName || currentRequest.branchCode || 'Branch account';
   const deviceLabel = currentRequest.deviceLabel || 'Current browser session';
+  const brandLogoUrl = logoUrl || clientConfig.logoUrl;
 
   const requestedAt = useMemo(() => formatTime(currentRequest.requestedAt), [currentRequest.requestedAt]);
   const expiresAt = useMemo(() => formatTime(currentRequest.expiresAt), [currentRequest.expiresAt]);
@@ -78,7 +81,7 @@ export const BranchLoginApprovalWaitingPage: React.FC<BranchLoginApprovalWaiting
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center justify-center">
         <section className="w-full rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm md:p-8">
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-brand shadow-lg shadow-brand/20">
-            <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
+            <img src={brandLogoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
           </div>
 
           <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand">

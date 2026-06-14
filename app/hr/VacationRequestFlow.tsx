@@ -175,6 +175,26 @@ const ReadOnlyField = ({ label, value, isRtl }: { label: string; value: string; 
     </div>
 );
 
+const FlowSignal = ({ icon: Icon, label, value, tone = 'slate' }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; tone?: 'red' | 'emerald' | 'amber' | 'slate' }) => {
+    const toneClass = tone === 'red'
+        ? 'bg-red-50 text-red-700 border-red-100'
+        : tone === 'emerald'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+            : tone === 'amber'
+                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                : 'bg-slate-50 text-slate-700 border-slate-200';
+
+    return (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg border ${toneClass}`}>
+                <Icon className="h-4 w-4" />
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+            <div className="mt-1 text-sm font-bold text-slate-900">{value}</div>
+        </div>
+    );
+};
+
 export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employee, onBack, onComplete, lang }) => {
     const [step, setStep] = useState<'policy' | 'form' | 'review'>('policy');
     const [policyRead, setPolicyRead] = useState(false);
@@ -264,30 +284,45 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
     // POLICY SCREEN
     if (step === 'policy') {
         return (
-            <div className={`max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6 animate-in fade-in duration-300 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className={`mx-auto max-w-5xl px-4 py-6 animate-in fade-in duration-300 sm:px-6 sm:py-8 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-1 mb-6">
                     <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors flex items-center gap-1">
                         {isRtl ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
                         {isRtl ? 'رجوع' : 'Back'}
                     </button>
-                    <span className="text-slate-300 mx-1">/</span>
-                    <span className="text-xs text-slate-600 font-semibold">{t.policy_title}</span>
                 </div>
 
-                <div className="mb-5">
-                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-1">{t.policy_title}</h2>
-                    <p className="text-sm text-slate-500">{t.policy_desc}</p>
-                </div>
+                <section className="mb-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                {isRtl ? 'إقرار مطلوب' : 'Acknowledgement required'}
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-950 sm:text-3xl">{t.policy_title}</h2>
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t.policy_desc}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:min-w-[360px]">
+                            <FlowSignal icon={Clock} label={isRtl ? 'الخطوة' : 'Step'} value={isRtl ? 'السياسة' : 'Policy'} tone="amber" />
+                            <FlowSignal icon={CheckCircle2} label={isRtl ? 'التالي' : 'Next'} value={isRtl ? 'الطلب' : 'Request'} tone="emerald" />
+                        </div>
+                    </div>
+                </section>
 
-                <div className="bg-white rounded-xl border border-slate-200 p-5 mb-5 max-h-[55vh] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-slate-900 mb-4 pb-3 border-b border-slate-100">{t.policy_header}</h3>
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{t.policy_text}</div>
+                <div className="mb-5 max-h-[52vh] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-5 backdrop-blur">
+                        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                            {t.policy_header}
+                        </h3>
+                    </div>
+                    <div className="whitespace-pre-wrap p-5 text-sm leading-7 text-slate-600">{t.policy_text}</div>
                 </div>
 
                 <div
-                    className={`flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer mb-5 ${
-                        policyRead ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 hover:border-slate-300'
+                    className={`mb-5 flex cursor-pointer items-start gap-4 rounded-lg border p-4 shadow-sm transition-all ${
+                        policyRead ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                     onClick={() => setPolicyRead(!policyRead)}
                 >
@@ -321,7 +356,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
     return (
         <div className={isRtl ? 'font-arabic' : 'font-sans'} dir={isRtl ? 'rtl' : 'ltr'}>
             {/* --- SCREEN VIEW --- */}
-            <div className="max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6 animate-in fade-in duration-300 print:hidden">
+            <div className="mx-auto max-w-5xl px-4 py-6 animate-in fade-in duration-300 sm:px-6 sm:py-8 print:hidden">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <div className="flex items-center gap-3">
@@ -350,10 +385,16 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                     )}
                 </div>
 
+                <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <FlowSignal icon={User} label={isRtl ? 'الموظف' : 'Employee'} value={employee.name} tone="slate" />
+                    <FlowSignal icon={Plane} label={isRtl ? 'نوع الإجازة' : 'Leave type'} value={formData.leaveType} tone="red" />
+                    <FlowSignal icon={CalendarDays} label={isRtl ? 'الأيام' : 'Days'} value={`${formData.daysCount || 0}`} tone={formData.daysCount > 0 ? 'emerald' : 'amber'} />
+                </div>
+
                 {/* Form Card */}
                 <div className="space-y-5">
                     {/* Employee Info */}
-                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                             <User className="w-4 h-4 text-slate-400" />
                             {t.lbl_emp_info}
@@ -407,7 +448,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                     </div>
 
                     {/* Leave Details */}
-                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                             <CalendarDays className="w-4 h-4 text-slate-400" />
                             {t.lbl_leave_details}
@@ -429,7 +470,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                                     </FormField>
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-slate-400">{t.lbl_days}</label>
-                                        <div className="h-11 flex items-center justify-center bg-red-50 border border-red-100 rounded-xl text-lg font-bold text-red-700">
+                                        <div className="h-11 flex items-center justify-center bg-red-50 border border-red-100 rounded-lg text-lg font-bold text-red-700">
                                             {formData.daysCount || 0}
                                         </div>
                                     </div>
@@ -447,7 +488,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                                         type="button"
                                         disabled={isReview}
                                         onClick={() => setFormData({ ...formData, leaveType: type })}
-                                        className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                                        className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
                                             formData.leaveType === type
                                                 ? 'bg-red-700 text-white border-red-700'
                                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
@@ -462,7 +503,7 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                         {/* Notes */}
                         {isReview ? (
                             formData.notes && (
-                                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                                <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
                                     <label className="text-[10px] font-semibold text-amber-600 uppercase block mb-1">{t.lbl_notes}</label>
                                     <p className="text-sm text-amber-900 italic">"{formData.notes}"</p>
                                 </div>

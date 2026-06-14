@@ -121,6 +121,23 @@ Google review/sign-in URL opened after pressing Rate Branch to Spin
 
 The in-app browser replaced/lost the app tab after opening the external Google URL. The Chrome fallback was approved, but the Codex Chrome Extension was not installed/enabled in the selected Chrome profile, so Chrome automation could not be used to complete return/refresh/Continue/spin/voucher verification. Do not mark this browser gate passed until the checklist above is executed in a browser that preserves both the app tab and the Google Maps/review tab.
 
+## Branch QR Generator Redesign QA Note
+
+Checked on: 2026-06-14
+
+Authenticated browser QA for the redesigned branch-side Customer Engagement
+Generator / Generate QR & Link page was attempted locally, but the available
+in-app browser reached only the login page. No authorized manager/admin/owner
+session or usable credentials were available, and Chrome profile automation was
+not used without explicit approval. The authenticated generator page, mode
+cards, QR downloads, copy feedback, and Talabat/WhatsApp panels remain pending
+for a valid role session.
+
+The public customer link regression was smoke-tested locally with a static
+branch-code URL. It opened the customer flow without login, exchanged to a
+token URL, and displayed the customer details screen without observed console
+errors. The Google Maps return/Continue/spin/voucher portion remains pending.
+
 Smoke-test data cleanup on the linked Supabase project:
 
 ```text

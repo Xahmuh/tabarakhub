@@ -1,8 +1,10 @@
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
-import { buildPermissionChecker } from '../../lib/access';
+import { buildPermissionChecker, isManagerRole } from '../../lib/access';
 import { FeaturePermission, MaintenanceSettings, RolePermission } from '../../types';
+
+const DEFAULT_FOOTER_LOGO_URL = '/tabarak-logo.svg';
 
 export interface FooterProps {
     onNavigate?: (tab: any) => void;
@@ -14,12 +16,15 @@ export interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermissions = [], user, settings }) => {
     const role = user?.role;
-    const isManager = role === 'manager';
+    const isManager = isManagerRole(role);
     const isOwner = role === 'owner';
     const isWarehouse = role === 'warehouse';
-    const canApproveBranchLogins = role === 'admin' || role === 'manager' || role === 'owner';
-    const footerLogoUrl = settings?.footerLogoUrl ?? '';
-    const footerText = settings?.footerText ?? 'HUB';
+    const canApproveBranchLogins = isManager || role === 'owner';
+    const hubLogoUrl = settings?.hubLogoUrl?.trim() || DEFAULT_FOOTER_LOGO_URL;
+    const configuredFooterLogoUrl = settings?.footerLogoUrl?.trim() ?? '';
+    const footerLogoUrl = configuredFooterLogoUrl || hubLogoUrl;
+    const footerText = settings?.footerText?.trim() ?? 'HUB';
+    const showFooterText = Boolean(footerText) && footerText.toLowerCase() !== 'hub';
 
     const checkPermission = buildPermissionChecker(role, permissions, rolePermissions);
 
@@ -94,12 +99,12 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
             <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-4">
                 <div className="flex flex-col gap-3 text-sm text-white md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                        {footerLogoUrl && (
-                            <div className="w-8 h-8 bg-brand rounded-lg overflow-hidden shadow-sm">
-                                <img src={footerLogoUrl} alt="Footer logo" className="w-full h-full object-cover" />
-                            </div>
-                        )}
-                        {footerText && <p className="text-2xl font-black leading-none text-white">{footerText}</p>}
+                        <img
+                            src={footerLogoUrl}
+                            alt="HUB logo"
+                            className="h-12 w-32 object-contain object-left brightness-0 invert"
+                        />
+                        {showFooterText && <p className="text-2xl font-black leading-none text-white">{footerText}</p>}
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-white">
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-white">

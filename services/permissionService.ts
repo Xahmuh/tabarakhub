@@ -1,5 +1,5 @@
 import { supabaseClient } from '../lib/supabaseClient';
-import { AppUser, FeaturePermission, Role, RolePermission } from '../types';
+import { AppUser, FeaturePermission, Role, RolePermission, UserFeaturePermission } from '../types';
 
 export type AdminCreateUserInput = {
   email: string;
@@ -66,8 +66,55 @@ export const permissionService = {
     if (error) throw error;
     return true;
   },
+  listForUser: async (userId: string): Promise<FeaturePermission[]> => {
+    const { data, error } = await supabaseClient
+      .from('app_user_feature_permissions')
+      .select('user_id, feature_name, access_level')
+      .eq('user_id', userId);
+    if (error) return [];
+    return (data || []).map(p => ({
+      id: `${p.user_id}:${p.feature_name}`,
+      branchId: `user:${p.user_id}`,
+      featureName: p.feature_name,
+      accessLevel: p.access_level
+    })) as FeaturePermission[];
+  },
+  listRawForUser: async (userId: string): Promise<UserFeaturePermission[]> => {
+    const { data, error } = await supabaseClient
+      .from('app_user_feature_permissions')
+      .select('user_id, feature_name, access_level')
+      .eq('user_id', userId);
+    if (error) return [];
+    return (data || []).map(p => ({
+      userId: p.user_id,
+      featureName: p.feature_name,
+      accessLevel: p.access_level
+    }));
+  },
+  replaceUserPermissions: async (userId: string, permissions: Array<Pick<UserFeaturePermission, 'featureName' | 'accessLevel'>>) => {
+    const { error: deleteError } = await supabaseClient
+      .from('app_user_feature_permissions')
+      .delete()
+      .eq('user_id', userId);
+    if (deleteError) throw deleteError;
 
-  // --- User & role administration (manager-guarded security definer RPCs) ---
+    if (permissions.length === 0) return true;
+
+    const rows = permissions.map(permission => ({
+      user_id: userId,
+      feature_name: permission.featureName,
+      access_level: permission.accessLevel,
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabaseClient
+      .from('app_user_feature_permissions')
+      .insert(rows);
+    if (error) throw error;
+    return true;
+  },
+
+  // --- User & role administration (admin-guarded security definer RPCs/functions) ---
   adminListUsers: async (): Promise<AppUser[]> => {
     const { data, error } = await supabaseClient.rpc('app_admin_list_users');
     if (error) throw error;
@@ -101,6 +148,22 @@ export const permissionService = {
     const user = data?.user;
     if (!user) throw new Error('User was created but no user payload was returned.');
     return user as AppUser;
+  },
+  adminDeleteUser: async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabaseClient.functions.invoke('admin-delete-user', {
+      body: { userId }
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return true;
+  },
+  adminResetUserPassword: async (userId: string, password: string): Promise<boolean> => {
+    const { data, error } = await supabaseClient.functions.invoke('admin-reset-user-password', {
+      body: { userId, password }
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return true;
   },
 
   // --- Supervisor branch assignments ---

@@ -12,7 +12,7 @@ B) dedicated-client staging-ready only
 
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
-| Migration status | Pass for history alignment | Migration history was repaired for the seven schema-present/manual-applied migrations, the three approved remaining migrations were applied with `supabase.cmd migration up --linked --include-all --yes`, and the approved Spin Static QR remediation `20260614150000_harden_spin_static_qr_exchange_rpc.sql` was applied with `supabase.cmd migration up --linked --yes`. `supabase.cmd migration list --linked` now shows no observed local-only or remote-only gaps. |
+| Migration status | Pass for current linked history alignment | Approved migration history is aligned through `20260614203000_branding_logo_system_settings.sql`, including Quality Feedback, Admin Role Access, user-permission grant hardening, Module Layout settings, and Branding Logo settings. Future database changes must still be reviewed intentionally; do not run blind `supabase db push`. |
 | RLS / role isolation | Partial pass | Real branch T001/H003 sessions passed targeted cross-branch reads returning 0 rows across delivery_orders, lost_sales, shortages, cash_differences, pharmacist_branches, operations_tasks, and branch_login_approvals. Anon select denied on the same sensitive tables. Helper/RPC anon grant remediation was applied to the linked project; unsafe non-allowlisted anon EXECUTE count is now 0. Supervisor/browser QA remains pending. |
 | Branch login approval | Partial pass | Branch pending request creation, branch self-approval denial, cross-branch approval read denial, warehouse list/approval denial, and cancel passed at API/RLS layer. Manager/admin browser approve/reject and sign-out UX remain pending. |
 | Branch-scoped workflows | Partial pass | SQL/RLS checks passed for branch A/B on core branch-scoped tables. UI smoke tests for Delivery, Cash Tracker, Lost Sales, Shortages, Live Shift Coverage, pharmacist assignment, feature permissions, and operations task creation remain pending. |
@@ -23,6 +23,10 @@ B) dedicated-client staging-ready only
 | Edge functions / secrets / CORS | Fail | Linked secrets list still shows only Supabase defaults. Local Edge Function code is prepared with non-wildcard dynamic CORS on browser-called functions and placeholder-safe email function configuration, but it was not deployed in this pass. Required production secrets such as FUNCTION_SECRET, ALLOWED_ORIGIN/CLIENT_APP_URL, RESEND_API_KEY, email settings, and optional ANTHROPIC_API_KEY are not configured in the linked project. Operator checklist added: `docs/EDGE_FUNCTIONS_DEPLOYMENT_CHECKLIST.md`. |
 | Env vars | Partial pass | `.env.example.production` separates frontend-safe VITE values from server-only secrets. Actual deployment env cannot be fully validated here; `.env.production` is not present. |
 | Storage policies | Partial pass | `contributions` public exposure was remediated on the linked project: bucket public=false, legacy public policies count=0, anon upload denied, public URL fetch denied, authenticated download works. Manager write policies exist, but real manager Storage API upload/update/delete remains pending because manager browser credentials are invalid. |
+| Quality Feedback questions | Partial pass | `20260614173000_seed_quality_feedback_questions_from_legacy.sql` was applied and recorded with explicit approval. Linked data now has `feedback_questions` = 28, `quality_feedback_questions` = 28, duplicate `field_key` groups = 0. SQL/RLS validation passed for anon active-question read, anon write denial, branch no-management behavior, and Admin question-management after the Admin role migration. Browser QA remains pending because no authenticated session/password was available. |
+| Admin Role Access model | Partial pass | `20260614190000_admin_role_access_model.sql` and `20260614193000_harden_app_user_feature_permissions_grants.sql` were applied and recorded. First Admin was bootstrapped for `ahmedelsherbiinii@gmail.com`; SQL/RLS role simulations passed for Admin, Branch, Supervisor, Warehouse, Accounts, and user-level permissions. Browser QA is pending because no password/session was available. `public.branches` still contains one legacy `manager` placeholder row referenced by `legacy_branch_password_backups`, requiring explicit cleanup approval. |
+| Module Layout settings | Partial pass | `20260614200000_module_display_settings.sql` was applied and recorded on the linked project. Schema/data validation passed for `system_settings.module_display_settings` as non-null jsonb with default `{"items":[]}`. Code review confirms presentation-only order/badge behavior, permission filtering before sorting, text-safe badges, and default fallback. Authenticated browser QA remains pending because no valid admin/manager/owner/branch session was available. |
+| Branding logo settings | Partial pass | `20260614203000_branding_logo_system_settings.sql` was applied and recorded on the linked project. Schema/data validation passed for `system_settings.pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` as non-null text columns with expected defaults. Authenticated Project Settings browser QA remains pending because no valid admin/manager/owner session was available. |
 | Audit risk | Fail | `npm audit --audit-level=moderate` still fails with 5 vulnerabilities: 2 moderate uuid/exceljs and 3 high esbuild/vite, no fix available in current audit output. Production acceptance is not recorded. |
 | Smoke tests | Pending | Spin Static QR SQL/API smoke passed after remediation. Deployed frontend QR smoke partially passed through Google opening, but return/refresh/Continue/spin/voucher remains pending due browser automation limits. No working manager/admin browser credentials were available, so full browser smoke remains pending. |
 | Documentation | Updated | Release, gaps, manual QA, migration gap, security, security acceptance, accepted risks, and handover docs updated with final gate status. |
@@ -214,11 +218,16 @@ lint/test scripts: not present in package.json
 Checked, repaired, and fully aligned on 2026-06-14:
 
 ```text
-local-only migrations after approved apply: 0 observed
+approved migrations through 20260614203000: aligned
 remote-only migrations: 0 observed
 history_repaired_as_applied: 20260613124500, 20260614090000, 20260614103000, 20260614104500, 20260614120000, 20260614123000, 20260614133000
 approved_migrations_applied_and_recorded: 20260613103000, 20260613131500, 20260613134500
 spin_static_qr_remediation_applied_and_recorded: 20260614150000
+quality_feedback_seed_hardening_applied_and_recorded: 20260614173000
+admin_role_access_model_applied_and_recorded: 20260614190000
+user_feature_permission_grant_hardening_applied_and_recorded: 20260614193000
+module_layout_settings_applied_and_recorded: 20260614200000
+branding_logo_system_settings_applied_and_recorded: 20260614203000
 ```
 
 Repair command run:
@@ -233,9 +242,7 @@ Approved remaining migrations applied:
 supabase.cmd migration up --linked --include-all --yes
 ```
 
-`supabase db push` is no longer blocked by known local-only migration gaps, but
-it should still not be used casually. Future database changes must be reviewed,
-backed up, and applied intentionally.
+`supabase db push` must not be used casually. Future database changes must be reviewed, backed up, and applied intentionally.
 
 Migration reconciliation plan verification:
 
@@ -252,7 +259,7 @@ Migration history repair verification:
 supabase.cmd migration repair --linked --status applied 20260613124500 20260614090000 20260614103000 20260614104500 20260614120000 20260614123000 20260614133000: passed
 supabase.cmd migration up --linked --include-all --yes: passed for 20260613103000, 20260613131500, 20260613134500
 supabase.cmd migration up --linked --yes: passed for 20260614150000
-supabase.cmd migration list --linked: no observed local-only or remote-only gaps
+supabase.cmd migration list --linked: approved migrations through 20260614150000 aligned at that time
 ```
 
 Approved remaining migration application verification:
@@ -270,6 +277,79 @@ npm.cmd run typecheck: passed
 npm.cmd run build: passed, with existing Browserslist/chunk-size/static+dynamic import warnings
 npm.cmd ls --depth=0: passed
 npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort: local Vite server started; / and /delivery returned HTTP 200
+```
+
+Quality Feedback migration verification:
+
+```text
+supabase.cmd db query --linked --file supabase\migrations\20260614173000_seed_quality_feedback_questions_from_legacy.sql: passed
+supabase.cmd migration repair --linked --status applied 20260614173000: passed
+supabase.cmd migration list --linked: 20260614173000 present in local and remote history
+feedback_questions rows: 28
+quality_feedback_questions rows: 28
+duplicate quality_feedback_questions.field_key groups: 0
+quality_feedback_questions anon active-question read: 28 rows
+quality_feedback_questions anon insert/update/delete: denied
+quality_feedback_questions branch read: 28 rows
+quality_feedback_questions branch insert: denied by RLS
+quality_feedback_questions branch update/delete: 0 rows affected
+quality_feedback_questions manager SQL simulation: insert/update/delete passed inside rollback
+quality_feedback_questions owner SQL simulation: insert/update passed inside rollback
+sample branch simulation profile restored: role=branch, is_active=true
+post-admin migration SQL/RLS: admin can update questions inside rollback; branch update affects 0 rows
+browser QA: attempted locally; app reached login with no console errors, but no authenticated session/password was available
+```
+
+Admin Role Access migration verification:
+
+```text
+supabase.cmd migration up --linked --yes: applied 20260614190000_admin_role_access_model.sql
+supabase.cmd migration up --linked --yes: applied 20260614193000_harden_app_user_feature_permissions_grants.sql
+supabase.cmd migration list --linked: aligned through 20260614193000 at Admin validation time; later Module Layout validation aligned through 20260614200000
+app_user_profiles roles: admin=1, branch=20
+legacy manager app profiles: 0
+non-branch branch_id violations: 0
+branch users linked to missing/non-branch branches: 0
+branches table admin-like rows: 1 legacy manager placeholder remains
+legacy manager branch placeholder references: legacy_branch_password_backups.branch_id = 1
+admin bootstrap profile: ahmedelsherbiinii@gmail.com, role=admin, branch_id=null, is_active=true
+admin simulation: can_manage=true, is_admin=true, can_read_all=true, app_admin_list_users=21
+branch simulation: can_manage=false, is_admin=false, can_read_all=false
+supervisor rollback simulation: assigned branch=true, unassigned branch=false
+warehouse rollback simulation: can_read_all=true, can_manage=false
+accounts rollback simulation: can_read_all=false, can_manage=false
+app_user_feature_permissions branch write: denied by RLS
+app_user_feature_permissions admin write: passed inside rollback
+app_user_feature_permissions authenticated TRUNCATE: false after grant hardening
+browser QA: attempted locally; stopped at login because no password/session was available
+```
+
+Module Layout migration verification:
+
+```text
+supabase.cmd migration list --linked: aligned through 20260614200000
+module_display_settings column: jsonb, is_nullable=NO, default '{"items": []}'::jsonb
+global row: value_type=object, value {"items":[]}
+system_settings policies: public read plus authenticated manage policies using current_app_can_manage() / current_app_can_control_maintenance()
+system_settings grants: anon SELECT only; authenticated SELECT/INSERT/UPDATE; service_role full privileges
+migration review: no RLS, grant, role permission, branch permission, or app_user_feature_permissions changes
+runtime review: SuitePage filters visible modules before sorting and badge override
+browser QA: pending because no authenticated admin/manager session or usable credentials were available
+docs: docs/MODULE_LAYOUT_SETTINGS.md
+```
+
+Branding Logo settings migration verification:
+
+```text
+supabase.cmd migration up --linked: applied 20260614203000_branding_logo_system_settings.sql
+supabase.cmd migration list --linked: local and remote history aligned through 20260614203000
+system_settings.pharmacy_logo_url: text, not nullable, default '/logo.jpg'
+system_settings.hub_logo_url: text, not nullable, default '/tabarak-logo.svg'
+system_settings.browser_icon_url: text, not nullable, default '/logo.jpg'
+system_settings.loading_spinner_url: text, not nullable, default '/spinner.svg'
+global row values: pharmacy_logo_url='/logo.jpg', hub_logo_url='/tabarak-logo.svg', browser_icon_url='/logo.jpg', loading_spinner_url='/spinner.svg'
+RLS/grant changes: none in the migration
+browser QA: pending because no authenticated admin/manager session or usable credentials were available
 ```
 
 ## Final Decision

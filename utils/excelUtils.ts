@@ -5,7 +5,128 @@ import { isModuleEnabled } from '../config/clientConfig';
 import { BAHRAIN_VAT_RATE, formatVatLabel, parseVatEnabled } from './vat';
 
 const MAX_PRODUCT_IMPORT_BYTES = 5 * 1024 * 1024;
+export const PRODUCT_IMPORT_ACCEPT = '.xlsx,.csv,text/csv,application/vnd.ms-excel';
+const PRODUCT_IMPORT_EXTENSIONS = ['.xlsx', '.csv'];
+const EXPECTED_PRODUCT_IMPORT_HEADERS = ['internal_code', 'name', 'category', 'agent', 'retail price ex vat', 'vat', 'is_manual'];
+
 const normalizeProductInternalCode = (code: unknown) => code?.toString().trim().toUpperCase() || '';
+const stripBom = (value: string) => value.replace(/^\uFEFF/, '');
+const normalizeImportHeader = (value: unknown) => stripBom(value?.toString().trim() || '');
+
+export interface ProductImportProgress {
+    percent: number;
+    label: string;
+    detail?: string;
+}
+
+export type ProductImportProgressHandler = (progress: ProductImportProgress) => void;
+
+export const isSupportedProductImportFile = (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    return PRODUCT_IMPORT_EXTENSIONS.some(extension => lowerName.endsWith(extension));
+};
+
+const isCsvProductUpload = (file: File) => file.name.toLowerCase().endsWith('.csv');
+
+const reportProductImportProgress = (
+    onProgress: ProductImportProgressHandler | undefined,
+    percent: number,
+    label: string,
+    detail?: string
+) => {
+    onProgress?.({ percent, label, detail });
+};
+
+const validateProductImportHeaders = (fileHeaders: string[]) => {
+    // Valid headers match the generated template and product export format.
+    // Keep uploaded files aligned with the generated template and exported list.
+    // This prevents silent column shifts during catalog imports.
+    const isExactMatch =
+        fileHeaders.length === EXPECTED_PRODUCT_IMPORT_HEADERS.length &&
+        EXPECTED_PRODUCT_IMPORT_HEADERS.every(h => fileHeaders.includes(h));
+
+    if (!isExactMatch) {
+        throw new Error(`Invalid Template. Headers must exactly match: ${EXPECTED_PRODUCT_IMPORT_HEADERS.join(', ')}. Found: ${fileHeaders.join(', ')}`);
+    }
+};
+
+const detectCsvDelimiter = (text: string): ',' | ';' | '\t' => {
+    const sample = text.slice(0, 4096);
+    const candidates: Array<',' | ';' | '\t'> = [',', ';', '\t'];
+    const counts = new Map<',' | ';' | '\t', number>(candidates.map(candidate => [candidate, 0]));
+    let inQuotes = false;
+
+    for (let i = 0; i < sample.length; i++) {
+        const char = sample[i];
+        if (char === '"') {
+            if (inQuotes && sample[i + 1] === '"') {
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+        if (!inQuotes && (char === '\n' || char === '\r')) break;
+        if (!inQuotes && counts.has(char as ',' | ';' | '\t')) {
+            counts.set(char as ',' | ';' | '\t', (counts.get(char as ',' | ';' | '\t') || 0) + 1);
+        }
+    }
+
+    return candidates.sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0))[0];
+};
+
+const parseDelimitedText = (text: string, delimiter: ',' | ';' | '\t') => {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let inQuotes = false;
+
+    const pushCell = () => {
+        row.push(cell);
+        cell = '';
+    };
+
+    const pushRow = () => {
+        pushCell();
+        if (row.some(value => value.trim() !== '')) {
+            rows.push(row);
+        }
+        row = [];
+    };
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+
+        if (char === '"') {
+            if (inQuotes && text[i + 1] === '"') {
+                cell += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (!inQuotes && char === delimiter) {
+            pushCell();
+            continue;
+        }
+
+        if (!inQuotes && (char === '\n' || char === '\r')) {
+            if (char === '\r' && text[i + 1] === '\n') i++;
+            pushRow();
+            continue;
+        }
+
+        cell += char;
+    }
+
+    if (cell || row.length > 0) {
+        pushRow();
+    }
+
+    return rows;
+};
 
 const createWorkbook = async () => {
     if (!isModuleEnabled('excelExport')) {
@@ -142,74 +263,35 @@ export interface ProductImportResult {
     errors: { row: number; message: string }[];
 }
 
-export const parseProductUpload = async (file: File): Promise<ProductImportResult> => {
-    if (file.size > MAX_PRODUCT_IMPORT_BYTES) {
-        throw new Error("Invalid Excel file: Maximum upload size is 5MB");
-    }
+type ProductImportRowValues = {
+    rowNumber: number;
+    values: Record<string, unknown>;
+};
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = await createWorkbook();
-    await workbook.xlsx.load(arrayBuffer);
-
-    const worksheet = workbook.getWorksheet(1);
-    if (!worksheet) {
-        throw new Error("Invalid Excel file: No worksheet found");
-    }
-
+const parseProductImportRows = (rows: ProductImportRowValues[]): ProductImportResult => {
     const validRowsByCode = new Map<string, any>();
     const errors: { row: number; message: string }[] = [];
 
-    // Validate headers
-    const headerRow = worksheet.getRow(1);
-    const fileHeaders: string[] = [];
-    headerRow.eachCell((cell) => {
-        const val = cell.value?.toString().trim();
-        if (val) fileHeaders.push(val);
-    });
-
-    // Valid headers match the generated template and product export format.
-    const expectedHeaders = ['internal_code', 'name', 'category', 'agent', 'retail price ex vat', 'vat', 'is_manual'];
-
-    // STRICT VALIDATION
-    // Keep uploaded files aligned with the generated template and exported list.
-    // This prevents silent column shifts during catalog imports.
-    const isExactMatch =
-        fileHeaders.length === expectedHeaders.length &&
-        expectedHeaders.every(h => fileHeaders.includes(h));
-
-    if (!isExactMatch) {
-        throw new Error(`Invalid Template. Headers must exactly match: ${expectedHeaders.join(', ')}. Found: ${fileHeaders.join(', ')}`);
-    }
-
-    // Map headers to columns
-    const colMap: { [key: string]: number } = {};
-    headerRow.eachCell((cell, colNumber) => {
-        const val = cell.value?.toString().trim();
-        if (val && expectedHeaders.includes(val)) {
-            colMap[val] = colNumber;
-        }
-    });
-
-    worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header
+    rows.forEach(({ rowNumber, values }) => {
+        const isEmptyRow = EXPECTED_PRODUCT_IMPORT_HEADERS.every(header => {
+            const value = values[header];
+            return value === null || value === undefined || value.toString().trim() === '';
+        });
 
         const rowData: any = {};
 
         // internal_code
-        const internalCode = normalizeProductInternalCode(row.getCell(colMap['internal_code']).value);
+        const internalCode = normalizeProductInternalCode(values['internal_code']);
 
         if (!internalCode) {
-            // Check empty row
-            let text = "";
-            row.eachCell(cell => text += cell.value);
-            if (!text.trim()) return; // Skip empty row
+            if (isEmptyRow) return;
 
             errors.push({ row: rowNumber, message: "Missing internal_code" });
             return;
         }
 
         // Price mapping from 'retail price ex vat'
-        const defaultPriceVal = row.getCell(colMap['retail price ex vat']).value;
+        const defaultPriceVal = values['retail price ex vat'];
         const defaultPrice = Number(defaultPriceVal);
 
         if (isNaN(defaultPrice)) {
@@ -218,17 +300,17 @@ export const parseProductUpload = async (file: File): Promise<ProductImportResul
         }
 
         rowData.internal_code = internalCode;
-        const productName = row.getCell(colMap['name']).value?.toString().trim();
+        const productName = values['name']?.toString().trim();
         if (!productName) {
             errors.push({ row: rowNumber, message: "Missing product name" });
             return;
         }
 
         rowData.name = productName;
-        rowData.category = row.getCell(colMap['category']).value?.toString().trim() || '';
-        rowData.agent = row.getCell(colMap['agent']).value?.toString().trim() || '';
+        rowData.category = values['category']?.toString().trim() || '';
+        rowData.agent = values['agent']?.toString().trim() || '';
         rowData.default_price = defaultPrice;
-        rowData.vat_enabled = parseVatEnabled(row.getCell(colMap['vat']).value);
+        rowData.vat_enabled = parseVatEnabled(values['vat']);
         // Product imports are manager-owned catalog additions, so the service
         // forces is_manual = true regardless of the uploaded value.
         rowData.is_manual = true;
@@ -237,4 +319,90 @@ export const parseProductUpload = async (file: File): Promise<ProductImportResul
     });
 
     return { validRows: Array.from(validRowsByCode.values()), errors };
+};
+
+export const parseProductUpload = async (
+    file: File,
+    onProgress?: ProductImportProgressHandler
+): Promise<ProductImportResult> => {
+    if (file.size > MAX_PRODUCT_IMPORT_BYTES) {
+        throw new Error("Invalid product import file: Maximum upload size is 5MB");
+    }
+
+    if (!isSupportedProductImportFile(file)) {
+        throw new Error("Invalid product import file: Please upload a .xlsx Excel or .csv file.");
+    }
+
+    if (isCsvProductUpload(file)) {
+        if (!isModuleEnabled('excelExport')) {
+            throw new Error("Product import is disabled for this client deployment");
+        }
+
+        reportProductImportProgress(onProgress, 8, 'Reading CSV file', file.name);
+        const text = await file.text();
+        const delimiter = detectCsvDelimiter(text);
+        reportProductImportProgress(onProgress, 16, 'Parsing CSV rows', delimiter === '\t' ? 'Detected tab-delimited CSV' : `Detected "${delimiter}" delimiter`);
+        const csvRows = parseDelimitedText(text, delimiter);
+
+        if (csvRows.length === 0) {
+            throw new Error("Invalid CSV file: No rows found");
+        }
+
+        const fileHeaders = csvRows[0].map(normalizeImportHeader).filter(Boolean);
+        validateProductImportHeaders(fileHeaders);
+
+        const rows = csvRows.slice(1).map((csvRow, index) => {
+            const values: Record<string, unknown> = {};
+            fileHeaders.forEach((header, colIndex) => {
+                values[header] = csvRow[colIndex] ?? '';
+            });
+            return { rowNumber: index + 2, values };
+        });
+
+        reportProductImportProgress(onProgress, 32, 'Validating product rows', `${rows.length} data rows found`);
+        return parseProductImportRows(rows);
+    }
+
+    reportProductImportProgress(onProgress, 8, 'Reading Excel file', file.name);
+    const arrayBuffer = await file.arrayBuffer();
+    reportProductImportProgress(onProgress, 16, 'Opening workbook', 'Loading first worksheet');
+    const workbook = await createWorkbook();
+    await workbook.xlsx.load(arrayBuffer);
+
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) {
+        throw new Error("Invalid Excel file: No worksheet found");
+    }
+
+    // Validate headers
+    const headerRow = worksheet.getRow(1);
+    const fileHeaders: string[] = [];
+    headerRow.eachCell((cell) => {
+        const val = normalizeImportHeader(cell.value);
+        if (val) fileHeaders.push(val);
+    });
+    validateProductImportHeaders(fileHeaders);
+
+    // Map headers to columns
+    const colMap: { [key: string]: number } = {};
+    headerRow.eachCell((cell, colNumber) => {
+        const val = normalizeImportHeader(cell.value);
+        if (val && EXPECTED_PRODUCT_IMPORT_HEADERS.includes(val)) {
+            colMap[val] = colNumber;
+        }
+    });
+
+    const rows: ProductImportRowValues[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header
+
+        const values: Record<string, unknown> = {};
+        EXPECTED_PRODUCT_IMPORT_HEADERS.forEach(header => {
+            values[header] = row.getCell(colMap[header]).value;
+        });
+        rows.push({ rowNumber, values });
+    });
+
+    reportProductImportProgress(onProgress, 32, 'Validating product rows', `${rows.length} data rows found`);
+    return parseProductImportRows(rows);
 };

@@ -1,11 +1,14 @@
 import { branchService } from './branchService';
 import { deliveryService } from './deliveryService';
 import {
+  Branch,
   BranchDeliveryCoverageMetric,
+  BranchGovernoratePerformanceKpi,
   DeliveryAdvancedCoverage,
   DeliveryBranchCatchment,
   DeliveryBranchCatchmentBlock,
   DeliveryBranchOverlap,
+  DeliveryBlock,
   DeliveryBlockMetric,
   DeliveryCampaignOpportunity,
   DeliveryCapacityClass,
@@ -20,9 +23,12 @@ import {
   DeliveryDemandTrendClass,
   DeliveryExpansionCandidate,
   DeliveryFieldAvailability,
+  DeliveryGovernorateKpiQuality,
+  DeliveryPaymentType,
   DeliveryGovernorateCoverage,
   DeliveryOrder,
   DeliveryWhiteSpace,
+  GovernoratePerformanceKpi,
   Governorate
 } from '../types';
 
@@ -30,6 +36,8 @@ export interface DeliveryCoverageFilters {
   dateFrom?: string;
   dateTo?: string;
   branchId?: string | null;
+  governorate?: Governorate | 'Unknown' | 'all' | null;
+  paymentType?: DeliveryPaymentType | 'all' | null;
   /** Reserved: include orders with no block number in the bucketed view. Default true. */
   includeUnknownBlocks?: boolean;
 }
@@ -92,12 +100,259 @@ const classifyDemand = (dates: string[], from: string, to: string): DeliveryDema
   return 'stable';
 };
 
+const KNOWN_GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
+
+const normalizeGovernorate = (value?: string | null): Governorate | null => {
+  const normalized = (value || '').trim().toLowerCase();
+  return KNOWN_GOVERNORATES.find(gov => gov.toLowerCase() === normalized) || null;
+};
+
+const orderValueOrNull = (order: DeliveryOrder): number | null => {
+  const value = Number(order.valueBhd);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
+const getDirectoryGovernorate = (
+  blockNumber: string | null | undefined,
+  directoryByBlock: Map<string, DeliveryBlock>
+): Governorate | null => {
+  const key = (blockNumber || '').trim();
+  if (!key) return null;
+  return normalizeGovernorate(directoryByBlock.get(key)?.governorate);
+};
+
+const getOrderGovernorate = (
+  order: DeliveryOrder,
+  directoryByBlock: Map<string, DeliveryBlock>
+): Governorate | null =>
+  normalizeGovernorate(order.governorate) || getDirectoryGovernorate(order.blockNumber, directoryByBlock);
+
+const pct = (part: number, total: number) => total > 0 ? (part / total) * 100 : 0;
+
+const normalizeAgainstMax = (value: number, max: number) => max > 0 ? value / max : 0;
+
+export const calculatePurchasePowerProxy = (
+  rows: Array<Pick<GovernoratePerformanceKpi, 'ordersCount' | 'totalValue' | 'averageOrderValue'>>
+): Array<number | null> => {
+  const eligible = rows.filter(row =>
+    row.ordersCount > 0
+    && row.totalValue !== null
+    && row.averageOrderValue !== null
+  );
+  if (eligible.length === 0) return rows.map(() => null);
+
+  const maxValue = Math.max(...eligible.map(row => row.totalValue || 0));
+  const maxAverage = Math.max(...eligible.map(row => row.averageOrderValue || 0));
+  const maxOrders = Math.max(...eligible.map(row => row.ordersCount));
+
+  return rows.map(row => {
+    if (row.totalValue === null || row.averageOrderValue === null || row.ordersCount <= 0) return null;
+    const score = (
+      normalizeAgainstMax(row.totalValue, maxValue) * 0.5
+      + normalizeAgainstMax(row.averageOrderValue, maxAverage) * 0.3
+      + normalizeAgainstMax(row.ordersCount, maxOrders) * 0.2
+    ) * 100;
+    return Math.round(score);
+  });
+};
+
+const applyPurchasePowerBands = (rows: GovernoratePerformanceKpi[]): GovernoratePerformanceKpi[] => {
+  const scored = rows
+    .filter(row => row.purchasePowerProxyScore !== null)
+    .sort((a, b) => (b.purchasePowerProxyScore || 0) - (a.purchasePowerProxyScore || 0));
+  if (scored.length === 0) return rows;
+
+  const topCut = Math.ceil(scored.length / 3);
+  const middleCut = Math.ceil((scored.length * 2) / 3);
+  const bandByGov = new Map<Governorate | 'Unknown', GovernoratePerformanceKpi['purchasePowerBand']>();
+  scored.forEach((row, index) => {
+    const band = index < topCut ? 'high' : index < middleCut ? 'medium' : 'low';
+    bandByGov.set(row.governorate, band);
+  });
+
+  return rows.map(row => ({
+    ...row,
+    purchasePowerBand: row.purchasePowerProxyScore === null
+      ? 'unavailable'
+      : bandByGov.get(row.governorate) || 'unavailable'
+  }));
+};
+
+export const buildGovernoratePerformanceKpis = (
+  orders: DeliveryOrder[],
+  directoryBlocks: DeliveryBlock[]
+): { rows: GovernoratePerformanceKpi[]; quality: DeliveryGovernorateKpiQuality } => {
+  const directoryByBlock = new Map(directoryBlocks.map(block => [block.blockNumber.trim(), block]));
+  const agg = new Map<Governorate, { orders: number; value: number; valueOrders: number; blocks: Set<string> }>();
+
+  let ordersWithMappedGovernorate = 0;
+  let ordersWithUnmappedGovernorate = 0;
+  let ordersWithValue = 0;
+  let ordersMissingValue = 0;
+
+  for (const order of orders) {
+    const value = orderValueOrNull(order);
+    if (value !== null) ordersWithValue += 1;
+    else ordersMissingValue += 1;
+
+    const governorate = getOrderGovernorate(order, directoryByBlock);
+    if (!governorate) {
+      ordersWithUnmappedGovernorate += 1;
+      continue;
+    }
+
+    ordersWithMappedGovernorate += 1;
+    const row = agg.get(governorate) || { orders: 0, value: 0, valueOrders: 0, blocks: new Set<string>() };
+    row.orders += 1;
+    if (value !== null) {
+      row.value += value;
+      row.valueOrders += 1;
+    }
+    const block = blockKey(order);
+    if (block) row.blocks.add(block);
+    agg.set(governorate, row);
+  }
+
+  const rows = KNOWN_GOVERNORATES.map(governorate => {
+    const row = agg.get(governorate) || { orders: 0, value: 0, valueOrders: 0, blocks: new Set<string>() };
+    const totalValue = row.valueOrders > 0 ? row.value : null;
+    const servedBlocksCount = row.blocks.size;
+    return {
+      governorate,
+      ordersCount: row.orders,
+      totalValue,
+      averageOrderValue: totalValue !== null ? totalValue / row.valueOrders : null,
+      servedBlocksCount,
+      valuePerServedBlock: totalValue !== null && servedBlocksCount > 0 ? totalValue / servedBlocksCount : null,
+      ordersPerServedBlock: servedBlocksCount > 0 ? row.orders / servedBlocksCount : 0,
+      purchasePowerProxyScore: null,
+      purchasePowerBand: 'unavailable' as const
+    };
+  }).filter(row => row.ordersCount > 0);
+
+  const scores = calculatePurchasePowerProxy(rows);
+  const withScores = applyPurchasePowerBands(rows.map((row, index) => ({
+    ...row,
+    purchasePowerProxyScore: scores[index]
+  }))).sort((a, b) => b.ordersCount - a.ordersCount);
+
+  const directoryBlocksWithGov = directoryBlocks.filter(block => normalizeGovernorate(block.governorate)).length;
+
+  return {
+    rows: withScores,
+    quality: {
+      totalOrdersAnalyzed: orders.length,
+      ordersWithMappedGovernorate,
+      ordersWithUnmappedGovernorate,
+      ordersWithValue,
+      ordersMissingValue,
+      blocksWithGovernorateMapping: directoryBlocksWithGov,
+      blocksWithoutGovernorateMapping: Math.max(0, directoryBlocks.length - directoryBlocksWithGov),
+      governorateMappingSource: directoryBlocks.length > 0 || ordersWithMappedGovernorate > 0
+        ? 'delivery_orders_snapshot_and_delivery_blocks'
+        : 'unavailable',
+      orderValueField: 'value_bhd'
+    }
+  };
+};
+
+export const buildBranchGovernoratePerformanceKpis = (
+  orders: DeliveryOrder[],
+  branches: Branch[],
+  directoryBlocks: DeliveryBlock[]
+): BranchGovernoratePerformanceKpi[] => {
+  const directoryByBlock = new Map(directoryBlocks.map(block => [block.blockNumber.trim(), block]));
+  const branchInfo = new Map(branches.map(branch => [branch.id, branch]));
+  const branchTotals = new Map<string, { orders: number; value: number; valueOrders: number }>();
+  const governorateTotals = new Map<Governorate, { orders: number; value: number; valueOrders: number }>();
+  const agg = new Map<string, {
+    branchId: string;
+    branchCode: string;
+    branchName: string;
+    governorate: Governorate;
+    orders: number;
+    value: number;
+    valueOrders: number;
+    blocks: Set<string>;
+  }>();
+
+  for (const order of orders) {
+    const governorate = getOrderGovernorate(order, directoryByBlock);
+    if (!governorate) continue;
+
+    const value = orderValueOrNull(order);
+    const branch = branchInfo.get(order.branchId);
+    const branchName = order.branchName || branch?.name || 'Unknown branch';
+    const branchCode = branch?.code || branchName;
+
+    const branchTotal = branchTotals.get(order.branchId) || { orders: 0, value: 0, valueOrders: 0 };
+    branchTotal.orders += 1;
+    if (value !== null) {
+      branchTotal.value += value;
+      branchTotal.valueOrders += 1;
+    }
+    branchTotals.set(order.branchId, branchTotal);
+
+    const govTotal = governorateTotals.get(governorate) || { orders: 0, value: 0, valueOrders: 0 };
+    govTotal.orders += 1;
+    if (value !== null) {
+      govTotal.value += value;
+      govTotal.valueOrders += 1;
+    }
+    governorateTotals.set(governorate, govTotal);
+
+    const key = `${order.branchId}:${governorate}`;
+    const row = agg.get(key) || {
+      branchId: order.branchId,
+      branchCode,
+      branchName,
+      governorate,
+      orders: 0,
+      value: 0,
+      valueOrders: 0,
+      blocks: new Set<string>()
+    };
+    row.orders += 1;
+    if (value !== null) {
+      row.value += value;
+      row.valueOrders += 1;
+    }
+    const block = blockKey(order);
+    if (block) row.blocks.add(block);
+    agg.set(key, row);
+  }
+
+  return [...agg.values()]
+    .map(row => {
+      const branchTotal = branchTotals.get(row.branchId) || { orders: 0, value: 0, valueOrders: 0 };
+      const govTotal = governorateTotals.get(row.governorate) || { orders: 0, value: 0, valueOrders: 0 };
+      const totalValue = row.valueOrders > 0 ? row.value : null;
+      return {
+        branchId: row.branchId,
+        branchCode: row.branchCode,
+        branchName: row.branchName,
+        governorate: row.governorate,
+        ordersCount: row.orders,
+        totalValue,
+        averageOrderValue: totalValue !== null ? totalValue / row.valueOrders : null,
+        servedBlocksCount: row.blocks.size,
+        branchValueSharePercent: totalValue !== null && branchTotal.valueOrders > 0 ? pct(row.value, branchTotal.value) : null,
+        governorateValueSharePercent: totalValue !== null && govTotal.valueOrders > 0 ? pct(row.value, govTotal.value) : null,
+        branchOrderSharePercent: pct(row.orders, branchTotal.orders),
+        governorateOrderSharePercent: pct(row.orders, govTotal.orders)
+      };
+    })
+    .sort((a, b) => b.ordersCount - a.ordersCount);
+};
+
 // ---------------------------------------------------------------------------
 // Base summary (unchanged behaviour, refactored into a pure builder)
 // ---------------------------------------------------------------------------
 
 const buildSummary = (
   orders: DeliveryOrder[],
+  branches: Branch[],
+  directoryBlocks: DeliveryBlock[],
   nameFor: (id: string, fallback?: string | null) => string,
   range: { from: string; to: string }
 ): DeliveryCoverageSummary => {
@@ -206,6 +461,11 @@ const buildSummary = (
     .map(([governorate, v]) => ({ governorate: governorate as Governorate | 'Unknown', orderCount: v.orderCount, uniqueBlocks: v.blocks.size }))
     .sort((a, b) => b.orderCount - a.orderCount);
 
+  const { rows: governoratePerformanceKpis, quality: governorateKpiQuality } =
+    buildGovernoratePerformanceKpis(orders, directoryBlocks);
+  const branchGovernoratePerformanceKpis =
+    buildBranchGovernoratePerformanceKpis(orders, branches, directoryBlocks);
+
   return {
     dateFrom: range.from,
     dateTo: range.to,
@@ -222,6 +482,9 @@ const buildSummary = (
     blocks,
     branchCoverage,
     governorateCoverage,
+    governoratePerformanceKpis,
+    branchGovernoratePerformanceKpis,
+    governorateKpiQuality,
     recommendedActions: buildRecommendations({
       mappableCount: mappable.length,
       unknownBlockRate,
@@ -537,13 +800,23 @@ export const deliveryCoverageService = {
     const range = filters.dateFrom && filters.dateTo
       ? { from: filters.dateFrom, to: filters.dateTo }
       : defaultRange();
-    const [orders, branches] = await Promise.all([
-      deliveryService.orders.list({ branchId: filters.branchId || undefined, dateFrom: range.from, dateTo: range.to }),
-      branchService.list()
+    const [orders, branches, directory] = await Promise.all([
+      deliveryService.orders.list({
+        branchId: filters.branchId || undefined,
+        dateFrom: range.from,
+        dateTo: range.to,
+        paymentType: filters.paymentType || undefined,
+        governorate: filters.governorate && filters.governorate !== 'Unknown' ? filters.governorate : undefined
+      }),
+      branchService.list(),
+      deliveryService.blocks.list().catch(() => [])
     ]);
+    const scopedOrders = filters.governorate === 'Unknown'
+      ? orders.filter(order => !getOrderGovernorate(order, new Map((directory || []).map(block => [block.blockNumber.trim(), block]))))
+      : orders;
     const branchNames = new Map(branches.map(b => [b.id, b.name]));
     const nameFor = (id: string, fallback?: string | null) => fallback || branchNames.get(id) || 'Unknown branch';
-    return buildSummary(orders, nameFor, range);
+    return buildSummary(scopedOrders, branches, directory || [], nameFor, range);
   },
 
   /** Base summary + advanced analytics in one scoped fetch. */
@@ -553,21 +826,30 @@ export const deliveryCoverageService = {
       : defaultRange();
 
     const [orders, branches, directory] = await Promise.all([
-      deliveryService.orders.list({ branchId: filters.branchId || undefined, dateFrom: range.from, dateTo: range.to }),
+      deliveryService.orders.list({
+        branchId: filters.branchId || undefined,
+        dateFrom: range.from,
+        dateTo: range.to,
+        paymentType: filters.paymentType || undefined,
+        governorate: filters.governorate && filters.governorate !== 'Unknown' ? filters.governorate : undefined
+      }),
       branchService.list(),
       deliveryService.blocks.list().catch(() => [])
     ]);
+    const scopedOrders = filters.governorate === 'Unknown'
+      ? orders.filter(order => !getOrderGovernorate(order, new Map((directory || []).map(block => [block.blockNumber.trim(), block]))))
+      : orders;
 
     const branchNames = new Map(branches.map(b => [b.id, b.name]));
     const nameFor = (id: string, fallback?: string | null) => fallback || branchNames.get(id) || 'Unknown branch';
 
-    const summary = buildSummary(orders, nameFor, range);
+    const summary = buildSummary(scopedOrders, branches, directory || [], nameFor, range);
     const directoryBlocks = (directory || []).map(b => ({
       blockNumber: b.blockNumber,
       areaName: b.areaName,
       governorate: b.governorate
     }));
-    const advanced = buildAdvanced(orders, summary, directoryBlocks, range);
+    const advanced = buildAdvanced(scopedOrders, summary, directoryBlocks, range);
     return { summary, advanced };
   }
 };

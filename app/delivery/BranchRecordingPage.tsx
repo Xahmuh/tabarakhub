@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, CheckCircle2, MapPin, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, MapPin, Pencil, Plus, Trash2, Unlock, X } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
@@ -16,6 +16,15 @@ const paymentBadge = (type: string) =>
     ? 'border-orange-200 bg-orange-50 text-orange-700'
     : 'border-brand/10 bg-brand/5 text-brand';
 
+const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
+const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
+const lockButtonClass = (locked: boolean) =>
+  `mt-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+    locked
+      ? 'border-brand/20 bg-brand/5 text-brand hover:bg-brand/10'
+      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'
+  }`;
+
 interface BranchRecordingPageProps {
   branch: Branch;
   canEdit: boolean;
@@ -28,6 +37,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [todayOrders, setTodayOrders] = useState<DeliveryOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
 
   // Form state
   const [orderDate, setOrderDate] = useState(todayKey());
@@ -35,6 +45,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [paymentType, setPaymentType] = useState<DeliveryPaymentType>('CASH');
   const [pharmacistId, setPharmacistId] = useState<string | null>(null);
   const [driverId, setDriverId] = useState<string | null>(null);
+  const [isPharmacistLocked, setIsPharmacistLocked] = useState(false);
+  const [isDriverLocked, setIsDriverLocked] = useState(false);
+  const [locksHydrated, setLocksHydrated] = useState(false);
   const [blockInput, setBlockInput] = useState('');
   const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
   const [blockNotFound, setBlockNotFound] = useState(false);
@@ -50,6 +63,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager ? undefined : yesterdayKey();
   const maxDate = isManager ? undefined : todayKey();
+  const lockStorageKey = `delivery-entry-locks:${branch.id}`;
 
   const loadReference = async () => {
     try {
@@ -82,6 +96,56 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   useEffect(() => { loadReference(); loadToday(); }, [branch.id]);
 
+  useEffect(() => {
+    setLocksHydrated(false);
+    let nextPharmacistId: string | null = null;
+    let nextDriverId: string | null = null;
+    let nextPharmacistLocked = false;
+    let nextDriverLocked = false;
+    try {
+      const saved = localStorage.getItem(lockStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as {
+          pharmacistId?: string | null;
+          driverId?: string | null;
+          isPharmacistLocked?: boolean;
+          isDriverLocked?: boolean;
+        };
+        if (parsed.isPharmacistLocked && parsed.pharmacistId) {
+          nextPharmacistId = parsed.pharmacistId;
+          nextPharmacistLocked = true;
+        }
+        if (parsed.isDriverLocked && parsed.driverId) {
+          nextDriverId = parsed.driverId;
+          nextDriverLocked = true;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not restore delivery entry locks', error);
+    } finally {
+      setPharmacistId(nextPharmacistId);
+      setDriverId(nextDriverId);
+      setIsPharmacistLocked(nextPharmacistLocked);
+      setIsDriverLocked(nextDriverLocked);
+      setLocksHydrated(true);
+    }
+  }, [lockStorageKey]);
+
+  useEffect(() => {
+    if (!locksHydrated) return;
+    const hasLockedValue = (isPharmacistLocked && pharmacistId) || (isDriverLocked && driverId);
+    if (!hasLockedValue) {
+      localStorage.removeItem(lockStorageKey);
+      return;
+    }
+    localStorage.setItem(lockStorageKey, JSON.stringify({
+      isPharmacistLocked,
+      pharmacistId: isPharmacistLocked ? pharmacistId : null,
+      isDriverLocked,
+      driverId: isDriverLocked ? driverId : null
+    }));
+  }, [lockStorageKey, locksHydrated, isPharmacistLocked, pharmacistId, isDriverLocked, driverId]);
+
   // Resolve block -> area as the user types.
   useEffect(() => {
     let cancelled = false;
@@ -98,12 +162,62 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     return () => { cancelled = true; clearTimeout(timer); };
   }, [blockInput, isTalabat]);
 
-  const resetForm = () => {
-    // Keep date + driver: typical batch entry is one driver, many orders.
+  const resetForm = (preserveBatchContext = true) => {
+    // Keep locked people only; unlocked selectors reset after each order.
     setValue('');
     setBlockInput('');
     setResolvedBlock(null);
     setBlockNotFound(false);
+    setEditingOrder(null);
+    if (!preserveBatchContext) {
+      setOrderDate(todayKey());
+      setPaymentType('CASH');
+    }
+    if (!isPharmacistLocked) {
+      setPharmacistId(null);
+    }
+    if (!isDriverLocked) {
+      setDriverId(null);
+    }
+  };
+
+  const togglePharmacistLock = () => {
+    if (isPharmacistLocked) {
+      setIsPharmacistLocked(false);
+      return;
+    }
+    if (!pharmacistId) {
+      Swal.fire('Select pharmacist first', 'Choose a pharmacist before locking this field.', 'warning');
+      return;
+    }
+    setIsPharmacistLocked(true);
+  };
+
+  const toggleDriverLock = () => {
+    if (isDriverLocked) {
+      setIsDriverLocked(false);
+      return;
+    }
+    if (!driverId) {
+      Swal.fire('Select driver first', 'Choose a driver before locking this field.', 'warning');
+      return;
+    }
+    setIsDriverLocked(true);
+  };
+
+  const handleEdit = (order: DeliveryOrder) => {
+    setEditingOrder(order);
+    setOrderDate(order.orderDate);
+    setValue(order.valueBhd.toFixed(3));
+    setPaymentType(order.paymentType);
+    setPharmacistId(order.pharmacistId || null);
+    setDriverId(order.driverId || null);
+    setBlockInput(order.paymentType === 'TALABAT' ? '' : order.blockNumber || '');
+    setResolvedBlock(null);
+    setBlockNotFound(false);
+    window.requestAnimationFrame(() => {
+      document.getElementById('delivery-order-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const handleSubmit = async () => {
@@ -146,6 +260,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
     setIsSubmitting(true);
     try {
+      if (editingOrder) {
+        const updated = await deliveryService.orders.update(editingOrder.id, input);
+        setTodayOrders(prev => updated.orderDate === todayKey()
+          ? prev.map(order => order.id === updated.id ? updated : order)
+          : prev.filter(order => order.id !== updated.id)
+        );
+        resetForm(false);
+        return;
+      }
+
       const duplicate = await deliveryService.orders.findRecentDuplicate(input);
       if (duplicate) {
         const proceed = await Swal.fire({
@@ -165,7 +289,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       }
       resetForm();
     } catch (e: any) {
-      Swal.fire('Save failed', e?.message || 'Could not save the delivery order.', 'error');
+      Swal.fire(editingOrder ? 'Update failed' : 'Save failed', e?.message || 'Could not save the delivery order.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -197,8 +321,30 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   return (
     <div className="space-y-5">
       {canEdit && (
-        <section className="operational-panel p-4 md:p-5">
-          <h3 className="mb-4 text-sm font-black uppercase tracking-widest text-slate-700">New delivery order</h3>
+        <section id="delivery-order-form" className="operational-panel p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
+                {editingOrder ? 'Edit delivery order' : 'New delivery order'}
+              </h3>
+              {editingOrder && (
+                <p className="mt-1 text-[11px] font-bold text-slate-500">
+                  Editing {formatBhd(editingOrder.valueBhd)} / {editingOrder.paymentType}
+                </p>
+              )}
+            </div>
+            {editingOrder && (
+              <button
+                type="button"
+                onClick={() => resetForm(false)}
+                className={dangerActionClass}
+                title="Cancel edit"
+                aria-label="Cancel edit"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Order date</label>
@@ -250,12 +396,25 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Pharmacist</label>
               <SearchableSelect
-                options={pharmacists.map(p => ({ value: p.id, label: p.name }))}
+                options={pharmacists.map(p => ({
+                  value: p.id,
+                  label: p.code ? `${p.code} - ${p.name}` : p.name,
+                  hint: p.code
+                }))}
                 value={pharmacistId}
                 onChange={setPharmacistId}
                 placeholder="Select pharmacist…"
-                disabled={pharmacists.length === 0}
+                disabled={pharmacists.length === 0 || isPharmacistLocked}
+                allowClear={!isPharmacistLocked}
               />
+              <button
+                type="button"
+                onClick={togglePharmacistLock}
+                className={lockButtonClass(isPharmacistLocked)}
+              >
+                {isPharmacistLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                {isPharmacistLocked ? 'Unlock pharmacist' : 'Lock pharmacist'}
+              </button>
               {pharmacists.length === 0 && (
                 <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
                   No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.
@@ -273,8 +432,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 }))}
                 value={driverId}
                 onChange={setDriverId}
+                disabled={isDriverLocked}
+                allowClear={!isDriverLocked}
                 placeholder="Select driver…"
               />
+              <button
+                type="button"
+                onClick={toggleDriverLock}
+                className={lockButtonClass(isDriverLocked)}
+              >
+                {isDriverLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                {isDriverLocked ? 'Unlock driver' : 'Lock driver'}
+              </button>
             </div>
 
             <div>
@@ -327,8 +496,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               disabled={isSubmitting}
               className="btn-primary text-[11px] uppercase tracking-widest disabled:opacity-50"
             >
-              <Plus className="h-4 w-4" />
-              {isSubmitting ? 'Saving…' : 'Record order'}
+              {editingOrder ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {isSubmitting
+                ? editingOrder ? 'Updating...' : 'Saving...'
+                : editingOrder ? 'Update order' : 'Record order'}
             </button>
           </div>
         </section>
@@ -395,9 +566,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       </td>
                       <td className="py-2.5 text-right">
                         {canEdit && (
-                          <button onClick={() => handleDelete(order)} className="p-1.5 text-slate-300 hover:text-brand" title="Delete">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="inline-flex items-center gap-1">
+                            <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete" aria-label="Delete order">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -424,9 +600,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
                   </div>
                   {canEdit && (
-                    <div className="mt-2 flex justify-end">
-                      <button onClick={() => handleDelete(order)} className="text-[11px] font-bold text-slate-400 hover:text-brand">
-                        Delete
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete" aria-label="Delete order">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   )}

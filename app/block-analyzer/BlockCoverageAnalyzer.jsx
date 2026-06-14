@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { BackToModulesButton } from '../shared';
 
 const DataContext = createContext();
 
@@ -1153,11 +1154,7 @@ export function BlockCoverageAnalyzer({ onBack }) {
       <div className="bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 sticky top-0 z-30 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-            {onBack && (
-              <button onClick={onBack} className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors" title="Back">
-                <Icon d="M15 19l-7-7 7-7" size={17} />
-              </button>
-            )}
+            {onBack && <BackToModulesButton onClick={onBack} />}
             <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow">
               <Icon d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" size={17} className="text-white"/>
             </div>

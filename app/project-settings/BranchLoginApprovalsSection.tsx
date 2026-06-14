@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Clock3, Loader2, RefreshCcw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { supabase } from '../../lib/supabase';
 import { branchLoginApprovalService } from '../../services/branchLoginApprovalService';
-import { BranchLoginApproval } from '../../types';
+import { BranchLoginApproval, MaintenanceSettings } from '../../types';
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'Not available';
@@ -22,11 +23,23 @@ const minutesRemaining = (expiresAt: string) => {
   return `${minutes}m ${seconds}s`;
 };
 
-export const BranchLoginApprovalsSection: React.FC = () => {
+interface BranchLoginApprovalsSectionProps {
+  settings?: MaintenanceSettings | null;
+  settingsError?: string | null;
+  onSettingsChange?: (settings: MaintenanceSettings) => void;
+}
+
+export const BranchLoginApprovalsSection: React.FC<BranchLoginApprovalsSectionProps> = ({
+  settings,
+  settingsError,
+  onSettingsChange
+}) => {
   const [requests, setRequests] = useState<BranchLoginApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  const [isSavingSetting, setIsSavingSetting] = useState(false);
+  const approvalRequired = settings?.branchLoginApprovalRequired !== false;
 
   const loadRequests = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -97,6 +110,32 @@ export const BranchLoginApprovalsSection: React.FC = () => {
     }
   };
 
+  const toggleApprovalRequirement = async () => {
+    if (!settings || isSavingSetting) return;
+
+    const nextValue = !approvalRequired;
+    setIsSavingSetting(true);
+    try {
+      const updated = await supabase.systemSettings.updateMaintenanceSettings({
+        branchLoginApprovalRequired: nextValue
+      });
+      onSettingsChange?.(updated);
+      Swal.fire({
+        icon: 'success',
+        title: nextValue ? 'Approval layer enabled' : 'Approval layer disabled',
+        text: nextValue
+          ? 'Branch users will wait for manager approval after password login.'
+          : 'Branch users will enter after password login without a manager approval request.',
+        timer: 1800,
+        showConfirmButton: false
+      });
+    } catch (saveError: any) {
+      Swal.fire('Setting was not saved', saveError?.message || 'Could not update branch login approval setting.', 'error');
+    } finally {
+      setIsSavingSetting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 text-center">
@@ -108,6 +147,47 @@ export const BranchLoginApprovalsSection: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <div className={`rounded-lg border p-5 shadow-sm ${approvalRequired ? 'border-brand/20 bg-brand/5' : 'border-slate-200 bg-slate-50'}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${approvalRequired ? 'bg-brand text-white' : 'bg-slate-200 text-slate-600'}`}>
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Second login layer</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">
+                Manager approval is {approvalRequired ? 'active' : 'inactive'}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
+                When active, branch accounts must wait for an authorized manager, owner, or admin after entering the correct password.
+              </p>
+              {settingsError && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
+                  Settings could not be verified from Supabase. Login approval remains treated as active until this is fixed.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <label className={`relative inline-flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border px-4 py-3 lg:w-auto ${approvalRequired ? 'border-brand/20 bg-white' : 'border-slate-200 bg-white'}`}>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">
+              {approvalRequired ? 'Require approval' : 'Password only'}
+            </span>
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={approvalRequired}
+              disabled={!settings || isSavingSetting}
+              onChange={toggleApprovalRequirement}
+            />
+            <span className={`flex h-7 w-12 items-center rounded-full p-1 transition ${approvalRequired ? 'bg-brand' : 'bg-slate-300'} ${(!settings || isSavingSetting) ? 'opacity-60' : ''}`}>
+              <span className={`h-5 w-5 rounded-full bg-white shadow transition ${approvalRequired ? 'translate-x-5' : 'translate-x-0'}`} />
+            </span>
+            {isSavingSetting && <Loader2 className="h-4 w-4 animate-spin text-brand" />}
+          </label>
+        </div>
+      </div>
+
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">

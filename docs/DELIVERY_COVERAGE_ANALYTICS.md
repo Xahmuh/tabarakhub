@@ -60,6 +60,22 @@ Answer operational/strategic questions from real delivery data:
 | Top serving branch | Branch with the most mappable orders. |
 | Unresolved blocks | Orders whose block number is not in the directory. |
 
+## Governorate KPIs And Purchase Power Proxy
+
+Delivery Coverage includes a **Governorate KPIs** tab for internal delivery
+performance review. It calculates governorate performance, branch performance per
+governorate, and a Purchase Power Proxy based only on internal `delivery_orders`
+and `value_bhd`.
+
+The Purchase Power Proxy is not official economic purchasing power. It is not
+population-adjusted and does not use income data. Missing governorate/value data
+is surfaced in data-quality indicators and is not guessed.
+
+Governorate mapping source: `delivery_orders.governorate` snapshots and the
+`delivery_blocks` directory. The current GeoJSON has only `BLOCK_NO`, so no
+governorate map is invented from geometry. See
+`docs/DELIVERY_GOVERNORATE_KPIS_AND_PURCHASE_POWER.md`.
+
 Per-block metric (`DeliveryBlockMetric`): order count, branch breakdown,
 dominant branch, share of located deliveries, and an intra-period **trend**
 (first half vs second half of the selected window; `insufficient_data` below 4
@@ -104,6 +120,36 @@ by governorate (Capital / Muharraq / Northern / Southern / Unknown), each block 
 heat-colored cell with branch breakdown, share, and trend on click. This is the
 guaranteed view when geometry is missing, invalid, or still loading, and it also
 covers blocks that have no polygon. No invented geometry in either mode.
+
+## Branch delivery zones and markers
+
+Branch delivery profiles are now prepared through
+`public.branch_delivery_profiles` and configured in **Project Settings > Delivery
+Zones**. The map derives branch markers from the centroid of each branch
+`origin_block_number` in `public/data/bahrain-blocks.geojson`; no stored or fake
+coordinates are used.
+
+When profiles are available, the map can show branch code markers, subtle
+animated red service rings for core/standard/extended radius bands, and toggles
+for branch markers, service rings, and served blocks. Duplicate origin blocks
+such as `729` (H002/T001) and `745` (H004/S004) render as offset markers around
+the same real centroid.
+
+Served blocks are classified against the dominant branch profile as `core`,
+`standard`, `extended`, `outside_range`, or `unavailable`. These classifications
+are centroid-based approximations only; they are not route-time or driving
+distance calculations. See `docs/DELIVERY_BRANCH_ZONES_AND_MARKERS.md`.
+
+Linked Supabase validation on 2026-06-14 applied
+`20260614163000_add_branch_delivery_profiles.sql` successfully and confirmed 20
+seeded branch profiles, RLS enabled, 0 anon grants, anon REST denial, and branch
+T001 own-only visibility. Manager/owner/supervisor/warehouse browser-session
+validation and deployed marker/ring smoke tests remain pending. Authenticated
+browser QA was attempted locally on 2026-06-14; the app loaded the login page with
+no observed console errors, but the available in-app browser had no authenticated
+session and the linked `app_user_profiles` inventory contained only 20 active
+branch profiles, so manager/owner/supervisor/warehouse UI checks could not be
+completed without provisioning or credentials.
 
 ### Replacing or updating the geometry
 

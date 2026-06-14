@@ -31,6 +31,8 @@ import { CorrelationCharts } from '../components/dashboard/CorrelationCharts';
 import { QuestionManager } from '../components/admin/QuestionManager';
 import { ModuleSettingsControl } from '../components/admin/ModuleSettingsControl';
 import { isModuleEnabled } from '../../../../config/clientConfig';
+import { isManagerRole } from '../../../../lib/access';
+import { BackToModulesButton } from '../../../shared';
 
 interface Props {
   userRole?: string;
@@ -43,7 +45,7 @@ type AnalyticsSection = 'summary' | 'trends' | 'responses';
 export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
   const [activeAnalyticsSection, setActiveAnalyticsSection] = useState<AnalyticsSection>('summary');
-  const canManageQuestions = userRole?.toLowerCase() === 'manager';
+  const canManageQuestions = isManagerRole(userRole?.toLowerCase());
   const [filters, setFilters] = useState<DashboardFilters>({
     dateFrom: '',
     dateTo: '',
@@ -74,7 +76,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   ];
 
   return (
-    <ProtectedRoute roles={['manager', 'owner', 'ceo']} userRole={userRole}>
+    <ProtectedRoute roles={['admin', 'manager', 'owner', 'ceo']} userRole={userRole}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -95,9 +97,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
               </button>
             )}
             {onBack && (
-              <button onClick={onBack} className="btn-primary">
-                Back to Suite
-              </button>
+              <BackToModulesButton onClick={onBack} />
             )}
           </div>
         </div>

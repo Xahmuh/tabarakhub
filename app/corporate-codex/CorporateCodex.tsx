@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     BookOpen,
+    BadgeCheck,
     Plus,
     Trash2,
     ChevronLeft,
@@ -17,16 +18,90 @@ import {
     Edit2,
     Users,
     Globe,
-    Briefcase
+    Briefcase,
+    type LucideIcon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { CodexEntry, Role } from '../../types';
 import Swal from 'sweetalert2';
+import { isManagerRole } from '../../lib/access';
+import { BackToModulesButton } from '../shared';
 
 interface CorporateCodexProps {
     userRole: Role;
     onBack: () => void;
 }
+
+type CodexFilterType = 'all' | 'circular' | 'policy';
+
+const codexTypeOptions: Array<{ id: CodexFilterType; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'circular', label: 'Circulars' },
+    { id: 'policy', label: 'Policies' }
+];
+
+const departmentOptions: Array<{ id: string; label: string; icon: LucideIcon }> = [
+    { id: 'all', label: 'All Files', icon: Briefcase },
+    { id: 'HR', label: 'Human Resources', icon: Users },
+    { id: 'Operations', label: 'Operations', icon: Zap },
+    { id: 'IT', label: 'Info Tech', icon: Globe },
+    { id: 'Finance', label: 'Finance', icon: ShieldAlert }
+];
+
+const priorityStyles: Record<CodexEntry['priority'], string> = {
+    critical: 'border-rose-200 bg-rose-50 text-rose-700',
+    urgent: 'border-amber-200 bg-amber-50 text-amber-700',
+    normal: 'border-slate-200 bg-slate-50 text-slate-600'
+};
+
+const typeStyles: Record<CodexEntry['type'], string> = {
+    circular: 'border-blue-100 bg-blue-50 text-blue-700',
+    policy: 'border-brand/10 bg-brand/5 text-brand'
+};
+
+const formatCodexDate = (value?: string) => {
+    if (!value) return 'No date';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const CodexMetricCard = ({
+    icon: Icon,
+    label,
+    value,
+    hint,
+    tone = 'slate'
+}: {
+    icon: LucideIcon;
+    label: string;
+    value: number | string;
+    hint: string;
+    tone?: 'brand' | 'amber' | 'emerald' | 'slate';
+}) => {
+    const toneClass = tone === 'brand'
+        ? 'border-brand/10 bg-brand/5 text-brand'
+        : tone === 'amber'
+            ? 'border-amber-100 bg-amber-50 text-amber-700'
+            : tone === 'emerald'
+                ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                : 'border-slate-200 bg-slate-50 text-slate-600';
+
+    return (
+        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${toneClass}`}>
+                    <Icon className="h-4 w-4" />
+                </div>
+                <div className="text-right">
+                    <p className="text-2xl font-black tabular-nums tracking-tight text-slate-950">{value}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
+                </div>
+            </div>
+            <p className="mt-3 text-xs font-medium leading-5 text-slate-500">{hint}</p>
+        </article>
+    );
+};
 
 export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack }) => {
     const [entries, setEntries] = useState<CodexEntry[]>([]);
@@ -35,7 +110,7 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState<'all' | 'circular' | 'policy'>('all');
+    const [filterType, setFilterType] = useState<CodexFilterType>('all');
     const [isFlipping, setIsFlipping] = useState(false);
     const [isProcessingPdf, setIsProcessingPdf] = useState(false);
     const [zoom, setZoom] = useState(1);
@@ -55,7 +130,7 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
         tags: []
     });
 
-    const isManager = userRole === 'manager';
+    const isManager = isManagerRole(userRole);
 
     useEffect(() => {
         fetchEntries();
@@ -121,13 +196,15 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
     };
 
     const filteredEntries = useMemo(() => {
+        const normalizedSearch = searchTerm.trim().toLowerCase();
         return entries
             .filter(entry => {
-                const matchesSearch = entry.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    entry.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    entry.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+                const matchesSearch = !normalizedSearch ||
+                    entry.title.toLowerCase().includes(normalizedSearch) ||
+                    Boolean(entry.description?.toLowerCase().includes(normalizedSearch)) ||
+                    Boolean(entry.tags?.some(tag => tag.toLowerCase().includes(normalizedSearch)));
                 const matchesType = filterType === 'all' || entry.type === filterType;
-                const matchesDept = filterDept === 'all' || entry.department === filterDept;
+                const matchesDept = filterDept === 'all' || (entry.department || 'all') === filterDept;
                 return matchesSearch && matchesType && matchesDept;
             })
             .sort((a, b) => {
@@ -136,6 +213,48 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
                 return priorities[a.priority as keyof typeof priorities] - priorities[b.priority as keyof typeof priorities];
             });
     }, [entries, searchTerm, filterType, filterDept]);
+
+    const codexStats = useMemo(() => ({
+        total: entries.length,
+        published: entries.filter(entry => entry.isPublished).length,
+        drafts: entries.filter(entry => !entry.isPublished).length,
+        pinned: entries.filter(entry => entry.isPinned).length,
+        actionItems: entries.filter(entry => entry.priority === 'critical' || entry.priority === 'urgent').length
+    }), [entries]);
+
+    const departmentCounts = useMemo(() => {
+        return departmentOptions.reduce<Record<string, number>>((acc, dept) => {
+            acc[dept.id] = dept.id === 'all'
+                ? entries.length
+                : entries.filter(entry => entry.department === dept.id).length;
+            return acc;
+        }, {});
+    }, [entries]);
+
+    const activeDepartmentLabel = departmentOptions.find(dept => dept.id === filterDept)?.label || 'All Files';
+    const activeTypeLabel = codexTypeOptions.find(type => type.id === filterType)?.label || 'All';
+    const hasActiveFilters = Boolean(searchTerm.trim()) || filterType !== 'all' || filterDept !== 'all';
+
+    const openNewDocumentEditor = () => {
+        setEditorData({
+            title: '',
+            description: '',
+            type: 'circular',
+            priority: 'normal',
+            publishDate: new Date().toISOString().split('T')[0],
+            pages: [],
+            isPublished: true,
+            department: 'all',
+            tags: []
+        });
+        setIsEditorOpen(true);
+    };
+
+    const resetFilters = () => {
+        setSearchTerm('');
+        setFilterType('all');
+        setFilterDept('all');
+    };
 
     const handleTogglePin = async (entry: CodexEntry) => {
         const targetId = entry.id;
@@ -214,6 +333,9 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
     const renderMagazine = () => {
         if (!activeEntry) return null;
         const totalPages = activeEntry.pages.length;
+        const totalSpreads = Math.max(1, Math.ceil(totalPages / 2));
+        const currentPageImage = activeEntry.pages[currentPage];
+        const nextPageImage = activeEntry.pages[currentPage + 1];
 
         return (
             <div
@@ -251,13 +373,20 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
                     >
                         <div className="absolute inset-y-0 left-1/2 w-px bg-slate-200/30 z-20 hidden md:block"></div>
                         <div className="flex-1 relative bg-slate-50 overflow-hidden">
-                            <img src={activeEntry.pages[currentPage]} alt="Page" className="w-full h-full object-contain pointer-events-none" />
-                            <div className="absolute bottom-3 left-3 text-[10px] font-medium text-slate-400 bg-white/80 px-2 py-0.5 rounded">{currentPage + 1}</div>
+                            {currentPageImage ? (
+                                <img src={currentPageImage} alt="Page" className="w-full h-full object-contain pointer-events-none" />
+                            ) : (
+                                <div className="flex h-full w-full flex-col items-center justify-center text-slate-300">
+                                    <BookOpen size={40} />
+                                    <span className="mt-3 text-xs font-black uppercase tracking-widest">No pages uploaded</span>
+                                </div>
+                            )}
+                            <div className="absolute bottom-3 left-3 text-[10px] font-medium text-slate-400 bg-white/80 px-2 py-0.5 rounded">{totalPages ? currentPage + 1 : 0}</div>
                         </div>
                         <div className="flex-1 relative bg-slate-50 hidden md:block border-l border-slate-100">
-                            {currentPage + 1 < totalPages ? (
+                            {nextPageImage ? (
                                 <>
-                                    <img src={activeEntry.pages[currentPage + 1]} alt="Page" className="w-full h-full object-contain pointer-events-none" />
+                                    <img src={nextPageImage} alt="Page" className="w-full h-full object-contain pointer-events-none" />
                                     <div className="absolute bottom-3 right-3 text-[10px] font-medium text-slate-400 bg-white/80 px-2 py-0.5 rounded">{currentPage + 2}</div>
                                 </>
                             ) : (
@@ -278,11 +407,11 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
 
                 {/* Page navigation */}
                 <div className="z-[250] flex items-center gap-3 mt-4">
-                    <button disabled={currentPage === 0 || isFlipping} onClick={() => changePage(-2)} className="flex items-center gap-2 px-4 h-9 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors disabled:opacity-20 text-xs font-medium"><ChevronLeft size={16} />Previous</button>
+                    <button disabled={currentPage === 0 || totalPages < 2 || isFlipping} onClick={() => changePage(-2)} className="flex items-center gap-2 px-4 h-9 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors disabled:opacity-20 text-xs font-medium"><ChevronLeft size={16} />Previous</button>
                     <div className="px-4 h-9 bg-white/5 border border-white/10 rounded-lg flex items-center">
-                        <span className="text-white text-sm font-semibold">{Math.floor(currentPage / 2) + 1} <span className="text-white/30 mx-0.5">/</span> {Math.ceil(totalPages / 2)}</span>
+                        <span className="text-white text-sm font-semibold">{Math.floor(currentPage / 2) + 1} <span className="text-white/30 mx-0.5">/</span> {totalSpreads}</span>
                     </div>
-                    <button disabled={currentPage >= totalPages - 2 || isFlipping} onClick={() => changePage(2)} className="flex items-center gap-2 px-4 h-9 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors disabled:opacity-20 text-xs font-medium">Next<ChevronRight size={16} /></button>
+                    <button disabled={totalPages < 2 || currentPage >= totalPages - 2 || isFlipping} onClick={() => changePage(2)} className="flex items-center gap-2 px-4 h-9 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors disabled:opacity-20 text-xs font-medium">Next<ChevronRight size={16} /></button>
                 </div>
             </div>
         );
@@ -296,36 +425,50 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
             aria-labelledby="codex-editor-title"
             aria-describedby="codex-editor-description"
         >
-            <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden">
+            <div className="w-full max-w-4xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
                 <div id="codex-editor-description" className="sr-only">Form to create or update corporate documents, policies, and circulars.</div>
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <h3 id="codex-editor-title" className="text-base font-bold text-slate-900">{editorData.id ? 'Edit Document' : 'New Document'}</h3>
-                    <button onClick={() => setIsEditorOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand">
+                            <BookOpen className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Document editor</p>
+                            <h3 id="codex-editor-title" className="mt-1 text-lg font-black tracking-tight text-slate-950">{editorData.id ? 'Edit Document' : 'New Document'}</h3>
+                            <p className="mt-1 text-xs font-medium text-slate-500">Upload pages, set visibility, and classify the policy for faster retrieval.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsEditorOpen(false)}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        title="Close"
+                    >
+                        <X size={18} />
+                    </button>
                 </div>
                 <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-slate-500">Title</label>
-                            <input type="text" value={editorData.title} onChange={e => setEditorData(prev => ({ ...prev, title: e.target.value }))} className="w-full bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors" />
+                            <label className="text-xs font-bold text-slate-600">Title</label>
+                            <input type="text" value={editorData.title} onChange={e => setEditorData(prev => ({ ...prev, title: e.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10" />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-slate-500">Department</label>
-                            <select title="Dept" value={editorData.department} onChange={e => setEditorData(prev => ({ ...prev, department: e.target.value }))} className="w-full bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors">
-                                <option value="all">All Departments</option>
-                                <option value="HR">Human Resources</option>
-                                <option value="Operations">Operations</option>
-                                <option value="IT">Information Tech</option>
-                                <option value="Finance">Finance</option>
+                            <label className="text-xs font-bold text-slate-600">Department</label>
+                            <select title="Dept" value={editorData.department} onChange={e => setEditorData(prev => ({ ...prev, department: e.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10">
+                                {departmentOptions.map(dept => (
+                                    <option key={dept.id} value={dept.id}>{dept.label}</option>
+                                ))}
                             </select>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-slate-500">Type & Priority</label>
+                            <label className="text-xs font-bold text-slate-600">Type & Priority</label>
                             <div className="flex gap-2">
-                                <select title="Type" value={editorData.type} onChange={e => setEditorData(prev => ({ ...prev, type: e.target.value as any }))} className="flex-1 bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors">
+                                <select title="Type" value={editorData.type} onChange={e => setEditorData(prev => ({ ...prev, type: e.target.value as any }))} className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10">
                                     <option value="circular">Circular</option>
                                     <option value="policy">Policy</option>
                                 </select>
-                                <select title="Priority" value={editorData.priority} onChange={e => setEditorData(prev => ({ ...prev, priority: e.target.value as any }))} className="flex-1 bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors">
+                                <select title="Priority" value={editorData.priority} onChange={e => setEditorData(prev => ({ ...prev, priority: e.target.value as any }))} className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10">
                                     <option value="normal">Normal</option>
                                     <option value="urgent">Urgent</option>
                                     <option value="critical">Critical</option>
@@ -333,175 +476,341 @@ export const CorporateCodex: React.FC<CorporateCodexProps> = ({ userRole, onBack
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-slate-500">Publish Date</label>
-                            <input type="date" value={editorData.publishDate} onChange={e => setEditorData(prev => ({ ...prev, publishDate: e.target.value }))} className="w-full bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors" />
+                            <label className="text-xs font-bold text-slate-600">Publish Date</label>
+                            <input type="date" value={editorData.publishDate} onChange={e => setEditorData(prev => ({ ...prev, publishDate: e.target.value }))} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10" />
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-slate-500">Tags (comma separated)</label>
-                            <input type="text" value={editorData.tags?.join(', ')} onChange={e => setEditorData(prev => ({ ...prev, tags: e.target.value.split(',').map(t => t.trim()) }))} className="w-full bg-white border border-slate-200 h-10 px-3 rounded-lg outline-none text-sm focus:border-slate-400 transition-colors" placeholder="HR, Update, 2024" />
+                        <div className="space-y-1.5 lg:col-span-2">
+                            <label className="text-xs font-bold text-slate-600">Tags (comma separated)</label>
+                            <input type="text" value={editorData.tags?.join(', ')} onChange={e => setEditorData(prev => ({ ...prev, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) }))} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-brand/40 focus:ring-2 focus:ring-brand/10" placeholder="HR, Update, 2026" />
                         </div>
                         <div className="space-y-1.5 flex flex-col justify-end">
-                            <label className="flex items-center gap-2.5 h-10 px-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer">
-                                <input type="checkbox" checked={editorData.isPublished} onChange={e => setEditorData(prev => ({ ...prev, isPublished: e.target.checked }))} className="w-4 h-4 rounded accent-slate-900" />
-                                <span className="text-xs font-medium text-slate-600">Published</span>
+                            <label className="flex h-10 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 transition-colors hover:border-brand/30 hover:bg-brand/5">
+                                <input type="checkbox" checked={editorData.isPublished} onChange={e => setEditorData(prev => ({ ...prev, isPublished: e.target.checked }))} className="h-4 w-4 rounded accent-brand" />
+                                <span className="text-xs font-bold text-slate-600">Published</span>
                             </label>
                         </div>
                     </div>
                     <div className="space-y-3">
-                        <label className="text-xs font-medium text-slate-500">Assets (PDF / Images)</label>
-                        <label className="w-full h-20 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors">
+                        <label className="text-xs font-bold text-slate-600">Assets (PDF / Images)</label>
+                        <label className="flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/70 text-slate-400 transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand">
                             {isProcessingPdf ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-                            <span className="text-xs font-medium mt-1">Upload files</span>
+                            <span className="mt-1 text-xs font-black uppercase tracking-widest">Upload files</span>
+                            <span className="mt-0.5 text-[10px] font-medium text-slate-400">PDF, PNG, JPG</span>
                             <input type="file" multiple accept="image/*,application/pdf" onChange={handleFileUpload} className="hidden" disabled={isProcessingPdf} />
                         </label>
                         {editorData.pages && editorData.pages.length > 0 && (
                             <div className="flex flex-wrap gap-2">
                                 {editorData.pages.map((page, idx) => (
-                                    <div key={idx} className="relative w-14 h-18 rounded-md border border-slate-200 overflow-hidden group">
+                                    <div key={idx} className="group relative h-20 w-14 overflow-hidden rounded-md border border-slate-200">
                                         <img src={page} className="w-full h-full object-cover" alt="page" />
-                                        <button onClick={() => setEditorData(prev => ({ ...prev, pages: prev.pages?.filter((_, i) => i !== idx) }))} className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Trash2 size={12} /></button>
+                                        <button type="button" onClick={() => setEditorData(prev => ({ ...prev, pages: prev.pages?.filter((_, i) => i !== idx) }))} className="absolute inset-0 flex items-center justify-center bg-rose-600/80 text-white opacity-0 transition-opacity group-hover:opacity-100"><Trash2 size={12} /></button>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-                    <button onClick={() => setIsEditorOpen(false)} className="px-4 h-9 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-white transition-colors">Cancel</button>
-                    <button onClick={handleSave} className="px-6 h-9 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors">Save Document</button>
+                <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-6 py-4">
+                    <button type="button" onClick={() => setIsEditorOpen(false)} className="btn-secondary h-10 text-[10px] uppercase tracking-widest">Cancel</button>
+                    <button type="button" onClick={handleSave} className="btn-primary h-10 text-[10px] uppercase tracking-widest">Save Document</button>
                 </div>
             </div>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50/80 p-4 md:p-8">
-            <div className="max-w-[1400px] mx-auto">
-                {/* Header */}
-                <header className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+        <div className="min-h-screen bg-slate-50">
+            <div className="mx-auto max-w-[1600px] px-5 py-8 md:px-8">
+                <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
-                                <BookOpen size={16} className="text-white" />
-                            </div>
-                            <h1 className="text-2xl font-bold text-slate-900">Corporate Codex</h1>
-                        </div>
-                        <p className="text-xs text-slate-400 ml-12">Circulars, policies & company documents</p>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Knowledge module</p>
+                        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Corporate Codex</h1>
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                            Publish, search, and review company policies, circulars, and operating documents.
+                        </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                         {isManager && (
                             <button
-                                onClick={() => { setEditorData({ title: '', description: '', type: 'circular', priority: 'normal', publishDate: new Date().toISOString().split('T')[0], pages: [], isPublished: true, department: 'all', tags: [] }); setIsEditorOpen(true); }}
-                                className="flex items-center gap-2 px-4 h-9 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+                                type="button"
+                                onClick={openNewDocumentEditor}
+                                className="btn-primary h-10 text-[10px] uppercase tracking-widest"
                             >
-                                <Plus size={15} /> New Document
+                                <Plus className="h-4 w-4" />
+                                New Document
                             </button>
                         )}
-                        <button onClick={onBack} className="px-4 h-9 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Back</button>
+                        <BackToModulesButton onClick={onBack} />
                     </div>
                 </header>
 
-                {/* Search & Filters */}
-                <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Search by title, description or #tags..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full bg-white border border-slate-200 h-10 pl-10 pr-4 rounded-lg text-sm outline-none focus:border-slate-400 transition-colors"
-                        />
-                    </div>
-                    <div className="flex bg-white border border-slate-200 p-1 rounded-lg">
-                        {(['all', 'circular', 'policy'] as const).map(type => (
-                            <button key={type} onClick={() => setFilterType(type)} className={`px-4 h-8 rounded-md text-xs font-semibold capitalize transition-all ${filterType === type ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}>{type}</button>
-                        ))}
-                    </div>
+                <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <CodexMetricCard icon={BookOpen} label="Total docs" value={codexStats.total} hint="Visible documents in this library." tone="brand" />
+                    <CodexMetricCard icon={BadgeCheck} label="Published" value={codexStats.published} hint="Available to non-manager roles." tone="emerald" />
+                    <CodexMetricCard icon={Pin} label="Pinned" value={codexStats.pinned} hint="Forced to the top of the library." tone="amber" />
+                    <CodexMetricCard icon={ShieldAlert} label="Urgent" value={codexStats.actionItems} hint="Critical or urgent documents." />
                 </div>
 
-                {/* Main Content */}
-                <div className="flex flex-col md:flex-row gap-6">
-                    {/* Sidebar */}
-                    <aside className="w-full md:w-56 flex-shrink-0 space-y-1">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-2">Departments</p>
-                        {[
-                            { id: 'all', label: 'All Files', icon: Briefcase },
-                            { id: 'HR', label: 'Human Resources', icon: Users },
-                            { id: 'Operations', icon: Zap, label: 'Operations' },
-                            { id: 'IT', icon: Globe, label: 'Info Tech' },
-                            { id: 'Finance', icon: ShieldAlert, label: 'Finance' }
-                        ].map(dept => (
-                            <button
-                                key={dept.id}
-                                onClick={() => setFilterDept(dept.id)}
-                                className={`w-full flex items-center gap-3 px-3 h-10 rounded-lg transition-all text-left ${filterDept === dept.id ? 'bg-slate-900 text-white' : 'hover:bg-white text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <dept.icon size={16} className={filterDept === dept.id ? 'text-white/70' : 'text-slate-400'} />
-                                <span className="text-xs font-semibold">{dept.label}</span>
-                            </button>
-                        ))}
-                    </aside>
-
-                    {/* Grid */}
-                    <div className="flex-1">
-                        {isLoading ? (
-                            <div className="flex justify-center py-32"><Loader2 className="animate-spin text-slate-300" size={32} /></div>
-                        ) : filteredEntries.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-                                <BookOpen size={32} className="mb-3 text-slate-300" />
-                                <p className="text-sm font-medium">No documents found</p>
-                                <p className="text-xs mt-1">Try adjusting your search or filters</p>
+                <section className="operational-panel mb-6 p-4 md:p-5">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Library control</p>
+                            <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">Find the right document fast</h2>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    {activeDepartmentLabel}
+                                </span>
+                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    {activeTypeLabel}
+                                </span>
+                                <span className="rounded-md border border-brand/10 bg-brand/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                                    {filteredEntries.length} visible
+                                </span>
+                                {isManager && (
+                                    <span className="rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                                        {codexStats.drafts} drafts
+                                    </span>
+                                )}
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                                {filteredEntries.map(entry => (
-                                    <div key={entry.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col hover:shadow-md hover:border-slate-300 transition-all">
-                                        {/* Cover Image */}
-                                        <div className="h-44 bg-slate-100 relative group cursor-pointer" onClick={() => { setActiveEntry(entry); setCurrentPage(0); }}>
-                                            <img src={entry.pages[0]} className="w-full h-full object-cover" alt="cover" />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                                            <div className="absolute top-3 left-3 flex gap-1.5">
-                                                {!entry.isPublished && <span className="px-2 py-0.5 bg-white/20 backdrop-blur-sm text-white rounded text-[10px] font-semibold">Draft</span>}
-                                                {entry.department && entry.department !== 'all' && (
-                                                    <span className="px-2 py-0.5 bg-blue-500/20 backdrop-blur-sm text-blue-100 rounded text-[10px] font-semibold flex items-center gap-1">
-                                                        <Briefcase size={9} />{entry.department}
-                                                    </span>
-                                                )}
+                        </div>
+
+                        <div className="grid w-full gap-3 xl:w-auto xl:min-w-[760px] xl:grid-cols-[minmax(260px,1fr)_auto_auto]">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search title, description, or tags..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                />
+                            </div>
+                            <div className="tab-nav overflow-x-auto">
+                                {codexTypeOptions.map(type => (
+                                    <button
+                                        key={type.id}
+                                        type="button"
+                                        onClick={() => setFilterType(type.id)}
+                                        className={`tab-item whitespace-nowrap ${filterType === type.id ? 'tab-item-brand' : ''}`}
+                                    >
+                                        {type.label}
+                                    </button>
+                                ))}
+                            </div>
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    onClick={resetFilters}
+                                    className="btn-secondary h-10 justify-center text-[10px] uppercase tracking-widest"
+                                >
+                                    Reset
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+                    <aside className="space-y-4">
+                        <section className="operational-panel p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Departments</p>
+                                    <p className="mt-1 text-xs font-medium text-slate-500">Scope the library by team.</p>
+                                </div>
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand">
+                                    <Briefcase className="h-4 w-4" />
+                                </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                                {departmentOptions.map(dept => (
+                                    <button
+                                        key={dept.id}
+                                        type="button"
+                                        onClick={() => setFilterDept(dept.id)}
+                                        className={`flex h-11 w-full items-center justify-between gap-3 rounded-lg border px-3 text-left transition-all ${
+                                            filterDept === dept.id
+                                                ? 'border-brand/20 bg-brand/5 text-brand shadow-sm'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:bg-brand/5 hover:text-brand'
+                                        }`}
+                                    >
+                                        <span className="flex min-w-0 items-center gap-3">
+                                            <dept.icon className="h-4 w-4 shrink-0" />
+                                            <span className="truncate text-xs font-black">{dept.label}</span>
+                                        </span>
+                                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black tabular-nums text-slate-500">
+                                            {departmentCounts[dept.id] || 0}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section className="operational-panel p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Library mix</p>
+                            <div className="mt-4 space-y-3">
+                                {codexTypeOptions.filter(type => type.id !== 'all').map(type => {
+                                    const value = entries.filter(entry => entry.type === type.id).length;
+                                    const percentage = codexStats.total ? Math.round((value / codexStats.total) * 100) : 0;
+                                    return (
+                                        <div key={type.id}>
+                                            <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-slate-600">
+                                                <span>{type.label}</span>
+                                                <span>{value}</span>
                                             </div>
-                                            <div className="absolute top-3 right-3 flex gap-1.5">
-                                                {entry.isPinned && <div className="w-6 h-6 bg-amber-500 text-white rounded-md flex items-center justify-center"><Pin size={12} fill="currentColor" /></div>}
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${entry.priority === 'critical' ? 'bg-red-500 text-white' : entry.priority === 'urgent' ? 'bg-amber-500 text-white' : 'bg-slate-800 text-white'}`}>{entry.priority}</span>
-                                            </div>
-                                            {/* Hover overlay */}
-                                            <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition-colors flex items-center justify-center">
-                                                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold bg-slate-900/60 px-3 py-1.5 rounded-lg backdrop-blur-sm">Open Document</span>
+                                            <div className="h-2 rounded-full bg-slate-100">
+                                                <div className="h-2 rounded-full bg-brand" style={{ width: `${percentage}%` }} />
                                             </div>
                                         </div>
-                                        {/* Card Body */}
-                                        <div className="p-4 flex-1 flex flex-col">
-                                            <h3 className="text-sm font-bold text-slate-900 line-clamp-1">{entry.title}</h3>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">{entry.publishDate} &middot; {entry.pages.length} pages</p>
-                                            {entry.tags && entry.tags.length > 0 && (
-                                                <div className="mt-2 flex flex-wrap gap-1">
-                                                    {entry.tags.slice(0, 3).map(tag => (
-                                                        <span key={tag} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-medium rounded">#{tag}</span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                            {isManager && (
-                                                <div className="mt-auto pt-3 flex justify-end gap-1 border-t border-slate-100">
-                                                    <button onClick={() => handleTogglePin(entry)} className={`p-1.5 rounded-md transition-all ${entry.isPinned ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:text-amber-500 hover:bg-slate-50'}`}><Pin size={14} fill={entry.isPinned ? "currentColor" : "none"} /></button>
-                                                    <button onClick={() => { setEditorData(entry); setIsEditorOpen(true); }} className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-slate-50 rounded-md transition-all"><Edit2 size={14} /></button>
-                                                    <button onClick={() => handleDelete(entry.id)} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-slate-50 rounded-md transition-all"><Trash2 size={14} /></button>
-                                                </div>
-                                            )}
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    </aside>
+
+                    <main className="min-w-0">
+                        {isLoading ? (
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                                {Array.from({ length: 6 }).map((_, index) => (
+                                    <div key={index} className="operational-panel overflow-hidden">
+                                        <div className="skeleton h-52 rounded-none" />
+                                        <div className="space-y-3 p-4">
+                                            <div className="skeleton-text h-4 w-3/4" />
+                                            <div className="skeleton-text h-3 w-1/2" />
+                                            <div className="skeleton-text h-3 w-full" />
                                         </div>
                                     </div>
                                 ))}
                             </div>
+                        ) : filteredEntries.length === 0 ? (
+                            <div className="operational-panel empty-state min-h-[420px] px-4">
+                                <div className="empty-state-icon">
+                                    <BookOpen className="h-8 w-8" />
+                                </div>
+                                <p className="empty-state-title">No documents found</p>
+                                <p className="empty-state-desc">Try a different search, type, or department filter.</p>
+                                {hasActiveFilters && (
+                                    <button type="button" onClick={resetFilters} className="btn-secondary mt-5 text-[10px] uppercase tracking-widest">
+                                        Reset filters
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                                {filteredEntries.map(entry => {
+                                    const cover = entry.pages?.[0];
+                                    const tags = (entry.tags || []).filter(Boolean).slice(0, 3);
+                                    const departmentLabel = entry.department && entry.department !== 'all' ? entry.department : 'All departments';
+                                    return (
+                                        <article key={entry.id} className="group flex overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
+                                            <div className="flex min-w-0 flex-1 flex-col">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setActiveEntry(entry); setCurrentPage(0); setZoom(1); setPanning({ x: 0, y: 0 }); }}
+                                                    className="relative h-52 w-full overflow-hidden bg-slate-100 text-left focus-ring"
+                                                >
+                                                    {cover ? (
+                                                        <img src={cover} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" alt={`${entry.title} cover`} />
+                                                    ) : (
+                                                        <div className="flex h-full w-full flex-col items-center justify-center bg-slate-100 text-slate-300">
+                                                            <BookOpen className="h-10 w-10" />
+                                                            <span className="mt-2 text-[10px] font-black uppercase tracking-widest">No preview</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent" />
+                                                    <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                                                        {!entry.isPublished && (
+                                                            <span className="rounded-md border border-white/20 bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                                                                Draft
+                                                            </span>
+                                                        )}
+                                                        <span className="rounded-md border border-white/15 bg-white/15 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-white backdrop-blur">
+                                                            {entry.pages?.length || 0} pages
+                                                        </span>
+                                                    </div>
+                                                    <div className="absolute right-3 top-3 flex gap-1.5">
+                                                        {entry.isPinned && (
+                                                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm" title="Pinned">
+                                                                <Pin className="h-3.5 w-3.5" fill="currentColor" />
+                                                            </span>
+                                                        )}
+                                                        <span className={`rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-widest ${priorityStyles[entry.priority]}`}>
+                                                            {entry.priority}
+                                                        </span>
+                                                    </div>
+                                                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-3">
+                                                        <span className="rounded-md bg-slate-950/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                                                            Open Document
+                                                        </span>
+                                                        <span className={`ml-auto rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-widest ${typeStyles[entry.type]}`}>
+                                                            {entry.type}
+                                                        </span>
+                                                    </div>
+                                                </button>
+
+                                                <div className="flex flex-1 flex-col p-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <h3 className="line-clamp-1 text-sm font-black tracking-tight text-slate-950">{entry.title}</h3>
+                                                            <p className="mt-1 text-[11px] font-bold text-slate-400">{formatCodexDate(entry.publishDate)} · {departmentLabel}</p>
+                                                        </div>
+                                                        <BookOpen className="h-4 w-4 shrink-0 text-slate-300" />
+                                                    </div>
+
+                                                    {entry.description && (
+                                                        <p className="mt-3 line-clamp-2 min-h-[40px] text-xs font-medium leading-5 text-slate-500">{entry.description}</p>
+                                                    )}
+
+                                                    {tags.length > 0 && (
+                                                        <div className="mt-3 flex flex-wrap gap-1.5">
+                                                            {tags.map(tag => (
+                                                                <span key={tag} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-500">
+                                                                    #{tag}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {isManager && (
+                                                        <div className="mt-auto flex items-center justify-end gap-1 border-t border-slate-100 pt-3">
+                                                            <button
+                                                                type="button"
+                                                                title={entry.isPinned ? 'Unpin document' : 'Pin document'}
+                                                                onClick={() => handleTogglePin(entry)}
+                                                                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                                                                    entry.isPinned
+                                                                        ? 'bg-amber-50 text-amber-600'
+                                                                        : 'text-slate-300 hover:bg-amber-50 hover:text-amber-600'
+                                                                }`}
+                                                            >
+                                                                <Pin className="h-3.5 w-3.5" fill={entry.isPinned ? 'currentColor' : 'none'} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                title="Edit document"
+                                                                onClick={() => { setEditorData(entry); setIsEditorOpen(true); }}
+                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-all hover:bg-brand/5 hover:text-brand"
+                                                            >
+                                                                <Edit2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                title="Delete document"
+                                                                onClick={() => handleDelete(entry.id)}
+                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-600"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
                         )}
-                    </div>
+                    </main>
                 </div>
             </div>
             {activeEntry && renderMagazine()}

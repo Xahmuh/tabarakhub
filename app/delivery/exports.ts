@@ -9,6 +9,89 @@ const assertExcelEnabled = () => {
   }
 };
 
+type KpiRow = {
+  key: string;
+  label: string;
+  secondary?: string;
+  orders: number;
+  value: number;
+};
+
+const styleHeader = (row: ExcelJS.Row) => {
+  row.font = { bold: true };
+  row.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
+  });
+};
+
+const buildKpis = (
+  orders: DeliveryOrder[],
+  getKey: (order: DeliveryOrder) => string,
+  getLabel: (order: DeliveryOrder) => string,
+  getSecondary?: (order: DeliveryOrder) => string | undefined
+): KpiRow[] => {
+  const map = new Map<string, KpiRow>();
+  orders.forEach(order => {
+    const key = getKey(order);
+    const existing = map.get(key) || {
+      key,
+      label: getLabel(order),
+      secondary: getSecondary?.(order),
+      orders: 0,
+      value: 0
+    };
+    existing.orders += 1;
+    existing.value += order.valueBhd;
+    map.set(key, existing);
+  });
+
+  return [...map.values()]
+    .sort((a, b) => b.orders - a.orders || b.value - a.value || a.label.localeCompare(b.label));
+};
+
+const addKpiSheet = (
+  workbook: ExcelJS.Workbook,
+  sheetName: string,
+  title: string,
+  entityLabel: string,
+  rows: KpiRow[],
+  secondaryLabel?: string
+) => {
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.addRow([title]);
+  sheet.getRow(1).font = { bold: true, size: 14 };
+  sheet.addRow([]);
+
+  const columns = secondaryLabel
+    ? ['Rank', entityLabel, secondaryLabel, 'Orders', 'Total Value (BHD)']
+    : ['Rank', entityLabel, 'Orders', 'Total Value (BHD)'];
+  styleHeader(sheet.addRow(columns));
+
+  rows.forEach((row, index) => {
+    const values = secondaryLabel
+      ? [index + 1, row.label, row.secondary || '', row.orders, Number(row.value.toFixed(3))]
+      : [index + 1, row.label, row.orders, Number(row.value.toFixed(3))];
+    sheet.addRow(values);
+  });
+
+  if (rows.length === 0) {
+    sheet.addRow(['No data']);
+  }
+
+  const totalValue = rows.reduce((acc, row) => acc + row.value, 0);
+  const totalOrders = rows.reduce((acc, row) => acc + row.orders, 0);
+  sheet.addRow([]);
+  const totalRow = secondaryLabel
+    ? sheet.addRow(['TOTAL', '', '', totalOrders, Number(totalValue.toFixed(3))])
+    : sheet.addRow(['TOTAL', '', totalOrders, Number(totalValue.toFixed(3))]);
+  totalRow.font = { bold: true };
+
+  sheet.columns.forEach(col => { col.width = 22; });
+  sheet.getColumn(1).width = 10;
+  sheet.getColumn(secondaryLabel ? 5 : 4).numFmt = '0.000';
+};
+
 export const exportOrdersToExcel = async (
   orders: DeliveryOrder[],
   title: string,
@@ -25,11 +108,7 @@ export const exportOrdersToExcel = async (
   const header = sheet.addRow([
     'Date', 'Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
   ]);
-  header.font = { bold: true };
-  header.eachCell(cell => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
-  });
+  styleHeader(header);
 
   orders.forEach(order => {
     sheet.addRow([
@@ -55,6 +134,46 @@ export const exportOrdersToExcel = async (
     'TOTAL', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
   ]);
   totalRow.font = { bold: true };
+
+  addKpiSheet(
+    workbook,
+    'Pharmacist KPIs',
+    `${title} - Pharmacist KPIs`,
+    'Pharmacist',
+    buildKpis(
+      orders,
+      order => order.pharmacistId || `name:${order.pharmacistName || 'unassigned'}`,
+      order => order.pharmacistName || 'Unassigned pharmacist'
+    )
+  );
+
+  addKpiSheet(
+    workbook,
+    'Driver KPIs',
+    `${title} - Driver KPIs`,
+    'Driver',
+    buildKpis(
+      orders,
+      order => order.driverId || `name:${order.driverName || 'unassigned'}`,
+      order => order.driverName || 'Unassigned driver',
+      order => order.driverCode || undefined
+    ),
+    'Driver ID'
+  );
+
+  addKpiSheet(
+    workbook,
+    'Area KPIs',
+    `${title} - Area KPIs`,
+    'Area',
+    buildKpis(
+      orders,
+      order => `${order.governorate || 'No governorate'}|${order.areaName || (order.paymentType === 'TALABAT' ? 'Talabat / No area' : 'Unknown area')}`,
+      order => order.areaName || (order.paymentType === 'TALABAT' ? 'Talabat / No area' : 'Unknown area'),
+      order => order.governorate || undefined
+    ),
+    'Governorate'
+  );
 
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(new Blob([buffer]), `${fileName}.xlsx`);

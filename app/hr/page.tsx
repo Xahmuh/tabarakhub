@@ -25,12 +25,10 @@ import {
     HelpCircle,
     ChevronDown,
     Bell,
-    UserCircle2,
     CalendarDays,
     FileText as FileTextIcon,
     Sparkles,
     Shield,
-    ArrowLeft,
     Eye,
     EyeOff,
     BadgeCheck,
@@ -38,6 +36,7 @@ import {
     Hash
 } from 'lucide-react';
 import { VacationRequestFlow } from './VacationRequestFlow';
+import { BackToModulesButton } from '../shared';
 import Swal from 'sweetalert2';
 import confetti from 'canvas-confetti';
 
@@ -56,7 +55,7 @@ const isHrConfigError = (error: unknown) => error instanceof Error && error.mess
 
 const translations = {
     en: {
-        portal_name: "HR self-service",
+        portal_name: "HR Self-Service",
         service_title: "How can we help you?",
         login_title: "Welcome Back",
         login_desc: "Enter your CPR to access HR self-service portal",
@@ -118,7 +117,7 @@ const translations = {
         step_label_3: "Delivery",
     },
     ar: {
-        portal_name: "تبارك للموارد البشرية",
+        portal_name: "الخدمات الذاتية للموظفين",
         service_title: "كيف يمكننا مساعدتك؟",
         login_title: "مرحباً بعودتك",
         login_desc: "أدخل رقمك الشخصي للوصول إلى بوابة الموارد البشرية",
@@ -201,6 +200,113 @@ const FormField = ({ label, required, children, isRtl }: { label: string; requir
 const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
 const selectClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 outline-none transition-all appearance-none";
 
+type HRIcon = React.ComponentType<{ className?: string }>;
+
+const documentOptions: Array<{ label: string; icon: HRIcon; hint: string }> = [
+    { label: 'Experience Certificate', icon: BadgeCheck, hint: 'History' },
+    { label: 'Employment Certificate', icon: Briefcase, hint: 'Active job' },
+    { label: 'Salary Certificate', icon: FileCheck, hint: 'Payroll' },
+    { label: 'NOC', icon: ShieldCheck, hint: 'Approval' },
+    { label: 'Bank Letter', icon: IdCard, hint: 'Banking' },
+    { label: 'Embassy Letter', icon: Globe, hint: 'Travel' },
+    { label: 'Others', icon: FileText, hint: 'Custom' },
+];
+
+const PortalMetric = ({ icon: Icon, label, value, tone = 'slate' }: { icon: HRIcon; label: string; value: string; tone?: 'red' | 'emerald' | 'sky' | 'slate' }) => {
+    const toneClass = tone === 'red'
+        ? 'bg-red-50 text-red-700 border-red-100'
+        : tone === 'emerald'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+            : tone === 'sky'
+                ? 'bg-sky-50 text-sky-700 border-sky-100'
+                : 'bg-slate-50 text-slate-700 border-slate-200';
+
+    return (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg border ${toneClass}`}>
+                <Icon className="h-4 w-4" />
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+            <div className="mt-1 text-sm font-bold text-slate-900">{value}</div>
+        </div>
+    );
+};
+
+const ServiceLauncherCard = ({
+    icon: Icon,
+    title,
+    description,
+    badge,
+    meta,
+    tone,
+    isRtl,
+    onClick
+}: {
+    icon: HRIcon;
+    title: string;
+    description: string;
+    badge: string;
+    meta: string;
+    tone: 'red' | 'sky';
+    isRtl: boolean;
+    onClick: () => void;
+}) => {
+    const accent = tone === 'red'
+        ? 'bg-red-50 text-red-700 border-red-100 group-hover:bg-red-700 group-hover:text-white group-hover:border-red-700'
+        : 'bg-sky-50 text-sky-700 border-sky-100 group-hover:bg-sky-700 group-hover:text-white group-hover:border-sky-700';
+    const badgeClass = tone === 'red'
+        ? 'bg-red-50 text-red-700 border-red-100'
+        : 'bg-sky-50 text-sky-700 border-sky-100';
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`group relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg ${isRtl ? 'text-right' : 'text-left'}`}
+        >
+            <div className="flex items-start justify-between gap-4">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border transition-all ${accent}`}>
+                    <Icon className="h-5 w-5" />
+                </div>
+                <span className={`rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${badgeClass}`}>{badge}</span>
+            </div>
+            <div className="mt-5">
+                <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+                <p className="mt-1.5 min-h-[36px] text-sm leading-6 text-slate-500">{description}</p>
+            </div>
+            <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+                <span className="text-xs font-semibold text-slate-400">{meta}</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 transition-all group-hover:bg-slate-900 group-hover:text-white">
+                    <ArrowRight className={`h-4 w-4 ${isRtl ? 'rotate-180' : ''}`} />
+                </span>
+            </div>
+        </button>
+    );
+};
+
+const ModulePageTitle = ({
+    eyebrow,
+    title,
+    description,
+    isRtl,
+    children
+}: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    isRtl: boolean;
+    children?: React.ReactNode;
+}) => (
+    <div className={`flex flex-col gap-4 md:flex-row md:items-center md:justify-between ${isRtl ? 'text-right' : 'text-left'}`}>
+        <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">{eyebrow}</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">{title}</h2>
+            <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{description}</p>
+        </div>
+        {children}
+    </div>
+);
+
 export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
     const [lang, setLang] = useState<Language>('en');
     const [step, setStep] = useState<Step>(1);
@@ -230,6 +336,15 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
 
     const t = translations[lang];
     const isRtl = lang === 'ar';
+    const firstName = employee.name.split(/\s+/).filter(Boolean)[0] || employee.name;
+    const documentProgress = step <= 2 ? 0 : step === 3 ? 34 : step === 4 ? 67 : 100;
+    const selectedDocumentText = isRtl
+        ? formData.docTypes.length === 1
+            ? 'مستند واحد'
+            : `${formData.docTypes.length} مستندات`
+        : formData.docTypes.length === 1
+            ? '1 selected'
+            : `${formData.docTypes.length} selected`;
 
     useEffect(() => {
         const saved = localStorage.getItem('hr_doc_draft');
@@ -379,40 +494,30 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
         <div className={`flex flex-col h-full bg-slate-50 overflow-hidden ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
 
             {/* HEADER */}
-            <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 z-50">
-                <div className="flex items-center gap-4">
-                    {onBack && (
-                        <button
-                            onClick={onBack}
-                            className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
-                        >
-                            {isRtl ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                        </button>
-                    )}
+            <header className="h-[68px] shrink-0 border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8 z-50">
+                <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                    {onBack && <BackToModulesButton onClick={onBack} />}
                     {employee.name ? (
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 bg-gradient-to-br from-red-600 to-red-700 text-white rounded-xl flex items-center justify-center text-sm font-bold shadow-sm">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-sm font-bold text-white shadow-sm">
                                 {employee.name.charAt(0).toUpperCase()}
                             </div>
-                            <div>
-                                <h2 className="text-sm font-bold text-slate-900 leading-none">{employee.name}</h2>
-                                <span className="text-[11px] text-slate-400 font-medium">CPR {employee.cpr}</span>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="truncate text-sm font-bold leading-none text-slate-900">{employee.name}</h2>
+                                    <span className="hidden rounded-md border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-700 sm:inline-flex">Verified</span>
+                                </div>
+                                <span className="text-[11px] font-medium text-slate-400">CPR {employee.cpr}</span>
                             </div>
                         </div>
-                    ) : (
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
-                                <Building2 className="w-4 h-4 text-red-600" />
-                            </div>
-                            <span className="text-sm font-bold text-slate-900">{t.portal_name}</span>
-                        </div>
-                    )}
+                    ) : null}
                 </div>
 
                 <div className="flex items-center gap-2">
                     <button
                         onClick={toggleLang}
-                        className="h-8 px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                        className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900"
                     >
                         <Globe className="w-3.5 h-3.5" />
                         {lang === 'en' ? 'عربي' : 'EN'}
@@ -420,32 +525,72 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                     {employee.name && onBack && (
                         <button
                             onClick={onBack}
-                            className="h-8 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg flex items-center gap-1.5 transition-all text-xs font-semibold"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-all hover:bg-red-100"
+                            aria-label={t.btn_logout}
+                            title={t.btn_logout}
                         >
                             <Power className="w-3.5 h-3.5" />
                         </button>
                     )}
+                </div>
                 </div>
             </header>
 
             <main className="flex-1 overflow-y-auto">
                 {/* LOGIN SCREEN */}
                 {!employee.name ? (
-                    <div className="min-h-full flex items-center justify-center p-4 sm:p-6">
-                        <div className="w-full max-w-sm">
-                            {/* Login Card */}
-                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                                {/* Card Header */}
-                                <div className="bg-red-700 px-6 py-7 text-center">
-                                    <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center mx-auto mb-4">
-                                        <Shield className="w-6 h-6 text-white" />
+                    <div className="flex min-h-full items-center justify-center px-4 py-8 sm:px-6">
+                        <div className="grid w-full max-w-5xl gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                            <section className="hidden rounded-lg border border-slate-800 bg-slate-950 p-8 text-white shadow-xl shadow-slate-200/70 lg:flex lg:flex-col lg:justify-between">
+                                <div>
+                                    <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-red-700">
+                                        <Building2 className="h-6 w-6" />
                                     </div>
-                                    <h2 className="text-xl font-bold text-white mb-1.5">{t.login_title}</h2>
-                                    <p className="text-red-100 text-sm">{t.login_desc}</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/45">{isRtl ? 'وحدة الموارد البشرية' : 'People module'}</p>
+                                    <h1 className="mt-3 max-w-md text-3xl font-black leading-tight text-white">{t.portal_name}</h1>
+                                    <p className="mt-4 max-w-md text-sm leading-6 text-white/60">{isRtl ? 'ادخل بالرقم الشخصي لطلب مستندات الموارد البشرية أو تقديم طلب إجازة من نفس المكان.' : 'Use your CPR to request HR documents or submit vacation requests from one focused workspace.'}</p>
                                 </div>
+                                <div className="grid grid-cols-3 gap-3 border-t border-white/10 pt-6">
+                                    <div>
+                                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+                                            <FileTextIcon className="h-4 w-4" />
+                                        </div>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">Documents</p>
+                                    </div>
+                                    <div>
+                                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+                                            <CalendarDays className="h-4 w-4" />
+                                        </div>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">Vacation</p>
+                                    </div>
+                                    <div>
+                                        <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+                                            <ShieldCheck className="h-4 w-4" />
+                                        </div>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">Verified</p>
+                                    </div>
+                                </div>
+                            </section>
 
-                                {/* Card Body */}
-                                <div className="p-5 sm:p-6 space-y-5">
+                            <div className="mx-auto w-full max-w-md lg:max-w-none">
+                                <div className="mb-4 lg:hidden">
+                                    <ModulePageTitle
+                                        eyebrow={isRtl ? 'وحدة الموارد البشرية' : 'People module'}
+                                        title={t.portal_name}
+                                        description={isRtl ? 'بوابة الموظفين للخدمات اليومية.' : 'One desk for employee requests.'}
+                                        isRtl={isRtl}
+                                    />
+                                </div>
+                                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                                    <div className="border-b border-slate-100 p-6 text-center">
+                                        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-red-50 text-red-700">
+                                            <Shield className="h-6 w-6" />
+                                        </div>
+                                        <h2 className="text-xl font-bold text-slate-950">{t.login_title}</h2>
+                                        <p className="mt-1.5 text-sm leading-6 text-slate-500">{t.login_desc}</p>
+                                    </div>
+
+                                    <div className="space-y-5 p-5 sm:p-6">
                                     <div className="space-y-2">
                                         <label htmlFor="cpr-input" className={`text-xs font-semibold text-slate-600 block ${isRtl ? 'text-right' : ''}`}>{t.cpr_label}</label>
                                         <div className="relative">
@@ -458,7 +603,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                                 value={cpr}
                                                 onChange={(e) => setCpr(e.target.value.replace(/\D/g, '').slice(0, 9))}
                                                 onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                                                className={`block w-full h-12 ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} bg-slate-50 border border-slate-200 rounded-xl text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all`}
+                                                className={`block w-full h-12 ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} bg-slate-50 border border-slate-200 rounded-lg text-base font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all`}
                                                 placeholder="901234567"
                                                 title={t.cpr_label}
                                             />
@@ -480,9 +625,10 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                 </div>
                             </div>
 
-                            <div className="mt-6 flex items-center justify-center gap-2 text-slate-400">
-                                <Lock className="w-3 h-3" />
-                                <span className="text-[11px] font-medium">Secure encrypted connection</span>
+                                <div className="mt-5 flex items-center justify-center gap-2 text-slate-400">
+                                    <Lock className="w-3 h-3" />
+                                    <span className="text-[11px] font-medium">Secure encrypted connection</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -496,44 +642,62 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                         />
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto py-6 sm:py-8 px-4 sm:px-6">
+                    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
 
                         {/* STEP 2: SERVICE SELECTION */}
                         {step === 2 && (
-                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                {/* Greeting */}
-                                <div>
-                                    <h2 className="text-2xl font-bold text-slate-900 mb-1">
-                                        {t.greeting}, {employee.name.split(' ')[0]} 👋
-                                    </h2>
-                                    <p className="text-slate-500 text-sm">{t.service_title}</p>
+                            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <ModulePageTitle
+                                    eyebrow={isRtl ? 'وحدة الموارد البشرية' : 'People module'}
+                                    title={t.portal_name}
+                                    description={`${t.greeting}, ${firstName}. ${t.service_title}`}
+                                    isRtl={isRtl}
+                                />
+
+                                <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                        <div>
+                                            <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                                                <ShieldCheck className="h-3.5 w-3.5" />
+                                                {isRtl ? 'تم التحقق' : 'Verified access'}
+                                            </div>
+                                            <h3 className="text-lg font-black text-slate-950">{isRtl ? 'مساحة الموظف جاهزة' : 'Employee workspace is ready'}</h3>
+                                            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{isRtl ? 'اختر نوع الطلب وسيتم حفظه بنفس مسار الموافقات الحالي.' : 'Choose the request type and continue through the existing HR approval flow.'}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">CPR</div>
+                                            <div className="mt-1 font-mono text-sm font-bold text-slate-900">{employee.cpr}</div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <PortalMetric icon={BadgeCheck} label={isRtl ? 'الهوية' : 'Identity'} value={isRtl ? 'جاهزة' : 'Ready'} tone="emerald" />
+                                    <PortalMetric icon={Clock} label={isRtl ? 'المستندات' : 'Documents'} value={isRtl ? 'خلال 24 ساعة' : 'Within 24h'} tone="red" />
+                                    <PortalMetric icon={Bell} label={isRtl ? 'الحالة' : 'Status'} value={isRtl ? 'تحديثات مباشرة' : 'Live updates'} tone="sky" />
                                 </div>
 
-                                {/* Service Cards */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <button
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <ServiceLauncherCard
+                                        icon={FileTextIcon}
+                                        title={t.doc_service_title}
+                                        description={t.doc_service_desc}
+                                        badge={isRtl ? 'مستندات' : 'Docs'}
+                                        meta={isRtl ? 'اختيار المستند ثم طريقة الاستلام' : 'Choose documents, delivery, review'}
+                                        tone="red"
+                                        isRtl={isRtl}
                                         onClick={() => { setSelectedService('documents'); setStep(3); }}
-                                        className={`group relative p-5 bg-white rounded-xl border border-slate-200 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200 ${isRtl ? 'text-right' : 'text-left'}`}
-                                    >
-                                        <div className="w-10 h-10 bg-red-50 text-red-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-700 group-hover:text-white transition-all duration-200">
-                                            <FileTextIcon className="w-5 h-5" />
-                                        </div>
-                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-red-700 transition-colors">{t.doc_service_title}</h3>
-                                        <p className="text-xs text-slate-500 leading-relaxed">{t.doc_service_desc}</p>
-                                        <ArrowRight className={`absolute ${isRtl ? 'left-5' : 'right-5'} top-5 w-4 h-4 text-slate-300 group-hover:text-red-600 transition-all ${isRtl ? 'rotate-180' : ''}`} />
-                                    </button>
-
-                                    <button
+                                    />
+                                    <ServiceLauncherCard
+                                        icon={CalendarDays}
+                                        title={t.vac_service_title}
+                                        description={t.vac_service_desc}
+                                        badge={isRtl ? 'إجازات' : 'Leave'}
+                                        meta={isRtl ? 'السياسة ثم الطلب والتوقيع' : 'Policy, request, signature'}
+                                        tone="sky"
+                                        isRtl={isRtl}
                                         onClick={() => { setSelectedService('vacation'); }}
-                                        className={`group relative p-5 bg-white rounded-xl border border-slate-200 hover:border-red-200 hover:bg-red-50/30 transition-all duration-200 ${isRtl ? 'text-right' : 'text-left'}`}
-                                    >
-                                        <div className="w-10 h-10 bg-red-50 text-red-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-700 group-hover:text-white transition-all duration-200">
-                                            <CalendarDays className="w-5 h-5" />
-                                        </div>
-                                        <h3 className="text-base font-bold text-slate-900 mb-1 group-hover:text-red-700 transition-colors">{t.vac_service_title}</h3>
-                                        <p className="text-xs text-slate-500 leading-relaxed">{t.vac_service_desc}</p>
-                                        <ArrowRight className={`absolute ${isRtl ? 'left-5' : 'right-5'} top-5 w-4 h-4 text-slate-300 group-hover:text-red-600 transition-all ${isRtl ? 'rotate-180' : ''}`} />
-                                    </button>
+                                    />
                                 </div>
                             </div>
                         )}
@@ -541,6 +705,21 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                         {/* STEP INDICATOR (Documents flow) */}
                         {step > 2 && (
                             <div className="mb-6">
+                                <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{t.doc_service_title}</div>
+                                            <h2 className="mt-1 text-lg font-black text-slate-950">{step === 3 ? t.step_label_1 : step === 4 ? t.step_label_3 : t.review_title}</h2>
+                                        </div>
+                                        <span className="inline-flex w-fit items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                                            <FileTextIcon className="h-3.5 w-3.5" />
+                                            {selectedDocumentText}
+                                        </span>
+                                    </div>
+                                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div className="h-full rounded-full bg-red-700 transition-all duration-500" style={{ width: `${documentProgress}%` }} />
+                                    </div>
+                                </div>
                                 <div className="flex items-center gap-1 mb-6">
                                     <button
                                         onClick={() => { setSelectedService(null); setStep(2); }}
@@ -549,8 +728,6 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                         {isRtl ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
                                         {isRtl ? 'القائمة' : 'Menu'}
                                     </button>
-                                    <span className="text-slate-300 mx-1">/</span>
-                                    <span className="text-xs text-slate-600 font-semibold">{t.doc_service_title}</span>
                                 </div>
 
                                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -580,11 +757,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                             {step === 3 && (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     {/* Employee Info Section */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
-                                        <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
-                                            <UserCircle2 className="w-4 h-4 text-slate-400" />
-                                            {t.step_label_1}
-                                        </h3>
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <FormField label={t.lbl_passport_name} required isRtl={isRtl}>
                                                 <input
@@ -641,14 +814,14 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Document Selection Section */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
                                             <FileText className="w-4 h-4 text-slate-400" />
                                             {t.lbl_doc_type}
                                             <span className="text-red-500 text-[10px]">*</span>
                                         </h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                            {['Experience Certificate', 'Employment Certificate', 'Salary Certificate', 'NOC', 'Bank Letter', 'Embassy Letter', 'Others'].map(doc => (
+                                            {documentOptions.map(({ label: doc, icon: DocIcon, hint }) => (
                                                 <button
                                                     key={doc}
                                                     type="button"
@@ -658,20 +831,23 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                                             : [...formData.docTypes, doc];
                                                         setFormData({ ...formData, docTypes: types });
                                                     }}
-                                                    className={`px-3 py-2.5 rounded-lg border transition-all flex items-center gap-2.5 ${
+                                                    className={`min-h-[76px] rounded-lg border p-3 transition-all flex items-start gap-3 ${
                                                         formData.docTypes.includes(doc)
-                                                            ? 'bg-red-50 border-red-200 text-red-700'
-                                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                                                            ? 'bg-red-50 border-red-200 text-red-700 shadow-sm'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                                                     } ${isRtl ? 'text-right' : 'text-left'}`}
                                                 >
-                                                    <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
                                                         formData.docTypes.includes(doc)
-                                                            ? 'border-red-500 bg-red-500 text-white'
-                                                            : 'border-slate-300'
+                                                            ? 'border-red-600 bg-red-600 text-white'
+                                                            : 'border-slate-200 bg-slate-50 text-slate-400'
                                                     }`}>
-                                                        {formData.docTypes.includes(doc) && <CheckCircle2 className="w-3 h-3" />}
+                                                        {formData.docTypes.includes(doc) ? <CheckCircle2 className="w-4 h-4" /> : <DocIcon className="w-4 h-4" />}
                                                     </div>
-                                                    <span className="text-xs font-medium">{doc}</span>
+                                                    <div className="min-w-0">
+                                                        <span className="block text-xs font-bold leading-5">{doc}</span>
+                                                        <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{hint}</span>
+                                                    </div>
                                                 </button>
                                             ))}
                                         </div>
@@ -705,7 +881,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Purpose */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <FormField label={t.lbl_reason} isRtl={isRtl}>
                                             <textarea
                                                 value={formData.docReason}
@@ -755,7 +931,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                             {step === 4 && (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     {/* Date & Email */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <FormField label={t.lbl_req_date} required isRtl={isRtl}>
                                                 <input
@@ -782,7 +958,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Delivery Method */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <h3 className="text-sm font-bold text-slate-900 mb-4">{t.lbl_delivery} <span className="text-red-500 text-[10px]">*</span></h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <button
@@ -828,7 +1004,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                     </div>
 
                                     {/* Attachments */}
-                                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <h3 className="text-sm font-bold text-slate-900 mb-4">{t.lbl_files} <span className="text-xs text-slate-400 font-normal">({isRtl ? 'اختياري' : 'Optional'})</span></h3>
                                         <div
                                             onClick={() => document.getElementById('final-files-refined')?.click()}
@@ -842,7 +1018,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                                         {uploadedFiles.length > 0 && (
                                             <div className="space-y-2 mt-3">
                                                 {uploadedFiles.map((f, i) => (
-                                                    <div key={i} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between">
+                                                    <div key={i} className="bg-slate-50 border border-slate-200 p-3 rounded-lg flex items-center justify-between">
                                                         <div className="flex items-center gap-3 truncate">
                                                             <FileText className="w-4 h-4 text-slate-400 shrink-0" />
                                                             <span className="text-xs font-medium text-slate-700 truncate">{f.name}</span>
@@ -893,13 +1069,10 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                             {/* STEP 5: REVIEW & CONFIRM */}
                             {step === 5 && (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-slate-900 mb-1">{t.review_title}</h2>
-                                        <p className="text-sm text-slate-500">{t.review_desc}</p>
-                                    </div>
+                                    <p className="text-sm text-slate-500">{t.review_desc}</p>
 
                                     {/* Summary Card */}
-                                    <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                                    <div className="rounded-lg border border-slate-200 bg-white shadow-sm divide-y divide-slate-100">
                                         {/* Employee Info */}
                                         <div className="p-6">
                                             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">{t.step_label_1}</h4>

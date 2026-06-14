@@ -30,7 +30,11 @@ The login screen, app shell, footer, and document title read this value.
 
 ## Change logo
 
-Set:
+Preferred runtime option: use `Project Settings > Branding & logos` to set the pharmacy logo, HUB logo, browser icon, loading spinner, and optional footer logo.
+
+These settings are stored in `system_settings` and are intended for dedicated-client configuration.
+
+For deployment defaults, set:
 
 ```text
 VITE_CLIENT_LOGO_URL="/logo.jpg"
@@ -76,6 +80,18 @@ VITE_MODULE_WORKFORCE=true
 ```
 
 Module flags hide and block top-level navigation for the matching app sections. They do not replace Supabase RLS.
+
+## Change module launcher order and badges
+
+Use `Project Settings > Module Layout` to reorder the module launcher cards and set visible module badges such as `new module` or `Daily use`.
+
+These settings are stored in `system_settings.module_display_settings` and are presentation-only. They do not grant access, hide security rules, or replace role/module permissions.
+
+## Module exit buttons
+
+Use `BackToModulesButton` from `app/shared/BackToModulesButton.tsx` for top-level module exits that return to the modules screen.
+
+Do not use it for internal workflow back buttons, nested module backs, form-step backs, detail-page backs, or buttons that return to a parent module instead of the modules screen.
 
 ## Demo mode
 

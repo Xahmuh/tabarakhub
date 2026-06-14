@@ -1,7 +1,8 @@
 import React from 'react';
 import { LayoutDashboard, LogOut, RefreshCcw, Settings, ShoppingCart } from 'lucide-react';
-import { AuthState } from '../../types';
+import { AuthState, MaintenanceSettings } from '../../types';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
+import { isManagerRole } from '../../lib/access';
 
 export type AppHeaderTab = 'pos' | 'dashboard' | 'settings' | string | null;
 
@@ -14,6 +15,7 @@ interface AppHeaderProps {
   onNavigateHome: () => void;
   onTabChange?: (tab: any) => void;
   onLogout: () => void;
+  settings?: MaintenanceSettings | null;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -24,9 +26,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   checkPermission,
   onNavigateHome,
   onTabChange,
-  onLogout
+  onLogout,
+  settings
 }) => {
-  const canOpenApprovalQueue = authState.user?.role === 'admin' || authState.user?.role === 'owner';
+  const canOpenApprovalQueue = isManagerRole(authState.user?.role) || authState.user?.role === 'owner';
+  const headerLogoUrl = settings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
   const canShowSwitcher =
     !!onTabChange &&
     !!checkPermission &&
@@ -41,10 +45,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             type="button"
             onClick={onNavigateHome}
             className="group flex shrink-0 items-center space-x-4 rounded-lg text-left focus-ring"
-            aria-label="Back to operations modules"
+            aria-label="Back to Modules"
           >
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-brand shadow-sm transition-transform duration-300 group-hover:scale-105">
-              <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
+              <img src={headerLogoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
             </div>
             <div>
               <h1 className="text-lg font-black leading-none tracking-tight text-slate-900">
@@ -84,7 +88,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   <span>Dashboard</span>
                 </button>
               )}
-              {isModuleEnabled('settings') && ((authState.user?.role === 'manager' && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
+              {isModuleEnabled('settings') && ((isManagerRole(authState.user?.role) && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
                 <button
                   type="button"
                   onClick={() => onTabChange('settings')}

@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
-  AlertTriangle, ArrowUpRight, Building2, CheckCircle2, FileDown, Grid3x3, Info, Layers, LayoutDashboard, Lightbulb, Map as MapIcon, MapPinned, Package, Printer, ShieldAlert, Target, TrendingDown, TrendingUp
+  AlertTriangle, ArrowUpRight, BarChart3, Building2, CheckCircle2, FileDown, Grid3x3, Info, Layers, LayoutDashboard, Lightbulb, Map as MapIcon, MapPinned, Package, Printer, ShieldAlert, Target, TrendingDown, TrendingUp
 } from 'lucide-react';
 import { deliveryCoverageService } from '../../services/deliveryCoverageService';
 import { branchService } from '../../services/branchService';
+import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { operationsTaskService } from '../command-center/operationsTaskService';
 import {
-  Branch, DeliveryAdvancedCoverage, DeliveryBlockMetric, DeliveryCoverageRecommendation, DeliveryCoverageSummary, Governorate
+  Branch, BranchDeliveryProfile, DeliveryAdvancedCoverage, DeliveryBlockMetric, DeliveryBlockZoneAnalysis, DeliveryCoverageRecommendation, DeliveryCoverageSummary, DeliveryZoneQualityMetrics, Governorate
 } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
 import { BlockCoverageMap, BlockCoverageMapLoading } from './components/BlockCoverageMap';
@@ -15,11 +16,12 @@ import {
   BranchCatchmentSection, BranchOverlapSection, CampaignOpportunitiesSection, CapacityPressureSection,
   CoverageTaskRequest, DemandTrendSection, ExpansionReviewSection, FieldAvailabilitySection, WhiteSpaceSection
 } from './components/CoverageSections';
-import { BlockGeometryDataset, loadBahrainBlockGeometry } from './bahrainBlockGeometry';
+import { BlockGeometryDataset, calculateDistanceKm, classifyDistanceZone, getBlockCentroid, loadBahrainBlockGeometry } from './bahrainBlockGeometry';
 import { exportBreakdownToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { formatBhd } from './utils';
 
-type CoverageSection = 'overview' | 'matrix' | 'catchment' | 'campaign' | 'overlap' | 'capacity' | 'expansion' | 'quality';
+type CoverageSection = 'overview' | 'matrix' | 'governorate' | 'catchment' | 'campaign' | 'overlap' | 'capacity' | 'expansion' | 'quality';
 
 type CoveragePreset = 'today' | '7d' | '30d' | 'month' | 'custom';
 type GeometryStatus = 'loading' | 'available' | 'unavailable';
@@ -73,6 +75,45 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string }> = ({ lab
   </div>
 );
 
+const formatMaybeBhd = (value: number | null | undefined) => value === null || value === undefined ? 'Unavailable' : formatBhd(value);
+const formatMaybeNumber = (value: number | null | undefined, digits = 1) => value === null || value === undefined ? 'Unavailable' : value.toFixed(digits);
+const formatPercent = (value: number | null | undefined) => value === null || value === undefined ? 'Unavailable' : `${value.toFixed(1)}%`;
+
+const purchasePowerTone = (band: 'high' | 'medium' | 'low' | 'unavailable') => {
+  if (band === 'high') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (band === 'medium') return 'border-blue-200 bg-blue-50 text-blue-700';
+  if (band === 'low') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-slate-200 bg-slate-50 text-slate-500';
+};
+
+const emptyZoneMetrics = (geometry?: BlockGeometryDataset | null): DeliveryZoneQualityMetrics => ({
+  totalBranchProfiles: 0,
+  mappedBranchMarkers: 0,
+  unmappedBranchMarkers: 0,
+  duplicateBranchBlockGroups: [],
+  missingOriginBlock: 0,
+  missingGeoJsonBlock: 0,
+  servedCoreBlocks: 0,
+  servedStandardBlocks: 0,
+  servedExtendedBlocks: 0,
+  servedOutsideRangeBlocks: 0,
+  unmappedServedBlocks: 0,
+  missingBranchProfiles: 0,
+  servedBlocksMapped: 0,
+  servedBlocksUnavailableZone: 0,
+  totalGeometryBlocks: geometry?.featureCount || 0
+});
+
+const zoneLabel = (zone: DeliveryBlockZoneAnalysis['zone']) => zone.replace('_', ' ');
+
+const zoneAction = (zone: DeliveryBlockZoneAnalysis['zone'], orders: number) => {
+  if (zone === 'core') return orders >= 5 ? 'Strong natural service area. Maintain service quality.' : 'Core service area. Monitor quality and repeat demand.';
+  if (zone === 'standard') return 'Normal delivery coverage. Monitor capacity.';
+  if (zone === 'extended') return 'Extended coverage pressure. Review routing or nearby branch support.';
+  if (zone === 'outside_range') return 'Coverage review candidate. Consider routing review, campaign test, or future expansion study.';
+  return 'Distance unavailable because branch profile or block geometry is missing.';
+};
+
 interface DeliveryCoverageProps {
   /** Restrict the branch filter (supervisor/branch scopes); RLS enforces data scope regardless. */
   lockedBranchId?: string | null;
@@ -89,8 +130,11 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   const [branches, setBranches] = useState<Branch[]>([]);
   const [summary, setSummary] = useState<DeliveryCoverageSummary | null>(null);
   const [advanced, setAdvanced] = useState<DeliveryAdvancedCoverage | null>(null);
+  const [branchProfiles, setBranchProfiles] = useState<BranchDeliveryProfile[]>([]);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<DeliveryBlockMetric | null>(null);
+  const [selectedGovernorate, setSelectedGovernorate] = useState<Governorate | 'Unknown' | null>(null);
   const [geometry, setGeometry] = useState<BlockGeometryDataset | null>(null);
   const [geometryStatus, setGeometryStatus] = useState<GeometryStatus>('loading');
   const [view, setView] = useState<'map' | 'matrix'>('matrix');
@@ -98,11 +142,54 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   const [busyInsightId, setBusyInsightId] = useState<string | null>(null);
 
   const range = presetRange(preset, customFrom, customTo);
+  const effectiveBranchFilter = lockedBranchId || branchFilter || null;
+  const selectedBranch = useMemo(
+    () => branches.find(branch => branch.id === effectiveBranchFilter) || null,
+    [branches, effectiveBranchFilter]
+  );
+  const activeScopeLabel = selectedBranch
+    ? `${selectedBranch.code} - ${selectedBranch.name}`
+    : 'All branches';
+  const branchOptions = useMemo(
+    () => branches
+      .slice()
+      .sort((a, b) => a.code.localeCompare(b.code) || a.name.localeCompare(b.name))
+      .map(branch => ({ value: branch.id, label: branch.name, hint: branch.code })),
+    [branches]
+  );
+  const visibleBranchProfiles = useMemo(
+    () => effectiveBranchFilter
+      ? branchProfiles.filter(profile => profile.branchId === effectiveBranchFilter)
+      : branchProfiles,
+    [branchProfiles, effectiveBranchFilter]
+  );
 
   useEffect(() => {
     branchService.list()
       .then(list => setBranches(list.filter(b => b.role === 'branch')))
       .catch(e => console.error('Coverage branch load failed', e));
+  }, []);
+
+  useEffect(() => {
+    if (lockedBranchId) setBranchFilter(lockedBranchId);
+  }, [lockedBranchId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    branchDeliveryProfileService.listBranchDeliveryProfiles()
+      .then(list => {
+        if (!cancelled) {
+          setBranchProfiles(list);
+          setProfileLoadError(null);
+        }
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setBranchProfiles([]);
+          setProfileLoadError(error?.message || 'Could not load branch delivery profiles.');
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
 
   // Optional real block geometry. Never blocks the dashboard; matrix stays if absent.
@@ -129,16 +216,17 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     let cancelled = false;
     setIsLoading(true);
     setSelectedBlock(null);
+    setSelectedGovernorate(null);
     deliveryCoverageService.getDeliveryCoverageBundle({
       dateFrom: range.from,
       dateTo: range.to,
-      branchId: lockedBranchId || branchFilter || undefined
+      branchId: effectiveBranchFilter || undefined
     })
       .then(bundle => { if (!cancelled) { setSummary(bundle.summary); setAdvanced(bundle.advanced); } })
       .catch(e => { console.error('Coverage load failed', e); if (!cancelled) { setSummary(null); setAdvanced(null); } })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, lockedBranchId]);
+  }, [range.from, range.to, effectiveBranchFilter]);
 
   // Create an operations task from a coverage insight (manager-only), with a
   // duplicate warning if an open/in_progress task already exists for it.
@@ -197,6 +285,22 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     return map;
   }, [summary]);
 
+  const selectedGovernorateBranchRows = useMemo(
+    () => summary?.branchGovernoratePerformanceKpis
+      .filter(row => !selectedGovernorate || row.governorate === selectedGovernorate)
+      .slice(0, 50) || [],
+    [selectedGovernorate, summary]
+  );
+
+  const topServingBranchesForGovernorate = useMemo(() => {
+    if (!selectedGovernorate || !summary) return [];
+    return summary.branchGovernoratePerformanceKpis
+      .filter(row => row.governorate === selectedGovernorate)
+      .slice()
+      .sort((a, b) => b.ordersCount - a.ordersCount)
+      .slice(0, 5);
+  }, [selectedGovernorate, summary]);
+
   const geoAvailable = geometryStatus === 'available' && !!geometry?.available;
 
   // How many served blocks in this period have real geometry.
@@ -211,6 +315,83 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     () => (geometry?.available && summary ? summary.blocks.filter(b => geometry.byBlock.has(b.blockNumber.trim())) : []),
     [geometry, summary]
   );
+
+  const profileByBranch = useMemo(
+    () => new Map(visibleBranchProfiles.map(profile => [profile.branchId, profile])),
+    [visibleBranchProfiles]
+  );
+
+  const zoneAnalysis = useMemo((): { metrics: DeliveryZoneQualityMetrics; byBlock: Map<string, DeliveryBlockZoneAnalysis> } => {
+    const metrics = emptyZoneMetrics(geometry);
+    const byBlock = new Map<string, DeliveryBlockZoneAnalysis>();
+    if (!summary) return { metrics, byBlock };
+
+    metrics.totalBranchProfiles = visibleBranchProfiles.length;
+    metrics.missingBranchProfiles = summary.branchCoverage.filter(branch => !profileByBranch.has(branch.branchId)).length;
+
+    const duplicateMap = new Map<string, string[]>();
+    for (const profile of visibleBranchProfiles) {
+      const block = profile.originBlockNumber?.trim();
+      if (!block) {
+        metrics.missingOriginBlock += 1;
+        metrics.unmappedBranchMarkers += 1;
+        continue;
+      }
+      const group = duplicateMap.get(block) || [];
+      group.push(profile.branchCode || profile.branchName || profile.branchId.slice(0, 6));
+      duplicateMap.set(block, group);
+
+      if (geometry?.available && getBlockCentroid(geometry, block)) {
+        metrics.mappedBranchMarkers += 1;
+      } else {
+        metrics.unmappedBranchMarkers += 1;
+        if (geometry?.available) metrics.missingGeoJsonBlock += 1;
+      }
+    }
+
+    metrics.duplicateBranchBlockGroups = [...duplicateMap.entries()]
+      .filter(([, codes]) => codes.length > 1)
+      .map(([originBlockNumber, branchCodes]) => ({ originBlockNumber, branchCodes }));
+
+    for (const block of summary.blocks) {
+      const servedPoint = geometry?.available ? getBlockCentroid(geometry, block.blockNumber) : null;
+      if (servedPoint) metrics.servedBlocksMapped += 1;
+      else metrics.unmappedServedBlocks += 1;
+
+      const profile = block.dominantBranchId ? profileByBranch.get(block.dominantBranchId) : undefined;
+      const branchPoint = profile && geometry?.available ? getBlockCentroid(geometry, profile.originBlockNumber) : null;
+      const distanceKm = calculateDistanceKm(branchPoint, servedPoint);
+      const zone = classifyDistanceZone(distanceKm, profile);
+
+      if (zone === 'core') metrics.servedCoreBlocks += 1;
+      else if (zone === 'standard') metrics.servedStandardBlocks += 1;
+      else if (zone === 'extended') metrics.servedExtendedBlocks += 1;
+      else if (zone === 'outside_range') metrics.servedOutsideRangeBlocks += 1;
+      else metrics.servedBlocksUnavailableZone += 1;
+
+      const reason = !profile
+        ? 'branch profile missing'
+        : !branchPoint
+          ? 'branch origin block not mapped'
+          : !servedPoint
+            ? 'served block not mapped'
+            : undefined;
+
+      byBlock.set(block.blockNumber, {
+        blockNumber: block.blockNumber,
+        branchId: block.dominantBranchId,
+        branchName: block.dominantBranchName,
+        branchCode: profile?.branchCode || undefined,
+        originBlockNumber: profile?.originBlockNumber,
+        zone,
+        distanceKm,
+        reason,
+        recommendedAction: reason ? 'Distance unavailable because block geometry or branch profile is missing.' : zoneAction(zone, block.orderCount)
+      });
+    }
+
+    return { metrics, byBlock };
+  }, [geometry, profileByBranch, summary, visibleBranchProfiles]);
 
   const handlePeriod = (p: CoveragePreset) => setPreset(p);
 
@@ -235,8 +416,8 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
         { key: 'dominant_branch', label: 'Dominant branch' },
         { key: 'trend', label: 'Trend' }
       ],
-      `Bahrain Block Coverage — ${range.from} → ${range.to}`,
-      `Delivery_Coverage_${range.from}_${range.to}`
+      `Bahrain Block Coverage - ${activeScopeLabel} - ${range.from} to ${range.to}`,
+      `Delivery_Coverage_${activeScopeLabel.replace(/[^a-z0-9]+/gi, '_')}_${range.from}_${range.to}`
     ).catch(e => console.error(e));
   };
 
@@ -265,9 +446,18 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
               </div>
             )}
             {!lockedBranchId && (
-              <div className="w-52">
+              <div className="w-full min-w-[16rem] sm:w-72">
+                <div className="mb-1.5 flex items-center justify-between gap-3 px-1">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                    <Building2 className="h-3.5 w-3.5 text-brand" />
+                    Branch scope
+                  </span>
+                  <span className="max-w-[9rem] truncate text-right text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    {selectedBranch?.code || 'All'}
+                  </span>
+                </div>
                 <SearchableSelect
-                  options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))}
+                  options={branchOptions}
                   value={branchFilter}
                   onChange={setBranchFilter}
                   placeholder="All branches"
@@ -289,7 +479,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
       </section>
 
       <div className="hidden print:block">
-        <h1 className="text-xl font-black">Bahrain Block Coverage — {range.from} → {range.to}</h1>
+        <h1 className="text-xl font-black">Bahrain Block Coverage - {activeScopeLabel} - {range.from} to {range.to}</h1>
       </div>
 
       {/* Geometry availability notice */}
@@ -319,6 +509,15 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
         </div>
       )}
 
+      {profileLoadError && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] font-bold leading-5 text-amber-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Branch delivery profiles are unavailable: {profileLoadError}. Branch markers and zone detection will stay unavailable until the local migration is applied to the target Supabase project.
+          </span>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex h-48 items-center justify-center">
           <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-slate-100 border-t-brand"></div>
@@ -332,6 +531,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
             {([
               { id: 'overview', label: 'Overview', icon: LayoutDashboard, show: true },
               { id: 'matrix', label: 'Block Map', icon: MapPinned, show: true },
+              { id: 'governorate', label: 'Governorate KPIs', icon: BarChart3, show: true },
               { id: 'catchment', label: 'Branch Catchment', icon: Layers, show: true },
               { id: 'campaign', label: 'Campaign', icon: Target, show: advancedEnabled },
               { id: 'overlap', label: 'Overlap', icon: ShieldAlert, show: advancedEnabled },
@@ -408,9 +608,12 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
               <BlockCoverageMap
                 dataset={geometry}
                 blocks={mappableBlocks}
-                maxOrders={maxBlockOrders}
+                branchProfiles={visibleBranchProfiles}
+                blockZoneAnalysis={zoneAnalysis.byBlock}
+                zoneMetrics={zoneAnalysis.metrics}
                 summary={summary}
                 selectedBlock={selectedBlock}
+                highlightedGovernorate={selectedGovernorate}
                 geometryStats={geoMatch}
                 onSelect={setSelectedBlock}
                 onOpenMatrix={() => setView('matrix')}
@@ -485,6 +688,25 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                     </div>
                   ))}
                 </div>
+                {zoneAnalysis.byBlock.get(selectedBlock.blockNumber) && (
+                  <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
+                    {(() => {
+                      const analysis = zoneAnalysis.byBlock.get(selectedBlock.blockNumber)!;
+                      return (
+                        <>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Dominant branch zone</p>
+                          <p className="mt-1 text-xs font-bold leading-5 text-blue-900">
+                            {analysis.branchName || 'Unknown branch'}{analysis.branchCode ? ` (${analysis.branchCode})` : ''} | {zoneLabel(analysis.zone)}
+                            {analysis.distanceKm !== null && analysis.distanceKm !== undefined ? ` | approx. ${analysis.distanceKm.toFixed(1)} km` : ''}
+                          </p>
+                          <p className="mt-1 text-[11px] font-bold leading-5 text-blue-800">
+                            {analysis.reason ? `${analysis.reason}. ` : ''}{analysis.recommendedAction}
+                          </p>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -505,6 +727,204 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
             </section>
           </div>
           </>
+          )}
+
+          {section === 'governorate' && (
+          <div className="space-y-4">
+            <section className="operational-panel p-4 md:p-5">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-brand" />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Governorate KPIs</h3>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-xs font-bold leading-5 text-slate-500">
+                    Purchase Power Proxy is based on internal delivery orders and order value only. It is not population-adjusted economic purchasing power.
+                  </p>
+                </div>
+                {selectedGovernorate && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGovernorate(null)}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:border-brand/30 hover:text-brand"
+                  >
+                    Clear governorate
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <KpiCard label="Orders analyzed" value={String(summary.governorateKpiQuality.totalOrdersAnalyzed)} />
+                <KpiCard
+                  label="Mapped governorate"
+                  value={String(summary.governorateKpiQuality.ordersWithMappedGovernorate)}
+                  sub={`${summary.governorateKpiQuality.ordersWithUnmappedGovernorate} unmapped`}
+                />
+                <KpiCard
+                  label="Orders with value"
+                  value={String(summary.governorateKpiQuality.ordersWithValue)}
+                  sub={`${summary.governorateKpiQuality.ordersMissingValue} missing value`}
+                />
+                <KpiCard
+                  label="Mapped blocks"
+                  value={String(summary.governorateKpiQuality.blocksWithGovernorateMapping)}
+                  sub={`${summary.governorateKpiQuality.blocksWithoutGovernorateMapping} without mapping`}
+                />
+              </div>
+
+              {summary.governorateKpiQuality.ordersMissingValue > 0 && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900">
+                  Value-based KPIs may be incomplete because some orders do not have order value.
+                </div>
+              )}
+
+              {summary.governoratePerformanceKpis.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-black text-slate-700">Governorate mapping is unavailable for the selected orders.</p>
+                  <p className="mt-1 text-xs font-bold leading-5 text-slate-400">
+                    Add or fix block governorate mappings in Delivery Settings before using governorate KPIs.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {summary.governoratePerformanceKpis.map(row => (
+                      <button
+                        key={row.governorate}
+                        type="button"
+                        onClick={() => setSelectedGovernorate(selectedGovernorate === row.governorate ? null : row.governorate)}
+                        className={`rounded-lg border px-3 py-2 text-left transition ${
+                          selectedGovernorate === row.governorate
+                            ? 'border-brand bg-brand text-white shadow-sm'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-brand/30 hover:text-brand'
+                        }`}
+                      >
+                        <span className="block text-[10px] font-black uppercase tracking-widest">{row.governorate}</span>
+                        <span className="mt-0.5 block text-xs font-bold tabular-nums">{row.ordersCount} orders | {formatMaybeBhd(row.totalValue)}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedGovernorate && (
+                    <div className="mt-4 rounded-lg border border-brand/10 bg-brand/5 p-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-brand">Top serving branches in {selectedGovernorate}</p>
+                      {topServingBranchesForGovernorate.length === 0 ? (
+                        <p className="mt-2 text-xs font-bold text-slate-500">No branch activity for this governorate in the selected scope.</p>
+                      ) : (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {topServingBranchesForGovernorate.map(row => (
+                            <span key={`${row.branchId}:${row.governorate}`} className="rounded-md border border-white bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-700 shadow-sm">
+                              {row.branchCode} | {row.ordersCount} orders | {formatPercent(row.governorateOrderSharePercent)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+
+            <section className="operational-panel p-4 md:p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-brand" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Governorate Performance</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <th className="py-2 pr-3">Governorate</th>
+                      <th className="py-2 pr-3 text-right">Orders</th>
+                      <th className="py-2 pr-3 text-right">Total value</th>
+                      <th className="py-2 pr-3 text-right">Avg value</th>
+                      <th className="py-2 pr-3 text-right">Blocks</th>
+                      <th className="py-2 pr-3 text-right">Value / block</th>
+                      <th className="py-2 pr-3 text-right">Orders / block</th>
+                      <th className="py-2 pr-3 text-right">Purchase Power Proxy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {summary.governoratePerformanceKpis.map(row => (
+                      <tr
+                        key={row.governorate}
+                        className={`cursor-pointer hover:bg-slate-50/50 ${selectedGovernorate === row.governorate ? 'bg-brand/5' : ''}`}
+                        onClick={() => setSelectedGovernorate(selectedGovernorate === row.governorate ? null : row.governorate)}
+                      >
+                        <td className="py-2 pr-3 font-black text-slate-800">{row.governorate}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{row.ordersCount}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeBhd(row.totalValue)}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeBhd(row.averageOrderValue)}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{row.servedBlocksCount}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeBhd(row.valuePerServedBlock)}</td>
+                        <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeNumber(row.ordersPerServedBlock)}</td>
+                        <td className="py-2 pr-3 text-right">
+                          <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-black uppercase tracking-widest ${purchasePowerTone(row.purchasePowerBand)}`}>
+                            {row.purchasePowerProxyScore === null ? 'Unavailable' : `${row.purchasePowerBand} | ${row.purchasePowerProxyScore}`}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="operational-panel p-4 md:p-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-brand" />
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Branch Performance per Governorate</h3>
+                </div>
+                {selectedGovernorate && (
+                  <span className="rounded-md border border-brand/10 bg-brand/5 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                    Filtered: {selectedGovernorate}
+                  </span>
+                )}
+              </div>
+              {selectedGovernorateBranchRows.length === 0 ? (
+                <p className="py-6 text-center text-xs font-bold text-slate-400">No branch governorate activity for the selected scope.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <th className="py-2 pr-3">Branch</th>
+                        <th className="py-2 pr-3">Governorate</th>
+                        <th className="py-2 pr-3 text-right">Orders</th>
+                        <th className="py-2 pr-3 text-right">Total value</th>
+                        <th className="py-2 pr-3 text-right">Avg value</th>
+                        <th className="py-2 pr-3 text-right">Blocks</th>
+                        <th className="py-2 pr-3 text-right">Branch order share</th>
+                        <th className="py-2 pr-3 text-right">Gov order share</th>
+                        <th className="py-2 pr-3 text-right">Branch value share</th>
+                        <th className="py-2 pr-3 text-right">Gov value share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {selectedGovernorateBranchRows.map(row => (
+                        <tr key={`${row.branchId}:${row.governorate}`} className="hover:bg-slate-50/50">
+                          <td className="py-2 pr-3">
+                            <p className="font-black text-slate-800">{row.branchCode}</p>
+                            <p className="text-[10px] font-bold text-slate-400">{row.branchName}</p>
+                          </td>
+                          <td className="py-2 pr-3 text-xs font-bold text-slate-500">{row.governorate}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{row.ordersCount}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeBhd(row.totalValue)}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatMaybeBhd(row.averageOrderValue)}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{row.servedBlocksCount}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatPercent(row.branchOrderSharePercent)}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatPercent(row.governorateOrderSharePercent)}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatPercent(row.branchValueSharePercent)}</td>
+                          <td className="py-2 pr-3 text-right font-bold tabular-nums">{formatPercent(row.governorateValueSharePercent)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
           )}
 
           {section === 'catchment' && (
@@ -615,6 +1035,28 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                 <KpiCard label="Unresolved blocks" value={String(summary.unresolvedBlockOrders)} sub="not in directory" />
                 <KpiCard label="Talabat (no block)" value={String(summary.talabatOrders)} />
               </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <KpiCard label="Branch profiles" value={String(zoneAnalysis.metrics.totalBranchProfiles)} sub={`${zoneAnalysis.metrics.mappedBranchMarkers} mapped markers`} />
+                <KpiCard label="Unmapped markers" value={String(zoneAnalysis.metrics.unmappedBranchMarkers)} sub={`${zoneAnalysis.metrics.missingGeoJsonBlock} missing GeoJSON block`} />
+                <KpiCard label="Outside range blocks" value={String(zoneAnalysis.metrics.servedOutsideRangeBlocks)} sub="centroid-based" />
+                <KpiCard label="Unavailable zones" value={String(zoneAnalysis.metrics.servedBlocksUnavailableZone)} sub={`${zoneAnalysis.metrics.missingBranchProfiles} missing branch profiles`} />
+                <KpiCard label="Core zone blocks" value={String(zoneAnalysis.metrics.servedCoreBlocks)} />
+                <KpiCard label="Standard zone blocks" value={String(zoneAnalysis.metrics.servedStandardBlocks)} />
+                <KpiCard label="Extended zone blocks" value={String(zoneAnalysis.metrics.servedExtendedBlocks)} />
+                <KpiCard label="Geometry blocks" value={String(zoneAnalysis.metrics.totalGeometryBlocks)} sub={`${zoneAnalysis.metrics.servedBlocksMapped} served blocks mapped`} />
+              </div>
+              {zoneAnalysis.metrics.duplicateBranchBlockGroups.length > 0 && (
+                <section className="operational-panel p-4 md:p-5">
+                  <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Duplicate branch origin blocks</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {zoneAnalysis.metrics.duplicateBranchBlockGroups.map(group => (
+                      <span key={group.originBlockNumber} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800">
+                        Block {group.originBlockNumber}: {group.branchCodes.join(', ')}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              )}
               {advanced && <WhiteSpaceSection whiteSpace={advanced.whiteSpace} />}
               {advanced && <FieldAvailabilitySection advanced={advanced} />}
               {/* Data-quality recommendations */}

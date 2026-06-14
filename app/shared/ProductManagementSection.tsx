@@ -1,12 +1,50 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, Upload, Plus, Search, FileSpreadsheet, AlertCircle, CheckCircle, ShieldCheck, Database } from 'lucide-react';
 import { productService } from '../../services/productService';
-import { generateProductTemplate, generateProductListExport, parseProductUpload } from '../../utils/excelUtils';
+import type { ProductBulkUploadProgress } from '../../services/productService';
+import { generateProductTemplate, generateProductListExport, parseProductUpload, PRODUCT_IMPORT_ACCEPT, isSupportedProductImportFile } from '../../utils/excelUtils';
 import { AdminProductModal } from './AdminProductModal';
 import { Product } from '../../types';
 import Swal from 'sweetalert2';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { formatVatLabel, getPriceIncludingVat } from '../../utils/vat';
+
+const escapeUploadHtml = (value: string) => value.replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+}[char] || char));
+
+const renderUploadProgressHtml = (percent: number, label: string, detail?: string) => {
+    const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+    return `
+        <div style="font-family: inherit; text-align: left;">
+            <p style="margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8;">Parsing and uploading products</p>
+            <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 13px; font-weight: 800; color: #334155;">${escapeUploadHtml(label)}</span>
+                <span style="font-size: 18px; font-weight: 900; color: #b91c1c;">${safePercent}%</span>
+            </div>
+            <div style="height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden;">
+                <div style="height: 100%; width: ${safePercent}%; border-radius: 999px; background: linear-gradient(90deg, #991b1b, #ef4444); transition: width 180ms ease;"></div>
+            </div>
+            ${detail ? `<p style="margin: 10px 0 0; font-size: 12px; font-weight: 700; color: #64748b;">${escapeUploadHtml(detail)}</p>` : ''}
+        </div>
+    `;
+};
+
+const mapBulkUploadProgress = (progress: ProductBulkUploadProgress) => {
+    const ratio = progress.totalSteps > 0 ? progress.completedSteps / progress.totalSteps : 1;
+    const percent = progress.stage === 'complete' ? 96 : 38 + Math.round(ratio * 56);
+    const label = progress.stage === 'checking'
+        ? 'Checking existing products'
+        : progress.stage === 'uploading'
+            ? 'Uploading products'
+            : 'Finalizing upload';
+    const detail = `${progress.processedRows.toLocaleString()} of ${progress.totalRows.toLocaleString()} product rows processed`;
+    return { percent, label, detail };
+};
 
 export const ProductManagementSection: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
@@ -69,21 +107,30 @@ export const ProductManagementSection: React.FC = () => {
         setUploadStats(null);
 
         // Basic validation
-        if (!file.name.endsWith('.xlsx')) {
-            Swal.fire('Invalid File', 'Please upload a .xlsx Excel file.', 'warning');
+        if (!isSupportedProductImportFile(file)) {
+            Swal.fire('Invalid File', 'Please upload a .xlsx Excel or .csv file.', 'warning');
             return;
         }
 
+        const updateUploadProgress = (percent: number, label: string, detail?: string) => {
+            Swal.update({
+                html: renderUploadProgressHtml(percent, label, detail)
+            });
+        };
+
         Swal.fire({
             title: 'Processing...',
-            text: 'Parsing and uploading products',
+            html: renderUploadProgressHtml(3, 'Preparing product upload', file.name),
             allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
+            allowEscapeKey: false,
+            showConfirmButton: false
         });
 
         try {
             // 1. Parse
-            const { validRows, errors: parseErrors } = await parseProductUpload(file);
+            const { validRows, errors: parseErrors } = await parseProductUpload(file, progress => {
+                updateUploadProgress(progress.percent, progress.label, progress.detail);
+            });
 
             if (parseErrors.length > 0 && validRows.length === 0) {
                 // All failed parsing
@@ -98,9 +145,15 @@ export const ProductManagementSection: React.FC = () => {
             }
 
             // 2. Upsert
-            const { inserted, updated, failed } = await productService.bulkUpsertProducts(validRows);
+            updateUploadProgress(36, 'Preparing database upload', `${validRows.length.toLocaleString()} valid rows ready`);
+            const { inserted, updated, failed } = await productService.bulkUpsertProducts(validRows, {
+                onProgress: progress => {
+                    const mapped = mapBulkUploadProgress(progress);
+                    updateUploadProgress(mapped.percent, mapped.label, mapped.detail);
+                }
+            });
 
-            Swal.close();
+            updateUploadProgress(98, 'Refreshing product list', 'Syncing latest catalog view');
             setUploadStats({
                 inserted,
                 updated,
@@ -109,7 +162,10 @@ export const ProductManagementSection: React.FC = () => {
             });
 
             // Refresh list
-            fetchProducts();
+            await fetchProducts();
+
+            updateUploadProgress(100, 'Upload complete', `${inserted.toLocaleString()} inserted | ${updated.toLocaleString()} updated | ${(failed + parseErrors.length).toLocaleString()} failed`);
+            setTimeout(() => Swal.close(), 350);
 
             if (fileInputRef.current) fileInputRef.current.value = '';
 
@@ -215,7 +271,7 @@ export const ProductManagementSection: React.FC = () => {
                         <div>
                             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Bulk Product Upload</h3>
                             <p className="text-xs text-slate-500 font-medium mt-1">
-                                Upload `.xlsx` files using the official template. Existing `internal_code` rows update; new codes insert.
+                                Upload `.xlsx` or `.csv` files using the official template headers. Existing `internal_code` rows update; new codes insert.
                             </p>
                         </div>
                     </div>
@@ -236,7 +292,7 @@ export const ProductManagementSection: React.FC = () => {
                             <input
                                 type="file"
                                 ref={fileInputRef}
-                                accept=".xlsx"
+                                accept={PRODUCT_IMPORT_ACCEPT}
                                 className="hidden"
                                 onChange={handleFileUpload}
                             />
@@ -257,7 +313,7 @@ export const ProductManagementSection: React.FC = () => {
                         <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
                         <div>
                             <p className="text-xs font-black text-slate-700">Trusted manager workflow</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Excel import is kept inside Product Management only.</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Excel and CSV import is kept inside Product Management only.</p>
                         </div>
                     </div>
                     <div className="p-4 flex items-start gap-3">
@@ -271,7 +327,7 @@ export const ProductManagementSection: React.FC = () => {
                         <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                         <div>
                             <p className="text-xs font-black text-slate-700">5MB maximum file size</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Required headers: internal_code, name, category, agent, retail price ex vat, vat, is_manual.</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">CSV/XLSX headers: internal_code, name, category, agent, retail price ex vat, vat, is_manual.</p>
                         </div>
                     </div>
                 </div>

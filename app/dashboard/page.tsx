@@ -47,13 +47,14 @@ import {
   Trash2,
   FileText
 } from 'lucide-react';
-import { RevenueChart, OperationalTrendChart, ShortageTrendChart, DailyPerformanceCalendar, RangeDatePicker } from '../shared';
+import { BackToModulesButton, RevenueChart, OperationalTrendChart, ShortageTrendChart, DailyPerformanceCalendar, RangeDatePicker } from '../shared';
 import { PharmacistActivitySection } from './PharmacistActivitySection';
 import { ProductManagementSection } from '../shared';
 import { supabase } from '../../lib/supabase';
 import { LostSale, Branch, Product, Shortage } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { isManagerRole } from '../../lib/access';
 import styles from './dashboard.module.css';
 
 const createExcelWorkbook = async () => {
@@ -165,7 +166,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const cleanName = (name: string) => name?.toLowerCase().trim().replace(/\s+/g, ' ') || '';
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const isCanSelectBranch = user.role === 'manager' || user.role === 'owner' || user.role === 'warehouse' || user.role === 'supervisor';
+  const isCanSelectBranch = isManagerRole(user.role) || user.role === 'owner' || user.role === 'warehouse' || user.role === 'supervisor';
   const isAdmin = isCanSelectBranch;
   const [selectedBranch, setSelectedBranch] = useState<string>(isCanSelectBranch ? 'all' : user.id);
   const initialDateType = (() => {
@@ -212,6 +213,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const [error, setError] = useState<{ message: string; retry?: () => void } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (dateType === 'all') {
+      setLossDriverFilter('all');
+      setParetoPage(1);
+    }
+  }, [dateType]);
 
   // وظيفة عرض الإشعارات بدلاً من alert
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -790,7 +798,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       .slice(0, 48) || 'Branch';
 
   const resolveExportScope = () => {
-    if (user.role === 'manager') {
+    if (isManagerRole(user.role)) {
       if (selectedBranch === 'all') {
         return {
           branchId: null,
@@ -1644,12 +1652,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               )}
 
               {onBack && (
-                <button
-                  onClick={onBack}
-                  className="px-5 py-3.5 bg-white border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:border-slate-200 hover:text-slate-900 transition-all whitespace-nowrap"
-                >
-                Back to Operational Suite
-              </button>
+                <BackToModulesButton onClick={onBack} />
             )}
           </div>
         </header>
@@ -1675,7 +1678,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                   Inventory Shortages
                 </button>
               )}
-              {(user.role === 'manager') && (
+              {isManagerRole(user.role) && (
                 <button
                   onClick={() => changeViewMode('products')}
                   className={`tab-item px-7 py-3 rounded-xl flex items-center gap-2 ${viewMode === 'products' ? 'bg-slate-900 text-white shadow-lg' : ''}`}
@@ -1931,7 +1934,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                               </span>
                             </td>
                             <td className="py-4 text-center w-28">
-                              {(user.role === 'branch' || user.role === 'manager') && (
+                              {(user.role === 'branch' || isManagerRole(user.role)) && (
                                 <button
                                   onClick={async () => {
                                     if (confirm(`Remove lost sale record for "${s.productName}"? This cannot be undone.`)) {
@@ -2181,7 +2184,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                                             Safe
                                           </span>
                                         )}
-                                        {(user.role === 'branch' || user.role === 'manager') && (
+                                        {(user.role === 'branch' || isManagerRole(user.role)) && (
                                           <button
                                             onClick={async (e) => {
                                               e.stopPropagation();

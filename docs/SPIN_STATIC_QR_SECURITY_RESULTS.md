@@ -130,3 +130,22 @@ remains pending because the in-app browser lost the app tab after Google opened,
 and the approved Chrome fallback could not run because the Codex Chrome
 Extension is not installed/enabled in the selected Chrome profile. The overall
 project remains staging-ready only until the remaining production gates close.
+
+## Customer Engagement Generator Authenticated QA Attempt
+
+Checked on: 2026-06-14
+
+Local authenticated browser QA for the redesigned branch-side Customer
+Engagement Generator / Generate QR & Link page remains pending. The local app
+was started successfully and the in-app browser loaded the login page without
+console errors, but no authenticated manager/admin/owner browser session or
+usable credentials were available. The branch-side redesigned QR generator page,
+desktop/tablet/mobile responsive layout, mode-card behavior, copy/download
+actions, and Talabat/WhatsApp panels were therefore not fully browser-verified.
+
+A limited public static QR regression smoke was completed locally with a branch
+code URL. The public customer flow opened without login, exchanged the node URL
+to a token URL, and reached the customer details screen without observed console
+errors. No customer details were submitted and no spin/voucher flow was
+completed in this pass. Do not record generated token values in documentation or
+logs.

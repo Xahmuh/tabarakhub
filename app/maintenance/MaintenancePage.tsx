@@ -18,6 +18,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({
 }) => {
   const title = settings?.maintenanceTitle || 'Tabarak Hub is under maintenance';
   const message = settings?.maintenanceMessage || 'We are making a few improvements. Please check back shortly.';
+  const logoUrl = settings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
 
   return (
     <div className="min-h-screen bg-[#fafafa] px-5 py-8 selection:bg-brand/10">
@@ -25,7 +26,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({
         <header className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-brand shadow-sm shadow-brand/20">
-              <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
+              <img src={logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-black tracking-tight text-slate-950">{clientConfig.appName}</p>

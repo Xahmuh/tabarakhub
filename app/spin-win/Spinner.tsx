@@ -16,6 +16,7 @@ interface SpinnerProps {
     motionTiltY?: number;
     motionNudge?: number;
     isMotionActive?: boolean;
+    logoUrl?: string;
 }
 
 const fallbackColors = [
@@ -90,7 +91,8 @@ export const Spinner: React.FC<SpinnerProps> = ({
     motionTiltX = 0,
     motionTiltY = 0,
     motionNudge = 0,
-    isMotionActive = false
+    isMotionActive = false,
+    logoUrl = clientConfig.logoUrl
 }) => {
     const [rotation, setRotation] = useState(0);
     const [settledPrizeId, setSettledPrizeId] = useState<string | null>(null);
@@ -310,7 +312,7 @@ export const Spinner: React.FC<SpinnerProps> = ({
                     <div className="absolute left-1/2 top-1/2 z-20 flex h-[22%] w-[22%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[5px] border-white bg-slate-950 shadow-2xl">
                         <div className="absolute inset-1 rounded-full border border-white/10"></div>
                         <div className="flex h-[62%] w-[62%] items-center justify-center overflow-hidden rounded-full bg-white shadow-inner">
-                            <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
+                            <img src={logoUrl} alt={`${clientConfig.clientName} logo`} className="h-full w-full object-cover" />
                         </div>
                     </div>
 

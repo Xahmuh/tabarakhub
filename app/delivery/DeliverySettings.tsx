@@ -182,7 +182,7 @@ export const DeliverySettings: React.FC = () => {
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Driver ID</label>
             <div class="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-black text-slate-600">
-              ${driver?.driverCode ? escapeHtml(driver.driverCode) : 'Auto-generated on save'}
+              ${driver?.driverCode ? escapeHtml(driver.driverCode) : 'Auto-generated on save, e.g. D001'}
             </div>
           </div>
           <div>

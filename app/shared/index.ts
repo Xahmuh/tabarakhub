@@ -1,5 +1,7 @@
 export * from './Charts';
 export * from './AppHeader';
+export * from './BackToModulesButton';
+export * from './ModuleHelpButton';
 export * from './Footer';
 export * from './POSGuidelineModal';
 export * from './AdminProductModal';

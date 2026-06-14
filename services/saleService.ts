@@ -68,8 +68,31 @@ export const saleService = {
   products: {
     list: async (branchId?: string): Promise<Product[]> => {
       try {
-        const { data } = await supabaseClient.from('products').select('*');
-        if (data) return data.map(p => ({
+        let allProducts: any[] = [];
+        let from = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabaseClient
+            .from('products')
+            .select('*')
+            .order('name')
+            .range(from, from + PAGE_SIZE - 1);
+
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allProducts = [...allProducts, ...data];
+            if (data.length < PAGE_SIZE) {
+              hasMore = false;
+            } else {
+              from += PAGE_SIZE;
+            }
+          }
+        }
+
+        if (allProducts.length > 0) return allProducts.map(p => ({
           id: p.id, name: p.name, category: p.category, agent: p.agent,
           defaultPrice: Number(p.default_price || 0), isManual: !!p.is_manual,
           vatEnabled: !!p.vat_enabled, vatRate: Number(p.vat_rate ?? BAHRAIN_VAT_RATE),
@@ -186,7 +209,6 @@ export const saleService = {
             allRecords = [...allRecords, ...data];
             if (data.length < currentPageSize || allRecords.length >= maxRows) hasMore = false; else from += currentPageSize;
           }
-          if (allRecords.length >= 100000) hasMore = false;
         }
         remoteData = allRecords.map(s => ({
           id: s.id, branchId: s.branch_id, pharmacistId: s.pharmacist_id,

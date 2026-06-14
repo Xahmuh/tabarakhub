@@ -18,6 +18,18 @@ const isMissingInternalCodeConstraint = (error: any) =>
     error?.code === '42P10' ||
     String(error?.message || '').toLowerCase().includes('unique or exclusion constraint');
 
+export interface ProductBulkUploadProgress {
+    stage: 'checking' | 'uploading' | 'complete';
+    completedSteps: number;
+    totalSteps: number;
+    processedRows: number;
+    totalRows: number;
+}
+
+interface ProductBulkUpsertOptions {
+    onProgress?: (progress: ProductBulkUploadProgress) => void;
+}
+
 export const productService = {
     getProductsForExport: async (): Promise<Product[]> => {
         let allData: any[] = [];
@@ -60,7 +72,10 @@ export const productService = {
     },
 
     // Secure Bulk Upload
-    bulkUpsertProducts: async (rows: any[]): Promise<{ inserted: number; updated: number; failed: number }> => {
+    bulkUpsertProducts: async (
+        rows: any[],
+        options: ProductBulkUpsertOptions = {}
+    ): Promise<{ inserted: number; updated: number; failed: number }> => {
         if (rows.length === 0) return { inserted: 0, updated: 0, failed: 0 };
 
         const rowsByInternalCode = new Map<string, any>();
@@ -77,10 +92,28 @@ export const productService = {
         if (dedupedRows.length === 0) return { inserted: 0, updated: 0, failed: rows.length };
 
         const internalCodes = dedupedRows.map(r => r.internal_code);
+        const codeChunks = chunkRows(internalCodes);
+        const payloadChunksTotal = Math.ceil(dedupedRows.length / PRODUCT_BULK_CHUNK_SIZE);
+        const totalSteps = Math.max(1, codeChunks.length + payloadChunksTotal);
+        let completedSteps = 0;
+
+        const notifyProgress = (
+            stage: ProductBulkUploadProgress['stage'],
+            processedRows: number
+        ) => {
+            options.onProgress?.({
+                stage,
+                completedSteps,
+                totalSteps,
+                processedRows,
+                totalRows: dedupedRows.length
+            });
+        };
 
         // Check existing to calculate inserted vs updated stats
         const existingCodes = new Set<string>();
-        for (const codeChunk of chunkRows(internalCodes)) {
+        notifyProgress('checking', 0);
+        for (const codeChunk of codeChunks) {
             const { data: existing, error: checkError } = await supabaseClient
                 .from('products')
                 .select('internal_code')
@@ -88,6 +121,8 @@ export const productService = {
 
             if (checkError) throw checkError;
             existing?.forEach(e => existingCodes.add(normalizeInternalCode(e.internal_code)));
+            completedSteps++;
+            notifyProgress('checking', Math.min(completedSteps * PRODUCT_BULK_CHUNK_SIZE, dedupedRows.length));
         }
         let insertedCount = 0;
         let updatedCount = 0;
@@ -113,6 +148,8 @@ export const productService = {
         }));
 
         // Perform chunked upserts to avoid request-size limits for large catalogs.
+        let uploadedRows = 0;
+        notifyProgress('uploading', uploadedRows);
         for (const payloadChunk of chunkRows(payload)) {
             const { error } = await supabaseClient
                 .from('products')
@@ -124,8 +161,12 @@ export const productService = {
                 }
                 throw error;
             }
+            uploadedRows += payloadChunk.length;
+            completedSteps++;
+            notifyProgress('uploading', Math.min(uploadedRows, dedupedRows.length));
         }
 
+        notifyProgress('complete', dedupedRows.length);
         return {
             inserted: insertedCount,
             updated: updatedCount,

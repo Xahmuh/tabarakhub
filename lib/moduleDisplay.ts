@@ -1,0 +1,72 @@
+import { ModuleDisplayItemSetting, ModuleDisplaySettings } from '../types';
+
+export const DEFAULT_MODULE_DISPLAY_ITEMS: ModuleDisplayItemSetting[] = [
+  { key: 'pos', order: 10, badge: 'Entry', badgeStyle: 'hidden' },
+  { key: 'dashboard-manager', order: 20, badge: 'Analytics', badgeStyle: 'hidden' },
+  { key: 'dashboard-admin', order: 30, badge: 'Analytics', badgeStyle: 'hidden' },
+  { key: 'hr-manager', order: 40, badge: 'Admin', badgeStyle: 'hidden' },
+  { key: 'dashboard-branch', order: 50, badge: 'Analytics', badgeStyle: 'hidden' },
+  { key: 'workforce', order: 60, badge: 'Planning', badgeStyle: 'hidden' },
+  { key: 'hr', order: 70, badge: 'Self-service', badgeStyle: 'hidden' },
+  { key: 'cash-flow', order: 80, badge: 'Finance', badgeStyle: 'hidden' },
+  { key: 'cash-tracker', order: 90, badge: 'Finance', badgeStyle: 'hidden' },
+  { key: 'corporate-codex', order: 100, badge: 'Knowledge', badgeStyle: 'hidden' },
+  { key: 'settings', order: 110, badge: 'Control', badgeStyle: 'hidden' },
+  { key: 'spin-win', order: 120, badge: 'Rewards', badgeStyle: 'hidden' },
+  { key: 'feedback-form', order: 130, badge: 'Feedback', badgeStyle: 'hidden' },
+  { key: 'feedback-admin', order: 140, badge: 'Analytics', badgeStyle: 'hidden' },
+  { key: 'employee-contributions', order: 150, badge: 'Ideas', badgeStyle: 'hidden' },
+  { key: 'delivery', order: 160, badge: 'new module', badgeStyle: 'red' },
+  { key: 'block-analyzer', order: 170, badge: 'Analytics', badgeStyle: 'hidden' },
+  { key: 'command-center', order: 180, badge: 'new module', badgeStyle: 'red' }
+];
+
+export const MODULE_DISPLAY_LABELS: Record<string, string> = {
+  pos: 'Lost Sales & Shortage Log',
+  'dashboard-manager': 'Performance Dashboard - Manager',
+  'dashboard-admin': 'Performance Dashboard - Admin/Warehouse',
+  'hr-manager': 'HR Requests Admin',
+  'dashboard-branch': 'Performance Dashboard - Branch',
+  workforce: 'Workforce Analytics',
+  hr: 'HR Self-Service',
+  'cash-flow': 'Cash Flow Planner',
+  'cash-tracker': 'Branch Cash Tracker',
+  'corporate-codex': 'Corporate Codex',
+  settings: 'Settings & Permissions',
+  'spin-win': 'Spin & Win',
+  'feedback-form': 'QC Insights',
+  'feedback-admin': 'Feedback Admin',
+  'employee-contributions': 'Team Contributions',
+  delivery: 'Delivery Recording & Traceability',
+  'block-analyzer': 'BH Block Analyzer',
+  'command-center': 'Daily Command Center'
+};
+
+const normalizeBadgeStyle = (value: unknown): ModuleDisplayItemSetting['badgeStyle'] =>
+  value === 'red' ? 'red' : 'hidden';
+
+export const normalizeModuleDisplaySettings = (value: unknown): ModuleDisplaySettings => {
+  const inputItems = Array.isArray((value as ModuleDisplaySettings | null)?.items)
+    ? (value as ModuleDisplaySettings).items
+    : [];
+  const inputByKey = new Map(inputItems.map(item => [String(item?.key || ''), item]));
+
+  const items = DEFAULT_MODULE_DISPLAY_ITEMS.map(defaultItem => {
+    const input = inputByKey.get(defaultItem.key);
+    const parsedOrder = Number(input?.order);
+
+    return {
+      key: defaultItem.key,
+      order: Number.isFinite(parsedOrder) ? parsedOrder : defaultItem.order,
+      badge: typeof input?.badge === 'string' ? input.badge.trim().slice(0, 32) : defaultItem.badge,
+      badgeStyle: normalizeBadgeStyle(input?.badgeStyle ?? defaultItem.badgeStyle)
+    };
+  }).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
+
+  return {
+    items: items.map((item, index) => ({
+      ...item,
+      order: (index + 1) * 10
+    }))
+  };
+};

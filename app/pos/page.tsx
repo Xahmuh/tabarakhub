@@ -33,6 +33,7 @@ import { Product, LostSale, Branch, Pharmacist, Shortage } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/calculations';
 import { getPriceIncludingVat } from '../../utils/vat';
+import { isManagerRole } from '../../lib/access';
 
 interface POSPageProps {
   branch: Branch;
@@ -45,7 +46,7 @@ type Mode = 'sales' | 'shortages';
 
 export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permissions, onBackToPharmacist }) => {
   const getPermission = (feature: string) => {
-    if (branch.role === 'manager') return 'edit';
+    if (isManagerRole(branch.role)) return 'edit';
     const level = permissions.find(p => p.featureName === feature)?.accessLevel || 'edit';
     // If a branch is in POS, they should have logging access ('edit') by default
     return level === 'read' ? 'edit' : level;

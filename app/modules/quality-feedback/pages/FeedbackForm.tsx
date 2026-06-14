@@ -8,6 +8,7 @@ import { FeedbackFormData, Question, ModuleSettings, FeedbackSection } from '../
 import { ThankYouPage } from './ThankYouPage';
 import { ShieldCheck, ChevronRight, ChevronLeft, Loader2, AlertTriangle, Lock, Globe } from 'lucide-react';
 import { useAnonymityGuard } from '../hooks/useAnonymityGuard';
+import { BackToModulesButton } from '../../../shared';
 
 interface Props {
   onBack: () => void;
@@ -88,9 +89,7 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
         <p className="text-slate-600 font-medium">
           The feedback form is currently closed. Please check back later.
         </p>
-        <button onClick={onBack} className="px-10 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all mx-auto flex items-center justify-center">
-          Return to Dashboard
-        </button>
+        <BackToModulesButton onClick={onBack} className="mx-auto" />
       </div>
     );
   }
@@ -105,9 +104,7 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
         <p className="text-slate-600">
           You have submitted <strong>{submissionsThisPeriod()}</strong> of <strong>{maxPerPeriod}</strong> allowed responses this {periodLabel}. You can submit again next {periodLabel}.
         </p>
-        <button onClick={onBack} className="px-8 py-3 bg-brand text-white font-bold rounded-xl">
-          Return to Home
-        </button>
+        <BackToModulesButton onClick={onBack} className="mx-auto" />
       </div>
     );
   }
@@ -159,9 +156,7 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between mb-8">
-        <button onClick={onBack} className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
-          ← Cancel
-        </button>
+        <BackToModulesButton onClick={onBack} />
         <button
           onClick={() => setLang(l => l === 'en' ? 'ar' : 'en')}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"

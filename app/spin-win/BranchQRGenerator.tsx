@@ -19,7 +19,13 @@ import {
     ArrowLeft,
     Copy,
     Send,
-    Download
+    Download,
+    Gift,
+    Link2,
+    MapPin,
+    Phone,
+    Share2,
+    ShieldCheck
 } from 'lucide-react';
 
 import { NETWORK_CONFIG } from '../../lib/networkConfig';
@@ -301,345 +307,461 @@ Free delivery to all areas of Bahrain
 Win exclusive vouchers from Tabarak Pharmacies
 Free delivery to all areas of Bahrain`;
 
+    const isQrReady = Boolean(session || qrType === 'static');
+    const daysLeft = Math.max(1, Math.ceil(timeLeft / (24 * 3600)));
+    const expiryLabel = qrType === 'static'
+        ? 'Static link - no expiry'
+        : qrType === 'multi'
+            ? `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
+            : `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')} remaining`;
+    const qrStatusLabel = isQrReady
+        ? qrType === 'static' ? 'Permanent branch QR' : 'Session active'
+        : 'Waiting for a generated session';
+    const branchDisplayName = branch.code ? `${branch.name} - ${branch.code}` : branch.name;
+    const currentModeLabel = qrType === 'static'
+        ? 'Counter display'
+        : qrType === 'multi'
+            ? 'Campaign sharing'
+            : 'One customer handoff';
+    const modeOptions: Array<{
+        id: 'static' | 'single' | 'multi';
+        title: string;
+        description: string;
+        meta: string;
+        icon: React.ComponentType<{ className?: string }>;
+    }> = [
+        {
+            id: 'static',
+            title: 'Static branch QR',
+            description: 'Best for counter displays, printed posters, and branch-owned QR assets.',
+            meta: 'Never expires',
+            icon: QrCode
+        },
+        {
+            id: 'single',
+            title: 'Single customer',
+            description: 'Short session for a direct customer handoff at the branch.',
+            meta: '10 minutes',
+            icon: ShieldCheck
+        },
+        {
+            id: 'multi',
+            title: 'Multi-use campaign',
+            description: 'Reusable campaign link for controlled sharing during an active push.',
+            meta: '7 days',
+            icon: Share2
+        }
+    ];
+    const journeySteps = [
+        { icon: Smartphone, title: 'Scan or open', text: 'Customer reaches the branch reward flow from the QR or link.' },
+        { icon: Users, title: 'Identify customer', text: 'Phone details are captured before reward generation.' },
+        { icon: CheckCircle2, title: 'Rate branch', text: 'Customer can be guided to the branch review step.' },
+        { icon: Gift, title: 'Spin and redeem', text: 'Voucher outcome is tied back to this branch session.' }
+    ];
+
     if (isLocked) {
         return (
-            <div className="max-w-lg mx-auto p-4 lg:p-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
-                <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden p-12 text-center">
-                    <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 mb-6 mx-auto">
-                        <Lock className="w-10 h-10" />
+            <div className="mx-auto max-w-3xl p-4 md:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                <section className="operational-panel p-6 text-center md:p-8">
+                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                        <Lock className="h-8 w-8" />
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-3">Locked by Manager</h2>
-                    <p className="text-slate-500 text-sm mb-8">This section has been restricted by the administration.</p>
-                    <div className="inline-flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-lg border border-red-100 text-xs font-bold uppercase tracking-wider mb-8">
-                        <Activity className="w-3.5 h-3.5" />
-                        Status: Inactive
+                    <h2 className="mb-2 text-2xl font-black text-slate-950">Customer engagement is locked</h2>
+                    <p className="mx-auto mb-6 max-w-md text-sm leading-6 text-slate-500">
+                        QR generation and campaign links are currently restricted by management for this branch.
+                    </p>
+                    <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-red-100 bg-red-50 px-4 py-2 text-xs font-bold text-red-700">
+                        <Activity className="h-3.5 w-3.5" />
+                        Inactive
                     </div>
-                    <button onClick={onBack} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-xl font-bold text-sm transition-all">
+                    <button onClick={onBack} className="btn-primary mx-auto w-full max-w-xs">
                         Return to Suite
                     </button>
-                </div>
+                </section>
             </div>
         );
     }
 
     return (
-        <div className="max-w-5xl mx-auto p-4 lg:p-10 animate-in fade-in slide-in-from-bottom-6 duration-700 space-y-6">
-            {/* Back */}
-            <button onClick={onBack} className="inline-flex items-center gap-2 text-slate-400 hover:text-red-600 transition-colors group">
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                <span className="text-xs font-bold uppercase tracking-widest">Back to Spin & Win Suite</span>
-            </button>
-
-            {/* Network info for localhost */}
-            {isLocalhost && (
-                <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <p className="text-xs text-emerald-700 font-medium">
-                        QR optimized for mobile via <span className="font-bold underline">{NETWORK_CONFIG.localIp}</span>
-                    </p>
-                </div>
-            )}
-
-            {/* Main QR Card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                            <QrCode className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-white">Customer Engagement Generator</h2>
-                            <p className="text-white/50 text-xs font-medium">Generate QR codes for customer rewards</p>
-                        </div>
-                    </div>
-                    {(session || qrType === 'static') && (
-                        <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
-                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-xs font-bold text-white/80">{qrType === 'static' ? 'Permanent' : 'Active'}</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
-                    {/* Left: QR */}
-                    <div className="p-6 lg:p-8 flex flex-col items-center">
-                        {/* QR Code */}
-                        <div ref={qrRef} className={`bg-white p-6 rounded-2xl border-2 border-slate-100 mb-6 transition-all ${(!session && qrType !== 'static') ? 'opacity-30 grayscale' : 'shadow-lg'}`}>
-                            {(session || qrType === 'static') ? (
-                                <QRCodeSVG value={customerUrl} size={200} level="H" includeMargin={false} />
-                            ) : (
-                                <div className="w-[200px] h-[200px] flex items-center justify-center bg-slate-50 rounded-xl">
-                                    <QrCode className="w-14 h-14 text-slate-300" />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Timer */}
-                        {(session || qrType === 'static') && (
-                            <div className="bg-slate-900 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 mb-4 w-full max-w-[280px] justify-center">
-                                <Clock className="w-4 h-4 text-red-400" />
-                                <span className="text-xs font-bold tabular-nums">
-                                    {qrType === 'static'
-                                        ? 'Static (Never Expires)'
-                                        : qrType === 'multi'
-                                            ? `Expires in ${Math.ceil(timeLeft / (24 * 3600))} Days`
-                                            : `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`
-                                    }
-                                </span>
-                            </div>
-                        )}
-
-                        {/* URL */}
-                        {(session || qrType === 'static') && (
-                            <div className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg w-full max-w-[280px] mb-5">
-                                <code className="text-[10px] text-slate-600 font-mono break-all">{customerUrl}</code>
-                            </div>
-                        )}
-
-                        {/* Mode Toggle */}
-                        <div className="w-full max-w-[280px] bg-slate-100 p-1 rounded-xl flex mb-5">
-                            <button
-                                onClick={() => setQrType('static')}
-                                className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all ${qrType === 'static' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                            >
-                                Static
-                            </button>
-                            <button
-                                onClick={() => setQrType('single')}
-                                className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all ${qrType === 'single' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                            >
-                                Single
-                            </button>
-                            <button
-                                onClick={() => setQrType('multi')}
-                                className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold transition-all ${qrType === 'multi' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                            >
-                                Multi
-                            </button>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2 w-full max-w-[280px] relative">
-                            {qrType === 'static' ? (
-                                <div className="flex-1 relative">
-                                    <button
-                                        onClick={() => setShowDownloadOptions(!showDownloadOptions)}
-                                        disabled={isLoading}
-                                        className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        Download
-                                    </button>
-
-                                    {showDownloadOptions && (
-                                        <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-10 animate-in slide-in-from-bottom-2 duration-200">
-                                            <button
-                                                onClick={() => { downloadQR(); setShowDownloadOptions(false); }}
-                                                className="w-full px-4 py-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-50"
-                                            >
-                                                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                                                Download as JPG
-                                            </button>
-                                            <button
-                                                onClick={downloadPDF}
-                                                className="w-full px-4 py-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                            >
-                                                <div className="w-2 h-2 rounded-full bg-red-500" />
-                                                Save as PDF (Print)
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => generateSession(qrType)}
-                                    disabled={isLoading}
-                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                >
-                                    <RefreshCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                    Regenerate
-                                </button>
-                            )}
-                            <button
-                                onClick={handleCopy}
-                                className="flex-1 bg-white border-2 border-slate-200 hover:border-red-200 text-slate-700 hover:text-red-600 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                            >
-                                {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                                {copied ? 'Copied!' : 'Copy'}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Right: How it works */}
-                    <div className="p-6 lg:p-8">
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">How It Works</h3>
-                        <p className="text-sm text-slate-500 mb-6">Show QR to customers. They scan, rate, and spin for rewards.</p>
-
-                        <div className="space-y-4">
-                            {[
-                                { icon: Smartphone, title: 'Scan QR Code', text: 'Customer scans with mobile device', bg: 'bg-blue-50', fg: 'text-blue-600' },
-                                { icon: Users, title: 'Enter Details', text: 'Provide phone for verification', bg: 'bg-indigo-50', fg: 'text-indigo-600' },
-                                { icon: CheckCircle2, title: 'Rate Branch', text: 'Leave a Google Maps review', bg: 'bg-emerald-50', fg: 'text-emerald-600' },
-                                { icon: ExternalLink, title: 'Win Reward', text: 'Spin wheel for voucher prizes', bg: 'bg-amber-50', fg: 'text-amber-600' },
-                            ].map((step, i) => (
-                                <div key={i} className="flex items-start gap-3">
-                                    <div className={`w-9 h-9 ${step.bg} rounded-lg flex items-center justify-center shrink-0`}>
-                                        <step.icon className={`w-4 h-4 ${step.fg}`} />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-slate-900">{step.title}</h4>
-                                        <p className="text-xs text-slate-500">{step.text}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {error && (
-                            <div className="mt-6 bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
-                                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                                <p className="text-xs text-red-700">{error}</p>
-                            </div>
-                        )}
-                    </div>
+        <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <button onClick={onBack} className="btn-secondary w-fit">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Spin & Win Suite
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        {qrStatusLabel}
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
+                        <MapPin className="h-3.5 w-3.5 text-red-600" />
+                        {branchDisplayName}
+                    </span>
                 </div>
             </div>
 
-            {/* Talabat Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4 flex items-center gap-3">
-                    <Smartphone className="w-5 h-5 text-white" />
-                    <div>
-                        <h3 className="text-base font-bold text-white">Talabat Customers</h3>
-                        <p className="text-white/70 text-xs">Send personalized delivery notifications with rewards</p>
-                    </div>
-                </div>
-                <div className="p-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        {/* Send Card */}
-                        <div className="bg-slate-50 rounded-xl border border-slate-100 p-5 space-y-4">
-                            <h4 className="text-sm font-bold text-slate-900">Send to Customer</h4>
+            <section className="operational-panel overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+                    <div className="border-b border-slate-200 p-5 md:p-6 lg:border-b-0 lg:border-r lg:p-8">
+                        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Country Code</label>
-                                <input type="text" id="talabat-country-code" defaultValue="973" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all" />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Phone Number</label>
-                                <input type="tel" id="talabat-phone" placeholder="33XXXXXX" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all" />
-                            </div>
-                            <button
-                                onClick={() => {
-                                    const countryCode = (document.getElementById('talabat-country-code') as HTMLInputElement)?.value || '973';
-                                    const phone = (document.getElementById('talabat-phone') as HTMLInputElement)?.value;
-                                    if (!phone) { alert('Please enter customer phone number'); return; }
-                                    const fullPhone = `${countryCode}${phone}`;
-                                    const message = `${talabatMessage}\n\n Click here to play:\n${talabatUrl}`;
-                                    window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`, '_blank');
-                                }}
-                                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                            >
-                                <Send className="w-4 h-4" />
-                                Send via WhatsApp
-                            </button>
-                            {qrType !== 'static' ? (
-                                <button
-                                    onClick={() => generateSession(qrType)}
-                                    disabled={isLoading}
-                                    className="w-full bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 font-bold py-2 rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                                >
-                                    <RefreshCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                                    Regenerate Session Link
-                                </button>
-                            ) : (
-                                <div className="bg-orange-50 text-orange-700 p-2 rounded-lg text-[10px] font-medium text-center">
-                                    Using Static Branch Link
+                                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700">
+                                    <QrCode className="h-3.5 w-3.5" />
+                                    Generate QR code and link
                                 </div>
-                            )}
+                                <h2 className="text-3xl font-black text-slate-950 md:text-4xl">Customer Engagement Generator</h2>
+                                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                                    Create branch-safe QR codes, copy customer links, and send reward messages without exposing internal keys or branch IDs.
+                                </p>
+                            </div>
+                            <div className="grid min-w-[190px] grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                                <div className="rounded-md bg-white p-3">
+                                    <p className="font-bold text-slate-400">Mode</p>
+                                    <p className="mt-1 font-black text-slate-900">{currentModeLabel}</p>
+                                </div>
+                                <div className="rounded-md bg-white p-3">
+                                    <p className="font-bold text-slate-400">Validity</p>
+                                    <p className="mt-1 font-black text-slate-900">{qrType === 'static' ? 'Always on' : qrType === 'multi' ? '7 days' : '10 min'}</p>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Message Template */}
-                        <div className="bg-slate-50 rounded-xl border border-slate-100 p-5 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-bold text-slate-900">Message Template</h4>
-                                <button onClick={() => setTalabatMessage(defaultTalabatMsg)} className="text-xs font-bold text-orange-600 hover:text-orange-700">Reset</button>
+                        {isLocalhost && (
+                            <div className="mb-5 flex items-start gap-3 rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+                                <Activity className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                                <p className="text-sm font-medium leading-6 text-emerald-800">
+                                    Local QR links are routed through <span className="font-black">{NETWORK_CONFIG.localIp}:{NETWORK_CONFIG.port}</span> so mobile devices can open the branch flow during testing.
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="grid gap-3 md:grid-cols-3">
+                            {modeOptions.map((option) => {
+                                const Icon = option.icon;
+                                const isActive = qrType === option.id;
+                                return (
+                                    <button
+                                        key={option.id}
+                                        onClick={() => setQrType(option.id)}
+                                        className={`flex min-h-[168px] flex-col justify-between rounded-lg border p-4 text-left transition-colors active:scale-[0.99] ${isActive
+                                            ? 'border-red-200 bg-red-50 text-red-950 shadow-sm'
+                                            : 'border-slate-200 bg-white text-slate-700 hover:border-red-100 hover:bg-red-50/40'
+                                            }`}
+                                    >
+                                        <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${isActive ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                            <Icon className="h-5 w-5" />
+                                        </span>
+                                        <span>
+                                            <span className="block text-sm font-black">{option.title}</span>
+                                            <span className="mt-1 block text-xs leading-5 text-slate-500">{option.description}</span>
+                                        </span>
+                                        <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-bold ${isActive ? 'bg-white text-red-700' : 'bg-slate-100 text-slate-500'}`}>
+                                            {option.meta}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {error && (
+                            <div className="mt-5 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                                <p className="text-sm text-red-700">{error}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <aside className="bg-slate-50/70 p-5 md:p-6 lg:p-8">
+                        <div className="flex h-full flex-col items-center text-center">
+                            <div className="mb-4 flex w-full items-center justify-between gap-3 text-left">
+                                <div>
+                                    <p className="text-xs font-bold text-slate-400">Customer link</p>
+                                    <h3 className="text-lg font-black text-slate-950">Ready to share</h3>
+                                </div>
+                                <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${isQrReady ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                    {isQrReady ? 'Live' : 'Not ready'}
+                                </span>
+                            </div>
+
+                            <div
+                                ref={qrRef}
+                                className={`flex aspect-square w-full max-w-[260px] items-center justify-center rounded-lg border bg-white p-5 transition-all ${isQrReady
+                                    ? 'border-slate-200 shadow-sm'
+                                    : 'border-slate-200 opacity-40 grayscale'
+                                    }`}
+                            >
+                                {isQrReady ? (
+                                    <QRCodeSVG value={customerUrl} size={240} level="H" includeMargin={false} className="h-full w-full" />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center rounded-md bg-slate-50">
+                                        <QrCode className="h-16 w-16 text-slate-300" />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-2">
+                                <span className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
+                                    <Clock className="h-3.5 w-3.5 text-red-300" />
+                                    {expiryLabel}
+                                </span>
+                                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                                    Branch scoped
+                                </span>
+                            </div>
+
+                            <div className="mt-4 w-full rounded-lg border border-slate-200 bg-white p-3 text-left">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                        <Link2 className="h-3.5 w-3.5 text-red-600" />
+                                        Generated customer URL
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-400">{qrType}</span>
+                                </div>
+                                <code className="block break-all text-xs leading-5 text-slate-700">{customerUrl}</code>
+                            </div>
+
+                            <div className="relative mt-4 grid w-full grid-cols-2 gap-2">
+                                {qrType === 'static' ? (
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowDownloadOptions(!showDownloadOptions)}
+                                            disabled={isLoading}
+                                            className="btn-primary w-full"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Download
+                                        </button>
+
+                                        {showDownloadOptions && (
+                                            <div className="absolute bottom-full left-0 z-10 mb-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl animate-in slide-in-from-bottom-2 duration-200">
+                                                <button
+                                                    onClick={() => { downloadQR(); setShowDownloadOptions(false); }}
+                                                    className="flex w-full items-center gap-2 border-b border-slate-100 px-4 py-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                                >
+                                                    <Download className="h-3.5 w-3.5 text-red-600" />
+                                                    Download JPG
+                                                </button>
+                                                <button
+                                                    onClick={downloadPDF}
+                                                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                                >
+                                                    <Download className="h-3.5 w-3.5 text-slate-700" />
+                                                    Print PDF
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => generateSession(qrType)}
+                                        disabled={isLoading}
+                                        className="btn-primary w-full"
+                                    >
+                                        <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                        Regenerate
+                                    </button>
+                                )}
+                                <button onClick={handleCopy} className="btn-secondary w-full">
+                                    {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                                    {copied ? 'Copied' : 'Copy'}
+                                </button>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+
+            <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+                <section className="operational-panel p-5 md:p-6">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400">Customer journey</p>
+                            <h3 className="text-xl font-black text-slate-950">What happens after the scan</h3>
+                        </div>
+                        <div className="rounded-lg bg-red-50 p-3 text-red-700">
+                            <Gift className="h-5 w-5" />
+                        </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {journeySteps.map((step, index) => {
+                            const Icon = step.icon;
+                            return (
+                                <div key={step.title} className="rounded-lg border border-slate-200 bg-white p-4">
+                                    <div className="mb-3 flex items-center gap-3">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-xs font-black text-slate-600">
+                                            {index + 1}
+                                        </span>
+                                        <Icon className="h-4 w-4 text-red-600" />
+                                    </div>
+                                    <h4 className="text-sm font-black text-slate-950">{step.title}</h4>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">{step.text}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+
+                <section className="operational-panel p-5 md:p-6">
+                    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400">Link variants</p>
+                            <h3 className="text-xl font-black text-slate-950">Use the right link for the channel</h3>
+                        </div>
+                        <span className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Same branch scope
+                        </span>
+                    </div>
+                    <div className="space-y-3">
+                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-950">
+                                <Link2 className="h-4 w-4 text-red-600" />
+                                Standard customer link
+                            </div>
+                            <code className="block break-all text-xs leading-5 text-slate-600">{customerUrl}</code>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-950">
+                                <Smartphone className="h-4 w-4 text-orange-600" />
+                                Talabat delivery link
+                            </div>
+                            <code className="block break-all text-xs leading-5 text-slate-600">{talabatUrl}</code>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-2">
+                <section className="operational-panel overflow-hidden">
+                    <div className="border-b border-slate-200 bg-orange-50 px-5 py-4 md:px-6">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600 text-white">
+                                <Phone className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-950">Talabat customer send</h3>
+                                <p className="text-sm text-slate-600">Send the delivery reward link to a specific customer number.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="space-y-4 p-5 md:p-6">
+                        <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-slate-500">Country code</label>
+                                <input type="text" id="talabat-country-code" defaultValue="973" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none transition-all focus:border-orange-400 focus:ring-2 focus:ring-orange-100" />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-bold text-slate-500">Phone number</label>
+                                <input type="tel" id="talabat-phone" placeholder="33XXXXXX" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none transition-all focus:border-orange-400 focus:ring-2 focus:ring-orange-100" />
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const countryCode = (document.getElementById('talabat-country-code') as HTMLInputElement)?.value || '973';
+                                const phone = (document.getElementById('talabat-phone') as HTMLInputElement)?.value;
+                                if (!phone) { alert('Please enter customer phone number'); return; }
+                                const fullPhone = `${countryCode}${phone}`;
+                                const message = `${talabatMessage}\n\n Click here to play:\n${talabatUrl}`;
+                                window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`, '_blank');
+                            }}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-600 bg-orange-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+                        >
+                            <Send className="h-4 w-4" />
+                            Send via WhatsApp
+                        </button>
+                        {qrType !== 'static' ? (
+                            <button
+                                onClick={() => generateSession(qrType)}
+                                disabled={isLoading}
+                                className="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-200 bg-white px-4 py-2.5 text-xs font-bold text-orange-700 transition-colors hover:bg-orange-50 disabled:opacity-40"
+                            >
+                                <RefreshCcw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                                Regenerate session link
+                            </button>
+                        ) : (
+                            <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-center text-xs font-bold text-orange-700">
+                                Using static branch link
+                            </div>
+                        )}
+                        <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <label className="text-xs font-bold text-slate-500">Message template</label>
+                                <button onClick={() => setTalabatMessage(defaultTalabatMsg)} className="text-xs font-bold text-orange-700 hover:text-orange-800">Reset</button>
                             </div>
                             <textarea
                                 value={talabatMessage}
                                 onChange={(e) => setTalabatMessage(e.target.value)}
-                                rows={10}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm leading-relaxed outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all resize-none"
+                                rows={9}
+                                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 outline-none transition-all focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                             />
-                            <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                <span>Link added automatically</span>
+                            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                                <span>Link is appended automatically</span>
                                 <span>{talabatMessage.length} chars</span>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                </section>
 
-            {/* WhatsApp Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-green-600 to-green-500 px-6 py-4 flex items-center gap-3">
-                    <MessageCircle className="w-5 h-5 text-white" />
-                    <div>
-                        <h3 className="text-base font-bold text-white">WhatsApp Customers</h3>
-                        <p className="text-white/70 text-xs">Share rewards campaign with your contacts</p>
-                    </div>
-                </div>
-                <div className="p-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        {/* Quick Share */}
-                        <div className="bg-slate-50 rounded-xl border border-slate-100 p-5 space-y-4">
-                            <h4 className="text-sm font-bold text-slate-900">Quick Share</h4>
-                            <button
-                                onClick={() => {
-                                    const message = `${whatsappMessage}\n\n Click here to play:\n${customerUrl}`;
-                                    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-                                }}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                            >
-                                <MessageCircle className="w-5 h-5" />
-                                Share via WhatsApp
-                            </button>
-                            {qrType !== 'static' ? (
-                                <button
-                                    onClick={() => generateSession(qrType)}
-                                    disabled={isLoading}
-                                    className="w-full bg-white border border-green-200 text-green-600 hover:bg-green-50 font-bold py-2 rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                                >
-                                    <RefreshCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                                    Regenerate Session Link
-                                </button>
-                            ) : (
-                                <div className="bg-green-50 text-green-700 p-2 rounded-lg text-[10px] font-medium text-center">
-                                    Using Static Branch Link
-                                </div>
-                            )}
-                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                                <p className="text-xs text-blue-700">Opens WhatsApp with your message pre-filled. Select contacts to share.</p>
+                <section className="operational-panel overflow-hidden">
+                    <div className="border-b border-slate-200 bg-emerald-50 px-5 py-4 md:px-6">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                                <MessageCircle className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-950">WhatsApp campaign share</h3>
+                                <p className="text-sm text-slate-600">Open WhatsApp with the current reward message and link.</p>
                             </div>
                         </div>
-
-                        {/* Message Template */}
-                        <div className="bg-slate-50 rounded-xl border border-slate-100 p-5 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-bold text-slate-900">Message Template</h4>
-                                <button onClick={() => setWhatsappMessage(defaultWhatsappMsg)} className="text-xs font-bold text-green-600 hover:text-green-700">Reset</button>
+                    </div>
+                    <div className="space-y-4 p-5 md:p-6">
+                        <button
+                            onClick={() => {
+                                const message = `${whatsappMessage}\n\n Click here to play:\n${customerUrl}`;
+                                window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+                            }}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-4 text-sm font-bold text-white transition-colors hover:bg-emerald-700"
+                        >
+                            <MessageCircle className="h-5 w-5" />
+                            Share via WhatsApp
+                        </button>
+                        {qrType !== 'static' ? (
+                            <button
+                                onClick={() => generateSession(qrType)}
+                                disabled={isLoading}
+                                className="flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-4 py-2.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-40"
+                            >
+                                <RefreshCcw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                                Regenerate session link
+                            </button>
+                        ) : (
+                            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-center text-xs font-bold text-emerald-700">
+                                Using static branch link
+                            </div>
+                        )}
+                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-800">
+                            WhatsApp opens with the message pre-filled. The branch team still selects the final recipients.
+                        </div>
+                        <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <label className="text-xs font-bold text-slate-500">Message template</label>
+                                <button onClick={() => setWhatsappMessage(defaultWhatsappMsg)} className="text-xs font-bold text-emerald-700 hover:text-emerald-800">Reset</button>
                             </div>
                             <textarea
                                 value={whatsappMessage}
                                 onChange={(e) => setWhatsappMessage(e.target.value)}
-                                rows={7}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm leading-relaxed outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition-all resize-none"
+                                rows={9}
+                                className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
                             />
-                            <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                <span>Link added automatically</span>
+                            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                                <span>Link is appended automatically</span>
                                 <span>{whatsappMessage.length} chars</span>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     );

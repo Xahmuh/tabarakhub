@@ -3,6 +3,7 @@ import { isModuleEnabled } from '../../config/clientConfig';
 import { supabaseClient } from '../../lib/supabaseClient';
 import { Branch } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
+import { isManagerRole } from '../../lib/access';
 
 type ExportScope = {
   branchId: string | null;
@@ -82,7 +83,7 @@ const sanitizeExportFilePart = (value: string) =>
     .replace(/^_+|_+$/g, '')
     .slice(0, 48) || 'Branch';
 
-const canExportAllVisible = (user: Branch) => user.role === 'manager';
+const canExportAllVisible = (user: Branch) => isManagerRole(user.role);
 
 const resolveExportScope = (user: Branch): ExportScope => {
   if (canExportAllVisible(user)) {

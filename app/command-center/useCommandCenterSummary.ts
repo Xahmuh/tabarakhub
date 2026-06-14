@@ -70,9 +70,9 @@ const isMissingCashFlowSetup = (error: unknown) => {
     || message.includes('revenues_expected');
 };
 
-const isReadAllRole = (role?: Role) => role === 'manager' || role === 'owner' || role === 'warehouse';
-const isManagerRole = (role?: Role) => role === 'manager';
-const isFinancialRole = (role?: Role) => role === 'manager' || role === 'owner';
+const isReadAllRole = (role?: Role) => role === 'admin' || role === 'manager' || role === 'owner' || role === 'warehouse';
+const isManagerRole = (role?: Role) => role === 'admin' || role === 'manager';
+const isFinancialRole = (role?: Role) => role === 'admin' || role === 'manager' || role === 'owner' || role === 'accounts';
 
 const feedbackFilters = {
   dateFrom: '',

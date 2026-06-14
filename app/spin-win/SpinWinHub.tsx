@@ -1,10 +1,10 @@
 import React, { useState, useTransition } from 'react';
 import { Branch } from '../../types';
+import { isManagerRole } from '../../lib/access';
 import {
     QrCode,
     Ticket,
     LayoutDashboard,
-    ArrowLeft,
     Lock,
     Zap,
     ChevronRight,
@@ -14,6 +14,7 @@ import { BranchQRGenerator } from './BranchQRGenerator';
 import { VoucherRedeemer } from './VoucherRedeemer';
 import { BranchDashboard } from './BranchDashboard';
 import { ManagerDashboard } from './ManagerDashboard';
+import { BackToModulesButton } from '../shared';
 
 interface SpinWinHubProps {
     branch: Branch;
@@ -31,7 +32,9 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
         });
     };
 
-    if (userRole === 'manager' || userRole === 'owner') {
+    const isAdmin = isManagerRole(userRole);
+
+    if (isAdmin || userRole === 'owner') {
         return <ManagerDashboard onBack={onBack} />;
     }
 
@@ -40,7 +43,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
     if (subTab === 'dashboard') return <BranchDashboard branch={branch} onBack={() => handleTabChange('menu')} />;
 
     const isEnabled = branch.isSpinEnabled !== false;
-    const canManage = userRole === 'manager';
+    const canManage = isAdmin;
 
     const menuItems = [
         {
@@ -86,13 +89,7 @@ export const SpinWinHub: React.FC<SpinWinHubProps> = ({ branch, onBack, userRole
     return (
         <div className={`max-w-5xl mx-auto p-4 lg:p-10 animate-in fade-in slide-in-from-bottom-6 duration-700 ${isPending ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Back Navigation */}
-            <button
-                onClick={onBack}
-                className="inline-flex items-center gap-2 text-slate-400 hover:text-red-600 mb-8 transition-colors group"
-            >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                <span className="text-xs font-bold uppercase tracking-widest">Command Center</span>
-            </button>
+            <BackToModulesButton onClick={onBack} className="mb-8" />
 
             {/* Header */}
             <div className="mb-10">

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { Loader2, RefreshCcw, Shield, UserCog, UserPlus, Users } from 'lucide-react';
+import { KeyRound, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
 import { permissionService, branchService } from '../../services';
 import { AppUser, Branch, Role, RolePermission } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 
-const ASSIGNABLE_ROLES: Role[] = ['manager', 'owner', 'supervisor', 'warehouse', 'branch'];
+const ASSIGNABLE_ROLES: Role[] = ['admin', 'branch', 'supervisor', 'warehouse', 'accounts'];
 
 const FEATURE_LABELS = getEnabledAccessFeatures().map(({ id, label }) => ({ id, label }));
 
@@ -60,7 +60,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
             }));
             setSupervisorAssignments(assignments);
         } catch (e: any) {
-            Swal.fire('Access Control', e?.message || 'Failed to load users. Only managers can open this panel.', 'error');
+            Swal.fire('Access Control', e?.message || 'Failed to load users. Only admins can open this panel.', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -125,10 +125,15 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                 const roleInput = document.getElementById('swal-new-role') as HTMLSelectElement | null;
                 const branchWrap = document.getElementById('swal-new-branch-wrap');
                 const supervisorWrap = document.getElementById('swal-new-supervisor-wrap');
+                const activeInput = document.getElementById('swal-new-active') as HTMLInputElement | null;
                 const syncRoleFields = () => {
                     const role = roleInput?.value;
                     branchWrap?.classList.toggle('hidden', role !== 'branch');
                     supervisorWrap?.classList.toggle('hidden', role !== 'supervisor');
+                    if (activeInput) {
+                        activeInput.checked = role === 'admin' ? true : activeInput.checked;
+                        activeInput.disabled = role === 'admin';
+                    }
                 };
                 roleInput?.addEventListener('change', syncRoleFields);
                 syncRoleFields();
@@ -138,7 +143,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                 const password = (document.getElementById('swal-new-password') as HTMLInputElement).value;
                 const role = (document.getElementById('swal-new-role') as HTMLSelectElement).value as Role;
                 const branchId = (document.getElementById('swal-new-branch') as HTMLSelectElement).value || null;
-                const isActive = (document.getElementById('swal-new-active') as HTMLInputElement).checked;
+                const isActive = role === 'admin' ? true : (document.getElementById('swal-new-active') as HTMLInputElement).checked;
                 const supervisorBranchIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-branch:checked')).map(i => i.value);
 
                 if (!email || !email.includes('@')) {
@@ -221,6 +226,97 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
         }
     };
 
+    const handleDeleteUser = async (user: AppUser) => {
+        const result = await Swal.fire({
+            title: 'Delete login user?',
+            html: `
+              <div class="text-left text-sm font-semibold leading-6 text-slate-600">
+                <p>This permanently deletes <strong>${escapeHtml(user.email)}</strong> from Auth and removes the app profile.</p>
+                <p class="mt-2 text-amber-700">Use Suspend when you only want to block access temporarily.</p>
+              </div>
+            `,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete user',
+            confirmButtonColor: '#B91c1c'
+        });
+
+        if (!result.isConfirmed) return;
+
+        setSavingKey(user.userId);
+        try {
+            await permissionService.adminDeleteUser(user.userId);
+            setUsers(prev => prev.filter(u => u.userId !== user.userId));
+            setSupervisorAssignments(prev => {
+                const next = { ...prev };
+                delete next[user.userId];
+                return next;
+            });
+            Swal.fire('User deleted', 'The login user has been removed.', 'success');
+        } catch (e: any) {
+            Swal.fire('Delete failed', e?.message || 'Could not delete the user.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
+    const handleResetPassword = async (user: AppUser) => {
+        if (user.role !== 'branch') {
+            Swal.fire('Branch users only', 'Password assignment from this panel is limited to linked branch accounts.', 'info');
+            return;
+        }
+
+        const { value } = await Swal.fire({
+            title: '<span class="text-xl font-black tracking-tight">Assign new branch password</span>',
+            html: `
+              <div class="space-y-4 text-left">
+                <div class="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+                  This updates the Supabase Auth password for <strong>${escapeHtml(user.email)}</strong>. Share it outside the app.
+                </div>
+                <div>
+                  <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">New password</label>
+                  <input id="swal-reset-password" type="password" autocomplete="new-password" placeholder="Minimum 8 characters" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                </div>
+                <div>
+                  <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Confirm password</label>
+                  <input id="swal-reset-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                </div>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Update password',
+            confirmButtonColor: '#B91c1c',
+            width: 520,
+            preConfirm: () => {
+                const password = (document.getElementById('swal-reset-password') as HTMLInputElement).value;
+                const confirmation = (document.getElementById('swal-reset-password-confirm') as HTMLInputElement).value;
+
+                if (password.length < 8) {
+                    Swal.showValidationMessage('New password must be at least 8 characters.');
+                    return false;
+                }
+                if (password !== confirmation) {
+                    Swal.showValidationMessage('Password confirmation does not match.');
+                    return false;
+                }
+
+                return { password };
+            }
+        });
+
+        if (!value) return;
+
+        setSavingKey(user.userId);
+        try {
+            await permissionService.adminResetUserPassword(user.userId, value.password);
+            Swal.fire('Password updated', 'The branch login password was updated in Supabase Auth.', 'success');
+        } catch (e: any) {
+            Swal.fire('Password update failed', e?.message || 'Could not update this branch password.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
     const handleSupervisorBranches = async (user: AppUser) => {
         const current = supervisorAssignments[user.userId] || [];
         const { value } = await Swal.fire({
@@ -251,13 +347,65 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
         }
     };
 
+    const handleUserPermissions = async (user: AppUser) => {
+        setSavingKey(`permissions:${user.userId}`);
+        try {
+            const current = await permissionService.listRawForUser(user.userId);
+            const byFeature = new Map(current.map(permission => [permission.featureName, permission.accessLevel]));
+            const { value } = await Swal.fire({
+                title: `<span class="text-xl font-black tracking-tight">Module access for ${escapeHtml(user.email)}</span>`,
+                html: `
+                  <div class="space-y-2 text-left">
+                    <p class="text-xs font-semibold leading-5 text-slate-500">
+                      Leave a module on Role default to inherit the role matrix. Pick None, Read, or Edit to override this user only.
+                    </p>
+                    <div class="max-h-[420px] space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                      ${FEATURE_LABELS.map(feature => {
+                        const selected = byFeature.get(feature.id) || '';
+                        return `
+                          <label class="grid grid-cols-[1fr_120px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                            <span class="text-sm font-bold text-slate-700">${escapeHtml(feature.label)}</span>
+                            <select id="swal-user-perm-${escapeHtml(feature.id)}" class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-black uppercase text-slate-600">
+                              <option value="" ${selected === '' ? 'selected' : ''}>Role default</option>
+                              <option value="none" ${selected === 'none' ? 'selected' : ''}>None</option>
+                              <option value="read" ${selected === 'read' ? 'selected' : ''}>Read</option>
+                              <option value="edit" ${selected === 'edit' ? 'selected' : ''}>Edit</option>
+                            </select>
+                          </label>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Save permissions',
+                confirmButtonColor: '#B91c1c',
+                width: 680,
+                preConfirm: () => FEATURE_LABELS
+                    .map(feature => ({
+                        featureName: feature.id,
+                        accessLevel: (document.getElementById(`swal-user-perm-${feature.id}`) as HTMLSelectElement).value as 'none' | 'read' | 'edit' | ''
+                    }))
+                    .filter((permission): permission is { featureName: string; accessLevel: 'none' | 'read' | 'edit' } => !!permission.accessLevel)
+            });
+
+            if (!value) return;
+            await permissionService.replaceUserPermissions(user.userId, value);
+            Swal.fire('Permissions saved', 'User-level module overrides were updated.', 'success');
+        } catch (e: any) {
+            Swal.fire('Permissions failed', e?.message || 'Could not update user permissions.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
     const getDefault = (role: Role, feature: string): 'none' | 'read' | 'edit' => {
-        if (role === 'manager') return 'edit';
+        if (role === 'admin' || role === 'manager') return 'edit';
         return (roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel as any) || 'none';
     };
 
     const cycleDefault = async (role: Role, feature: string) => {
-        if (role === 'manager') return; // manager always has full access
+        if (role === 'admin' || role === 'manager') return; // admin always has full access
         const current = getDefault(role, feature);
         const next = ACCESS_CYCLE[(ACCESS_CYCLE.indexOf(current) + 1) % ACCESS_CYCLE.length];
         setSavingKey(`${role}:${feature}`);
@@ -324,7 +472,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                 <div className="space-y-3">
                     <p className="text-sm font-medium text-slate-500">
                         Assign each login a role. Supervisors must be linked to the branches they oversee; branch logins must be linked to one branch.
-                        Managers can create new logins here; temporary passwords are shown only while you type them.
+                        Admins can create, suspend, delete, and permission user accounts here; temporary passwords are shown only while you type them.
                     </p>
                     {/* Desktop table */}
                     <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
@@ -342,6 +490,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                 {users.map(user => {
                                     const isSelf = user.userId === currentUserId;
                                     const isSaving = savingKey === user.userId;
+                                    const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
                                     return (
                                         <tr key={user.userId} className="bg-white">
                                             <td className="px-4 py-3">
@@ -351,7 +500,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                             <td className="px-4 py-3">
                                                 <select
                                                     value={user.role}
-                                                    disabled={isSelf || isSaving}
+                                                    disabled={isSelf || isSaving || isProtectedAdmin}
                                                     onChange={e => handleRoleChange(user, e.target.value as Role)}
                                                     className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold outline-none focus:border-brand/40 disabled:opacity-50"
                                                 >
@@ -386,11 +535,34 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
-                                                    onClick={() => handleActiveToggle(user)}
-                                                    disabled={isSelf || isSaving}
+                                                        onClick={() => handleActiveToggle(user)}
+                                                        disabled={isSelf || isSaving || isProtectedAdmin}
                                                     className={`text-xs font-bold ${user.isActive ? 'text-slate-400 hover:text-brand' : 'text-emerald-600 hover:text-emerald-700'} disabled:opacity-40`}
                                                 >
-                                                    {isSaving ? '…' : user.isActive ? 'Disable' : 'Enable'}
+                                                    {isSaving ? '...' : user.isActive ? 'Suspend' : 'Activate'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleUserPermissions(user)}
+                                                    disabled={isSelf || isSaving || isProtectedAdmin}
+                                                    className="ml-3 text-xs font-bold text-slate-400 transition hover:text-brand disabled:opacity-40"
+                                                >
+                                                    Permissions
+                                                </button>
+                                                {user.role === 'branch' && (
+                                                    <button
+                                                        onClick={() => handleResetPassword(user)}
+                                                        disabled={isSelf || isSaving}
+                                                        className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-slate-400 transition hover:text-brand disabled:opacity-40"
+                                                    >
+                                                        <KeyRound className="h-3.5 w-3.5" /> Set Password
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => handleDeleteUser(user)}
+                                                    disabled={isSelf || isSaving || isProtectedAdmin}
+                                                    className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-slate-300 transition hover:text-red-700 disabled:opacity-40"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" /> Delete
                                                 </button>
                                             </td>
                                         </tr>
@@ -404,6 +576,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                         {users.map(user => {
                             const isSelf = user.userId === currentUserId;
                             const isSaving = savingKey === user.userId;
+                            const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
                             return (
                                 <div key={user.userId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-3">
                                     <div className="flex items-center justify-between gap-2">
@@ -415,7 +588,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                     <div className="flex flex-wrap items-center gap-2">
                                         <select
                                             value={user.role}
-                                            disabled={isSelf || isSaving}
+                                            disabled={isSelf || isSaving || isProtectedAdmin}
                                             onChange={e => handleRoleChange(user, e.target.value as Role)}
                                             className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold outline-none disabled:opacity-50"
                                         >
@@ -432,10 +605,33 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                         )}
                                         <button
                                             onClick={() => handleActiveToggle(user)}
-                                            disabled={isSelf || isSaving}
+                                            disabled={isSelf || isSaving || isProtectedAdmin}
                                             className="ml-auto text-xs font-bold text-slate-400 disabled:opacity-40"
                                         >
-                                            {user.isActive ? 'Disable' : 'Enable'}
+                                            {user.isActive ? 'Suspend' : 'Activate'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteUser(user)}
+                                            disabled={isSelf || isSaving || isProtectedAdmin}
+                                            className="text-xs font-bold text-slate-300 disabled:opacity-40"
+                                        >
+                                            Delete
+                                        </button>
+                                        {user.role === 'branch' && (
+                                            <button
+                                                onClick={() => handleResetPassword(user)}
+                                                disabled={isSelf || isSaving}
+                                                className="text-xs font-bold text-slate-400 disabled:opacity-40"
+                                            >
+                                                Set Password
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => handleUserPermissions(user)}
+                                            disabled={isSelf || isSaving || isProtectedAdmin}
+                                            className="text-xs font-bold text-slate-400 disabled:opacity-40"
+                                        >
+                                            Permissions
                                         </button>
                                     </div>
                                 </div>
@@ -446,7 +642,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
             ) : (
                 <div className="space-y-3">
                     <p className="text-sm font-medium text-slate-500">
-                        Default access per role. Tap a cell to cycle None → Read → Edit. Per-branch overrides (Access tab) win over these defaults. Managers always have full access.
+                        Default access per role. Tap a cell to cycle None → Read → Edit. Per-branch overrides (Access tab) win over these defaults. Admin always has full access.
                     </p>
                     <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-sm">
@@ -469,8 +665,8 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
                                                 <td key={r} className="px-3 py-2 text-center">
                                                     <button
                                                         onClick={() => cycleDefault(r, feature.id)}
-                                                        disabled={r === 'manager' || savingKey === key}
-                                                        className={`w-16 rounded-md border px-2 py-1.5 text-[10px] font-black uppercase transition-colors ${accessBadgeClass(level)} ${r === 'manager' ? 'opacity-60 cursor-not-allowed' : 'hover:border-brand/40'}`}
+                                                        disabled={r === 'admin' || r === 'manager' || savingKey === key}
+                                                        className={`w-16 rounded-md border px-2 py-1.5 text-[10px] font-black uppercase transition-colors ${accessBadgeClass(level)} ${r === 'admin' || r === 'manager' ? 'opacity-60 cursor-not-allowed' : 'hover:border-brand/40'}`}
                                                     >
                                                         {savingKey === key ? '…' : level}
                                                     </button>

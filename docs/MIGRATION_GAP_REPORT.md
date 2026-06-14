@@ -21,6 +21,8 @@ supabase.cmd db query --linked "select pg_get_functiondef('public.generate_spin_
 supabase.cmd backups list --project-ref rvoqfhvdwadauoeemyvs
 supabase.cmd migration up --linked --yes
 supabase.cmd db query --linked --file docs/SPIN_STATIC_QR_SECURITY_CHECKS.sql
+supabase.cmd migration up --linked
+supabase.cmd migration list --linked
 ```
 
 Repair result:
@@ -58,12 +60,12 @@ remote-only migrations: none observed
 local-only migrations: 20260614150000_harden_spin_static_qr_exchange_rpc.sql
 ```
 
-Final current migration-list result after approved Spin Static QR remediation:
+Final current migration-list result after approved Spin Static QR remediation, Module Layout, and Branding Logo settings:
 
 ```text
 remote-only migrations: none observed
 local-only migrations: none observed
-all listed local migrations have matching remote history entries, including 20260614150000
+all listed local migrations have matching remote history entries through 20260614203000
 ```
 
 Post-apply schema verification:
@@ -101,6 +103,8 @@ backed up, and applied intentionally.
 | `20260614123000_optimize_sales_shortages_branch_timestamp_indexes.sql` | repaired/applied | Applied. All four expected lost_sales/shortages timestamp indexes exist. | `applied_and_recorded` | Keep branch shortages reads branch/date bounded. | History is aligned. |
 | `20260614133000_harden_contributions_storage_and_rpc_grants.sql` | repaired/applied | Applied. `contributions` bucket public=false; old public contribution policies count = 0; configured contribution policy count = 4; unsafe non-allowlisted anon EXECUTE count = 0; public Spin RPC anon count = 4. | `applied_and_recorded` | Manager Storage API write smoke remains pending. | History is aligned. |
 | `20260614150000_harden_spin_static_qr_exchange_rpc.sql` | applied | Applied with explicit approval using `supabase.cmd migration up --linked --yes`. The live `generate_spin_session_from_branch_code(text)` now returns only token/timestamps, raises generic `SPIN_QR_UNAVAILABLE`, and enforces branch-level exchange throttling. `docs/SPIN_STATIC_QR_SECURITY_CHECKS.sql` passes. | `applied_and_recorded` | Run browser/manual Static QR checks on the real frontend URL before production sign-off. | History is aligned; do not use blind push for future changes. |
+| `20260614200000_module_display_settings.sql` | applied | Applied. `system_settings.module_display_settings` exists as non-null jsonb with default `{"items":[]}` and global row object value. | `applied_and_recorded` | Complete authenticated Project Settings > Module Layout browser QA before production. | History is aligned; do not use blind push for future changes. |
+| `20260614203000_branding_logo_system_settings.sql` | applied | Applied. `system_settings.pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` exist as non-null text columns with defaults `/logo.jpg`, `/tabarak-logo.svg`, `/logo.jpg`, and `/spinner.svg`; global row values are populated. | `applied_and_recorded` | Complete authenticated Project Settings > Branding & logos browser QA before production. | History is aligned; do not use blind push for future changes. |
 
 ## Remaining Operator Action
 

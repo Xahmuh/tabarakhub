@@ -1,5 +1,6 @@
 import React from 'react';
-import { CheckCircle2, ArrowRight } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import { BackToModulesButton } from '../../../shared';
 
 interface Props {
   onBackToHome: () => void;
@@ -22,13 +23,7 @@ export const ThankYouPage: React.FC<Props> = ({ onBackToHome }) => {
         </p>
       </div>
 
-      <button
-        onClick={onBackToHome}
-        className="px-10 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 mx-auto group"
-      >
-        <span>Return to Dashboard</span>
-        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-      </button>
+      <BackToModulesButton onClick={onBackToHome} className="mx-auto" />
     </div>
   );
 };

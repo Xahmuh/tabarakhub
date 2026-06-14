@@ -4,6 +4,7 @@ export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | '
 
 export interface Branch {
   id: string;
+  userId?: string;
   code: string;
   name: string;
   role: Role;
@@ -15,6 +16,67 @@ export interface Branch {
   nhraLicenseNo?: string;
   crNumber?: string;
   branchManagerName?: string;
+}
+
+export type DeliveryZoneClass = 'core' | 'standard' | 'extended' | 'outside_range' | 'unavailable';
+
+export interface BranchDeliveryProfile {
+  id?: string;
+  branchId: string;
+  branchCode?: string | null;
+  branchName?: string | null;
+  originBlockNumber: string;
+  coreRadiusKm: number;
+  standardRadiusKm: number;
+  extendedRadiusKm: number;
+  targetDeliveryMinutes: number;
+  warningDeliveryMinutes: number;
+  isDeliveryEnabled: boolean;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BranchDeliveryProfileInput {
+  branchId: string;
+  originBlockNumber: string;
+  coreRadiusKm: number;
+  standardRadiusKm: number;
+  extendedRadiusKm: number;
+  targetDeliveryMinutes: number;
+  warningDeliveryMinutes: number;
+  isDeliveryEnabled: boolean;
+  notes?: string | null;
+}
+
+export interface DeliveryBlockZoneAnalysis {
+  blockNumber: string;
+  branchId?: string;
+  branchName?: string;
+  branchCode?: string;
+  originBlockNumber?: string;
+  zone: DeliveryZoneClass;
+  distanceKm?: number | null;
+  reason?: string;
+  recommendedAction: string;
+}
+
+export interface DeliveryZoneQualityMetrics {
+  totalBranchProfiles: number;
+  mappedBranchMarkers: number;
+  unmappedBranchMarkers: number;
+  duplicateBranchBlockGroups: Array<{ originBlockNumber: string; branchCodes: string[] }>;
+  missingOriginBlock: number;
+  missingGeoJsonBlock: number;
+  servedCoreBlocks: number;
+  servedStandardBlocks: number;
+  servedExtendedBlocks: number;
+  servedOutsideRangeBlocks: number;
+  unmappedServedBlocks: number;
+  missingBranchProfiles: number;
+  servedBlocksMapped: number;
+  servedBlocksUnavailableZone: number;
+  totalGeometryBlocks: number;
 }
 
 export interface Pharmacist {
@@ -106,6 +168,19 @@ export interface BranchLoginApprovalDeviceInfo {
   userAgentHash: string;
 }
 
+export type ModuleDisplayBadgeStyle = 'hidden' | 'red';
+
+export interface ModuleDisplayItemSetting {
+  key: string;
+  order: number;
+  badge: string;
+  badgeStyle: ModuleDisplayBadgeStyle;
+}
+
+export interface ModuleDisplaySettings {
+  items: ModuleDisplayItemSetting[];
+}
+
 export interface MaintenanceSettings {
   id: 'global';
   isMaintenanceModeEnabled: boolean;
@@ -118,9 +193,15 @@ export interface MaintenanceSettings {
   posGuidelineShortageEn: string;
   posGuidelineLostSalesAr: string;
   posGuidelineShortageAr: string;
+  pharmacyLogoUrl: string;
+  hubLogoUrl: string;
+  browserIconUrl: string;
+  loadingSpinnerUrl: string;
   footerLogoUrl: string;
   footerText: string;
   loginBadges: string[];
+  branchLoginApprovalRequired: boolean;
+  moduleDisplaySettings: ModuleDisplaySettings;
   updatedAt?: string;
   updatedBy?: string | null;
 }
@@ -403,6 +484,12 @@ export interface RolePermission {
   accessLevel: 'read' | 'edit' | 'none';
 }
 
+export interface UserFeaturePermission {
+  userId: string;
+  featureName: string;
+  accessLevel: 'read' | 'edit' | 'none';
+}
+
 export interface AppUser {
   userId: string;
   email: string;
@@ -552,6 +639,47 @@ export interface DeliveryGovernorateCoverage {
   uniqueBlocks: number;
 }
 
+export type PurchasePowerBand = 'high' | 'medium' | 'low' | 'unavailable';
+
+export interface GovernoratePerformanceKpi {
+  governorate: Governorate | 'Unknown';
+  ordersCount: number;
+  totalValue: number | null;
+  averageOrderValue: number | null;
+  servedBlocksCount: number;
+  valuePerServedBlock: number | null;
+  ordersPerServedBlock: number;
+  purchasePowerProxyScore: number | null;
+  purchasePowerBand: PurchasePowerBand;
+}
+
+export interface BranchGovernoratePerformanceKpi {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  governorate: Governorate | 'Unknown';
+  ordersCount: number;
+  totalValue: number | null;
+  averageOrderValue: number | null;
+  servedBlocksCount: number;
+  branchValueSharePercent: number | null;
+  governorateValueSharePercent: number | null;
+  branchOrderSharePercent: number;
+  governorateOrderSharePercent: number;
+}
+
+export interface DeliveryGovernorateKpiQuality {
+  totalOrdersAnalyzed: number;
+  ordersWithMappedGovernorate: number;
+  ordersWithUnmappedGovernorate: number;
+  ordersWithValue: number;
+  ordersMissingValue: number;
+  blocksWithGovernorateMapping: number;
+  blocksWithoutGovernorateMapping: number;
+  governorateMappingSource: 'delivery_orders_snapshot_and_delivery_blocks' | 'geojson' | 'unavailable';
+  orderValueField: 'value_bhd' | 'unavailable';
+}
+
 export type DeliveryCoverageRecommendationType =
   | 'marketing_opportunity'
   | 'strong_service_area'
@@ -589,6 +717,9 @@ export interface DeliveryCoverageSummary {
   blocks: DeliveryBlockMetric[];
   branchCoverage: BranchDeliveryCoverageMetric[];
   governorateCoverage: DeliveryGovernorateCoverage[];
+  governoratePerformanceKpis: GovernoratePerformanceKpi[];
+  branchGovernoratePerformanceKpis: BranchGovernoratePerformanceKpi[];
+  governorateKpiQuality: DeliveryGovernorateKpiQuality;
   recommendedActions: DeliveryCoverageRecommendation[];
   topBlock?: DeliveryBlockMetric;
   topBranch?: BranchDeliveryCoverageMetric;

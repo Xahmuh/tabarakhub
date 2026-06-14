@@ -27,6 +27,14 @@ decision.
 | Expansion review | per-block score 0–100 | Conservative; shown only ≥60 with ≥2 reasons and ≥20 mappable orders. "Candidate for further review." |
 | Capacity pressure | per-branch composite | normal / watch / high_pressure / overloaded / insufficient_data. |
 
+## Governorate KPIs And Purchase Power Proxy
+
+The enabled analytics include a governorate KPI layer that uses
+`delivery_orders.governorate`, `delivery_blocks`, and `value_bhd` to show
+governorate performance, branch performance per governorate, and a Purchase
+Power Proxy. The proxy is an internal delivery-demand index only; it is not
+official economic purchasing power and is not adjusted by population or income.
+
 ## Future-only (required fields absent on `delivery_orders`)
 
 `delivery_orders` has: branch, order_date, value_bhd, payment_type, pharmacist,

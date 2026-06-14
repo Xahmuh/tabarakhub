@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
@@ -6,6 +6,7 @@ import { AuthState, MaintenanceSettings } from '../../types';
 import { Footer } from '../shared';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
 import { ROLE_LABELS } from '../../lib/access';
+import { normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
 
 interface SuitePageProps {
   authState: AuthState;
@@ -133,9 +134,9 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   const descriptionClass = isBrandVariant
     ? 'mt-2 max-w-[18rem] text-sm font-semibold leading-relaxed text-slate-500 transition-colors duration-200 group-hover:text-white/85'
     : 'mt-1.5 text-sm font-medium leading-relaxed text-slate-500';
-  const ctaClass = isBrandVariant ? 'text-brand transition-colors duration-200 group-hover:text-white' : classes.cta;
+  const ctaClass = isBrandVariant ? 'text-white' : classes.cta;
   const ctaContainerClass = isBrandVariant
-    ? 'flex items-center justify-center gap-2 text-xs font-bold'
+    ? 'inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white shadow-sm shadow-brand/20'
     : 'flex items-center gap-2 text-xs font-bold';
 
   return (
@@ -166,7 +167,9 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
           <p className={descriptionClass}>{description}</p>
         </div>
         <div className={ctaContainerClass}>
-          <span className={`h-px w-6 bg-current opacity-50 transition-all duration-200 group-hover:w-10 ${ctaClass}`}></span>
+          {!isBrandVariant && (
+            <span className={`h-px w-6 bg-current opacity-50 transition-all duration-200 group-hover:w-10 ${ctaClass}`}></span>
+          )}
           <span className={ctaClass}>{cta}</span>
         </div>
       </div>
@@ -186,7 +189,15 @@ export const SuitePage: React.FC<SuitePageProps> = ({
 }) => {
   const role = authState.user?.role;
   const isOwner = role === 'owner';
-  const canOpenApprovalQueue = role === 'admin' || role === 'owner';
+  const canOpenApprovalQueue = isManager || role === 'owner';
+  const moduleDisplayItems = useMemo(
+    () => normalizeModuleDisplaySettings(footerSettings?.moduleDisplaySettings).items,
+    [footerSettings?.moduleDisplaySettings]
+  );
+  const moduleDisplayByKey = useMemo(
+    () => new Map(moduleDisplayItems.map(item => [item.key, item])),
+    [moduleDisplayItems]
+  );
   const canUseSales = isModuleEnabled('sales');
   const canUseHr = isModuleEnabled('hr');
   const canUseWorkforce = canUseHr && isModuleEnabled('workforce');
@@ -310,9 +321,9 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'settings',
-      visible: isModuleEnabled('settings') && ((role === 'manager' && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
+      visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
       title: 'Settings & Permissions',
-      description: role === 'manager'
+      description: isManager
         ? 'Manage branches, staff access, enabled workflows, and branch login approvals.'
         : 'Review and approve pending branch login requests.',
       icon: <Settings2 className="h-5 w-5" />,
@@ -448,9 +459,22 @@ export const SuitePage: React.FC<SuitePageProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 page-enter">
           {moduleCards
             .filter(card => card.visible)
-            .map(({ key, visible, ...card }) => (
-              <ModuleCard key={key} {...card} />
-            ))}
+            .sort((a, b) => {
+              const first = moduleDisplayByKey.get(a.key)?.order ?? 9999;
+              const second = moduleDisplayByKey.get(b.key)?.order ?? 9999;
+              return first - second || a.key.localeCompare(b.key);
+            })
+            .map(({ key, visible, ...card }) => {
+              const display = moduleDisplayByKey.get(key);
+              return (
+                <ModuleCard
+                  key={key}
+                  {...card}
+                  badge={display ? display.badge : card.badge}
+                  badgeStyle={display ? display.badgeStyle : card.badgeStyle}
+                />
+              );
+            })}
         </div>
 
         <div className="mt-10 text-center">

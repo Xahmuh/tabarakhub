@@ -2,9 +2,9 @@
 import React, { useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Pharmacist, AuthState, BranchLoginApproval, MaintenanceSettings } from './types';
+import { Pharmacist, AuthState, Branch, BranchLoginApproval, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
-import { buildPermissionChecker } from './lib/access';
+import { buildPermissionChecker, isManagerRole } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { spinWinService } from './services/spinWin';
 import { getSystemSettingsErrorMessage } from './services/systemSettingsService';
@@ -12,7 +12,7 @@ import { branchLoginApprovalService } from './services/branchLoginApprovalServic
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
-  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, Footer, POSGuidelineModal,
+  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
   FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub
 } from './app/index';
@@ -22,7 +22,6 @@ import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalW
 // --- Icons ---
 import {
   ShieldCheck,
-  QrCode,
   Loader2,
   AlertTriangle
 } from 'lucide-react';
@@ -76,7 +75,7 @@ const getRecoverableSpinToken = () => {
 };
 
 const canControlMaintenance = (role?: string | null) =>
-  role === 'manager' || role === 'owner';
+  isManagerRole(role) || role === 'owner';
 
 const storeBranchLoginApprovalRequest = (requestId: string | null) => {
   try {
@@ -128,6 +127,18 @@ const hexToRgbParts = (value: string, fallback: string) => {
   return `${red} ${green} ${blue}`;
 };
 
+const updateBrowserIcon = (iconUrl: string) => {
+  const href = iconUrl.trim() || clientConfig.logoUrl;
+  let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!icon) {
+    icon = document.createElement('link');
+    icon.rel = 'icon';
+    document.head.appendChild(icon);
+  }
+  icon.href = href;
+  icon.type = href.endsWith('.svg') ? 'image/svg+xml' : 'image/jpeg';
+};
+
 const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ user: null, pharmacist: null });
   const [activeTab, setActiveTab] = useState<AppTab | null>(null);
@@ -143,6 +154,7 @@ const App: React.FC = () => {
   const [showPOSGuideline, setShowPOSGuideline] = useState(false);
   const [showPharmacistSelector, setShowPharmacistSelector] = useState(false);
   const [customerFlowError, setCustomerFlowError] = useState<string | null>(null);
+  const [activePOSBranch, setActivePOSBranch] = useState<Branch | null>(null);
   const [isCustomerFlow] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('token') || params.has('node') || params.has('branch');
@@ -151,13 +163,14 @@ const App: React.FC = () => {
   const isDashboardEnabledForRole = (role?: string) => {
     if (!isModuleEnabled('reports')) return false;
     if (role === 'warehouse') return isModuleEnabled('adminDashboard');
-    if (role === 'manager' || role === 'owner' || role === 'supervisor') return isModuleEnabled('managerDashboard');
+    if (isManagerRole(role) || role === 'owner' || role === 'supervisor') return isModuleEnabled('managerDashboard');
     return isModuleEnabled('branchDashboard');
   };
 
   const canUseFeature = (feature: string, minimum: 'read' | 'edit' = 'read', role = authState.user?.role) =>
     buildPermissionChecker(role, authState.permissions, authState.rolePermissions)(feature, minimum);
   const shouldShowPOSGuideline = () => maintenanceSettings?.posGuidelineEnabled !== false;
+  const isBranchLoginApprovalRequired = maintenanceSettings?.branchLoginApprovalRequired !== false;
 
   const isTabEnabled = (tab: AppTab | null, role = authState.user?.role) => {
     if (!tab || tab === 'selector') return true;
@@ -183,18 +196,18 @@ const App: React.FC = () => {
         return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role);
       case 'settings':
         return isModuleEnabled('settings') && (
-          (role === 'manager' && canUseFeature('settings', 'edit', role))
+          (isManagerRole(role) && canUseFeature('settings', 'edit', role))
           || role === 'owner'
           || role === 'admin'
         );
       case 'feedback-form':
         return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role);
       case 'feedback-admin':
-        return isModuleEnabled('qualityFeedback') && (role === 'manager' || role === 'owner') && canUseFeature('quality_feedback', 'read', role);
+        return isModuleEnabled('qualityFeedback') && (isManagerRole(role) || role === 'owner') && canUseFeature('quality_feedback', 'read', role);
       case 'employee-contributions':
         return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role);
       case 'block-analyzer':
-        return (role === 'manager' || role === 'owner') && canUseFeature('block_analyzer', 'read', role);
+        return (isManagerRole(role) || role === 'owner') && canUseFeature('block_analyzer', 'read', role);
       case 'delivery':
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
       default:
@@ -207,6 +220,9 @@ const App: React.FC = () => {
       setActiveTab('selector');
       sessionStorage.setItem('tabarak_active_tab', 'selector');
       return;
+    }
+    if (tab !== 'pos') {
+      setActivePOSBranch(null);
     }
     if (tab === 'pos' && !authState.pharmacist) {
       setShowPharmacistSelector(true);
@@ -246,12 +262,13 @@ const App: React.FC = () => {
       throw new Error('Authenticated account is not linked to an active app profile.');
     }
 
-    const [permissions, rolePermissions] = await Promise.all([
-      supabase.permissions.listForBranch(user.id),
+    const [branchPermissions, userPermissions, rolePermissions] = await Promise.all([
+      user.role === 'branch' ? supabase.permissions.listForBranch(user.id) : Promise.resolve([]),
+      supabase.permissions.listForUser(user.userId || user.id),
       supabase.permissions.listRoleDefaults(user.role)
     ]);
 
-    const newState = { user, pharmacist: null, permissions, rolePermissions };
+    const newState = { user, pharmacist: null, permissions: [...userPermissions, ...branchPermissions], rolePermissions };
     if (user.role !== 'branch') {
       storeBranchLoginApprovalRequest(null);
     }
@@ -344,6 +361,15 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
+    updateBrowserIcon(
+      maintenanceSettings?.browserIconUrl?.trim() ||
+      maintenanceSettings?.pharmacyLogoUrl?.trim() ||
+      clientConfig.logoUrl
+    );
+  }, [maintenanceSettings?.browserIconUrl, maintenanceSettings?.pharmacyLogoUrl]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const loadMaintenanceSettings = async () => {
@@ -405,11 +431,19 @@ const App: React.FC = () => {
     }
 
     const init = async () => {
+      if (isMaintenanceLoading) return;
+
       try {
         const { data } = await supabase.auth.getSession();
         const session = data?.session as AuthState | null;
         if (session?.user) {
           if (session.user.role === 'branch') {
+            if (!isBranchLoginApprovalRequired) {
+              storeBranchLoginApprovalRequest(null);
+              await enterAuthenticatedApp(session);
+              return;
+            }
+
             const requestId = readBranchLoginApprovalRequest();
             if (!requestId) {
               await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
@@ -455,11 +489,12 @@ const App: React.FC = () => {
           let currentSession: AuthState = session;
           if (currentSession.user) {
             try {
-              const [perms, rolePerms] = await Promise.all([
-                supabase.permissions.listForBranch(currentSession.user.id),
+              const [branchPerms, userPerms, rolePerms] = await Promise.all([
+                currentSession.user.role === 'branch' ? supabase.permissions.listForBranch(currentSession.user.id) : Promise.resolve([]),
+                supabase.permissions.listForUser(currentSession.user.userId || currentSession.user.id),
                 supabase.permissions.listRoleDefaults(currentSession.user.role)
               ]);
-              currentSession.permissions = perms;
+              currentSession.permissions = [...userPerms, ...branchPerms];
               currentSession.rolePermissions = rolePerms;
             } catch (pErr) {
               console.error("Init permission fetch error:", pErr);
@@ -483,7 +518,7 @@ const App: React.FC = () => {
       }
     };
     init();
-  }, [isBhAnalyzerPage]);
+  }, [enterAuthenticatedApp, isBhAnalyzerPage, isBranchLoginApprovalRequired, isMaintenanceLoading, signOutToLoginWithNotice]);
 
   const handleLogin = async (identifier: string, password: string) => {
     setIsInitializing(true);
@@ -496,7 +531,12 @@ const App: React.FC = () => {
       }
 
       if (branch.role === 'branch') {
-        await beginBranchLoginApproval(signedInState);
+        if (isBranchLoginApprovalRequired) {
+          await beginBranchLoginApproval(signedInState);
+        } else {
+          storeBranchLoginApprovalRequest(null);
+          await enterAuthenticatedApp(signedInState);
+        }
         return;
       }
 
@@ -529,6 +569,7 @@ const App: React.FC = () => {
     storeBranchLoginApprovalRequest(null);
     await supabase.auth.signOut();
     setAuthState({ user: null, pharmacist: null, permissions: [] });
+    setActivePOSBranch(null);
     setActiveTab(null);
     setIsMaintenanceAdminLoginOpen(false);
   };
@@ -543,27 +584,25 @@ const App: React.FC = () => {
   const canBypassMaintenance = canControlMaintenance(authState.user?.role);
   const isMaintenanceAdminLoginAllowed = isMaintenanceEnabled && isMaintenanceAdminLoginOpen && !authState.user;
   const shouldRenderMaintenance = isMaintenanceEnabled && !canBypassMaintenance && !isMaintenanceAdminLoginAllowed;
+  const pharmacyLogoUrl = maintenanceSettings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
+  const loadingSpinnerUrl = maintenanceSettings?.loadingSpinnerUrl?.trim() || '/spinner.svg';
 
   if (isInitializing || isMaintenanceLoading) {
     const isRewardFlowLoading = isCustomerFlow && !isMaintenanceLoading;
 
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-10 text-center space-y-8">
-        <div className="relative">
-          <div className="w-16 h-16 border-[3px] border-slate-100 border-t-brand rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            {isRewardFlowLoading ? (
-              <QrCode className="w-6 h-6 text-brand" />
-            ) : (
-              <div className="w-8 h-8 bg-brand rounded-lg shadow-lg shadow-brand/20 overflow-hidden">
-                <img src={clientConfig.logoUrl} alt={`${clientConfig.clientName} logo`} className="w-full h-full object-cover" />
-              </div>
-            )}
-          </div>
+        <div className="relative flex h-24 w-24 items-center justify-center">
+          <div className="absolute inset-0 rounded-3xl bg-brand/5 blur-xl"></div>
+          <img
+            src={loadingSpinnerUrl}
+            alt="Loading"
+            className="relative h-20 w-20 object-contain"
+          />
         </div>
         <div className="space-y-2">
-          <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">
-            {isRewardFlowLoading ? 'Reward Hub' : clientConfig.clientName}
+          <h3 className="text-xl font-black text-slate-900 tracking-tight">
+            {isRewardFlowLoading ? 'Reward hub' : clientConfig.clientName}
           </h3>
           <p className="text-xs text-slate-400 font-medium uppercase tracking-[0.2em]">
             {isRewardFlowLoading ? 'Verifying Security Token...' : 'Establishing connection...'}
@@ -600,7 +639,7 @@ const App: React.FC = () => {
   if (customerToken) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <CustomerFlow token={customerToken} />
+        <CustomerFlow token={customerToken} logoUrl={pharmacyLogoUrl} spinnerUrl={loadingSpinnerUrl} />
       </div>
     );
   }
@@ -635,6 +674,7 @@ const App: React.FC = () => {
         onExpired={handleExpiredBranchLogin}
         onVerificationError={handleBranchApprovalVerificationError}
         onCancel={handleCancelBranchApproval}
+        logoUrl={pharmacyLogoUrl}
       />
     );
   }
@@ -648,7 +688,7 @@ const App: React.FC = () => {
     );
   }
 
-  const isManager = authState.user?.role === 'manager';
+  const isManager = isManagerRole(authState.user?.role);
   const isWarehouse = authState.user?.role === 'warehouse';
 
   const checkPermission = buildPermissionChecker(
@@ -657,20 +697,25 @@ const App: React.FC = () => {
     authState.rolePermissions
   );
 
-  if (showPharmacistSelector) {
+  if (showPharmacistSelector || (activeTab === 'pos' && !authState.pharmacist)) {
     return (
       <SelectPharmacistPage
         branch={authState.user!}
         backLabel="Back to Modules"
-        onSelect={(pharmacist) => {
+        onSelect={(pharmacist, operatingBranch) => {
           const newState = { ...authState, pharmacist };
           setAuthState(newState);
+          setActivePOSBranch(operatingBranch || authState.user);
           setShowPharmacistSelector(false);
           if (shouldShowPOSGuideline()) setShowPOSGuideline(true);
           sessionStorage.setItem('tabarak_active_tab', 'pos');
           startTransition(() => setActiveTab('pos'));
         }}
-        onLogout={() => setShowPharmacistSelector(false)}
+        onLogout={() => {
+          setShowPharmacistSelector(false);
+          setActivePOSBranch(null);
+          handleTabChange('selector');
+        }}
       />
     );
   }
@@ -688,6 +733,7 @@ const App: React.FC = () => {
           onNavigateHome={() => handleTabChange('selector')}
           onTabChange={handleTabChange}
           onLogout={logout}
+          settings={maintenanceSettings}
         />
         <SuitePage
           authState={authState}
@@ -715,13 +761,17 @@ const App: React.FC = () => {
         onNavigateHome={() => handleTabChange('selector')}
         onTabChange={handleTabChange}
         onLogout={logout}
+        settings={maintenanceSettings}
       />
 
       <main className="flex-1 w-full max-w-[1400px] mx-auto px-5 md:px-8 py-6">
+        <div className="mb-4 flex justify-end print:hidden">
+          <ModuleHelpButton moduleKey={activeTab === 'selector' ? null : activeTab} />
+        </div>
         {activeTab === 'command-center' ? (
           <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
         ) : activeTab === 'pos' ? (
-          <POSPage branch={authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
+          <POSPage branch={activePOSBranch || authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
         ) : activeTab === 'spin-win' ? (
           <SpinWinHub
             branch={authState.user!}
@@ -737,9 +787,7 @@ const App: React.FC = () => {
                 <h2 className="text-3xl font-black text-slate-900 tracking-tighter">HR Admin Portal</h2>
                 <p className="text-slate-500 font-medium">Manage employee requests and approvals</p>
               </div>
-              <button onClick={() => handleTabChange('selector')} className="btn-secondary">
-                Back to Modules
-              </button>
+              <BackToModulesButton onClick={() => handleTabChange('selector')} />
             </div>
             <HRRequestsSection />
           </div>

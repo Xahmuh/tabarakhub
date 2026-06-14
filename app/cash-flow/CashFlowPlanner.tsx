@@ -32,6 +32,7 @@ import {
     CashFlowSettings,
     Role
 } from '../../types';
+import { BackToModulesButton } from '../shared';
 import { calculateForecast, getSmartSuggestions } from '../../utils/cashFlowUtils';
 import {
     LineChart,
@@ -53,6 +54,7 @@ import { ExpensesView } from './ExpensesView';
 import { RevenuesView } from './RevenuesView';
 import { AuditLogView } from './AuditLogView';
 import { BranchCashDifferenceTracker } from './BranchCashDifferenceTracker';
+import { isManagerRole } from '../../lib/access';
 
 interface CashFlowPlannerProps {
     onBack: () => void;
@@ -235,12 +237,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                 </div>
 
                 <div className="flex items-center space-x-4">
-                    <button
-                        onClick={onBack}
-                        className="btn-secondary"
-                    >
-                        <span>Exit Module</span>
-                    </button>
+                    <BackToModulesButton onClick={onBack} />
                 </div>
             </div>
 
@@ -252,7 +249,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                     { id: 'expenses', label: 'OpEx Planner', icon: TrendingDown },
                     { id: 'revenues', label: 'Revenue Entry', icon: TrendingUp },
                     { id: 'history', label: 'Audit Log', icon: History }
-                ].filter(tab => userRole === 'manager' || userRole === 'owner').map(tab => (
+                ].filter(tab => isManagerRole(userRole) || userRole === 'owner' || userRole === 'accounts').map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveSubTab(tab.id as any)}
@@ -262,7 +259,7 @@ export const CashFlowPlanner: React.FC<CashFlowPlannerProps> = ({ onBack, branch
                         <span>{tab.label}</span>
                     </button>
                 ))}
-                {userRole === 'manager' && (
+                {isManagerRole(userRole) && (
                     <button
                         onClick={() => {
                             Swal.fire({
