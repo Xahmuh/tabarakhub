@@ -36,10 +36,19 @@ A comprehensive migration file is available at: [full-migration.sql](file:///a:/
 
 ## 3. Environment Variables Required
 Ensure the following variables are set in your Supabase Project Settings (Edge Functions):
-- `ANTHROPIC_API_KEY`: For Claude AI Sentiment Analysis.
+- `AI_INSIGHTS_ENABLED`: Set to `true` only when AI insights are accepted for this dedicated-client scope.
+- `ANTHROPIC_API_KEY`: Server-only provider key for Claude AI sentiment analysis. Required only when AI insights are enabled.
 - `RESEND_API_KEY`: For monthly reports and CEO notifications.
 - `SUPABASE_URL`: Standard Supabase project URL.
 - `SUPABASE_SERVICE_ROLE_KEY`: For administrative batch updates.
+- `FUNCTION_SECRET`: Required for protected report/notification functions.
+- `ALLOWED_ORIGIN` or `CLIENT_APP_URL`: Required to restrict Edge Function CORS to the client frontend URL.
+
+Frontend AI controls:
+- `VITE_MODULE_AI_INSIGHTS=false` keeps the AI panel disabled/hidden for production validation.
+- `VITE_MODULE_AI_INSIGHTS=true` should be used only when the server-side AI secrets above are configured.
+
+Do not expose `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, or `FUNCTION_SECRET` in frontend `VITE_` variables.
 
 ## 4. Audit Result
 The directory `src/modules/quality-feedback/` is **FULLY AUDITED** and confirmed to be **UNUSED** by the current application. All routes in `App.tsx` and exports in `app/index.ts` point exclusively to the new `app/modules/` location.

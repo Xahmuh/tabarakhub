@@ -42,7 +42,17 @@ import Swal from 'sweetalert2';
 import confetti from 'canvas-confetti';
 
 // --- CONFIGURATION ---
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzhFVrwIdvBK4qOK13y0dXxpaownQMsKfnI_iZFNGh3PWnykKBzgDSxT1Sb1AbbddMy/exec";
+const HR_GOOGLE_SCRIPT_URL = (import.meta.env.VITE_HR_GOOGLE_SCRIPT_URL || '').trim();
+const HR_CONFIG_ERROR_MESSAGE = 'HR Google Script URL is not configured for this dedicated-client deployment.';
+
+const getHrGoogleScriptUrl = () => {
+    if (!HR_GOOGLE_SCRIPT_URL) {
+        throw new Error(HR_CONFIG_ERROR_MESSAGE);
+    }
+    return HR_GOOGLE_SCRIPT_URL;
+};
+
+const isHrConfigError = (error: unknown) => error instanceof Error && error.message === HR_CONFIG_ERROR_MESSAGE;
 
 const translations = {
     en: {
@@ -244,7 +254,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
         }
         setIsAuthenticating(true);
         try {
-            const response = await fetch(WEB_APP_URL, {
+            const response = await fetch(getHrGoogleScriptUrl(), {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify({ action: "login", cpr: cpr.trim() })
@@ -257,7 +267,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                 throw new Error("No record");
             }
         } catch (error) {
-            showToast(t.toast_cpr_not_found, 'error');
+            showToast(isHrConfigError(error) ? HR_CONFIG_ERROR_MESSAGE : t.toast_cpr_not_found, 'error');
         } finally {
             setIsAuthenticating(false);
         }
@@ -308,7 +318,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                 referenceNumber: refNum,
                 attachments
             };
-            const response = await fetch(WEB_APP_URL, {
+            const response = await fetch(getHrGoogleScriptUrl(), {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify(payload)
@@ -344,7 +354,9 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                     if (onBack) onBack(); else window.location.reload();
                 });
             } else { throw new Error("Failed"); }
-        } catch (error) { showToast("Submission Failed", 'error'); }
+        } catch (error) {
+            showToast(isHrConfigError(error) ? HR_CONFIG_ERROR_MESSAGE : "Submission Failed", 'error');
+        }
         finally { setIsSubmitting(false); }
     };
 

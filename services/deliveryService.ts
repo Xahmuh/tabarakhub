@@ -10,6 +10,82 @@ import {
   DeliverySupervisor
 } from '../types';
 
+const PAYMENT_TYPES = new Set(['BP', 'CARD', 'CASH', 'TALABAT']);
+
+const isValidDateKey = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+};
+
+const normalizeOrderInput = (input: DeliveryOrderInput): DeliveryOrderInput => {
+  const branchId = input.branchId?.trim();
+  const orderDate = input.orderDate?.trim();
+  const paymentType = input.paymentType;
+  const valueBhd = Number(input.valueBhd);
+  const blockNumber = input.blockNumber?.trim() || null;
+
+  if (!branchId) throw new Error('Branch is required for delivery orders.');
+  if (!orderDate || !isValidDateKey(orderDate)) throw new Error('A valid order date is required.');
+  if (!PAYMENT_TYPES.has(paymentType)) throw new Error('A valid payment type is required.');
+  if (!Number.isFinite(valueBhd) || valueBhd <= 0) throw new Error('Order value must be greater than zero.');
+  if (paymentType !== 'TALABAT' && !blockNumber) {
+    throw new Error('Block number is required for non-Talabat delivery orders.');
+  }
+
+  return {
+    ...input,
+    branchId,
+    orderDate,
+    valueBhd,
+    paymentType,
+    pharmacistId: input.pharmacistId || null,
+    pharmacistName: input.pharmacistName?.trim() || null,
+    driverId: input.driverId || null,
+    blockNumber: paymentType === 'TALABAT' ? null : blockNumber,
+    notes: input.notes?.trim() || undefined
+  };
+};
+
+const resolveActivePharmacistForBranch = async (branchId: string, pharmacistId?: string | null) => {
+  if (!pharmacistId) return null;
+
+  const { data: assignment, error: assignmentError } = await supabaseClient
+    .from('pharmacist_branches')
+    .select('pharmacist_id')
+    .eq('branch_id', branchId)
+    .eq('pharmacist_id', pharmacistId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error('Selected pharmacist is not assigned to this branch.');
+
+  const { data: pharmacist, error: pharmacistError } = await supabaseClient
+    .from('pharmacists')
+    .select('name, is_active')
+    .eq('id', pharmacistId)
+    .maybeSingle();
+  if (pharmacistError) throw pharmacistError;
+  if (!pharmacist?.is_active) throw new Error('Selected pharmacist is inactive or unavailable.');
+  return pharmacist.name as string;
+};
+
+const assertActiveDriver = async (driverId?: string | null) => {
+  if (!driverId) return;
+  const { data, error } = await supabaseClient
+    .from('delivery_drivers')
+    .select('id, is_active')
+    .eq('id', driverId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.is_active) throw new Error('Selected driver is inactive or unavailable.');
+};
+
 const toOrder = (row: any): DeliveryOrder => ({
   id: row.id,
   branchId: row.branch_id,
@@ -20,6 +96,7 @@ const toOrder = (row: any): DeliveryOrder => ({
   pharmacistId: row.pharmacist_id,
   pharmacistName: row.pharmacist_name || row.pharmacist?.name || null,
   driverId: row.driver_id,
+  driverCode: row.driver?.driver_code || null,
   driverName: row.driver?.name || null,
   blockNumber: row.block_number,
   areaName: row.area_name,
@@ -31,7 +108,7 @@ const toOrder = (row: any): DeliveryOrder => ({
 
 const ORDER_SELECT = `
   *,
-  driver:delivery_drivers(name),
+  driver:delivery_drivers(name, driver_code),
   pharmacist:pharmacists(name)
 `;
 
@@ -80,17 +157,20 @@ export const deliveryService = {
     },
 
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {
+      const normalized = normalizeOrderInput(input);
+      const pharmacistName = await resolveActivePharmacistForBranch(normalized.branchId, normalized.pharmacistId);
+      await assertActiveDriver(normalized.driverId);
       const { data: session } = await supabaseClient.auth.getSession();
       const payload = {
-        branch_id: input.branchId,
-        order_date: input.orderDate,
-        value_bhd: input.valueBhd,
-        payment_type: input.paymentType,
-        pharmacist_id: input.pharmacistId || null,
-        pharmacist_name: input.pharmacistName || null,
-        driver_id: input.driverId || null,
-        block_number: input.paymentType === 'TALABAT' ? null : input.blockNumber || null,
-        notes: input.notes || null,
+        branch_id: normalized.branchId,
+        order_date: normalized.orderDate,
+        value_bhd: normalized.valueBhd,
+        payment_type: normalized.paymentType,
+        pharmacist_id: normalized.pharmacistId || null,
+        pharmacist_name: pharmacistName || null,
+        driver_id: normalized.driverId || null,
+        block_number: normalized.blockNumber,
+        notes: normalized.notes || null,
         created_by: session.session?.user?.id || null
       };
       const { data, error } = await supabaseClient
@@ -105,15 +185,41 @@ export const deliveryService = {
     update: async (id: string, input: Partial<DeliveryOrderInput>): Promise<DeliveryOrder> => {
       const { data: session } = await supabaseClient.auth.getSession();
       const payload: any = { updated_at: new Date().toISOString(), updated_by: session.session?.user?.id || null };
-      if (input.orderDate !== undefined) payload.order_date = input.orderDate;
-      if (input.valueBhd !== undefined) payload.value_bhd = input.valueBhd;
-      if (input.paymentType !== undefined) payload.payment_type = input.paymentType;
+      if (input.orderDate !== undefined) {
+        const orderDate = input.orderDate.trim();
+        if (!isValidDateKey(orderDate)) throw new Error('A valid order date is required.');
+        payload.order_date = orderDate;
+      }
+      if (input.valueBhd !== undefined) {
+        const valueBhd = Number(input.valueBhd);
+        if (!Number.isFinite(valueBhd) || valueBhd <= 0) throw new Error('Order value must be greater than zero.');
+        payload.value_bhd = valueBhd;
+      }
+      if (input.paymentType !== undefined) {
+        if (!PAYMENT_TYPES.has(input.paymentType)) throw new Error('A valid payment type is required.');
+        payload.payment_type = input.paymentType;
+      }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
       if (input.pharmacistName !== undefined) payload.pharmacist_name = input.pharmacistName;
-      if (input.driverId !== undefined) payload.driver_id = input.driverId;
-      if (input.blockNumber !== undefined) payload.block_number = input.blockNumber;
-      if (input.notes !== undefined) payload.notes = input.notes;
+      if (input.driverId !== undefined) {
+        await assertActiveDriver(input.driverId);
+        payload.driver_id = input.driverId || null;
+      }
+      if (input.blockNumber !== undefined) payload.block_number = input.blockNumber?.trim() || null;
+      if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
       if (payload.payment_type === 'TALABAT') payload.block_number = null;
+
+      if (input.pharmacistId) {
+        const { data: current, error: currentError } = await supabaseClient
+          .from('delivery_orders')
+          .select('branch_id')
+          .eq('id', id)
+          .single();
+        if (currentError) throw currentError;
+        payload.pharmacist_name = await resolveActivePharmacistForBranch(current.branch_id, input.pharmacistId);
+      } else if (input.pharmacistId === null) {
+        payload.pharmacist_name = null;
+      }
 
       const { data, error } = await supabaseClient
         .from('delivery_orders')
@@ -133,17 +239,18 @@ export const deliveryService = {
 
     /** Possible duplicate: same branch/date/value/payment/driver created in the last N minutes. */
     findRecentDuplicate: async (input: DeliveryOrderInput, windowMinutes = 10): Promise<DeliveryOrder | null> => {
+      const normalized = normalizeOrderInput(input);
       const since = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
       let query = supabaseClient
         .from('delivery_orders')
         .select(ORDER_SELECT)
-        .eq('branch_id', input.branchId)
-        .eq('order_date', input.orderDate)
-        .eq('value_bhd', input.valueBhd)
-        .eq('payment_type', input.paymentType)
+        .eq('branch_id', normalized.branchId)
+        .eq('order_date', normalized.orderDate)
+        .eq('value_bhd', normalized.valueBhd)
+        .eq('payment_type', normalized.paymentType)
         .gte('created_at', since)
         .limit(1);
-      if (input.driverId) query = query.eq('driver_id', input.driverId);
+      if (normalized.driverId) query = query.eq('driver_id', normalized.driverId);
       const { data, error } = await query;
       if (error) return null;
       return data && data.length > 0 ? toOrder(data[0]) : null;
@@ -157,7 +264,12 @@ export const deliveryService = {
       const { data, error } = await query;
       if (error) throw error;
       return (data || []).map(d => ({
-        id: d.id, name: d.name, phone: d.phone || undefined, notes: d.notes || undefined, isActive: d.is_active
+        id: d.id,
+        driverCode: d.driver_code || undefined,
+        name: d.name,
+        phone: d.phone || undefined,
+        notes: d.notes || undefined,
+        isActive: d.is_active
       }));
     },
     upsert: async (driver: Partial<DeliveryDriver>): Promise<DeliveryDriver> => {
@@ -171,7 +283,14 @@ export const deliveryService = {
       if (driver.id) payload.id = driver.id;
       const { data, error } = await supabaseClient.from('delivery_drivers').upsert(payload).select().single();
       if (error) throw error;
-      return { id: data.id, name: data.name, phone: data.phone || undefined, notes: data.notes || undefined, isActive: data.is_active };
+      return {
+        id: data.id,
+        driverCode: data.driver_code || undefined,
+        name: data.name,
+        phone: data.phone || undefined,
+        notes: data.notes || undefined,
+        isActive: data.is_active
+      };
     },
     deactivate: async (id: string) => {
       const { error } = await supabaseClient.from('delivery_drivers').update({ is_active: false }).eq('id', id);

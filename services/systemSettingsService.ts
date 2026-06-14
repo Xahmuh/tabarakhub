@@ -15,6 +15,7 @@ const DEFAULT_MAINTENANCE_SETTINGS: MaintenanceSettings = {
   posGuidelineShortageEn: 'Daily missing stock, even without a customer request.',
   footerLogoUrl: '',
   footerText: 'HUB',
+  loginBadges: [],
   posGuidelineLostSalesAr: 'طلب فعلي من عميل + الصنف غير متوفر داخل الفرع.',
   posGuidelineShortageAr: 'نواقص يومية داخل الفرع حتى بدون طلب من عميل.'
 };
@@ -33,9 +34,46 @@ const SYSTEM_SETTINGS_COLUMNS = `
   pos_guideline_shortage_ar,
   footer_logo_url,
   footer_text,
+  login_badges,
   updated_at,
   updated_by
 `;
+
+const errorPart = (error: unknown, key: string) => {
+  if (typeof error !== 'object' || error === null) return null;
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
+export const getSystemSettingsErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.name !== 'SystemSettingsUnavailableError') return error.message;
+  const parts = [
+    errorPart(error, 'message'),
+    errorPart(error, 'details'),
+    errorPart(error, 'hint'),
+    errorPart(error, 'code') ? `code ${errorPart(error, 'code')}` : null
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.length > 0 ? parts.join(' | ') : 'System settings could not be loaded.';
+};
+
+export class SystemSettingsUnavailableError extends Error {
+  originalError: unknown;
+
+  constructor(error: unknown) {
+    super(`System settings unavailable: ${getSystemSettingsErrorMessage(error)}`);
+    this.name = 'SystemSettingsUnavailableError';
+    this.originalError = error;
+  }
+}
+
+const normalizeLoginBadges = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return DEFAULT_MAINTENANCE_SETTINGS.loginBadges;
+  return value
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, 6);
+};
 
 const toMaintenanceSettings = (row: any): MaintenanceSettings => ({
   id: SETTINGS_ID,
@@ -51,6 +89,7 @@ const toMaintenanceSettings = (row: any): MaintenanceSettings => ({
   posGuidelineShortageAr: row?.pos_guideline_shortage_ar || DEFAULT_MAINTENANCE_SETTINGS.posGuidelineShortageAr,
   footerLogoUrl: row?.footer_logo_url ?? DEFAULT_MAINTENANCE_SETTINGS.footerLogoUrl,
   footerText: row?.footer_text ?? DEFAULT_MAINTENANCE_SETTINGS.footerText,
+  loginBadges: normalizeLoginBadges(row?.login_badges),
   updatedAt: row?.updated_at,
   updatedBy: row?.updated_by
 });
@@ -67,8 +106,8 @@ export const systemSettingsService = {
       if (error) throw error;
       return data ? toMaintenanceSettings(data) : DEFAULT_MAINTENANCE_SETTINGS;
     } catch (error) {
-      console.warn('Maintenance settings unavailable; defaulting to online mode.', error);
-      return DEFAULT_MAINTENANCE_SETTINGS;
+      console.warn('Maintenance settings unavailable; surfacing configuration warning.', error);
+      throw new SystemSettingsUnavailableError(error);
     }
   },
 
@@ -87,6 +126,7 @@ export const systemSettingsService = {
       | 'posGuidelineShortageAr'
       | 'footerLogoUrl'
       | 'footerText'
+      | 'loginBadges'
     >>
   ): Promise<MaintenanceSettings> => {
     const payload: Record<string, unknown> = { id: SETTINGS_ID };
@@ -126,6 +166,12 @@ export const systemSettingsService = {
     }
     if (typeof settings.footerText === 'string') {
       payload.footer_text = settings.footerText.trim();
+    }
+    if (Array.isArray(settings.loginBadges)) {
+      payload.login_badges = settings.loginBadges
+        .map(item => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, 6);
     }
 
     const { data, error } = await supabaseClient

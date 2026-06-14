@@ -1,21 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
 type AssignableRole = "manager" | "owner" | "supervisor" | "warehouse" | "branch";
 
 const assignableRoles: AssignableRole[] = ["manager", "owner", "supervisor", "warehouse", "branch"];
 
-const json = (body: Record<string, unknown>, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-
 serve(async (req) => {
+  const json = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleCorsPreflight(req);
   }
+
+  const corsError = rejectDisallowedOrigin(req);
+  if (corsError) return corsError;
 
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);

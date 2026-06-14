@@ -23,7 +23,7 @@ export const exportOrdersToExcel = async (
   sheet.addRow([]);
 
   const header = sheet.addRow([
-    'Date', 'Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
+    'Date', 'Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
   ]);
   header.font = { bold: true };
   header.eachCell(cell => {
@@ -38,6 +38,7 @@ export const exportOrdersToExcel = async (
       Number(order.valueBhd.toFixed(3)),
       order.paymentType,
       order.pharmacistName || '',
+      order.driverCode || '',
       order.driverName || '',
       order.blockNumber || '',
       order.areaName || '',

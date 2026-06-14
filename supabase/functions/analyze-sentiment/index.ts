@@ -1,20 +1,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../_shared/cors.ts'
+import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from '../_shared/cors.ts'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+const AI_INSIGHTS_ENABLED = ['1', 'true', 'yes', 'on'].includes((Deno.env.get('AI_INSIGHTS_ENABLED') || '').toLowerCase())
 
 serve(async (req) => {
+  const json = (body: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+    })
+
   // Handle CORS
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return handleCorsPreflight(req)
   }
 
+  const corsError = rejectDisallowedOrigin(req)
+  if (corsError) return corsError
+
   try {
+    if (!AI_INSIGHTS_ENABLED) {
+      return json({ error: 'AI insights are disabled for this deployment.' }, 403)
+    }
+
     if (!ANTHROPIC_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Missing environment variables")
+      console.error("AI insights function is missing required server-side environment variables")
+      return json({ error: 'AI insights are not configured for this deployment.' }, 503)
     }
 
     // Initialize Supabase client with Service Role to bypass RLS for batch updates
@@ -23,12 +38,12 @@ serve(async (req) => {
     // Verify the user making the request (Admin check)
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ error: 'Missing Authorization header' }, 401)
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ error: 'Unauthorized' }, 401)
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -38,7 +53,7 @@ serve(async (req) => {
       .maybeSingle()
 
     if (profileError || !profile?.is_active || !['admin', 'manager'].includes(profile.role)) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return json({ error: 'Forbidden' }, 403)
     }
 
     // 1. Fetch unanalyzed responses. Limit to 20 to avoid Edge Function timeouts.
@@ -51,10 +66,7 @@ serve(async (req) => {
     if (fetchError) throw fetchError
 
     if (!responses || responses.length === 0) {
-      return new Response(JSON.stringify({ message: "No unanalyzed responses found.", processedCount: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      })
+      return json({ message: "No unanalyzed responses found.", processedCount: 0 })
     }
 
     const processedIds = []
@@ -149,19 +161,13 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ 
+    return json({
       message: `Successfully processed ${successCount} out of ${responses.length} responses.`,
       processedCount: successCount,
       processedIds
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
     })
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    })
+    return json({ error: error.message }, 400)
   }
 })

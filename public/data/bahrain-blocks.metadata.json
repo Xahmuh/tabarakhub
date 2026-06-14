@@ -1,0 +1,17 @@
+{
+  "sourcePath": "A:\\ACTIONS\\tabarakhub\\bahrain-geojson-main\\blocks.json",
+  "sourceRepo": "bahrain-geojson-main (README: 'Bahrain GeoJSON — Areas/Blocks boundaries, Buildings locations. Export Date: 9 Sep 2021')",
+  "integratedAs": "public/data/bahrain-blocks.geojson",
+  "featureCount": 491,
+  "geometryTypes": ["Polygon"],
+  "coordinateSystem": "WGS84 (lng/lat); bounds lng 50.32–50.82, lat 25.57–26.34 — consistent with Bahrain",
+  "blockPropertyCandidates": ["BLOCK_NO", "BLOCK_AR", "OBJECTID"],
+  "selectedBlockProperty": "BLOCK_NO",
+  "blockNumberRange": "101–1218",
+  "duplicateBlockKeys": 0,
+  "optimization": "Coordinates rounded to 6 decimal places (~0.1m); kept only BLOCK_NO (as string). Reduced 5.76 MB -> 3.23 MB. Boundary shapes unchanged at display scale. SHAPE.AREA, SHAPE.LEN, BLOCK_AR (blank), OBJECTID dropped.",
+  "seedCoverage": "450 of 454 seeded delivery_blocks (99.1%) have geometry. Unmatched seeded blocks: 532, 534, 535, 610. 41 geometry blocks are not in the current seed.",
+  "licenseStatus": "internal_use_accepted_external_unconfirmed",
+  "usage": "Internal-use accepted. External/commercial redistribution license not confirmed.",
+  "notes": "The Bahrain block map is enabled for internal operational use. The dataset is suitable for internal staging/operations, but its license is not confirmed for external resale, redistribution, or commercial client packaging (source repo has no LICENSE file; 2021 static export). If this product is sold externally, replace the dataset with a licensed/approved source or obtain written permission. Fetched lazily as a static asset only when the manager Block Coverage tab opens; not bundled into the JS."
+}

@@ -17,6 +17,7 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
     const isManager = role === 'manager';
     const isOwner = role === 'owner';
     const isWarehouse = role === 'warehouse';
+    const canApproveBranchLogins = role === 'admin' || role === 'manager' || role === 'owner';
     const footerLogoUrl = settings?.footerLogoUrl ?? '';
     const footerText = settings?.footerText ?? 'HUB';
 
@@ -74,8 +75,8 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
         enabledModuleCount += 1;
     }
 
-    // 8. Settings / permissions (Manager only)
-    if (isModuleEnabled('settings') && isManager) {
+    // 8. Settings / permissions, plus branch login approval queue
+    if (isModuleEnabled('settings') && (isManager || canApproveBranchLogins)) {
         enabledModuleCount += 1;
     }
 

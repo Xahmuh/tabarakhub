@@ -4,7 +4,25 @@
       "Bash(python3 -c ' *)",
       "Bash(Remove-Item *)",
       "PowerShell(npm run typecheck)",
-      "Bash(awk '/on conflict \\\\\\(block_number\\\\\\) do nothing/,0' A:/ACTIONS/tabarakhub/supabase/migrations/20260612190000_delivery_recording_traceability.sql)"
+      "Bash(awk '/on conflict \\\\\\(block_number\\\\\\) do nothing/,0' A:/ACTIONS/tabarakhub/supabase/migrations/20260612190000_delivery_recording_traceability.sql)",
+      "Bash(npm audit *)",
+      "Bash(npm ls *)",
+      "Bash(npm view *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('overrides:', JSON.stringify\\(p.overrides||null\\)\\)\")",
+      "Bash(npm run *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm install *)",
+      "Bash(node -e \"console.log\\(require\\('esbuild'\\).version\\)\")",
+      "Bash(echo \"TYPECHECK_EXIT: $?\")",
+      "Bash(echo \"BUILD_EXIT: $?\")",
+      "Bash(echo \"AUDIT_EXIT: $?\")",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./package.json'\\).scripts\\).join\\(', '\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(mkdir -p public/data)",
+      "Bash(git check-ignore *)",
+      "Bash(grep -n \"Could not load coverage data\\\\|{/\\\\* KPI cards \\\\*/}\\\\|{/\\\\* Coverage matrix\\\\|{/\\\\* Top + low blocks\\\\|{/\\\\* Branch coverage \\\\*/}\\\\|{/\\\\* Recommendations \\\\*/}\\\\|^        </>\\\\|^      \\)}\\\\|^    </div>\\\\|^  \\);\\\\|^};\" app/delivery/DeliveryCoverage.tsx)",
+      "Bash(find . -iname \"*DELIVERY_PRODUCTION_READINESS*\" -not -path \"*/node_modules/*\")",
+      "Bash(find . -iname \"CODEX_PROMPT*\" -not -path \"*/node_modules/*\")"
     ]
   }
 }

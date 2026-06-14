@@ -161,6 +161,98 @@ export const operationsTaskService = {
     }
   },
 
+  /** Find an open/in_progress task for a given source insight (dedup check for UI). */
+  findOpenTaskForInsight: async (
+    sourceModule: CreateOperationsTaskInput['sourceModule'],
+    relatedRecordType: string | null,
+    relatedRecordId: string | null
+  ): Promise<OperationsTask | null> => {
+    try {
+      let query = supabaseClient
+        .from('operations_tasks')
+        .select('*')
+        .in('status', ['open', 'in_progress'])
+        .eq('source_module', sourceModule);
+      query = relatedRecordId ? query.eq('related_record_id', relatedRecordId) : query.is('related_record_id', null);
+      query = relatedRecordType ? query.eq('related_record_type', relatedRecordType) : query.is('related_record_type', null);
+      const { data, error } = await query.limit(1);
+      if (error) throw error;
+      return data && data.length > 0 ? toTask(data[0]) : null;
+    } catch (error) {
+      throwUnlessDemoMode(error, 'Unable to look up operations task');
+      const tasks = readDemoArray<OperationsTask>(TASKS_KEY);
+      return tasks.find(t =>
+        ['open', 'in_progress'].includes(t.status)
+        && t.sourceModule === sourceModule
+        && (t.relatedRecordType || null) === relatedRecordType
+        && (t.relatedRecordId || null) === relatedRecordId
+      ) || null;
+    }
+  },
+
+  /** Generic, dedup-protected task creation from any explicit input (e.g. a coverage insight). */
+  createTaskFromInput: async (input: CreateOperationsTaskInput, originNote = 'manual insight'): Promise<OperationsTask> => {
+    try {
+      let query = supabaseClient
+        .from('operations_tasks')
+        .select('*')
+        .in('status', ['open', 'in_progress'])
+        .eq('source_module', input.sourceModule)
+        .eq('title', input.title);
+      query = input.relatedRecordId ? query.eq('related_record_id', input.relatedRecordId) : query.is('related_record_id', null);
+      query = input.relatedRecordType ? query.eq('related_record_type', input.relatedRecordType) : query.is('related_record_type', null);
+      query = input.branchId ? query.eq('branch_id', input.branchId) : query.is('branch_id', null);
+
+      const { data: existing, error: existingError } = await query.limit(1);
+      if (existingError) throw existingError;
+      if (existing && existing.length > 0) return toTask(existing[0]);
+
+      const { data, error } = await supabaseClient
+        .from('operations_tasks')
+        .insert([toInsertPayload(input)])
+        .select()
+        .single();
+      if (error) throw error;
+
+      const task = toTask(data);
+      const { error: eventError } = await supabaseClient
+        .from('operations_task_events')
+        .insert([{ task_id: task.id, event_type: 'created', new_status: task.status, comment: `Task created from ${originNote}` }]);
+      if (eventError) throw eventError;
+      return task;
+    } catch (error) {
+      throwUnlessDemoMode(error, 'Unable to create operations task');
+      const tasks = readDemoArray<OperationsTask>(TASKS_KEY);
+      const existing = findMatchingDemoTask(tasks, input);
+      if (existing) return existing;
+      const now = new Date().toISOString();
+      const task: OperationsTask = {
+        id: crypto.randomUUID(),
+        sourceModule: input.sourceModule,
+        title: input.title,
+        description: input.description || null,
+        severity: input.severity,
+        priority: input.priority,
+        status: 'open',
+        branchId: input.branchId || null,
+        branchName: input.branchName || null,
+        ownerRole: input.ownerRole || null,
+        assignedTo: input.assignedTo || null,
+        recommendedAction: input.recommendedAction || null,
+        nextStep: input.nextStep || null,
+        relatedRecordId: input.relatedRecordId || null,
+        relatedRecordType: input.relatedRecordType || null,
+        dueAt: input.dueAt || null,
+        createdAt: now,
+        updatedAt: now
+      };
+      writeDemoArray(TASKS_KEY, [task, ...tasks]);
+      const events = readDemoArray<OperationsTaskEvent>(EVENTS_KEY);
+      writeDemoArray(EVENTS_KEY, [makeDemoEvent({ taskId: task.id, eventType: 'created', comment: `Demo task created from ${originNote}` }), ...events]);
+      return task;
+    }
+  },
+
   createTaskFromAlert: async (alert: OperationalAlert): Promise<OperationsTask> => {
     const input = inputFromAlert(alert);
 

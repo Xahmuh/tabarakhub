@@ -173,7 +173,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
     };
 
     const handleRoleChange = async (user: AppUser, newRole: Role) => {
-        let branchId: string | null = user.branchId || null;
+        let branchId: string | null = newRole === 'branch' ? user.branchId || null : null;
 
         if (newRole === 'branch' && !branchId) {
             const { value } = await Swal.fire({
@@ -194,7 +194,14 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
         setSavingKey(user.userId);
         try {
             await permissionService.adminSetUserRole(user.userId, newRole, branchId, user.isActive);
-            setUsers(prev => prev.map(u => u.userId === user.userId ? { ...u, role: newRole, branchId } : u));
+            const selectedBranch = branchOptions.find(branch => branch.id === branchId);
+            setUsers(prev => prev.map(u => u.userId === user.userId ? {
+                ...u,
+                role: newRole,
+                branchId,
+                branchCode: selectedBranch?.code,
+                branchName: selectedBranch?.name
+            } : u));
         } catch (e: any) {
             Swal.fire('Role update failed', e?.message || 'Could not update role.', 'error');
         } finally {
@@ -205,7 +212,7 @@ export const AccessControlSection: React.FC<{ currentUserId?: string }> = ({ cur
     const handleActiveToggle = async (user: AppUser) => {
         setSavingKey(user.userId);
         try {
-            await permissionService.adminSetUserRole(user.userId, user.role, user.branchId || null, !user.isActive);
+            await permissionService.adminSetUserRole(user.userId, user.role, user.role === 'branch' ? user.branchId || null : null, !user.isActive);
             setUsers(prev => prev.map(u => u.userId === user.userId ? { ...u, isActive: !u.isActive } : u));
         } catch (e: any) {
             Swal.fire('Update failed', e?.message || 'Could not update user state.', 'error');

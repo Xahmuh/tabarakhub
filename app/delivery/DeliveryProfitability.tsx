@@ -37,7 +37,7 @@ const classifyDriver = (
 
   if (!setting) {
     return {
-      driverId: driver.id, driverName: driver.name, orders: count, totalValue: value,
+      driverId: driver.id, driverCode: driver.driverCode, driverName: driver.name, orders: count, totalValue: value,
       ordersPerDay, costPerOrder: null, periodCost: null,
       estimatedContribution: null, estimatedNet: null, classification: 'no_cost_data'
     };
@@ -70,7 +70,7 @@ const classifyDriver = (
   }
 
   return {
-    driverId: driver.id, driverName: driver.name, orders: count, totalValue: value,
+    driverId: driver.id, driverCode: driver.driverCode, driverName: driver.name, orders: count, totalValue: value,
     ordersPerDay, costPerOrder, periodCost, estimatedContribution, estimatedNet, classification
   };
 };
@@ -235,6 +235,9 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
                 >
                   <div>
                     <p className="text-sm font-black text-slate-800">{driver.name}</p>
+                    {driver.driverCode && (
+                      <p className="text-[10px] font-black uppercase tracking-widest text-brand">{driver.driverCode}</p>
+                    )}
                     <p className="text-[11px] font-bold text-slate-400">
                       {setting
                         ? `${formatBhd(setting.monthlyCostBhd)}/mo · ${setting.workingDaysPerMonth}d · target ${setting.targetOrdersPerDay}/day${setting.assumedMarginPct != null ? ` · margin ${setting.assumedMarginPct}%` : ''}`
@@ -278,7 +281,10 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
                     return (
                       <tr key={row.driverId} className="hover:bg-slate-50/50">
                         <td className="py-2.5 pr-3 text-xs font-black text-slate-400">{index + 1}</td>
-                        <td className="py-2.5 pr-3 font-black text-slate-800">{row.driverName}</td>
+                        <td className="py-2.5 pr-3 font-black text-slate-800">
+                          <div>{row.driverName}</div>
+                          {row.driverCode && <div className="text-[10px] font-black uppercase tracking-widest text-brand">{row.driverCode}</div>}
+                        </td>
                         <td className="py-2.5 pr-3 text-right font-bold tabular-nums">{row.orders}</td>
                         <td className="py-2.5 pr-3 text-right font-bold tabular-nums">{formatBhd(row.totalValue)}</td>
                         <td className="py-2.5 pr-3 text-right font-bold tabular-nums">{row.ordersPerDay.toFixed(1)}</td>
@@ -307,6 +313,7 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
                   <div key={row.driverId} className="rounded-lg border border-slate-200 bg-white p-3">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-black text-slate-800">{index + 1}. {row.driverName}</p>
+                      {row.driverCode && <p className="text-[10px] font-black uppercase tracking-widest text-brand">{row.driverCode}</p>}
                       <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${meta.className}`}>{meta.label}</span>
                     </div>
                     <p className="mt-1.5 text-[11px] font-bold text-slate-500">

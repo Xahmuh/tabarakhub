@@ -30,6 +30,12 @@ dist-ssr
 
 .vercel
 .env*
+!.env.example.production
 
 # Supabase local CLI metadata
 supabase/.temp/
+
+# Downloaded Bahrain GeoJSON source repo (large; e.g. 89 MB buildings.json).
+# Only the optimized app assets are tracked: public/data/bahrain-blocks.geojson
+# and public/data/bahrain-blocks.metadata.json. Regenerate from this if needed.
+bahrain-geojson-main/

@@ -601,19 +601,159 @@ where schemaname = 'public'
   )
 order by tablename, policyname;
 
--- Expected: execute grants are limited to authenticated and service_role.
+-- Expected: contributions bucket is private. Employee contribution files are
+-- internal authenticated resources; public bucket delivery is not accepted for
+-- production.
 select
-  routine_name,
-  grantee,
-  privilege_type
-from information_schema.routine_privileges
-where specific_schema = 'public'
-  and routine_name in (
-    'current_app_role',
-    'current_app_branch_id',
-    'current_app_can_manage',
-    'current_app_is_admin',
-    'current_app_can_read_all',
-    'current_app_can_access_branch'
+  id as bucket_id,
+  public as bucket_is_public,
+  (public = false) as passed
+from storage.buckets
+where id = 'contributions';
+
+-- Expected: zero rows. No anon/public storage policy should allow selecting or
+-- uploading objects from contributions. Authenticated read and manager-only
+-- writes are checked by inspecting the concrete policies below.
+select
+  schemaname,
+  tablename,
+  policyname,
+  cmd,
+  roles,
+  qual,
+  with_check
+from pg_policies
+where schemaname = 'storage'
+  and tablename = 'objects'
+  and roles::text ~* '(anon|public)'
+  and (
+    policyname ilike '%contribution%'
+    or coalesce(qual, '') ilike '%contributions%'
+    or coalesce(with_check, '') ilike '%contributions%'
+    or coalesce(qual, '') ~* '(^|[^a-z_])true([^a-z_]|$)'
+    or coalesce(with_check, '') ~* '(^|[^a-z_])true([^a-z_]|$)'
   )
-order by routine_name, grantee;
+order by policyname;
+
+-- Expected: contributions storage policies show authenticated SELECT and
+-- manager/app-management gated INSERT/UPDATE/DELETE only.
+select
+  schemaname,
+  tablename,
+  policyname,
+  cmd,
+  roles,
+  qual,
+  with_check
+from pg_policies
+where schemaname = 'storage'
+  and tablename = 'objects'
+  and (
+    policyname ilike '%contribution%'
+    or coalesce(qual, '') ilike '%contributions%'
+    or coalesce(with_check, '') ilike '%contributions%'
+  )
+order by policyname;
+
+-- Allowed public RPCs:
+-- - validate_spin_token(text)
+-- - execute_spin_transaction(text, text, text, text, text)
+-- - execute_spin_transaction(text, text, text, text, text, text)
+-- - generate_spin_session_from_branch_code(text)
+--
+-- Expected: zero rows. Any other public-schema function executable by anon is
+-- a production security finding unless it is intentionally added to this
+-- allowlist with a public-flow justification.
+with allowed_public_rpcs(function_name, arg_count) as (
+  values
+    ('validate_spin_token', 1),
+    ('execute_spin_transaction', 5),
+    ('execute_spin_transaction', 6),
+    ('generate_spin_session_from_branch_code', 1)
+)
+select
+  n.nspname as schema_name,
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as identity_arguments,
+  p.pronargs as arg_count,
+  has_function_privilege('anon', p.oid, 'EXECUTE') as anon_can_execute
+from pg_proc p
+join pg_namespace n
+  on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and has_function_privilege('anon', p.oid, 'EXECUTE')
+  and not exists (
+    select 1
+    from allowed_public_rpcs allowed
+    where allowed.function_name = p.proname
+      and allowed.arg_count = p.pronargs
+  )
+order by function_name, identity_arguments;
+
+-- Expected: rows below show anon_can_execute = true only for the reviewed
+-- public Spin customer-flow RPCs.
+with allowed_public_rpcs(function_name, arg_count) as (
+  values
+    ('validate_spin_token', 1),
+    ('execute_spin_transaction', 5),
+    ('execute_spin_transaction', 6),
+    ('generate_spin_session_from_branch_code', 1)
+)
+select
+  allowed.function_name,
+  allowed.arg_count,
+  pg_get_function_identity_arguments(p.oid) as identity_arguments,
+  has_function_privilege('anon', p.oid, 'EXECUTE') as anon_can_execute
+from allowed_public_rpcs allowed
+left join pg_namespace n
+  on n.nspname = 'public'
+left join pg_proc p
+  on p.pronamespace = n.oid
+ and p.proname = allowed.function_name
+ and p.pronargs = allowed.arg_count
+order by allowed.function_name;
+
+-- Expected: zero rows. Internal helper/RLS functions must not be directly
+-- executable by anon.
+with internal_helpers(function_name) as (
+  values
+    ('current_app_role'),
+    ('current_app_branch_id'),
+    ('current_app_can_manage'),
+    ('current_app_is_admin'),
+    ('current_app_can_read_all'),
+    ('current_app_can_access_branch'),
+    ('current_app_is_supervisor_of'),
+    ('current_app_can_read_operations_task'),
+    ('current_app_can_update_operations_task'),
+    ('current_app_can_export_branch'),
+    ('current_app_can_control_maintenance'),
+    ('current_app_can_approve_branch_login'),
+    ('app_admin_list_users'),
+    ('app_admin_set_user_role'),
+    ('branch_login_approval_expire_old'),
+    ('branch_login_approval_list_pending'),
+    ('branch_login_approval_approve'),
+    ('branch_login_approval_reject'),
+    ('branch_login_approval_cancel'),
+    ('audit_shortage_status_change'),
+    ('branch_login_approvals_touch_updated_at'),
+    ('get_monthly_trend'),
+    ('set_pharmacist_name'),
+    ('set_submission_month'),
+    ('update_pharmacist_names'),
+    ('update_updated_at_column')
+)
+select
+  n.nspname as schema_name,
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as identity_arguments,
+  has_function_privilege('anon', p.oid, 'EXECUTE') as anon_can_execute
+from internal_helpers h
+join pg_proc p
+  on p.proname = h.function_name
+join pg_namespace n
+  on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and has_function_privilege('anon', p.oid, 'EXECUTE')
+order by function_name, identity_arguments;

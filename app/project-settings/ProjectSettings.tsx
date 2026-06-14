@@ -28,13 +28,16 @@ import {
     SlidersHorizontal,
     RadioTower,
     RotateCcw,
-    Hash
+    Hash,
+    KeyRound
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
 import Swal from 'sweetalert2';
 import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
+import { getSystemSettingsErrorMessage } from '../../services/systemSettingsService';
+import { BranchLoginApprovalsSection } from './BranchLoginApprovalsSection';
 
 const FEATURE_ICON_MAP: Partial<Record<AccessFeatureId, React.ElementType>> = {
     command_center: RadioTower,
@@ -59,8 +62,7 @@ const FEATURES = getEnabledAccessFeatures().map(feature => ({
     icon: FEATURE_ICON_MAP[feature.id as AccessFeatureId] || Lock
 }));
 
-const ROLES: Role[] = ['manager', 'owner', 'supervisor', 'warehouse', 'branch'];
-type SettingsTab = 'branches' | 'pharmacists' | 'permissions' | 'access-control' | 'system';
+type SettingsTab = 'branches' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
 
 const TAB_META: Record<SettingsTab, {
     label: string;
@@ -68,8 +70,8 @@ const TAB_META: Record<SettingsTab, {
     icon: React.ElementType;
 }> = {
     branches: {
-        label: 'Identities',
-        description: 'Branches, managers, admins, and account users',
+        label: 'Branches',
+        description: 'Operational pharmacy branches only',
         icon: Building2
     },
     pharmacists: {
@@ -79,13 +81,18 @@ const TAB_META: Record<SettingsTab, {
     },
     permissions: {
         label: 'Access',
-        description: 'Module permissions per identity',
+        description: 'Module permission overrides per branch',
         icon: SlidersHorizontal
     },
     'access-control': {
         label: 'Users & Roles',
         description: 'Login roles, supervisor scopes, and role defaults',
         icon: Lock
+    },
+    'login-approvals': {
+        label: 'Login Approvals',
+        description: 'Approve or reject pending branch sign-ins',
+        icon: KeyRound
     },
     system: {
         label: 'System',
@@ -160,7 +167,7 @@ const ACCESS_LEVELS: Array<{
     {
         level: 'none',
         title: 'No access',
-        description: 'Hide or block this module for the selected identity.',
+        description: 'Hide or block this module for the selected branch override.',
         icon: Lock,
         className: 'border-red-100 bg-red-50 text-red-600'
     },
@@ -204,16 +211,21 @@ const AccessGuide: React.FC = () => (
 export const ProjectSettings: React.FC<{
     onBack: () => void;
     onSettingsChange?: (settings: MaintenanceSettings) => void;
-}> = ({ onBack, onSettingsChange }) => {
-    const [activeTab, setActiveTab] = useState<SettingsTab>('branches');
+    currentRole?: Role;
+}> = ({ onBack, onSettingsChange, currentRole = 'manager' }) => {
+    const canManageSettings = currentRole === 'manager';
+    const canApproveLoginRequests = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
+    const [activeTab, setActiveTab] = useState<SettingsTab>(() => canManageSettings ? 'branches' : 'login-approvals');
     const [branches, setBranches] = useState<Branch[]>([]);
     const [branchClassifications, setBranchClassifications] = useState<BranchClassification[]>([]);
     const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
     const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
+    const [maintenanceSettingsError, setMaintenanceSettingsError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
     const [isSavingGuideline, setIsSavingGuideline] = useState(false);
     const [isSavingFooter, setIsSavingFooter] = useState(false);
+    const [isSavingLoginBadges, setIsSavingLoginBadges] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined);
 
@@ -242,19 +254,37 @@ export const ProjectSettings: React.FC<{
         loadData();
     }, []);
 
+    const visibleSettingsTabs = useMemo(
+        () => (['branches', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'] as SettingsTab[])
+            .filter(tab => canManageSettings || (tab === 'login-approvals' && canApproveLoginRequests)),
+        [canApproveLoginRequests, canManageSettings]
+    );
+
+    useEffect(() => {
+        if (!visibleSettingsTabs.includes(activeTab)) {
+            setActiveTab(visibleSettingsTabs[0] || 'login-approvals');
+        }
+    }, [activeTab, visibleSettingsTabs]);
+
     const loadData = async () => {
         setIsLoading(true);
+        setMaintenanceSettingsError(null);
         try {
-            const [b, p, c, settings] = await Promise.all([
+            const [b, p, c] = await Promise.all([
                 supabase.branches.list(),
                 supabase.pharmacists.listAll(),
-                supabase.delivery.classifications.list(),
-                supabase.systemSettings.getMaintenanceSettings()
+                supabase.delivery.classifications.list()
             ]);
             setBranches(b);
             setPharmacists(p);
             setBranchClassifications(c);
-            setMaintenanceSettings(settings);
+            try {
+                const settings = await supabase.systemSettings.getMaintenanceSettings();
+                setMaintenanceSettings(settings);
+            } catch (settingsError) {
+                setMaintenanceSettings(null);
+                setMaintenanceSettingsError(getSystemSettingsErrorMessage(settingsError));
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -403,13 +433,41 @@ export const ProjectSettings: React.FC<{
         }
     };
 
+    const handleSaveLoginBadges = async () => {
+        if (!maintenanceSettings || isSavingLoginBadges) return;
+
+        const loginBadges = maintenanceSettings.loginBadges
+            .map(item => item.trim())
+            .filter(Boolean)
+            .slice(0, 6);
+
+        setIsSavingLoginBadges(true);
+        try {
+            const updated = await supabase.systemSettings.updateMaintenanceSettings({ loginBadges });
+            setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Login badges updated',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2500
+            });
+        } catch (err: any) {
+            Swal.fire('Error', err.message || 'Failed to save login badges', 'error');
+        } finally {
+            setIsSavingLoginBadges(false);
+        }
+    };
+
     const handleSaveBranch = async () => {
         if (!branchForm.code || !branchForm.name) {
             Swal.fire('Error', 'Code and Name are required', 'error');
             return;
         }
         try {
-            await supabase.branches.upsert(branchForm);
+            await supabase.branches.upsert({ ...branchForm, role: 'branch' });
             Swal.fire('Success', 'Branch saved successfully', 'success');
             setIsBranchModalOpen(false);
             loadData();
@@ -421,11 +479,11 @@ export const ProjectSettings: React.FC<{
 
     const handleDeleteBranch = async (id: string) => {
         const result = await Swal.fire({
-            title: 'Are you sure?',
-            text: "This will permanently remove the branch/user.",
+            title: 'Remove branch?',
+            text: 'This will permanently remove the branch record. Historical records or foreign keys may block the delete.',
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: 'Yes, delete it!'
+            confirmButtonText: 'Yes, remove branch'
         });
         if (result.isConfirmed) {
             try {
@@ -541,17 +599,18 @@ export const ProjectSettings: React.FC<{
     const selectedBranch = branches.find(branch => branch.id === selectedBranchForPerms);
     const activeTabMeta = TAB_META[activeTab];
     const ActiveTabIcon = activeTabMeta.icon;
-    const branchCount = branches.filter(branch => branch.role === 'branch').length;
-    const adminIdentityCount = branches.filter(branch => branch.role !== 'branch').length;
+    const branchCount = branches.length;
+    const classifiedBranchCount = branchClassifications.filter(classification => classification.governorate).length;
     const activePharmacistCount = pharmacists.filter(pharmacist => pharmacist.isActive).length;
     const maintenanceEnabled = maintenanceSettings?.isMaintenanceModeEnabled === true;
     const visibleRecordCount = activeTab === 'branches'
         ? filteredBranches.length
         : activeTab === 'pharmacists'
             ? filteredPharmacists.length
-            : branches.length;
+            : activeTab === 'permissions'
+                ? branches.length
+                : 0;
     const selectedBranchPermissionCount = FEATURES.filter(feature => {
-        if (selectedBranch?.role === 'manager') return true;
         const explicitPermission = permissions.find(permission => permission.featureName === feature.id);
         return (explicitPermission?.accessLevel || 'none') !== 'none';
     }).length;
@@ -569,7 +628,7 @@ export const ProjectSettings: React.FC<{
                                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">Control center</p>
                                 <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Settings & Permissions</h1>
                                 <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
-                                    Manage identities, staff records, module access, and domain maintenance from one operational surface.
+                                    Manage branches, staff records, login roles, module access, and domain maintenance from one operational surface.
                                 </p>
                             </div>
                         </div>
@@ -593,14 +652,14 @@ export const ProjectSettings: React.FC<{
                 </header>
 
                 <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <StatTile label="Branch identities" value={branchCount} icon={Store} tone="brand" />
-                    <StatTile label="Admin identities" value={adminIdentityCount} icon={Lock} />
+                    <StatTile label="Branches" value={branchCount} icon={Store} tone="brand" />
+                    <StatTile label="Classified branches" value={`${classifiedBranchCount}/${branchCount}`} icon={Building2} />
                     <StatTile label="Active people" value={activePharmacistCount} icon={UserCheck} tone="emerald" />
                     <StatTile label="Domain status" value={maintenanceEnabled ? 'Paused' : 'Live'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
                 </section>
 
-                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
-                    {(['branches', 'pharmacists', 'permissions', 'access-control', 'system'] as const).map(tab => {
+                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-6">
+                    {visibleSettingsTabs.map(tab => {
                         const meta = TAB_META[tab];
                         const Icon = meta.icon;
                         const isActive = activeTab === tab;
@@ -652,12 +711,12 @@ export const ProjectSettings: React.FC<{
                         </div>
 
                         <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                            {activeTab !== 'system' && activeTab !== 'access-control' && (
+                            {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && (
                                 <div className="relative min-w-0 md:w-80">
                                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                     <input
                                         type="text"
-                                        placeholder={activeTab === 'permissions' ? 'Find identity...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
+                                        placeholder={activeTab === 'permissions' ? 'Find branch...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 pl-10 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
@@ -668,7 +727,7 @@ export const ProjectSettings: React.FC<{
                                 </div>
                             )}
 
-                            {(activeTab === 'branches' || activeTab === 'pharmacists') && (
+                            {canManageSettings && (activeTab === 'branches' || activeTab === 'pharmacists') && (
                                 <button
                                     onClick={() => {
                                         if (activeTab === 'branches') {
@@ -682,7 +741,7 @@ export const ProjectSettings: React.FC<{
                                     className="btn-primary whitespace-nowrap text-[10px] uppercase tracking-widest"
                                 >
                                     <Plus size={18} />
-                                    Add {activeTab === 'branches' ? 'Identity' : 'Person'}
+                                    Add {activeTab === 'branches' ? 'Branch' : 'Person'}
                                 </button>
                             )}
                         </div>
@@ -697,12 +756,16 @@ export const ProjectSettings: React.FC<{
                         </div>
                     ) : (
                         <div className="p-5 md:p-6">
+                            {activeTab === 'login-approvals' && (
+                                <BranchLoginApprovalsSection />
+                            )}
+
                             {activeTab === 'branches' && (
                                 filteredBranches.length === 0 ? (
                                     <EmptyState
                                         icon={Store}
-                                        title="No identities found"
-                                        description="Try another search term or add a new branch, manager, admin, or accounts identity."
+                                        title="No branches found"
+                                        description="Try another search term or add a new operational branch."
                                     />
                                 ) : (
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -728,9 +791,7 @@ export const ProjectSettings: React.FC<{
                                                                 <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{branch.name}</h3>
                                                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                                                     <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500">{branch.code}</span>
-                                                                    <span className={`rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
-                                                                        branch.role === 'branch' ? 'bg-brand/10 text-brand' : 'bg-slate-900 text-white'
-                                                                    }`}>{branch.role}</span>
+                                                                    <span className="rounded-md bg-brand/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">Branch</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -738,14 +799,14 @@ export const ProjectSettings: React.FC<{
                                                             <button
                                                                 onClick={() => { setBranchForm(branch); setIsBranchModalOpen(true); }}
                                                                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
-                                                                title="Edit identity"
+                                                                title="Edit branch"
                                                             >
                                                                 <Edit2 size={16} />
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteBranch(branch.id)}
                                                                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100"
-                                                                title="Delete identity"
+                                                                title="Delete branch"
                                                             >
                                                                 <Trash2 size={16} />
                                                             </button>
@@ -857,13 +918,13 @@ export const ProjectSettings: React.FC<{
                                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
                                         <aside className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                                             <div className="mb-3 px-2">
-                                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Target identity</h2>
-                                                <p className="mt-1 text-xs font-medium text-slate-500">Pick one identity, then adjust module access.</p>
+                                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Target branch</h2>
+                                                <p className="mt-1 text-xs font-medium text-slate-500">Pick one branch, then adjust module overrides.</p>
                                             </div>
                                             <div className="max-h-[540px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                                                 {filteredBranches.length === 0 ? (
                                                     <div className="rounded-lg border border-dashed border-slate-200 bg-white p-5 text-center text-xs font-bold text-slate-400">
-                                                        No matching identities
+                                                        No matching branches
                                                     </div>
                                                 ) : filteredBranches.map(branch => {
                                                     const selected = selectedBranchForPerms === branch.id;
@@ -880,7 +941,7 @@ export const ProjectSettings: React.FC<{
                                                             <div className="flex items-center justify-between gap-3">
                                                                 <div className="min-w-0">
                                                                     <p className="truncate text-[11px] font-black uppercase tracking-wider">{branch.name}</p>
-                                                                    <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${selected ? 'text-white/60' : 'text-slate-400'}`}>{branch.role} / {branch.code}</p>
+                                                                    <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${selected ? 'text-white/60' : 'text-slate-400'}`}>Branch / {branch.code}</p>
                                                                 </div>
                                                                 <ChevronRight size={16} className={selected ? 'text-white' : 'text-slate-300'} />
                                                             </div>
@@ -894,8 +955,8 @@ export const ProjectSettings: React.FC<{
                                             {!selectedBranch ? (
                                                 <EmptyState
                                                     icon={Lock}
-                                                    title="Select an identity"
-                                                    description="Choose a branch, manager, admin, or accounts identity to manage feature access."
+                                                    title="Select a branch"
+                                                    description="Choose an operational branch to manage branch-specific feature overrides."
                                                 />
                                             ) : (
                                                 <div className="space-y-5">
@@ -904,7 +965,7 @@ export const ProjectSettings: React.FC<{
                                                             <div>
                                                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Permission target</p>
                                                                 <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">{selectedBranch.name}</h3>
-                                                                <p className="mt-1 text-sm font-medium text-slate-500">{selectedBranch.role.toUpperCase()} / {selectedBranch.code}</p>
+                                                                <p className="mt-1 text-sm font-medium text-slate-500">BRANCH / {selectedBranch.code}</p>
                                                             </div>
                                                             <div className="rounded-lg border border-brand/10 bg-brand/5 px-4 py-3 text-right">
                                                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand">Enabled features</p>
@@ -915,8 +976,7 @@ export const ProjectSettings: React.FC<{
 
                                                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                                                         {FEATURES.map(feature => {
-                                                            const isManagerTarget = selectedBranch.role === 'manager';
-                                                            const currentPerm = isManagerTarget ? 'edit' : permissions.find(p => p.featureName === feature.id)?.accessLevel || 'none';
+                                                            const currentPerm = permissions.find(p => p.featureName === feature.id)?.accessLevel || 'none';
                                                             const accessTone = currentPerm === 'none'
                                                                 ? 'text-red-600 bg-red-50 border-red-100'
                                                                 : currentPerm === 'read'
@@ -939,12 +999,11 @@ export const ProjectSettings: React.FC<{
                                                                                     <button
                                                                                         key={level}
                                                                                         onClick={() => handleUpdatePermission(feature.id, level)}
-                                                                                        disabled={isManagerTarget}
                                                                                         className={`rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
                                                                                             currentPerm === level
                                                                                                 ? 'bg-brand text-white shadow-sm'
                                                                                                 : 'text-slate-400 hover:bg-white hover:text-slate-700'
-                                                                                        } ${isManagerTarget ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                                                        }`}
                                                                                     >
                                                                                         {level}
                                                                                     </button>
@@ -958,6 +1017,29 @@ export const ProjectSettings: React.FC<{
                                                     </div>
                                                 </div>
                                             )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'system' && maintenanceSettingsError && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm">
+                                            <AlertTriangle size={22} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">System settings blocked</p>
+                                            <h2 className="mt-1 text-xl font-black tracking-tight text-amber-950">Settings could not be loaded from Supabase</h2>
+                                            <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-amber-800">
+                                                The app is not treating defaults as saved settings. Resolve migrations, RLS, or connectivity before changing maintenance mode, footer branding, or POS instruction copy.
+                                            </p>
+                                            <p className="mt-3 break-words rounded-lg border border-amber-200 bg-white/70 px-3 py-2 text-xs font-semibold leading-5 text-amber-800">
+                                                {maintenanceSettingsError}
+                                            </p>
+                                            <button onClick={loadData} className="mt-4 btn-secondary text-[10px] uppercase tracking-widest">
+                                                <RotateCcw size={15} /> Retry settings load
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -1133,6 +1215,75 @@ export const ProjectSettings: React.FC<{
                                     </section>
 
                                     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                                        <div className="mb-5 flex items-start gap-3">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand shadow-sm">
+                                                <Lock size={18} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black tracking-tight text-slate-900">Login page badges</h3>
+                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Control the small badges shown on the login page. Leave empty to show no badges.</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.9fr]">
+                                            <div className="space-y-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Badges, one per line</label>
+                                                    <textarea
+                                                        value={(maintenanceSettings.loginBadges || []).join('\n')}
+                                                        onChange={e => setMaintenanceSettings({
+                                                            ...maintenanceSettings,
+                                                            loginBadges: e.target.value
+                                                                .split('\n')
+                                                                .map(item => item.trim())
+                                                                .slice(0, 6)
+                                                        })}
+                                                        maxLength={480}
+                                                        rows={5}
+                                                        placeholder="Example: Manager Approved Access"
+                                                        className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                    />
+                                                    <p className="text-xs font-semibold text-slate-400">Maximum 6 badges. Blank lines are ignored.</p>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={handleSaveLoginBadges}
+                                                        disabled={isSavingLoginBadges}
+                                                        className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
+                                                    >
+                                                        <Save size={18} />
+                                                        Save badges
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setMaintenanceSettings({ ...maintenanceSettings, loginBadges: [] })}
+                                                        className="btn-secondary text-[10px] uppercase tracking-widest"
+                                                    >
+                                                        <RotateCcw size={16} />
+                                                        Clear badges
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Preview</p>
+                                                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950 px-4 py-5">
+                                                    {(maintenanceSettings.loginBadges || []).filter(Boolean).length > 0 ? (
+                                                        <div className="flex flex-col items-center gap-3">
+                                                            {maintenanceSettings.loginBadges.filter(Boolean).map((badge, index) => (
+                                                                <span key={`${badge}-${index}`} className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center text-xs font-bold uppercase tracking-widest text-slate-300">
+                                                                    {badge}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-center text-xs font-bold text-slate-500">No login badges will be shown.</p>
+                                                    )}
+                                                </div>
+                                            </aside>
+                                        </div>
+                                    </section>
+
+                                    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                                             <div className="flex items-start gap-3">
                                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand shadow-sm">
@@ -1288,37 +1439,24 @@ export const ProjectSettings: React.FC<{
                     aria-describedby="branch-modal-description"
                 >
                     <div className="bg-white w-full max-w-xl rounded-lg shadow-xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
-                        <span id="branch-modal-description" className="sr-only">Configuration form for branch or admin system identities.</span>
+                        <span id="branch-modal-description" className="sr-only">Configuration form for operational pharmacy branches.</span>
                         <div className="p-6 border-b flex items-center justify-between bg-slate-50">
                             <div>
-                                <h3 id="branch-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">System Identity</h3>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Configure Branch or Admin access</p>
+                                <h3 id="branch-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">Branch</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Configure an operational pharmacy branch</p>
                             </div>
                             <button onClick={() => setIsBranchModalOpen(false)} className="w-9 h-9 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors"><X size={18} /></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Internal ID / Code</label>
-                                    <input
-                                        type="text"
-                                        value={branchForm.code}
-                                        onChange={e => setBranchForm({ ...branchForm, code: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                        placeholder="e.g. T001"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Security Role</label>
-                                    <select
-                                        title="User Role"
-                                        value={branchForm.role}
-                                        onChange={e => setBranchForm({ ...branchForm, role: e.target.value as Role })}
-                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black"
-                                    >
-                                        {ROLES.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
-                                    </select>
-                                </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Code</label>
+                                <input
+                                    type="text"
+                                    value={branchForm.code}
+                                    onChange={e => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase(), role: 'branch' })}
+                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                    placeholder="e.g. T001"
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Display Name</label>
@@ -1421,7 +1559,7 @@ export const ProjectSettings: React.FC<{
                             </div>
                         </div>
                         <div className="p-6 bg-slate-50 flex gap-4">
-                            <button onClick={handleSaveBranch} className="btn-primary flex-1 text-[10px] uppercase tracking-widest"><Save size={18} /> Provision Identity</button>
+                            <button onClick={handleSaveBranch} className="btn-primary flex-1 text-[10px] uppercase tracking-widest"><Save size={18} /> Save Branch</button>
                         </div>
                     </div>
                 </div>

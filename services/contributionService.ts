@@ -2,6 +2,57 @@ import { supabaseClient } from '../lib/supabaseClient';
 import { EmployeeContribution, ContributionType } from '../types';
 import { generateUUID } from '../utils/uuid';
 
+const CONTRIBUTIONS_BUCKET = 'contributions';
+
+const getContributionStoragePath = (value?: string | null) => {
+  const rawValue = value?.trim();
+  if (!rawValue) return null;
+
+  if (rawValue.startsWith('files/')) return rawValue;
+
+  const bucketPrefix = `${CONTRIBUTIONS_BUCKET}/`;
+  if (rawValue.startsWith(bucketPrefix)) return rawValue.slice(bucketPrefix.length);
+
+  try {
+    const parsed = new URL(rawValue);
+    const publicPrefix = `/storage/v1/object/public/${CONTRIBUTIONS_BUCKET}/`;
+    const signedPrefix = `/storage/v1/object/sign/${CONTRIBUTIONS_BUCKET}/`;
+    const matchingPrefix = [publicPrefix, signedPrefix].find(prefix => parsed.pathname.startsWith(prefix));
+
+    if (matchingPrefix) {
+      const objectPath = parsed.pathname.slice(matchingPrefix.length);
+      return decodeURIComponent(objectPath);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const getDownloadFileName = (value: string, title: string) => {
+  const storagePath = getContributionStoragePath(value);
+  let fileName = storagePath?.split('/').pop();
+
+  if (!fileName) {
+    try {
+      const parsed = new URL(value);
+      fileName = parsed.pathname.split('/').pop();
+    } catch {
+      fileName = value.split('/').pop();
+    }
+  }
+
+  if (fileName && fileName.includes('_') && fileName.length > 36) {
+    const parts = fileName.split('_');
+    if (parts[0].length === 36) {
+      fileName = parts.slice(1).join('_');
+    }
+  }
+
+  return fileName || title.replace(/\s+/g, '_');
+};
+
 export const contributionService = {
   list: async (): Promise<EmployeeContribution[]> => {
     const { data, error } = await supabaseClient
@@ -105,7 +156,7 @@ export const contributionService = {
     const filePath = `files/${fileName}`;
 
     const { error: uploadError } = await supabaseClient.storage
-      .from('contributions')
+      .from(CONTRIBUTIONS_BUCKET)
       .upload(filePath, file);
 
     if (uploadError) {
@@ -113,34 +164,31 @@ export const contributionService = {
       throw uploadError;
     }
 
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('contributions')
-      .getPublicUrl(filePath);
-
-    return publicUrl;
+    return filePath;
   },
 
   downloadFile: async (url: string, title: string) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      
-      // Extract original filename or create one from title
-      const urlParts = url.split('/');
-      let fileName = urlParts[urlParts.length - 1];
-      
-      // If it's our new format (UUID_OriginalName), extract the original part
-      if (fileName && fileName.includes('_') && fileName.length > 36) {
-        const parts = fileName.split('_');
-        // Check if the first part looks like a UUID (approximate check)
-        if (parts[0].length === 36) {
-          fileName = parts.slice(1).join('_');
+      let blob: Blob;
+      const storagePath = getContributionStoragePath(url);
+
+      if (storagePath) {
+        const { data, error } = await supabaseClient.storage
+          .from(CONTRIBUTIONS_BUCKET)
+          .download(storagePath);
+
+        if (error) throw error;
+        blob = data;
+      } else {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Download failed with status ${response.status}`);
         }
+        blob = await response.blob();
       }
-      
-      if (!fileName) fileName = title.replace(/\s+/g, '_');
-      
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const fileName = getDownloadFileName(url, title);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = fileName;

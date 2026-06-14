@@ -15,7 +15,8 @@ import {
   Settings, 
   FileQuestion,
   LayoutDashboard,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 
 import { AlertBanner } from '../components/dashboard/AlertBanner';
@@ -52,6 +53,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   });
 
   const { data, questions, isLoading, error, refresh } = useDashboardData(filters);
+  const aiInsightsEnabled = isModuleEnabled('aiInsights');
 
   const updateFilter = (key: keyof DashboardFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -236,7 +238,23 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                       <KPICard title="IT" score={data?.it_avg || 0} colorType="it" />
                     </div>
 
-                    <AIInsightsPanel stats={data?.sentiment_stats} onRefresh={refresh} isLoading={isLoading} />
+                    {aiInsightsEnabled ? (
+                      <AIInsightsPanel stats={data?.sentiment_stats} onRefresh={refresh} isLoading={isLoading} />
+                    ) : (
+                      <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-200 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-slate-100 text-slate-500 rounded-lg">
+                            <Sparkles className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-black text-slate-900 tracking-tight">AI insights disabled</h3>
+                            <p className="text-sm font-medium text-slate-500 mt-1">
+                              Enable VITE_MODULE_AI_INSIGHTS only after the Supabase function and AI provider secrets are configured for this dedicated-client deployment.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

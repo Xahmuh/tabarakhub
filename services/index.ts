@@ -12,3 +12,5 @@ export * from './permissionService';
 export * from './contributionService';
 export * from './systemSettingsService';
 export * from './deliveryService';
+export * from './deliveryCoverageService';
+export * from './branchLoginApprovalService';

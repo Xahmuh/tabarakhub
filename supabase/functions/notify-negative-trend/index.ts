@@ -4,19 +4,61 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-const CEO_EMAIL = Deno.env.get('CEO_EMAIL') || 'ceo@example.com'
+const CEO_EMAIL = Deno.env.get('CEO_EMAIL')
+const NOTIFICATION_FROM_EMAIL = Deno.env.get('NOTIFICATION_FROM_EMAIL')
+const CLIENT_DASHBOARD_URL = Deno.env.get('CLIENT_DASHBOARD_URL')
+const CLIENT_PUBLIC_NAME = Deno.env.get('CLIENT_PUBLIC_NAME') || 'Dedicated Client'
 const FUNCTION_SECRET = Deno.env.get('FUNCTION_SECRET')
+
+const placeholderTokens = [
+  'client_frontend_url',
+  'client-dashboard-url',
+  'client-domain.example',
+  'example.com',
+  'admin@example.com',
+  'onboarding@resend.dev',
+  'localhost',
+  '127.0.0.1',
+];
+
+const hasPlaceholderValue = (value?: string | null) => {
+  const normalized = (value || '').trim().toLowerCase();
+  return !normalized || placeholderTokens.some((token) => normalized.includes(token));
+};
+
+const isValidEmail = (value?: string | null) =>
+  !!value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !hasPlaceholderValue(value);
+
+const isValidProductionUrl = (value?: string | null) => {
+  if (hasPlaceholderValue(value)) return false;
+
+  try {
+    const parsed = new URL(value || '');
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 serve(async (req) => {
   try {
-    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Missing environment variables")
-    }
     if (!FUNCTION_SECRET || req.headers.get('x-function-secret') !== FUNCTION_SECRET) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         headers: { 'Content-Type': 'application/json' },
         status: 401,
       })
+    }
+
+    if (
+      !RESEND_API_KEY ||
+      !SUPABASE_URL ||
+      !SUPABASE_SERVICE_ROLE_KEY ||
+      !isValidEmail(CEO_EMAIL) ||
+      !isValidEmail(NOTIFICATION_FROM_EMAIL) ||
+      !isValidProductionUrl(CLIENT_DASHBOARD_URL)
+    ) {
+      console.error("Negative trend notification function is missing required production-safe server-side environment variables")
+      throw new Error("Negative trend notification email is not configured")
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -45,14 +87,18 @@ serve(async (req) => {
       const dropPercentFormatted = (dropPercentage * 100).toFixed(1)
       const htmlContent = `
         <h2 style="color: #d32f2f;">⚠️ Critical Alert: Negative Trend Detected</h2>
-        <p>The Management Health Score has dropped significantly.</p>
+        <p>${CLIENT_PUBLIC_NAME} Management Health Score has dropped significantly.</p>
         <ul>
           <li><strong>Current Score (${current.month}):</strong> ${current.health_score} / 5.0</li>
           <li><strong>Previous 2 Months Average:</strong> ${twoMonthsAgoAvg.toFixed(2)} / 5.0</li>
           <li><strong>Drop:</strong> ${dropPercentFormatted}%</li>
         </ul>
-        <p>Immediate review of the <a href="https://your-app.com/admin/quality-feedback">Admin Dashboard</a> is recommended to identify the operational issues driving this trend.</p>
+        <p>Immediate review of the <a href="${CLIENT_DASHBOARD_URL}">Admin Dashboard</a> is recommended to identify the operational issues driving this trend.</p>
       `
+      const safeHtmlContent = htmlContent.replace(
+        /<h2[\s\S]*?<\/h2>/,
+        '<h2 style="color: #d32f2f;">Critical Alert: Negative Trend Detected</h2>',
+      )
 
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -61,10 +107,10 @@ serve(async (req) => {
           'Authorization': `Bearer ${RESEND_API_KEY}`
         },
         body: JSON.stringify({
-          from: 'Quality Feedback Alerts <onboarding@resend.dev>', // Replace with your verified domain
+          from: NOTIFICATION_FROM_EMAIL,
           to: [CEO_EMAIL],
-          subject: `URGENT: Management Health Score dropped by ${dropPercentFormatted}%`,
-          html: htmlContent
+          subject: `URGENT: ${CLIENT_PUBLIC_NAME} Management Health Score dropped by ${dropPercentFormatted}%`,
+          html: safeHtmlContent
         })
       })
 

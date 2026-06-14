@@ -72,7 +72,7 @@ export const SelectPharmacistPage: React.FC<SelectPharmacistPageProps> = ({ bran
 
   const todayLabel = useMemo(getTodayLabel, []);
   const isSearching = searchQuery.trim().length > 0;
-  const hasResultMode = showAllResults || isSearching;
+  const hasResultMode = showAllResults || isSearching || pharmacists.length === 0;
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -199,9 +199,15 @@ export const SelectPharmacistPage: React.FC<SelectPharmacistPageProps> = ({ bran
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
                 <Clock3 className="h-5 w-5" />
               </div>
-              <h2 className="mt-4 text-lg font-black text-slate-900">No active shift data yet</h2>
+              <h2 className="mt-4 text-lg font-black text-slate-900">
+                {pharmacists.length === 0 ? 'No pharmacists assigned' : 'No active shift data yet'}
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm font-medium text-slate-500">
-                {isSearching ? `No personnel matches "${searchQuery}".` : 'No active personnel is currently assigned to this terminal.'}
+                {pharmacists.length === 0
+                  ? 'No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.'
+                  : isSearching
+                    ? `No personnel matches "${searchQuery}".`
+                    : 'No active personnel is currently assigned to this terminal.'}
               </p>
               {isSearching && (
                 <button

@@ -180,12 +180,18 @@ export const DeliverySettings: React.FC = () => {
       html: `
         <div class="space-y-3 text-left p-2">
           <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Driver ID</label>
+            <div class="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-black text-slate-600">
+              ${driver?.driverCode ? escapeHtml(driver.driverCode) : 'Auto-generated on save'}
+            </div>
+          </div>
+          <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Name</label>
-            <input id="swal-name" value="${driver?.name || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+            <input id="swal-name" value="${escapeHtml(driver?.name)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone (optional)</label>
-            <input id="swal-phone" value="${driver?.phone || ''}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+            <input id="swal-phone" value="${escapeHtml(driver?.phone)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
         </div>`,
       showCancelButton: true,
@@ -398,7 +404,12 @@ export const DeliverySettings: React.FC = () => {
             {drivers.map(driver => (
               <div key={driver.id} className={`rounded-lg border p-3 ${driver.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-black text-slate-800">{driver.name}</p>
+                  <div>
+                    <p className="text-sm font-black text-slate-800">{driver.name}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                      {driver.driverCode || 'Pending Driver ID'}
+                    </p>
+                  </div>
                   <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${driver.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
                     {driver.isActive ? 'Active' : 'Inactive'}
                   </span>

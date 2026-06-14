@@ -32,14 +32,18 @@ const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
 
+type SpinRecoveryStep = 'info' | 'review' | 'spin';
+
 type SpinFlowDraft = {
     token: string;
+    step: SpinRecoveryStep;
     phone: string;
     firstName: string;
     lastName: string;
     email: string;
     countryCode: string;
     hasClickedRate: boolean;
+    mapsOpenedAt?: number;
     savedAt: number;
 };
 
@@ -57,6 +61,71 @@ type MotionPermissionEvent = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const isSpinRecoveryStateExpired = (savedAt?: number) =>
+    !savedAt || Date.now() - savedAt > SPIN_RETURN_TTL_MS;
+
+const clearSpinRecoveryState = () => {
+    sessionStorage.removeItem(SPIN_RETURN_KEY);
+    sessionStorage.removeItem(SPIN_DRAFT_KEY);
+};
+
+const loadSpinRecoveryState = (token: string): SpinFlowDraft | null => {
+    try {
+        const draft = JSON.parse(sessionStorage.getItem(SPIN_DRAFT_KEY) || 'null') as Partial<SpinFlowDraft> | null;
+        const savedAt = Number(draft?.savedAt);
+        if (!draft?.token || draft.token !== token || !Number.isFinite(savedAt) || isSpinRecoveryStateExpired(savedAt)) {
+            clearSpinRecoveryState();
+            return null;
+        }
+
+        return {
+            token,
+            step: draft.step === 'review' || draft.step === 'spin' ? draft.step : 'info',
+            phone: draft.phone || '',
+            firstName: draft.firstName || '',
+            lastName: draft.lastName || '',
+            email: draft.email || '',
+            countryCode: draft.countryCode || '+973',
+            hasClickedRate: Boolean(draft.hasClickedRate),
+            mapsOpenedAt: draft.mapsOpenedAt,
+            savedAt
+        };
+    } catch {
+        clearSpinRecoveryState();
+        return null;
+    }
+};
+
+const saveSpinRecoveryState = (draft: Omit<SpinFlowDraft, 'savedAt'> & { url: string }) => {
+    try {
+        const savedAt = Date.now();
+        const safeDraft: SpinFlowDraft = {
+            token: draft.token,
+            step: draft.step,
+            phone: draft.phone,
+            firstName: draft.firstName,
+            lastName: draft.lastName,
+            email: draft.email,
+            countryCode: draft.countryCode,
+            hasClickedRate: draft.hasClickedRate,
+            mapsOpenedAt: draft.mapsOpenedAt,
+            savedAt
+        };
+
+        sessionStorage.setItem(SPIN_RETURN_KEY, JSON.stringify({
+            token: safeDraft.token,
+            url: draft.url,
+            step: safeDraft.step,
+            hasClickedRate: safeDraft.hasClickedRate,
+            mapsOpenedAt: safeDraft.mapsOpenedAt,
+            savedAt
+        }));
+        sessionStorage.setItem(SPIN_DRAFT_KEY, JSON.stringify(safeDraft));
+    } catch {
+        // Recovery storage is only UX state; RPC validation remains authoritative.
+    }
+};
 
 export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     const [step, setStep] = useState<'validate' | 'info' | 'review' | 'spin' | 'result'>('validate');
@@ -91,50 +160,37 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     };
 
-    const persistSpinReturn = (ratingOverride = skipRating) => {
+    const currentRecoveryStep = (): SpinRecoveryStep =>
+        step === 'review' || step === 'spin' ? step : 'info';
+
+    const persistSpinReturn = (
+        ratingOverride = skipRating,
+        patch: Partial<Omit<SpinFlowDraft, 'token' | 'savedAt'>> = {}
+    ) => {
         const url = buildSpinReturnUrl(ratingOverride);
         window.history.replaceState({ spinToken: token }, '', url);
-        sessionStorage.setItem(SPIN_RETURN_KEY, JSON.stringify({
+        const existing = loadSpinRecoveryState(token);
+        saveSpinRecoveryState({
             token,
             url,
-            savedAt: Date.now()
-        }));
+            step: patch.step ?? currentRecoveryStep(),
+            phone: patch.phone ?? phone,
+            firstName: patch.firstName ?? firstName,
+            lastName: patch.lastName ?? lastName,
+            email: patch.email ?? email,
+            countryCode: patch.countryCode ?? countryCode,
+            hasClickedRate: patch.hasClickedRate ?? hasClickedRate,
+            mapsOpenedAt: patch.mapsOpenedAt ?? existing?.mapsOpenedAt
+        });
         return url;
     };
 
-    const saveFlowDraft = (patch: Partial<SpinFlowDraft> = {}) => {
-        const draft: SpinFlowDraft = {
-            token,
-            phone,
-            firstName,
-            lastName,
-            email,
-            countryCode,
-            hasClickedRate,
-            savedAt: Date.now(),
-            ...patch
-        };
-        sessionStorage.setItem(SPIN_DRAFT_KEY, JSON.stringify(draft));
-    };
+    const saveFlowDraft = (patch: Partial<Omit<SpinFlowDraft, 'token' | 'savedAt'>> = {}) =>
+        persistSpinReturn(skipRating, patch);
 
-    const readFlowDraft = (): SpinFlowDraft | null => {
-        try {
-            const draft = JSON.parse(sessionStorage.getItem(SPIN_DRAFT_KEY) || 'null') as SpinFlowDraft | null;
-            if (!draft?.token || draft.token !== token || Date.now() - draft.savedAt > SPIN_RETURN_TTL_MS) {
-                sessionStorage.removeItem(SPIN_DRAFT_KEY);
-                return null;
-            }
-            return draft;
-        } catch {
-            sessionStorage.removeItem(SPIN_DRAFT_KEY);
-            return null;
-        }
-    };
+    const readFlowDraft = (): SpinFlowDraft | null => loadSpinRecoveryState(token);
 
-    const clearSpinRecovery = () => {
-        sessionStorage.removeItem(SPIN_RETURN_KEY);
-        sessionStorage.removeItem(SPIN_DRAFT_KEY);
-    };
+    const clearSpinRecovery = () => clearSpinRecoveryState();
 
     const countryCodes = [
         { code: '+973', country: 'BH' },
@@ -162,7 +218,6 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                     const urlParams = new URLSearchParams(window.location.search);
                     const shouldSkipRating = urlParams.get('skipRating') === 'true';
                     setSkipRating(shouldSkipRating);
-                    persistSpinReturn(shouldSkipRating);
 
                     const savedDraft = readFlowDraft();
                     if (savedDraft) {
@@ -172,16 +227,25 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                         setEmail(savedDraft.email);
                         setCountryCode(savedDraft.countryCode);
                         setHasClickedRate(savedDraft.hasClickedRate);
-                        setStep(savedDraft.hasClickedRate && !shouldSkipRating ? 'review' : 'info');
+                        const restoredStep = !shouldSkipRating && (savedDraft.hasClickedRate || savedDraft.step === 'review' || savedDraft.step === 'spin')
+                            ? 'review'
+                            : 'info';
+                        persistSpinReturn(shouldSkipRating, {
+                            ...savedDraft,
+                            step: restoredStep
+                        });
+                        setStep(restoredStep);
                         return;
                     }
 
+                    persistSpinReturn(shouldSkipRating, { step: 'info' });
                     setStep('info');
                 } else {
                     clearSpinRecovery();
                     setError('This reward session is not available right now. Please ask the branch team for a new QR code.');
                 }
             } catch {
+                clearSpinRecovery();
                 setError('We could not verify this reward session. Please check your connection and try again.');
             }
         };
@@ -189,8 +253,8 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
     }, [token]);
 
     useEffect(() => {
-        if (step !== 'result') {
-            persistSpinReturn();
+        if (step === 'info' || step === 'review' || step === 'spin') {
+            persistSpinReturn(skipRating, { step });
         }
 
         switch (step) {
@@ -211,7 +275,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         try {
             const cust = await spinWinService.customers.upsert(fullPhone, email, firstName, lastName);
             setCustomer(cust);
-            saveFlowDraft({ hasClickedRate: false, savedAt: Date.now() });
+            saveFlowDraft({ hasClickedRate: false, step: 'info' });
 
             if (isDemoMode) {
                 const dailyCount = await spinWinService.spins.getDailyCount(cust.id, 'customer');
@@ -246,6 +310,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
         try {
             const activePrizes = await spinWinService.prizes.list();
             setPrizes(activePrizes.filter(p => p.isActive));
+            saveFlowDraft({ hasClickedRate: true, step: 'spin' });
             setStep('spin');
         } catch (err) {
             setError('Error loading prizes.');
@@ -254,16 +319,16 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
 
     const handleReviewClick = async () => {
         if (!customer || !session) return;
-        persistSpinReturn();
+        const mapsOpenedAt = Date.now();
         setHasClickedRate(true);
-        saveFlowDraft({ hasClickedRate: true, savedAt: Date.now() });
-        spinWinService.reviews.log({
+        saveFlowDraft({ hasClickedRate: true, step: 'review', mapsOpenedAt });
+        void spinWinService.reviews.log({
             customerId: customer.id,
             branchId: session.branchId,
             reviewClicked: true
         });
         const reviewUrl = session.branches?.google_maps_link || 'https://search.google.com/local/writereview?placeid=ChIJo_Y029TfPTUREonl7Y1yN5A';
-        const opened = window.open(reviewUrl, '_blank');
+        const opened = window.open(reviewUrl, '_blank', 'noopener,noreferrer');
         if (!opened) {
             window.location.assign(reviewUrl);
         }
@@ -732,7 +797,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token }) => {
                                             <ArrowRight className="h-4 w-4" />
                                         </button>
                                     ) : (
-                                        <button onClick={() => loadPrizes()} className="flex w-full animate-in zoom-in items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-950/30 transition-all hover:bg-emerald-700 active:scale-[0.98]">
+                                        <button onClick={() => { saveFlowDraft({ hasClickedRate: true, step: 'review' }); loadPrizes(); }} className="flex w-full animate-in zoom-in items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-950/30 transition-all hover:bg-emerald-700 active:scale-[0.98]">
                                             <CheckCircle2 className="h-5 w-5" />
                                             <span>I Have Rated - Continue</span>
                                         </button>

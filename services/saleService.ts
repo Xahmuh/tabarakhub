@@ -25,6 +25,45 @@ const throwUnlessDemoMode = (error: unknown) => {
   if (!isDemoMode) throw error;
 };
 
+type BranchScopedListOptions = {
+  timestampFrom?: Date | string | null;
+  timestampTo?: Date | string | null;
+  maxRows?: number;
+};
+
+const PAGE_SIZE = 1000;
+
+const normalizeTimestampBound = (value?: Date | string | null) => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const applyTimestampBounds = (query: any, options?: BranchScopedListOptions) => {
+  const from = normalizeTimestampBound(options?.timestampFrom);
+  const to = normalizeTimestampBound(options?.timestampTo);
+  if (from) query = query.gte('timestamp', from);
+  if (to) query = query.lte('timestamp', to);
+  return query;
+};
+
+const isWithinTimestampBounds = (timestamp: string, options?: BranchScopedListOptions) => {
+  const value = new Date(timestamp).getTime();
+  if (Number.isNaN(value)) return false;
+
+  const from = normalizeTimestampBound(options?.timestampFrom);
+  const to = normalizeTimestampBound(options?.timestampTo);
+  if (from && value < new Date(from).getTime()) return false;
+  if (to && value > new Date(to).getTime()) return false;
+  return true;
+};
+
+const getMaxRows = (options?: BranchScopedListOptions) =>
+  typeof options?.maxRows === 'number' && Number.isFinite(options.maxRows) && options.maxRows > 0
+    ? Math.floor(options.maxRows)
+    : Number.POSITIVE_INFINITY;
+
 export const saleService = {
   products: {
     list: async (branchId?: string): Promise<Product[]> => {
@@ -119,29 +158,33 @@ export const saleService = {
   },
 
   sales: {
-    list: async (branchId?: string, role: Role = 'branch'): Promise<LostSale[]> => {
+    list: async (branchId?: string, role: Role = 'branch', options?: BranchScopedListOptions): Promise<LostSale[]> => {
       let remoteData: LostSale[] = [];
       try {
+        if (role === 'branch' && !isUUID(branchId)) return [];
+
         let allRecords: any[] = [];
         let from = 0;
-        let pageSize = 1000;
+        const maxRows = getMaxRows(options);
         let hasMore = true;
-        while (hasMore) {
+        while (hasMore && allRecords.length < maxRows) {
           let query = supabaseClient.from('lost_sales').select('*');
           if (role !== 'branch' && branchId && branchId !== 'all') {
             if (isUUID(branchId)) query = query.eq('branch_id', branchId);
           } else if (role === 'branch') {
             if (isUUID(branchId)) query = query.eq('branch_id', branchId);
           }
+          query = applyTimestampBounds(query, options);
+          const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
           const { data, error } = await query
             .order('timestamp', { ascending: false })
-            .range(from, from + pageSize - 1);
+            .range(from, from + currentPageSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) {
             hasMore = false;
           } else {
             allRecords = [...allRecords, ...data];
-            if (data.length < pageSize) hasMore = false; else from += pageSize;
+            if (data.length < currentPageSize || allRecords.length >= maxRows) hasMore = false; else from += currentPageSize;
           }
           if (allRecords.length >= 100000) hasMore = false;
         }
@@ -162,7 +205,8 @@ export const saleService = {
         throwUnlessDemoMode(e);
       }
       const localData = readDemoArray<LostSale>(SALES_KEY);
-      const filteredLocal = branchId && branchId !== 'all' ? localData.filter(s => s.branchId === branchId) : localData;
+      const filteredLocal = (branchId && branchId !== 'all' ? localData.filter(s => s.branchId === branchId) : localData)
+        .filter(s => isWithinTimestampBounds(s.timestamp, options));
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();
       return combined.filter(item => {
@@ -233,26 +277,30 @@ export const saleService = {
   },
 
   shortages: {
-    list: async (branchId?: string, role: Role = 'branch'): Promise<Shortage[]> => {
+    list: async (branchId?: string, role: Role = 'branch', options?: BranchScopedListOptions): Promise<Shortage[]> => {
       let remoteData: Shortage[] = [];
       try {
+        if (role === 'branch' && !isUUID(branchId)) return [];
+
         let allRecords: any[] = [];
         let from = 0;
-        let pageSize = 1000;
+        const maxRows = getMaxRows(options);
         let hasMore = true;
-        while (hasMore) {
+        while (hasMore && allRecords.length < maxRows) {
           let query = supabaseClient.from('shortages').select('*');
           if (role !== 'branch' && branchId && branchId !== 'all' && isUUID(branchId)) query = query.eq('branch_id', branchId);
           else if (role === 'branch' && isUUID(branchId)) query = query.eq('branch_id', branchId);
+          query = applyTimestampBounds(query, options);
+          const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
           const { data, error } = await query
             .order('timestamp', { ascending: false })
-            .range(from, from + pageSize - 1);
+            .range(from, from + currentPageSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) {
             hasMore = false;
           } else {
             allRecords = [...allRecords, ...data];
-            if (data.length < pageSize) hasMore = false; else from += pageSize;
+            if (data.length < currentPageSize || allRecords.length >= maxRows) hasMore = false; else from += currentPageSize;
           }
         }
         remoteData = allRecords.map(s => ({
@@ -266,7 +314,8 @@ export const saleService = {
         throwUnlessDemoMode(e);
       }
       const localData = readDemoArray<Shortage>('tabarak_offline_shortages');
-      const filteredLocal = branchId && branchId !== 'all' ? localData.filter((s: any) => s.branchId === branchId) : localData;
+      const filteredLocal = (branchId && branchId !== 'all' ? localData.filter((s: any) => s.branchId === branchId) : localData)
+        .filter(s => isWithinTimestampBounds(s.timestamp, options));
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();
       return combined.filter((item: any) => {

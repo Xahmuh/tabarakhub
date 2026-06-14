@@ -21,7 +21,10 @@ const toBranch = (b: any): Branch => ({
 export const branchService = {
   list: async () => {
     try {
-      const { data, error } = await supabaseClient.from('branches').select(BRANCH_COLUMNS);
+      const { data, error } = await supabaseClient
+        .from('branches')
+        .select(BRANCH_COLUMNS)
+        .eq('role', 'branch');
       if (error) throw error;
       return data?.map(toBranch) || [];
     } catch (e) {
@@ -34,6 +37,7 @@ export const branchService = {
         .from('branches')
         .select(BRANCH_COLUMNS)
         .ilike('code', code)
+        .eq('role', 'branch')
         .maybeSingle();
       if (error) throw error;
       if (data) return toBranch(data);
@@ -54,13 +58,18 @@ export const branchService = {
 
     if (error || !data?.branch) return null;
     const branch = Array.isArray(data.branch) ? data.branch[0] : data.branch;
+    if (branch.role !== 'branch') return null;
     return toBranch(branch);
   },
   upsert: async (branch: Partial<Branch>) => {
+    if (branch.role && branch.role !== 'branch') {
+      throw new Error('The branches table is reserved for real branch records. Use Users & Roles to manage login users.');
+    }
+
     const payload: any = {
       code: branch.code?.toUpperCase(),
       name: branch.name,
-      role: branch.role,
+      role: 'branch',
       google_maps_link: branch.googleMapsLink,
       whatsapp_number: branch.whatsappNumber,
       nhra_license_no: branch.nhraLicenseNo,

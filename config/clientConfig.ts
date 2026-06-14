@@ -15,7 +15,9 @@ export type ClientModuleKey =
   | 'employeeContributions'
   | 'settings'
   | 'workforce'
-  | 'delivery';
+  | 'delivery'
+  | 'deliveryCoverageAdvanced'
+  | 'aiInsights';
 
 export type ClientConfig = {
   appName: string;
@@ -76,6 +78,8 @@ export const clientConfig: ClientConfig = {
     settings: readBoolean('VITE_MODULE_SETTINGS'),
     workforce: readBoolean('VITE_MODULE_WORKFORCE'),
     delivery: readBoolean('VITE_MODULE_DELIVERY'),
+    deliveryCoverageAdvanced: readBoolean('VITE_DELIVERY_COVERAGE_ADVANCED_ANALYTICS'),
+    aiInsights: readBoolean('VITE_MODULE_AI_INSIGHTS', false),
   },
 };
 

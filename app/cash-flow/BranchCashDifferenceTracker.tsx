@@ -35,6 +35,14 @@ interface BranchCashDifferenceTrackerProps {
     onRefresh?: () => void;
 }
 
+const escapeHtml = (value: string | null | undefined) =>
+    String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
 export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerProps> = ({
     branchId,
     role = 'branch',
@@ -134,12 +142,15 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     };
 
     const handleAddLog = async (existingData?: CashDifference) => {
+        const isBranchScopedEntry = role === 'branch' && Boolean(branchId);
+        const assignedPharmacistNames = new Set(pharmacists);
+
         const { value: formValues } = await Swal.fire({
             title: `<span class="text-2xl font-black uppercase tracking-tighter">${existingData ? 'Edit' : 'Log'} Cash Difference</span>`,
             html: `
         <div class="space-y-4 text-left p-4">
           <datalist id="pharmacists-list">
-            ${pharmacists.map(p => `<option value="${p}">`).join('')}
+            ${pharmacists.map(p => `<option value="${escapeHtml(p)}"></option>`).join('')}
           </datalist>
 
           ${(role === 'manager' || role === 'owner') && !branchId ? `
@@ -165,6 +176,11 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             <div>
               <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pharmacist Name</label>
               <input id="swal-pharmacist" type="text" list="pharmacists-list" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" value="${existingData ? existingData.pharmacistName : (pharmacistName || '')}" placeholder="Search or enter name">
+              ${isBranchScopedEntry && pharmacists.length === 0 ? `
+                <p class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+                  No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.
+                </p>
+              ` : ''}
             </div>
           </div>
 
@@ -227,7 +243,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             },
             preConfirm: () => {
                 const date = (document.getElementById('swal-date') as HTMLInputElement).value;
-                const phName = (document.getElementById('swal-pharmacist') as HTMLInputElement).value;
+                const phName = (document.getElementById('swal-pharmacist') as HTMLInputElement).value.trim();
                 const targetBranchId = (document.getElementById('swal-branch') as HTMLSelectElement)?.value || branchId;
                 const systemCash = parseFloat((document.getElementById('swal-system') as HTMLInputElement).value);
                 const actualCash = parseFloat((document.getElementById('swal-actual') as HTMLInputElement).value);
@@ -239,6 +255,16 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
 
                 if (!date || !phName || !targetBranchId || isNaN(systemCash) || isNaN(actualCash)) {
                     Swal.showValidationMessage('Please fill in all required fields (Branch, Pharmacist, Financials)');
+                    return false;
+                }
+
+                if (isBranchScopedEntry && pharmacists.length === 0) {
+                    Swal.showValidationMessage('No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.');
+                    return false;
+                }
+
+                if (isBranchScopedEntry && !assignedPharmacistNames.has(phName)) {
+                    Swal.showValidationMessage('Select an assigned pharmacist for this branch.');
                     return false;
                 }
 

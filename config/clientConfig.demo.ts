@@ -33,6 +33,8 @@ export const demoClientConfig: ClientConfig = {
     settings: true,
     workforce: true,
     delivery: true,
+    deliveryCoverageAdvanced: true,
+    aiInsights: false,
   },
 };
 

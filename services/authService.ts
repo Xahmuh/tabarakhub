@@ -31,18 +31,34 @@ const toBranch = (row: any): Branch => ({
   isKPIDashboardEnabled: row.is_kpi_dashboard_enabled
 });
 
-const loginIdentifierToEmail = (identifier: string) => {
+const loginIdentifierToEmailCandidates = (identifier: string) => {
   const normalized = identifier.trim().toLowerCase();
-  return normalized.includes('@') ? normalized : `${normalized}@tabarak.local`;
+  if (normalized.includes('@')) {
+    return [normalized];
+  }
+
+  return [`tabarakph.${normalized}@gmail.com`, `${normalized}@tabarak.local`];
+};
+
+const isInvalidCredentialsError = (error: unknown) => {
+  const authError = error as { message?: string };
+  return /invalid login credentials/i.test(authError.message ?? '');
 };
 
 export const authService = {
   signInWithPassword: async (identifier: string, password: string): Promise<AuthState> => {
-    const email = loginIdentifierToEmail(identifier);
-    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    let signInError: unknown = null;
+    for (const email of loginIdentifierToEmailCandidates(identifier)) {
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      signInError = error;
 
-    if (error) {
-      throw error;
+      if (!error || !isInvalidCredentialsError(error)) {
+        break;
+      }
+    }
+
+    if (signInError) {
+      throw signInError;
     }
 
     const state = await authService.getCurrentAuthState();
@@ -92,6 +108,10 @@ export const authService = {
     }
 
     const branchRow = Array.isArray(profile.branch) ? profile.branch[0] : profile.branch;
+    if (branchRow.role !== 'branch') {
+      return { user: null, pharmacist: null, permissions: [] };
+    }
+
     return { user: toBranch(branchRow), pharmacist: null, permissions: [] };
   },
 

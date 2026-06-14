@@ -6,6 +6,7 @@ import {
   Question,
   ModuleSettings
 } from '../types/feedback.types';
+import { isModuleEnabled } from '../../../../config/clientConfig';
 
 export const feedbackService = {
   // --- Public Form Methods ---
@@ -184,6 +185,10 @@ export const feedbackService = {
   },
 
   triggerSentimentAnalysis: async () => {
+    if (!isModuleEnabled('aiInsights')) {
+      throw new Error('AI insights are disabled for this deployment.');
+    }
+
     const { data, error } = await supabase.functions.invoke('analyze-sentiment', {
       method: 'POST'
     });

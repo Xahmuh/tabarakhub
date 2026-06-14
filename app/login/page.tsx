@@ -2,9 +2,12 @@
 import React, { useState } from 'react';
 import { ChevronRight, ShieldCheck, ShieldAlert, Loader2, Lock, Building2 } from 'lucide-react';
 import { clientConfig } from '../../config/clientConfig';
+import { MaintenanceSettings } from '../../types';
 
 interface LoginPageProps {
   onLogin: (identifier: string, password: string) => Promise<void>;
+  settings?: MaintenanceSettings | null;
+  notice?: string | null;
 }
 
 const getLoginErrorMessage = (message?: string) => {
@@ -21,12 +24,13 @@ const getLoginErrorMessage = (message?: string) => {
   return message || 'Unable to sign in. Check the username, password, and Supabase Auth setup.';
 };
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice }) => {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const loginBadges = (settings?.loginBadges || []).filter(Boolean).slice(0, 6);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -71,16 +75,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             Operational Platform
           </p>
 
-          <div className="flex flex-col items-center space-y-4">
-            <div className="flex w-fit items-center space-x-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">End-to-End Encryption Active</span>
+          {loginBadges.length > 0 && (
+            <div className="flex flex-col items-center space-y-3">
+              {loginBadges.map((badge, index) => (
+                <div key={`${badge}-${index}`} className="flex w-fit items-center rounded-xl border border-white/10 bg-white/5 px-5 py-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-300">{badge}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex w-fit items-center space-x-3 rounded-xl border border-white/10 bg-white/5 px-5 py-3">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">All Systems Operational</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -97,6 +100,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </div>
             <h1 className="mt-5 text-3xl font-black tracking-tight text-brand">Tabarak HUB</h1>
             <p className="mt-1 text-xs font-black uppercase tracking-[0.2em] text-slate-400">Operational Platform</p>
+            {loginBadges.length > 0 && (
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {loginBadges.map((badge, index) => (
+                  <span key={`${badge}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mb-10">
@@ -115,7 +127,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   type="text"
                   autoComplete="username"
                   className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
-                  placeholder="admin or t01@tabarak.local"
+                  placeholder="T001 or tabarakph.t001@gmail.com"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   onFocus={() => setFocusedField('code')}
@@ -146,10 +158,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-50 text-brand p-4 rounded-xl text-sm font-medium border border-red-100 flex items-start space-x-3 animate-in fade-in slide-in-from-top-2">
+            {(error || notice) && (
+              <div className={`${error ? 'bg-red-50 text-brand border-red-100' : 'bg-amber-50 text-amber-800 border-amber-100'} p-4 rounded-xl text-sm font-medium border flex items-start space-x-3 animate-in fade-in slide-in-from-top-2`}>
                 <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
-                <span>{error}</span>
+                <span>{error || notice}</span>
               </div>
             )}
 

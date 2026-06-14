@@ -71,6 +71,41 @@ export interface AuthState {
   rolePermissions?: RolePermission[];
 }
 
+export type BranchLoginApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+export interface BranchLoginApproval {
+  id: string;
+  userId: string;
+  userEmail?: string | null;
+  branchId: string;
+  branchCode?: string | null;
+  branchName?: string | null;
+  deviceFingerprintHash?: string | null;
+  deviceLabel?: string | null;
+  browserName?: string | null;
+  osName?: string | null;
+  userAgentHash?: string | null;
+  lastIp?: string | null;
+  status: BranchLoginApprovalStatus;
+  requestedAt: string;
+  expiresAt: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  rejectedBy?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BranchLoginApprovalDeviceInfo {
+  deviceFingerprintHash: string;
+  deviceLabel: string;
+  browserName: string;
+  osName: string;
+  userAgentHash: string;
+}
+
 export interface MaintenanceSettings {
   id: 'global';
   isMaintenanceModeEnabled: boolean;
@@ -85,6 +120,7 @@ export interface MaintenanceSettings {
   posGuidelineShortageAr: string;
   footerLogoUrl: string;
   footerText: string;
+  loginBadges: string[];
   updatedAt?: string;
   updatedBy?: string | null;
 }
@@ -416,6 +452,7 @@ export interface DeliverySupervisor {
 
 export interface DeliveryDriver {
   id: string;
+  driverCode?: string;
   name: string;
   phone?: string;
   notes?: string;
@@ -451,6 +488,7 @@ export interface DeliveryOrder {
   pharmacistId?: string | null;
   pharmacistName?: string | null;
   driverId?: string | null;
+  driverCode?: string | null;
   driverName?: string | null;
   blockNumber?: string | null;
   areaName?: string | null;
@@ -472,10 +510,279 @@ export interface DeliveryOrderInput {
   notes?: string;
 }
 
+// --- Delivery Coverage Analytics (manager Bahrain block coverage) ---
+
+export type DeliveryCoverageTrend = 'up' | 'down' | 'stable' | 'insufficient_data';
+
+export interface DeliveryBlockBranchBreakdown {
+  branchId: string;
+  branchName: string;
+  orderCount: number;
+}
+
+export interface DeliveryBlockMetric {
+  blockNumber: string;
+  areaName?: string | null;
+  governorate?: Governorate | null;
+  /** Block number is recorded but not present in the delivery_blocks directory. */
+  unresolved: boolean;
+  orderCount: number;
+  branchBreakdown: DeliveryBlockBranchBreakdown[];
+  dominantBranchId?: string;
+  dominantBranchName?: string;
+  shareOfTotal: number; // fraction of known-block orders
+  trend: DeliveryCoverageTrend;
+}
+
+export interface BranchDeliveryCoverageMetric {
+  branchId: string;
+  branchName: string;
+  orderCount: number;
+  knownBlockOrders: number;
+  unknownBlockOrders: number;
+  uniqueBlocksServed: number;
+  topBlockNumber?: string;
+  topBlockOrders: number;
+  outsideGovernorateOrders: number;
+}
+
+export interface DeliveryGovernorateCoverage {
+  governorate: Governorate | 'Unknown';
+  orderCount: number;
+  uniqueBlocks: number;
+}
+
+export type DeliveryCoverageRecommendationType =
+  | 'marketing_opportunity'
+  | 'strong_service_area'
+  | 'under_served_area'
+  | 'data_quality_issue'
+  | 'expansion_candidate';
+
+export interface DeliveryCoverageRecommendation {
+  type: DeliveryCoverageRecommendationType;
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  message: string;
+  branchId?: string;
+  branchName?: string;
+  blockNumber?: string;
+  recommendedAction: string;
+}
+
+export interface DeliveryCoverageSummary {
+  dateFrom: string;
+  dateTo: string;
+  totalOrders: number;
+  /** Non-Talabat orders — the only orders that carry a block. */
+  mappableOrders: number;
+  /** Talabat orders have no block by design; excluded from block coverage. */
+  talabatOrders: number;
+  knownBlockOrders: number;
+  unknownBlockOrders: number;
+  unknownBlockRate: number; // unknown / mappable
+  /** Orders whose block number is not in the delivery_blocks directory. */
+  unresolvedBlockOrders: number;
+  uniqueBlocksServed: number;
+  topBlocks: DeliveryBlockMetric[];
+  lowBlocks: DeliveryBlockMetric[];
+  blocks: DeliveryBlockMetric[];
+  branchCoverage: BranchDeliveryCoverageMetric[];
+  governorateCoverage: DeliveryGovernorateCoverage[];
+  recommendedActions: DeliveryCoverageRecommendation[];
+  topBlock?: DeliveryBlockMetric;
+  topBranch?: BranchDeliveryCoverageMetric;
+}
+
+/**
+ * Future hook for an exact Bahrain block map. No real coordinates ship today —
+ * see docs/DELIVERY_COVERAGE_ANALYTICS.md for how to add a GeoJSON dataset.
+ */
+export interface BahrainBlockGeometry {
+  blockNumber: string;
+  governorate?: string;
+  centroidLat?: number;
+  centroidLng?: number;
+  polygonGeoJson?: unknown;
+}
+
+// --- Advanced Delivery Coverage Analytics ---
+
+export type DeliveryCoverageInsightSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type DeliveryCoverageInsightType =
+  | 'campaign_opportunity'
+  | 'strong_service_area'
+  | 'weak_service_area'
+  | 'branch_catchment'
+  | 'branch_overlap'
+  | 'white_space'
+  | 'expansion_candidate'
+  | 'capacity_pressure'
+  | 'data_quality_issue'
+  | 'sla_delay'
+  | 'repeat_customer_signal'
+  | 'product_demand_signal';
+
+export type DeliveryDemandTrendClass =
+  | 'increasing'
+  | 'decreasing'
+  | 'stable'
+  | 'new_demand'
+  | 'insufficient_data';
+
+export type DeliveryConfidence = 'low' | 'medium' | 'high';
+
+/** A coverage insight that a manager can convert into an operations task. */
+export interface DeliveryCoverageAction {
+  insightId: string; // stable id, e.g. "campaign:405" or "capacity:branch:<uuid>"
+  insightType: DeliveryCoverageInsightType;
+  relatedRecordType: 'delivery_block' | 'branch_coverage' | 'delivery_insight';
+  relatedRecordId: string; // block number or branch id
+  taskTitle: string;
+  branchId?: string;
+  branchName?: string;
+  blockNumber?: string;
+  severity: DeliveryCoverageInsightSeverity;
+  recommendedAction: string;
+}
+
+export interface DeliveryCampaignOpportunity {
+  insightId: string;
+  blockNumber: string;
+  areaName?: string | null;
+  governorate?: Governorate | null;
+  orderCount: number;
+  trend: DeliveryDemandTrendClass;
+  severity: DeliveryCoverageInsightSeverity;
+  confidence: DeliveryConfidence;
+  reason: string;
+  recommendedAction: string;
+}
+
+export interface DeliveryDemandTrend {
+  scope: 'block' | 'branch';
+  key: string; // block number or branch id
+  label: string;
+  firstHalf: number;
+  secondHalf: number;
+  changePct: number | null;
+  classification: DeliveryDemandTrendClass;
+}
+
+export interface DeliveryBranchCatchmentBlock {
+  blockNumber: string;
+  areaName?: string | null;
+  orderCount: number;
+  shareOfBranch: number;
+  tier: 'primary' | 'secondary' | 'weak';
+}
+
+export interface DeliveryBranchCatchment {
+  branchId: string;
+  branchName: string;
+  totalOrders: number;
+  totalValueBhd: number;
+  uniqueBlocks: number;
+  shareOfTotal: number;
+  outsideGovernorateOrders: number;
+  primaryBlocks: DeliveryBranchCatchmentBlock[];
+  secondaryBlocks: DeliveryBranchCatchmentBlock[];
+  weakBlocks: DeliveryBranchCatchmentBlock[];
+}
+
+export interface DeliveryBranchOverlap {
+  insightId: string;
+  blockNumber: string;
+  areaName?: string | null;
+  governorate?: Governorate | null;
+  totalOrders: number;
+  branches: Array<{ branchId: string; branchName: string; orderCount: number; sharePct: number }>;
+  dominantBranchId?: string;
+  dominantBranchName?: string;
+  severity: DeliveryCoverageInsightSeverity;
+  recommendedAction: string;
+}
+
+export interface DeliveryWhiteSpaceInsight {
+  blockNumber: string;
+  areaName?: string | null;
+  governorate?: Governorate | null;
+  orderCount: number; // 0 in true_zero_activity mode
+  note: string;
+}
+
+export interface DeliveryWhiteSpace {
+  /** true_zero_activity requires the block directory as a full universe; otherwise served-only. */
+  mode: 'served_low_activity' | 'true_zero_activity';
+  trueZeroCount: number;
+  items: DeliveryWhiteSpaceInsight[];
+  note: string;
+}
+
+export interface DeliveryExpansionCandidate {
+  insightId: string;
+  scope: 'block' | 'branch';
+  blockNumber?: string;
+  branchId?: string;
+  label: string;
+  score: number; // 0..100
+  reasons: string[];
+  severity: DeliveryCoverageInsightSeverity;
+  recommendedAction: string;
+}
+
+export type DeliveryCapacityClass =
+  | 'normal'
+  | 'watch'
+  | 'high_pressure'
+  | 'overloaded'
+  | 'insufficient_data';
+
+export interface DeliveryCapacityPressure {
+  insightId: string;
+  branchId: string;
+  branchName: string;
+  orderCount: number;
+  uniqueBlocks: number;
+  topBlockConcentration: number; // share of branch volume in its busiest block
+  outsideGovernoratePct: number;
+  unknownBlockRate: number;
+  overlapBlocks: number;
+  classification: DeliveryCapacityClass;
+  recommendedAction: string;
+}
+
+/** Which optional delivery_orders fields exist, gating SLA/product/customer analytics. */
+export interface DeliveryFieldAvailability {
+  revenue: boolean;
+  deliveryTiming: boolean;
+  deliveryStatus: boolean;
+  customerIdentifier: boolean;
+  productData: boolean;
+}
+
+export interface DeliveryAdvancedCoverage {
+  fieldAvailability: DeliveryFieldAvailability;
+  campaignOpportunities: DeliveryCampaignOpportunity[];
+  demandTrends: DeliveryDemandTrend[];
+  branchCatchments: DeliveryBranchCatchment[];
+  branchOverlaps: DeliveryBranchOverlap[];
+  whiteSpace: DeliveryWhiteSpace;
+  expansionCandidates: DeliveryExpansionCandidate[];
+  capacityPressures: DeliveryCapacityPressure[];
+}
+
+export interface DeliveryCoverageBundle {
+  summary: DeliveryCoverageSummary;
+  advanced: DeliveryAdvancedCoverage;
+}
+
 export type DriverEfficiencyClass = 'optimum' | 'in_range' | 'low_efficiency' | 'loss_making';
 
 export interface DriverEfficiency {
   driverId: string;
+  driverCode?: string;
   driverName: string;
   orders: number;
   totalValue: number;

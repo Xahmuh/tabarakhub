@@ -7,7 +7,8 @@ export type CommandCenterSourceModule =
   | 'cash_flow'
   | 'hr'
   | 'quality_feedback'
-  | 'spin_win';
+  | 'spin_win'
+  | 'delivery_coverage';
 
 export type OperationalAlertStatus = 'open' | 'in_progress' | 'resolved' | 'dismissed';
 export type ActionQueueStatus = 'open' | 'in_progress' | 'resolved' | 'dismissed';

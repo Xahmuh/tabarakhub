@@ -186,6 +186,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
 }) => {
   const role = authState.user?.role;
   const isOwner = role === 'owner';
+  const canOpenApprovalQueue = role === 'admin' || role === 'owner';
   const canUseSales = isModuleEnabled('sales');
   const canUseHr = isModuleEnabled('hr');
   const canUseWorkforce = canUseHr && isModuleEnabled('workforce');
@@ -309,9 +310,11 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'settings',
-      visible: isModuleEnabled('settings') && role === 'manager' && checkPermission('settings', 'edit'),
+      visible: isModuleEnabled('settings') && ((role === 'manager' && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
       title: 'Settings & Permissions',
-      description: 'Manage branches, staff access, and enabled workflows.',
+      description: role === 'manager'
+        ? 'Manage branches, staff access, enabled workflows, and branch login approvals.'
+        : 'Review and approve pending branch login requests.',
       icon: <Settings2 className="h-5 w-5" />,
       onClick: () => handleTabChange('settings'),
       isPending,

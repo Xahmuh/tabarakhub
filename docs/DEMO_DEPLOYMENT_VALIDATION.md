@@ -57,6 +57,11 @@ Verify these migrations are applied:
 ```text
 supabase/migrations/20260612034500_security_auth_rls_hardening.sql
 supabase/migrations/20260612062000_operations_tasks_workflow.sql
+supabase/migrations/20260613103000_delivery_area_supervisor_references.sql
+supabase/migrations/20260613124500_add_branch_registration_fields.sql
+supabase/migrations/20260613131500_add_branch_manager_name.sql
+supabase/migrations/20260613133000_login_badges_system_settings.sql
+supabase/migrations/20260613134500_add_delivery_driver_codes.sql
 ```
 
 Expected pass indicators:
@@ -66,6 +71,7 @@ All migrations apply without errors.
 Hardening migration is listed as applied.
 operations_tasks workflow migration is listed as applied.
 operations_tasks and operations_task_events exist.
+Migration list has no local-only gap before later applied migrations.
 ```
 
 Fail indicators:
@@ -74,6 +80,7 @@ Fail indicators:
 Any migration fails or is skipped.
 Hardening migration is missing.
 operations task migration is missing.
+Any local migration remains local-only before deployment sign-off.
 RLS is disabled on sensitive tables.
 ```
 
@@ -180,6 +187,28 @@ FUNCTION_SECRET does not appear in frontend env, source code, docs evidence, or 
 Protected Edge Functions reject missing or invalid x-function-secret where applicable.
 ```
 
+Also configure required server-only Edge Function secrets/config for the demo project. Do not add these to frontend `VITE_` variables:
+
+```bash
+supabase secrets set ALLOWED_ORIGIN="https://DEMO_FRONTEND_URL"
+supabase secrets set CLIENT_APP_URL="https://DEMO_FRONTEND_URL"
+supabase secrets set CLIENT_PUBLIC_NAME="Demo Pharmacy Group"
+supabase secrets set CLIENT_DASHBOARD_URL="https://DEMO_FRONTEND_URL"
+supabase secrets set REPORT_FROM_EMAIL="reports@demo-client.example"
+supabase secrets set NOTIFICATION_FROM_EMAIL="alerts@demo-client.example"
+supabase secrets set ADMIN_EMAIL="admin@demo-client.example"
+supabase secrets set CEO_EMAIL="admin@demo-client.example"
+```
+
+If AI insights are accepted for this demo scope, also set:
+
+```bash
+supabase secrets set AI_INSIGHTS_ENABLED="true"
+supabase secrets set ANTHROPIC_API_KEY="server-only-provider-key"
+```
+
+If AI secrets are missing, keep `AI_INSIGHTS_ENABLED` unset/false and keep frontend `VITE_MODULE_AI_INSIGHTS=false`.
+
 ## 7. Frontend Env
 
 Required `.env.production` values:
@@ -188,6 +217,8 @@ Required `.env.production` values:
 VITE_SUPABASE_URL="https://DEMO_PROJECT_REF.supabase.co"
 VITE_SUPABASE_ANON_KEY="DEMO_PUBLIC_ANON_KEY"
 VITE_DEMO_MODE=false
+VITE_MODULE_AI_INSIGHTS=false
+VITE_HR_GOOGLE_SCRIPT_URL=""
 ```
 
 Expected pass indicators:
@@ -231,6 +262,7 @@ Known current audit result:
 ```text
 npm audit fails because exceljs depends on vulnerable uuid versions.
 This must be resolved or formally accepted before production.
+Current audit also reports Vite/esbuild high-severity build-tool advisories. This must be resolved or formally accepted before production.
 ```
 
 ## 9. Manual Smoke Tests
@@ -248,6 +280,12 @@ Create an operations task from a real computed alert.
 Update task status.
 Verify operations_task_events receives an append-only audit trail entry.
 Verify branch user cannot access other branch tasks.
+Verify a branch with assigned pharmacists shows only those active pharmacists in Live Shift Coverage, Delivery Recording, and Cash Tracker.
+Verify a branch with no assigned pharmacists shows the assignment empty state and does not show unrelated pharmacists.
+Verify Project Settings > System displays a visible warning if system_settings cannot be loaded instead of silently showing defaults as saved values.
+Verify AI insights are hidden/disabled unless VITE_MODULE_AI_INSIGHTS=true and server-side AI secrets are configured.
+Verify HR self-service shows a clear configuration error if VITE_HR_GOOGLE_SCRIPT_URL is required but missing.
+Verify Delivery Settings creates a new driver with an automatic Driver ID and existing drivers have backfilled Driver IDs.
 Verify anon cannot read sensitive data.
 Verify suggested actions are not persisted until task creation.
 Verify saved tasks appear before suggested actions.

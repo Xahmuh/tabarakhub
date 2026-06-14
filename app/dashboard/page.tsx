@@ -312,15 +312,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setError(null);
     try {
       const activeBranchId = isCanSelectBranch ? selectedBranch : user.id;
-      let rawData: LostSale[] = await supabase.sales.list(activeBranchId, user.role);
-      let rawShortages: Shortage[] = await supabase.shortages.list(activeBranchId, user.role);
+      const { start, end } = getDateRange(dateType, startDate, endDate);
+      const listOptions = {
+        timestampFrom: start,
+        timestampTo: end
+      };
+      let rawData: LostSale[] = await supabase.sales.list(activeBranchId, user.role, listOptions);
+      let rawShortages: Shortage[] = await supabase.shortages.list(activeBranchId, user.role, listOptions);
 
-      // Store raw data for historical calculations
+      // Store raw data for calculations within the selected dashboard range.
       setAllSales(rawData);
       setAllShortages(rawShortages);
 
       // استخدام وظائف التصفية المستخرجة
-      const { start, end } = getDateRange(dateType, startDate, endDate);
       rawData = filterByDateRange(rawData, start, end);
       rawShortages = filterByDateRange(rawShortages, start, end);
 

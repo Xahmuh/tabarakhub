@@ -39,7 +39,7 @@ There is no lint script in this project; the verification gate is
 ## 3. Delivery setup (manager)
 
 - [ ] Delivery hub → **Delivery Settings → Drivers**: create at least one driver.
-      Duplicate active driver names are rejected.
+      It receives a Driver ID automatically and duplicate active driver names are rejected.
 - [ ] **Blocks & Areas**: search a known block (e.g. 905 → East Riffa, Southern);
       edit a governorate and confirm it persists; add a brand-new block.
 - [ ] **Branch Classification**: set area / supervisor / governorate for EVERY

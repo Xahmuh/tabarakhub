@@ -108,9 +108,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
+    if (!orderDate || Number.isNaN(new Date(`${orderDate}T00:00:00`).getTime())) {
+      Swal.fire('Missing date', 'Select a valid order date.', 'warning');
+      return;
+    }
     const numericValue = Number(value);
-    if (!numericValue || numericValue <= 0) {
-      Swal.fire('Missing value', 'Enter the order value in BHD.', 'warning');
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      Swal.fire('Invalid value', 'Enter an order value greater than zero in BHD.', 'warning');
       return;
     }
     if (!isTalabat && !blockInput.trim()) {
@@ -250,13 +254,23 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 value={pharmacistId}
                 onChange={setPharmacistId}
                 placeholder="Select pharmacist…"
+                disabled={pharmacists.length === 0}
               />
+              {pharmacists.length === 0 && (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+                  No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.
+                </p>
+              )}
             </div>
 
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Driver</label>
               <SearchableSelect
-                options={drivers.map(d => ({ value: d.id, label: d.name }))}
+                options={drivers.map(d => ({
+                  value: d.id,
+                  label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name,
+                  hint: d.driverCode
+                }))}
                 value={driverId}
                 onChange={setDriverId}
                 placeholder="Select driver…"

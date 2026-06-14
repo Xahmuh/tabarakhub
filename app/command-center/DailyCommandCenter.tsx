@@ -48,7 +48,8 @@ const sourceToTab: Partial<Record<CommandCenterSourceModule, string>> = {
   cash_flow: 'cash-flow',
   hr: 'hr-manager',
   quality_feedback: 'feedback-admin',
-  spin_win: 'spin-win'
+  spin_win: 'spin-win',
+  delivery_coverage: 'delivery'
 };
 
 const sourceLabels: Record<CommandCenterSourceModule, string> = {
@@ -58,7 +59,8 @@ const sourceLabels: Record<CommandCenterSourceModule, string> = {
   cash_flow: 'Cash Flow',
   hr: 'HR',
   quality_feedback: 'Feedback',
-  spin_win: 'Rewards'
+  spin_win: 'Rewards',
+  delivery_coverage: 'Delivery'
 };
 
 const formatTime = (value?: string) => {

@@ -1,5 +1,19 @@
 # Database Migrations
 
+## DANGER - LEGACY REFERENCE ONLY
+
+Do not run files in `db/migrations` against demo, staging, or production dedicated-client projects unless a release owner has reviewed the exact file for the target environment.
+
+Production Supabase migrations live in:
+
+```text
+supabase/migrations
+```
+
+Several legacy files in this folder were written before the Supabase Auth/app_user_profiles hardening pass and may grant broad `anon` or `authenticated` access. Running them after the production hardening migrations can weaken RLS and reopen data access that was intentionally closed.
+
+Use these files only as historical/reference SQL.
+
 Legacy SQL migration files are kept here for backward compatibility.
 Production Supabase migrations live in `supabase/migrations`.
 

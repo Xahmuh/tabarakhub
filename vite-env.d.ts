@@ -16,8 +16,11 @@ interface ImportMetaEnv {
     readonly VITE_CURRENCY?: string
     readonly VITE_COUNTRY?: string
     readonly VITE_ENVIRONMENT_LABEL?: string
+    readonly VITE_DEMO_MODE?: string
+    readonly VITE_HR_GOOGLE_SCRIPT_URL?: string
     readonly VITE_MODULE_HR?: string
     readonly VITE_MODULE_QUALITY_FEEDBACK?: string
+    readonly VITE_MODULE_AI_INSIGHTS?: string
     readonly VITE_MODULE_REPORTS?: string
     readonly VITE_MODULE_EXCEL_EXPORT?: string
     readonly VITE_MODULE_BRANCH_DASHBOARD?: string
@@ -32,6 +35,7 @@ interface ImportMetaEnv {
     readonly VITE_MODULE_EMPLOYEE_CONTRIBUTIONS?: string
     readonly VITE_MODULE_SETTINGS?: string
     readonly VITE_MODULE_WORKFORCE?: string
+    readonly VITE_MODULE_DELIVERY?: string
     readonly [key: string]: string | undefined
 }
 

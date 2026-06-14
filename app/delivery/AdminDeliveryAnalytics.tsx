@@ -155,7 +155,9 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     [filteredOrders]
   );
   const driverBoard = useMemo(
-    () => buildLeaderboard(filteredOrders, o => o.driverId, o => o.driverName || 'Unknown'),
+    () => buildLeaderboard(filteredOrders, o => o.driverId, o => (
+      o.driverCode && o.driverName ? `${o.driverCode} - ${o.driverName}` : o.driverName || 'Unknown'
+    )),
     [filteredOrders]
   );
   const branchBoard = useMemo(
@@ -193,7 +195,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     const counts = new Map<string, number[]>();
     for (const order of filteredOrders) {
       if (!order.driverId) continue;
-      const name = order.driverName || 'Unknown';
+      const name = order.driverCode && order.driverName ? `${order.driverCode} - ${order.driverName}` : order.driverName || 'Unknown';
       const weekday = new Date(`${order.orderDate}T00:00:00`).getDay();
       const row = counts.get(name) || [0, 0, 0, 0, 0, 0, 0];
       row[weekday] += 1;
@@ -270,7 +272,16 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           <SearchableSelect options={supervisorOptions} value={supervisorFilter} onChange={setSupervisorFilter} placeholder="All supervisors" />
           <SearchableSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" />
           <SearchableSelect options={['BP', 'CARD', 'CASH', 'TALABAT'].map(p => ({ value: p, label: p }))} value={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" />
-          <SearchableSelect options={drivers.map(d => ({ value: d.id, label: d.name }))} value={driverFilter} onChange={setDriverFilter} placeholder="All drivers" />
+          <SearchableSelect
+            options={drivers.map(d => ({
+              value: d.id,
+              label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name,
+              hint: d.driverCode
+            }))}
+            value={driverFilter}
+            onChange={setDriverFilter}
+            placeholder="All drivers"
+          />
           <SearchableSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} value={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" />
         </div>
       </section>

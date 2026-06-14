@@ -8,6 +8,13 @@ Current product status before real production sign-off:
 B) dedicated-client staging-ready only
 ```
 
+Final production-readiness gate checked on 2026-06-14:
+
+```text
+Production-ready: no
+Reference: docs/FINAL_PRODUCTION_READINESS_GATE_RESULTS.md
+```
+
 ## Deployment Details
 
 ```text
@@ -109,6 +116,25 @@ Anon access blocked: yes/no
 Branch scoping verified: yes/no
 No frontend secrets found in dist: yes/no
 FUNCTION_SECRET configured server-side only: yes/no
+Contributions bucket public upload accepted or remediated: yes/no
+Spin Static QR security checks passed or module disabled: yes/no
+Edge Function secrets/CORS configured: yes/no
+Edge Function placeholder email/dashboard values rejected: yes/no
+Migration history clean or formally repaired: yes/no
+```
+
+## Final Gate Blockers
+
+```text
+Migration history is clean on the current linked Supabase project after applying 20260614150000_harden_spin_static_qr_exchange_rpc.sql.
+Unsafe non-allowlisted POST_MIGRATION helper-function anon EXECUTE grants were remediated.
+Spin Static QR SQL/API checks pass after applying 20260614150000_harden_spin_static_qr_exchange_rpc.sql; browser/manual checks on the deployed frontend URL remain pending.
+Linked Edge Function production secrets/CORS are incomplete. Local code uses non-wildcard dynamic CORS for browser-called functions and placeholder-safe protected email configuration.
+Approved secret configuration/redeploy was attempted on 2026-06-14 but no real operator secret values were available, so no secrets were set and no Edge Functions were redeployed.
+The contributions bucket public-exposure blocker is remediated; manager Storage API write smoke remains pending.
+Manager/admin browser approve/reject/sign-out flow is pending.
+Supervisor assigned-branch session is pending.
+npm audit risks remain unresolved or not production-accepted.
 ```
 
 ## Operations Task Validation

@@ -26,6 +26,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onTabChange,
   onLogout
 }) => {
+  const canOpenApprovalQueue = authState.user?.role === 'admin' || authState.user?.role === 'owner';
   const canShowSwitcher =
     !!onTabChange &&
     !!checkPermission &&
@@ -83,7 +84,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   <span>Dashboard</span>
                 </button>
               )}
-              {authState.user?.role === 'manager' && isModuleEnabled('settings') && checkPermission('settings', 'edit') && (
+              {isModuleEnabled('settings') && ((authState.user?.role === 'manager' && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
                 <button
                   type="button"
                   onClick={() => onTabChange('settings')}

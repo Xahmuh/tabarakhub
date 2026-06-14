@@ -28,10 +28,26 @@ export const pharmacistService = {
     }
   },
   listByBranch: async (branchId: string) => {
+    if (!branchId) return [];
+
     try {
+      const { data: assignments, error: assignmentError } = await supabaseClient
+        .from('pharmacist_branches')
+        .select('pharmacist_id')
+        .eq('branch_id', branchId);
+
+      if (assignmentError) throw assignmentError;
+
+      const pharmacistIds = Array.from(new Set((assignments || [])
+        .map((row: any) => row.pharmacist_id)
+        .filter(Boolean)));
+
+      if (pharmacistIds.length === 0) return [];
+
       const { data, error } = await supabaseClient
         .from('pharmacists')
         .select(PHARMACIST_COLUMNS)
+        .in('id', pharmacistIds)
         .eq('is_active', true)
         .order('code');
 

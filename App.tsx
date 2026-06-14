@@ -1,12 +1,14 @@
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Pharmacist, AuthState, MaintenanceSettings } from './types';
+import { Pharmacist, AuthState, BranchLoginApproval, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
 import { buildPermissionChecker } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { spinWinService } from './services/spinWin';
+import { getSystemSettingsErrorMessage } from './services/systemSettingsService';
+import { branchLoginApprovalService } from './services/branchLoginApprovalService';
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
@@ -14,19 +16,22 @@ import {
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
   FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub
 } from './app/index';
+import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
 
 // --- Icons ---
 import {
   ShieldCheck,
   QrCode,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 
 type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
+const BRANCH_LOGIN_APPROVAL_REQUEST_KEY = 'tabarak_branch_login_approval_request';
 
 const getRecoverableSpinToken = () => {
   try {
@@ -73,6 +78,42 @@ const getRecoverableSpinToken = () => {
 const canControlMaintenance = (role?: string | null) =>
   role === 'manager' || role === 'owner';
 
+const storeBranchLoginApprovalRequest = (requestId: string | null) => {
+  try {
+    if (requestId) sessionStorage.setItem(BRANCH_LOGIN_APPROVAL_REQUEST_KEY, requestId);
+    else sessionStorage.removeItem(BRANCH_LOGIN_APPROVAL_REQUEST_KEY);
+  } catch {
+    // Session storage is a pointer only; Supabase remains the approval source.
+  }
+};
+
+const readBranchLoginApprovalRequest = () => {
+  try {
+    return sessionStorage.getItem(BRANCH_LOGIN_APPROVAL_REQUEST_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const SystemSettingsWarning: React.FC<{ message: string | null; showDetails?: boolean }> = ({ message, showDetails }) => {
+  if (!message) return null;
+
+  return (
+    <div className="fixed left-1/2 top-3 z-[120] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left shadow-lg">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div>
+          <p className="text-sm font-black text-amber-900">System settings could not be loaded.</p>
+          <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
+            Maintenance status, footer branding, login badges, and POS instruction copy are using in-app fallbacks until a manager verifies migrations, RLS, and connectivity.
+          </p>
+          {showDetails && <p className="mt-2 break-words text-[11px] font-semibold leading-5 text-amber-700">{message}</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const hexToRgbParts = (value: string, fallback: string) => {
   const normalized = value.trim().replace('#', '');
   const hex = normalized.length === 3
@@ -92,8 +133,12 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
+  const [maintenanceSettingsError, setMaintenanceSettingsError] = useState<string | null>(null);
   const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(true);
   const [isMaintenanceAdminLoginOpen, setIsMaintenanceAdminLoginOpen] = useState(false);
+  const [pendingBranchApproval, setPendingBranchApproval] = useState<BranchLoginApproval | null>(null);
+  const [pendingBranchAuthState, setPendingBranchAuthState] = useState<AuthState | null>(null);
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showPOSGuideline, setShowPOSGuideline] = useState(false);
   const [showPharmacistSelector, setShowPharmacistSelector] = useState(false);
@@ -137,7 +182,11 @@ const App: React.FC = () => {
       case 'corporate-codex':
         return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role);
       case 'settings':
-        return isModuleEnabled('settings') && role === 'manager' && canUseFeature('settings', 'edit', role);
+        return isModuleEnabled('settings') && (
+          (role === 'manager' && canUseFeature('settings', 'edit', role))
+          || role === 'owner'
+          || role === 'admin'
+        );
       case 'feedback-form':
         return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role);
       case 'feedback-admin':
@@ -176,6 +225,104 @@ const App: React.FC = () => {
     });
   };
 
+  const clearPendingBranchApproval = () => {
+    storeBranchLoginApprovalRequest(null);
+    setPendingBranchApproval(null);
+    setPendingBranchAuthState(null);
+  };
+
+  const signOutToLoginWithNotice = useCallback(async (message: string) => {
+    clearPendingBranchApproval();
+    await supabase.auth.signOut();
+    setAuthState({ user: null, pharmacist: null, permissions: [] });
+    setActiveTab(null);
+    setLoginNotice(message);
+    setIsMaintenanceAdminLoginOpen(false);
+  }, []);
+
+  const enterAuthenticatedApp = useCallback(async (baseState: AuthState) => {
+    const user = baseState.user;
+    if (!user) {
+      throw new Error('Authenticated account is not linked to an active app profile.');
+    }
+
+    const [permissions, rolePermissions] = await Promise.all([
+      supabase.permissions.listForBranch(user.id),
+      supabase.permissions.listRoleDefaults(user.role)
+    ]);
+
+    const newState = { user, pharmacist: null, permissions, rolePermissions };
+    if (user.role !== 'branch') {
+      storeBranchLoginApprovalRequest(null);
+    }
+    setPendingBranchApproval(null);
+    setPendingBranchAuthState(null);
+    setLoginNotice(null);
+    setAuthState(newState);
+    setIsMaintenanceAdminLoginOpen(false);
+
+    if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(user.role) && isModuleEnabled('settings')) {
+      sessionStorage.setItem('tabarak_active_tab', 'settings');
+      startTransition(() => setActiveTab('settings'));
+    } else {
+      handleTabChange('selector');
+    }
+  }, [maintenanceSettings]);
+
+  const beginBranchLoginApproval = useCallback(async (signedInState: AuthState) => {
+    const branch = signedInState.user;
+    if (!branch) {
+      throw new Error('Authenticated branch account is not linked to an active app profile.');
+    }
+
+    const request = await branchLoginApprovalService.createBranchLoginApprovalRequest({ branchId: branch.id });
+    storeBranchLoginApprovalRequest(request.id);
+    setPendingBranchAuthState({ user: branch, pharmacist: null, permissions: [], rolePermissions: [] });
+    setPendingBranchApproval(request);
+    setAuthState({ user: null, pharmacist: null, permissions: [] });
+    setActiveTab(null);
+    setLoginNotice(null);
+  }, []);
+
+  const handleApprovedBranchLogin = useCallback(async (approval: BranchLoginApproval) => {
+    if (!pendingBranchAuthState?.user) {
+      await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+      return;
+    }
+    try {
+      storeBranchLoginApprovalRequest(approval.id);
+      setIsInitializing(true);
+      await enterAuthenticatedApp(pendingBranchAuthState);
+    } catch (error) {
+      console.error('Approved branch login could not enter app:', error);
+      await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [enterAuthenticatedApp, pendingBranchAuthState, signOutToLoginWithNotice]);
+
+  const handleRejectedBranchLogin = useCallback(async () => {
+    await signOutToLoginWithNotice('Your login request was rejected by admin.');
+  }, [signOutToLoginWithNotice]);
+
+  const handleExpiredBranchLogin = useCallback(async () => {
+    await signOutToLoginWithNotice('Login approval expired. Please try again.');
+  }, [signOutToLoginWithNotice]);
+
+  const handleBranchApprovalVerificationError = useCallback(async () => {
+    await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+  }, [signOutToLoginWithNotice]);
+
+  const handleCancelBranchApproval = useCallback(async () => {
+    const requestId = pendingBranchApproval?.id;
+    try {
+      if (requestId) await branchLoginApprovalService.cancelBranchLoginApproval(requestId);
+    } catch (error) {
+      console.warn('Could not cancel branch login approval before sign-out:', error);
+    }
+    await signOutToLoginWithNotice('Login approval cancelled. Please sign in again.');
+  }, [pendingBranchApproval?.id, signOutToLoginWithNotice]);
+
   const [customerToken, setCustomerToken] = useState<string | null>(() => getRecoverableSpinToken());
   const [isBhAnalyzerPage] = useState(() => {
     const cleanPath = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -202,7 +349,15 @@ const App: React.FC = () => {
     const loadMaintenanceSettings = async () => {
       try {
         const settings = await supabase.systemSettings.getMaintenanceSettings();
-        if (isMounted) setMaintenanceSettings(settings);
+        if (isMounted) {
+          setMaintenanceSettings(settings);
+          setMaintenanceSettingsError(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMaintenanceSettings(null);
+          setMaintenanceSettingsError(getSystemSettingsErrorMessage(error));
+        }
       } finally {
         if (isMounted) setIsMaintenanceLoading(false);
       }
@@ -254,6 +409,49 @@ const App: React.FC = () => {
         const { data } = await supabase.auth.getSession();
         const session = data?.session as AuthState | null;
         if (session?.user) {
+          if (session.user.role === 'branch') {
+            const requestId = readBranchLoginApprovalRequest();
+            if (!requestId) {
+              await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+              return;
+            }
+
+            try {
+              const { data: rawSessionData } = await supabase.client.auth.getSession();
+              const authUserId = rawSessionData.session?.user.id;
+              const approval = await branchLoginApprovalService.getBranchLoginApprovalStatus(requestId);
+              if (!authUserId || approval.userId !== authUserId || approval.branchId !== session.user.id) {
+                await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+                return;
+              }
+
+              if (approval.status === 'approved') {
+                await enterAuthenticatedApp(session);
+                return;
+              }
+
+              if (approval.status === 'pending') {
+                setPendingBranchAuthState({ user: session.user, pharmacist: null, permissions: [], rolePermissions: [] });
+                setPendingBranchApproval(approval);
+                setAuthState({ user: null, pharmacist: null, permissions: [] });
+                setActiveTab(null);
+                return;
+              }
+
+              if (approval.status === 'rejected') {
+                await signOutToLoginWithNotice('Your login request was rejected by admin.');
+                return;
+              }
+
+              await signOutToLoginWithNotice('Login approval expired. Please try again.');
+              return;
+            } catch (approvalError) {
+              console.error('Branch login approval verification failed:', approvalError);
+              await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
+              return;
+            }
+          }
+
           let currentSession: AuthState = session;
           if (currentSession.user) {
             try {
@@ -289,28 +487,26 @@ const App: React.FC = () => {
 
   const handleLogin = async (identifier: string, password: string) => {
     setIsInitializing(true);
+    setLoginNotice(null);
     try {
       const signedInState = await supabase.auth.signInWithPassword(identifier, password);
       const branch = signedInState.user;
       if (!branch) {
         throw new Error('Authenticated account is not linked to a branch profile.');
       }
-      const [permissions, rolePermissions] = await Promise.all([
-        supabase.permissions.listForBranch(branch.id),
-        supabase.permissions.listRoleDefaults(branch.role)
-      ]);
-      const newState = { user: branch, pharmacist: null, permissions, rolePermissions };
-      setAuthState(newState);
-      setIsMaintenanceAdminLoginOpen(false);
 
-      if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(branch.role) && isModuleEnabled('settings')) {
-        sessionStorage.setItem('tabarak_active_tab', 'settings');
-        startTransition(() => setActiveTab('settings'));
-      } else {
-        handleTabChange('selector');
+      if (branch.role === 'branch') {
+        await beginBranchLoginApproval(signedInState);
+        return;
       }
+
+      await enterAuthenticatedApp(signedInState);
     } catch (err) {
       console.error("Login permission error:", err);
+      clearPendingBranchApproval();
+      await supabase.auth.signOut();
+      setAuthState({ user: null, pharmacist: null, permissions: [] });
+      setActiveTab(null);
       throw err;
     } finally {
       setIsInitializing(false);
@@ -330,6 +526,7 @@ const App: React.FC = () => {
 
   const logout = async () => {
     sessionStorage.removeItem('tabarak_active_tab');
+    storeBranchLoginApprovalRequest(null);
     await supabase.auth.signOut();
     setAuthState({ user: null, pharmacist: null, permissions: [] });
     setActiveTab(null);
@@ -388,7 +585,12 @@ const App: React.FC = () => {
   }
 
   if (isMaintenanceAdminLoginAllowed) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <>
+        <SystemSettingsWarning message={maintenanceSettingsError} />
+        <LoginPage onLogin={handleLogin} settings={maintenanceSettings} notice={loginNotice} />
+      </>
+    );
   }
 
   if (isBhAnalyzerPage) {
@@ -423,8 +625,27 @@ const App: React.FC = () => {
     );
   }
 
+  if (pendingBranchApproval && pendingBranchAuthState?.user) {
+    return (
+      <BranchLoginApprovalWaitingPage
+        request={pendingBranchApproval}
+        branchName={pendingBranchAuthState.user.name}
+        onApproved={handleApprovedBranchLogin}
+        onRejected={handleRejectedBranchLogin}
+        onExpired={handleExpiredBranchLogin}
+        onVerificationError={handleBranchApprovalVerificationError}
+        onCancel={handleCancelBranchApproval}
+      />
+    );
+  }
+
   if (!authState.user) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <>
+        <SystemSettingsWarning message={maintenanceSettingsError} />
+        <LoginPage onLogin={handleLogin} settings={maintenanceSettings} notice={loginNotice} />
+      </>
+    );
   }
 
   const isManager = authState.user?.role === 'manager';
@@ -457,6 +678,7 @@ const App: React.FC = () => {
   if (activeTab === null || activeTab === 'selector') {
     return (
       <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
+        <SystemSettingsWarning message={maintenanceSettingsError} showDetails={isManager} />
         <AppHeader
           authState={authState}
           activeTab="selector"
@@ -483,6 +705,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
+      <SystemSettingsWarning message={maintenanceSettingsError} showDetails={isManager} />
       <AppHeader
         authState={authState}
         activeTab={activeTab}
@@ -543,7 +766,7 @@ const App: React.FC = () => {
             onBack={() => handleTabChange('selector')}
           />
         ) : activeTab === 'settings' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} />
+          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (

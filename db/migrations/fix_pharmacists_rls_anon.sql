@@ -1,3 +1,8 @@
+-- DANGER - LEGACY REFERENCE ONLY.
+-- Do not run this file in demo, staging, or production.
+-- It grants broad anon access and can weaken the Supabase Auth/RLS hardening.
+-- Production migrations live in supabase/migrations.
+
 -- Fix RLS policies to allow anon role (app uses anon key without Supabase Auth)
 
 DROP POLICY IF EXISTS "Universal read pharmacists" ON public.pharmacists;

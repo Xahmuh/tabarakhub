@@ -1,3 +1,8 @@
+-- DANGER - LEGACY REFERENCE ONLY.
+-- Do not run this file in demo, staging, or production.
+-- It grants broad branch access and can weaken the Supabase Auth/RLS hardening.
+-- Production migrations live in supabase/migrations.
+
 
 -- ==========================================================
 -- CRITICAL DATABASE REPAIR: BRANCHES RLS & PERMISSIONS
