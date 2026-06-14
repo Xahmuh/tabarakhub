@@ -37,7 +37,16 @@ const loginIdentifierToEmailCandidates = (identifier: string) => {
     return [normalized];
   }
 
-  return [`tabarakph.${normalized}@gmail.com`, `${normalized}@tabarak.local`];
+  const candidates: string[] = [];
+  const compactBranchCode = normalized.match(/^([a-z])0(\d{2})$/);
+
+  if (compactBranchCode) {
+    candidates.push(`tabarakph.${compactBranchCode[1]}${compactBranchCode[2]}@gmail.com`);
+  }
+
+  candidates.push(`tabarakph.${normalized}@gmail.com`, `${normalized}@tabarak.local`);
+
+  return Array.from(new Set(candidates));
 };
 
 const isInvalidCredentialsError = (error: unknown) => {
