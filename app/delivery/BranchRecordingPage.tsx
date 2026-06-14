@@ -25,6 +25,10 @@ const lockButtonClass = (locked: boolean) =>
       : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'
   }`;
 
+const sortOrdersNewestFirst = (orders: DeliveryOrder[]) => [...orders].sort((a, b) =>
+  b.orderDate.localeCompare(a.orderDate) || b.createdAt.localeCompare(a.createdAt)
+);
+
 interface BranchRecordingPageProps {
   branch: Branch;
   canEdit: boolean;
@@ -36,7 +40,9 @@ interface BranchRecordingPageProps {
 export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch, canEdit, isManager, orderToEdit, onEditDone }) => {
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
-  const [todayOrders, setTodayOrders] = useState<DeliveryOrder[]>([]);
+  const [historyOrders, setHistoryOrders] = useState<DeliveryOrder[]>([]);
+  const [historyFrom, setHistoryFrom] = useState(todayKey());
+  const [historyTo, setHistoryTo] = useState(todayKey());
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
@@ -54,20 +60,30 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [locksHydrated, setLocksHydrated] = useState(false);
   const [blockInput, setBlockInput] = useState('');
   const [resolvedBlock, setResolvedBlock] = useState<DeliveryBlock | null>(null);
+  const [blockMatches, setBlockMatches] = useState<DeliveryBlock[]>([]);
   const [blockNotFound, setBlockNotFound] = useState(false);
+  const [isBlockSearching, setIsBlockSearching] = useState(false);
 
   const isTalabat = paymentType === 'TALABAT';
   const areaPreview = isTalabat
     ? 'Not required for Talabat'
     : resolvedBlock
       ? `${resolvedBlock.areaName} | ${resolvedBlock.governorate}`
+      : blockMatches.length > 0 && blockInput.trim()
+        ? `${blockMatches.length} matching block${blockMatches.length === 1 ? '' : 's'} - select one`
       : blockNotFound && blockInput.trim()
         ? 'Block not found'
-        : 'Enter block number or area';
+        : 'Search by block number or area';
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
-  const minDate = isManager ? undefined : yesterdayKey();
-  const maxDate = isManager ? undefined : todayKey();
+  const minDate = isManager || editingOrder ? undefined : yesterdayKey();
+  const maxDate = isManager || editingOrder ? undefined : todayKey();
   const lockStorageKey = `delivery-entry-locks:${branch.id}`;
+  const historyRange = useMemo(() => (
+    historyFrom <= historyTo
+      ? { from: historyFrom, to: historyTo }
+      : { from: historyTo, to: historyFrom }
+  ), [historyFrom, historyTo]);
+  const isOrderInsideHistoryRange = (order: DeliveryOrder) => order.orderDate >= historyRange.from && order.orderDate <= historyRange.to;
 
   const loadReference = async () => {
     try {
@@ -82,15 +98,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     }
   };
 
-  const loadToday = async () => {
+  const loadHistory = async () => {
     setIsLoading(true);
     try {
       const orders = await deliveryService.orders.list({
         branchId: branch.id,
-        dateFrom: todayKey(),
-        dateTo: todayKey()
+        dateFrom: historyRange.from,
+        dateTo: historyRange.to
       });
-      setTodayOrders(orders);
+      setHistoryOrders(orders);
     } catch (e) {
       console.error('Delivery list failed', e);
     } finally {
@@ -98,7 +114,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     }
   };
 
-  useEffect(() => { loadReference(); loadToday(); }, [branch.id]);
+  useEffect(() => { loadReference(); }, [branch.id]);
+  useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
 
   useEffect(() => {
     setLocksHydrated(false);
@@ -153,25 +170,58 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   // Resolve block -> area as the user types.
   useEffect(() => {
     let cancelled = false;
-    setResolvedBlock(null);
-    setBlockNotFound(false);
+    setIsBlockSearching(false);
     const trimmed = blockInput.trim();
-    if (!trimmed || isTalabat) return;
+    if (!trimmed || isTalabat) {
+      setResolvedBlock(null);
+      setBlockMatches([]);
+      setBlockNotFound(false);
+      return;
+    }
+    if (
+      resolvedBlock
+      && (
+        resolvedBlock.blockNumber.toLowerCase() === trimmed.toLowerCase()
+        || blockMatches.some(block => block.blockNumber === resolvedBlock.blockNumber)
+      )
+    ) {
+      setBlockMatches([resolvedBlock]);
+      setBlockNotFound(false);
+      return;
+    }
+    setResolvedBlock(null);
+    setBlockMatches([]);
+    setBlockNotFound(false);
     const timer = setTimeout(async () => {
-      const block = await deliveryService.blocks.resolve(trimmed);
+      setIsBlockSearching(true);
+      const matches = await deliveryService.blocks.search(trimmed, 10);
       if (cancelled) return;
-      setResolvedBlock(block);
-      setBlockNotFound(!block);
+      const normalized = trimmed.toLowerCase();
+      const exact = matches.find(block => block.blockNumber.toLowerCase() === normalized);
+      const selected = exact || (matches.length === 1 ? matches[0] : null);
+      setBlockMatches(matches);
+      setResolvedBlock(selected);
+      setBlockNotFound(matches.length === 0);
+      setIsBlockSearching(false);
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [blockInput, isTalabat]);
+  }, [blockInput, isTalabat, resolvedBlock]);
+
+  const selectResolvedBlock = (block: DeliveryBlock) => {
+    setBlockInput(block.blockNumber);
+    setResolvedBlock(block);
+    setBlockMatches([block]);
+    setBlockNotFound(false);
+  };
 
   const resetForm = (preserveBatchContext = true) => {
     // Keep locked people only; unlocked selectors reset after each order.
     setValue('');
     setBlockInput('');
     setResolvedBlock(null);
+    setBlockMatches([]);
     setBlockNotFound(false);
+    setIsBlockSearching(false);
     setEditingOrder(null);
     if (!preserveBatchContext) {
       setOrderDate(todayKey());
@@ -212,13 +262,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const handleEdit = (order: DeliveryOrder) => {
     setEditingOrder(order);
     setOrderDate(order.orderDate);
+    setHistoryFrom(order.orderDate);
+    setHistoryTo(order.orderDate);
     setValue(order.valueBhd.toFixed(3));
     setPaymentType(order.paymentType);
     setPharmacistId(order.pharmacistId || null);
     setDriverId(order.driverId || null);
     setBlockInput(order.paymentType === 'TALABAT' ? '' : order.blockNumber || '');
     setResolvedBlock(null);
+    setBlockMatches([]);
     setBlockNotFound(false);
+    setIsBlockSearching(false);
     window.requestAnimationFrame(() => {
       document.getElementById('delivery-order-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -244,6 +298,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     }
     if (!isTalabat && !blockInput.trim()) {
       Swal.fire('Block required', 'Block number is required for all orders except Talabat.', 'warning');
+      return;
+    }
+    if (!isTalabat && blockMatches.length > 0 && !resolvedBlock) {
+      Swal.fire('Select block number', 'This area search found multiple blocks. Choose the correct block number before saving.', 'warning');
       return;
     }
     if (!isTalabat && blockNotFound) {
@@ -273,10 +331,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     try {
       if (editingOrder) {
         const updated = await deliveryService.orders.update(editingOrder.id, input);
-        setTodayOrders(prev => updated.orderDate === todayKey()
-          ? prev.map(order => order.id === updated.id ? updated : order)
-          : prev.filter(order => order.id !== updated.id)
-        );
+        setHistoryOrders(prev => {
+          const withoutCurrent = prev.filter(order => order.id !== updated.id);
+          return isOrderInsideHistoryRange(updated)
+            ? sortOrdersNewestFirst([updated, ...withoutCurrent])
+            : withoutCurrent;
+        });
         resetForm(false);
         return;
       }
@@ -295,8 +355,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       }
 
       const created = await deliveryService.orders.insert(input);
-      if (created.orderDate === todayKey()) {
-        setTodayOrders(prev => [created, ...prev]);
+      if (isOrderInsideHistoryRange(created)) {
+        setHistoryOrders(prev => sortOrdersNewestFirst([created, ...prev]));
       }
       resetForm();
     } catch (e: any) {
@@ -308,26 +368,26 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   const handleDelete = async (order: DeliveryOrder) => {
     const confirm = await Swal.fire({
-      title: 'Delete order?',
+      title: 'Cancel delivery invoice?',
       text: `${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Delete',
+      confirmButtonText: 'Cancel invoice',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
     try {
       await deliveryService.orders.delete(order.id);
-      setTodayOrders(prev => prev.filter(o => o.id !== order.id));
+      setHistoryOrders(prev => prev.filter(o => o.id !== order.id));
     } catch (e: any) {
-      Swal.fire('Delete failed', e?.message || 'Branch users can delete same-day orders only.', 'error');
+      Swal.fire('Cancel failed', e?.message || 'Could not cancel this delivery invoice.', 'error');
     }
   };
 
   const totals = useMemo(() => ({
-    count: todayOrders.length,
-    value: todayOrders.reduce((acc, o) => acc + o.valueBhd, 0)
-  }), [todayOrders]);
+    count: historyOrders.length,
+    value: historyOrders.reduce((acc, o) => acc + o.valueBhd, 0)
+  }), [historyOrders]);
 
   return (
     <div className="space-y-5">
@@ -367,8 +427,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 onChange={e => setOrderDate(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold outline-none focus:border-brand/40"
               />
-              {!isManager && (
+              {!isManager && !editingOrder && (
                 <p className="mt-1 text-[10px] font-bold text-slate-400">Today or yesterday only</p>
+              )}
+              {!isManager && editingOrder && (
+                <p className="mt-1 text-[10px] font-bold text-slate-400">History invoices can be corrected from this form</p>
               )}
             </div>
 
@@ -464,7 +527,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <input
                 type="text"
                 inputMode="text"
-                placeholder={isTalabat ? 'Disabled for Talabat' : 'e.g. 905 or Manama'}
+                placeholder={isTalabat ? 'Disabled for Talabat' : 'Search block or area, e.g. 905 or Manama'}
                 value={isTalabat ? '' : blockInput}
                 disabled={isTalabat}
                 onChange={e => setBlockInput(e.target.value)}
@@ -474,6 +537,24 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                     : 'border-slate-200 bg-slate-50 focus:border-brand/40'
                 }`}
               />
+              {!isTalabat && isBlockSearching && (
+                <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>
+              )}
+              {!isTalabat && blockMatches.length > 1 && !resolvedBlock && (
+                <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+                  {blockMatches.map(block => (
+                    <button
+                      key={block.blockNumber}
+                      type="button"
+                      onClick={() => selectResolvedBlock(block)}
+                      className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition hover:bg-brand/5"
+                    >
+                      <span className="text-sm font-black text-slate-900 tabular-nums">Block {block.blockNumber}</span>
+                      <span className="min-w-0 truncate text-[11px] font-bold text-slate-500">{block.areaName} - {block.governorate}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {!isTalabat && resolvedBlock && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-600">
                   <MapPin className="h-3 w-3" /> {resolvedBlock.areaName} · {resolvedBlock.governorate}
@@ -491,6 +572,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <div className={`flex min-h-[42px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${
                 resolvedBlock
                   ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                  : blockMatches.length > 0 && blockInput.trim()
+                    ? 'border-blue-100 bg-blue-50 text-blue-700'
                   : blockNotFound && blockInput.trim()
                     ? 'border-amber-100 bg-amber-50 text-amber-700'
                     : 'border-slate-200 bg-slate-50 text-slate-400'
@@ -517,9 +600,42 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       )}
 
       <section className="operational-panel p-4 md:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Today's deliveries</h3>
-          <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery history</h3>
+            <p className="mt-1 text-[11px] font-bold text-slate-400">Edit or cancel recorded invoices from the selected period.</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setHistoryFrom(todayKey()); setHistoryTo(todayKey()); }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:border-brand/30 hover:text-brand"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => { setHistoryFrom(yesterdayKey()); setHistoryTo(yesterdayKey()); }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:border-brand/30 hover:text-brand"
+            >
+              Yesterday
+            </button>
+            <input
+              type="date"
+              value={historyFrom}
+              onChange={event => setHistoryFrom(event.target.value)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:border-brand/40"
+              aria-label="History from date"
+            />
+            <input
+              type="date"
+              value={historyTo}
+              onChange={event => setHistoryTo(event.target.value)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:border-brand/40"
+              aria-label="History to date"
+            />
+          </div>
+          <div className="flex w-full items-center gap-3 text-xs font-bold text-slate-500">
             <span>{totals.count} orders</span>
             <span className="text-slate-300">|</span>
             <span className="text-brand">{formatBhd(totals.value)}</span>
@@ -530,10 +646,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
           <div className="flex h-32 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-100 border-t-brand"></div>
           </div>
-        ) : todayOrders.length === 0 ? (
+        ) : historyOrders.length === 0 ? (
           <div className="flex min-h-[140px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-center">
             <CheckCircle2 className="mb-2 h-6 w-6 text-slate-300" />
-            <p className="text-xs font-bold text-slate-400">No deliveries recorded today yet.</p>
+            <p className="text-xs font-bold text-slate-400">No deliveries recorded in this period.</p>
           </div>
         ) : (
           <>
@@ -542,7 +658,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="py-2 pr-3">Time</th>
+                    <th className="py-2 pr-3">Date / time</th>
                     <th className="py-2 pr-3 text-right">Value</th>
                     <th className="py-2 px-3">Payment</th>
                     <th className="py-2 pr-3">Pharmacist</th>
@@ -552,10 +668,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {todayOrders.map(order => (
+                  {historyOrders.map(order => (
                     <tr key={order.id} className="hover:bg-slate-50/50">
                       <td className="py-2.5 pr-3 text-xs font-bold text-slate-400">
-                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <span className="block text-slate-600">{order.orderDate}</span>
+                        <span className="text-[11px] text-slate-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </td>
                       <td className="py-2.5 pr-3 text-right font-black text-slate-900 tabular-nums">{order.valueBhd.toFixed(3)}</td>
                       <td className="py-2.5 px-3">
@@ -581,7 +698,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                             <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                               <Pencil className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete" aria-label="Delete order">
+                            <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Cancel invoice" aria-label="Cancel invoice">
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -594,7 +711,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
             </div>
             {/* Mobile cards */}
             <div className="space-y-2 md:hidden">
-              {todayOrders.map(order => (
+              {historyOrders.map(order => (
                 <div key={order.id} className="rounded-lg border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-base font-black text-slate-900 tabular-nums">{formatBhd(order.valueBhd)}</span>
@@ -615,7 +732,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete" aria-label="Delete order">
+                      <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Cancel invoice" aria-label="Cancel invoice">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

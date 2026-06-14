@@ -106,6 +106,16 @@ const toOrder = (row: any): DeliveryOrder => ({
   createdAt: row.created_at
 });
 
+const toBlock = (row: any): DeliveryBlock => ({
+  blockNumber: row.block_number,
+  areaId: row.area_id,
+  areaName: row.area_name,
+  governorate: row.governorate,
+  isActive: row.is_active
+});
+
+const cleanBlockSearchTerm = (value: string) => value.trim().replace(/[,%()]/g, ' ').replace(/\s+/g, ' ');
+
 const ORDER_SELECT = `
   *,
   driver:delivery_drivers(name, driver_code),
@@ -390,22 +400,31 @@ export const deliveryService = {
         if (data.length < pageSize) break;
         from += pageSize;
       }
-      return all.map(b => ({
-        blockNumber: b.block_number, areaId: b.area_id, areaName: b.area_name, governorate: b.governorate, isActive: b.is_active
-      }));
+      return all.map(toBlock);
     },
-    resolve: async (queryStr: string): Promise<DeliveryBlock | null> => {
-      const trimmed = queryStr.trim();
+    search: async (queryStr: string, limit = 12): Promise<DeliveryBlock[]> => {
+      const trimmed = cleanBlockSearchTerm(queryStr);
+      if (!trimmed) return [];
       const { data, error } = await supabaseClient
         .from('delivery_blocks')
         .select('*')
-        .or(`block_number.ilike.%${trimmed}%,area_name.ilike.%${trimmed}%`)
+        .or(`block_number.ilike.%${trimmed}%,area_name.ilike.%${trimmed}%,governorate.ilike.%${trimmed}%`)
         .eq('is_active', true)
         .order('block_number')
-        .limit(1);
-      if (error || !data || data.length === 0) return null;
-      const b = data[0];
-      return { blockNumber: b.block_number, areaId: b.area_id, areaName: b.area_name, governorate: b.governorate, isActive: b.is_active };
+        .limit(limit);
+      if (error || !data) return [];
+      const normalized = trimmed.toLowerCase();
+      return data
+        .map(toBlock)
+        .sort((a, b) => {
+          const aExact = a.blockNumber.toLowerCase() === normalized ? 0 : 1;
+          const bExact = b.blockNumber.toLowerCase() === normalized ? 0 : 1;
+          return aExact - bExact || a.blockNumber.localeCompare(b.blockNumber, undefined, { numeric: true });
+        });
+    },
+    resolve: async (queryStr: string): Promise<DeliveryBlock | null> => {
+      const matches = await deliveryService.blocks.search(queryStr, 1);
+      return matches[0] || null;
     },
     upsert: async (block: DeliveryBlock) => {
       const { error } = await supabaseClient.from('delivery_blocks').upsert({

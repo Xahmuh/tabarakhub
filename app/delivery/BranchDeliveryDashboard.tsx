@@ -81,11 +81,11 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
 
   const handleDelete = async (order: DeliveryOrder) => {
     const confirm = await Swal.fire({
-      title: 'Delete this order?',
-      text: `Are you sure you want to delete this order (${order.valueBhd.toFixed(3)} BHD)?`,
+      title: 'Cancel delivery invoice?',
+      text: `Cancel this recorded invoice (${order.valueBhd.toFixed(3)} BHD)?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Yes, delete it',
+      confirmButtonText: 'Cancel invoice',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
@@ -93,7 +93,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
       await deliveryService.orders.delete(order.id);
       setOrders(prev => prev.filter(o => o.id !== order.id));
     } catch (e: any) {
-      Swal.fire('Delete failed', e?.message || 'Branch users can only delete their own active orders.', 'error');
+      Swal.fire('Cancel failed', e?.message || 'Could not cancel this delivery invoice.', 'error');
     }
   };
 
@@ -202,7 +202,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                             </button>
                           )}
-                          <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Delete" aria-label="Delete order">
+                          <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Cancel invoice" aria-label="Cancel invoice">
                             <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                           </button>
                         </div>

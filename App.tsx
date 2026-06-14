@@ -86,14 +86,6 @@ const storeBranchLoginApprovalRequest = (requestId: string | null) => {
   }
 };
 
-const readBranchLoginApprovalRequest = () => {
-  try {
-    return sessionStorage.getItem(BRANCH_LOGIN_APPROVAL_REQUEST_KEY);
-  } catch {
-    return null;
-  }
-};
-
 const SystemSettingsWarning: React.FC<{ message: string | null; showDetails?: boolean }> = ({ message, showDetails }) => {
   if (!message) return null;
 
@@ -294,12 +286,26 @@ const App: React.FC = () => {
 
     const request = await branchLoginApprovalService.createBranchLoginApprovalRequest({ branchId: branch.id });
     storeBranchLoginApprovalRequest(request.id);
+
+    if (request.status === 'approved') {
+      await enterAuthenticatedApp(signedInState);
+      return;
+    }
+
+    if (request.status === 'rejected') {
+      throw new Error('Your login request was rejected by admin.');
+    }
+
+    if (request.status !== 'pending') {
+      throw new Error('Login approval expired. Please try again.');
+    }
+
     setPendingBranchAuthState({ user: branch, pharmacist: null, permissions: [], rolePermissions: [] });
     setPendingBranchApproval(request);
     setAuthState({ user: null, pharmacist: null, permissions: [] });
     setActiveTab(null);
     setLoginNotice(null);
-  }, []);
+  }, [enterAuthenticatedApp]);
 
   const handleApprovedBranchLogin = useCallback(async (approval: BranchLoginApproval) => {
     if (!pendingBranchAuthState?.user) {
@@ -444,20 +450,17 @@ const App: React.FC = () => {
               return;
             }
 
-            const requestId = readBranchLoginApprovalRequest();
-            if (!requestId) {
-              await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
-              return;
-            }
-
             try {
               const { data: rawSessionData } = await supabase.client.auth.getSession();
               const authUserId = rawSessionData.session?.user.id;
-              const approval = await branchLoginApprovalService.getBranchLoginApprovalStatus(requestId);
+              const approval = await branchLoginApprovalService.createBranchLoginApprovalRequest({ branchId: session.user.id });
+
               if (!authUserId || approval.userId !== authUserId || approval.branchId !== session.user.id) {
                 await signOutToLoginWithNotice('Unable to verify login approval. For security, access is blocked.');
                 return;
               }
+
+              storeBranchLoginApprovalRequest(approval.id);
 
               if (approval.status === 'approved') {
                 await enterAuthenticatedApp(session);
