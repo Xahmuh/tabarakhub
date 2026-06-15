@@ -29,9 +29,24 @@ Post-deploy validation on 2026-06-15:
 | Git alignment | Partial | Current validation branch and `origin/main` point at `fe16f96`; local `main` is divergent and must be reconciled before further local-main work. |
 | Supabase migration | Pass | `supabase migration list --linked` is aligned through `20260615070000`. |
 | DB objects/grants | Pass | `delivery_order_events` exists with RLS enabled; lifecycle RPC exists; lifecycle columns count is 8; anon event grants are 0; authenticated event write grants are 0; authenticated RPC execute is true and anon RPC execute is false. |
-| SQL/RLS validation | Pass | Phase 1 lifecycle validation and delivery-order update/delete validation both passed; owner live-session validation remains pending due no active owner profile. |
-| Public browser smoke | Partial | Root domain loads the Sign In UI with no captured console errors. Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix. `vercel.json` fallback rewrite is prepared and local preview route smoke passes for `/`, `/delivery`, `/spin-win`, and `/project-settings`; production redeploy must confirm the live `/delivery` route. Authenticated Delivery module QA remains pending. |
+| SQL/RLS validation | Pass | Phase 1 lifecycle validation and delivery-order update/delete validation both passed; owner live-session validation remains pending due no authenticated owner session. |
+| Public browser smoke | Pass | Root domain and direct unauthenticated `/delivery` return HTTP 200 and serve the React app shell. `/delivery` reaches the Sign In screen, no longer returns Vercel `404: NOT_FOUND`, and has no captured console errors. Authenticated Delivery module QA remains pending. |
 | Cleanup | Pass | No test records were created and no production data was deleted. |
+
+Authenticated production QA follow-up on 2026-06-15:
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Route smoke | Pass | `/` and `/delivery` return HTTP 200 and serve the React app shell; browser `/delivery` reaches Sign In, not Vercel `404: NOT_FOUND`, with no captured console errors. |
+| Session availability | Blocked | In-app browser has no authenticated Supabase/session storage. Chrome existing-profile validation is unavailable because Codex cannot communicate with the Codex Chrome Extension. No credentials were entered or exposed. |
+| Role inventory | Partial | Read-only aggregate SQL shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts did not appear in the active role aggregate. |
+| Admin Dispatch QA | Pending | No authenticated admin browser session was available. |
+| Branch Dispatch QA | Pending | No authenticated branch browser session was available. |
+| Owner/Supervisor/Warehouse QA | Pending | Owner profile exists but no owner session was available; supervisor/warehouse/accounts profiles/sessions were unavailable. |
+| Lifecycle transition/event QA | Pending | No safe authenticated admin/branch session was available, so no production lifecycle transition was performed. `delivery_order_events` count remains `0`. |
+| Cleanup | Pass | No test delivery records were created and no production data was deleted. |
+
+Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
 ## Delivery Driver Mobile Phase 1 Readiness Gate - 2026-06-15
 
@@ -53,7 +68,7 @@ READY
 | Adjusted plan | Pass | `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md` now maps Phase 1 to `app/`, `services/`, `lib/`, `types.ts`, `supabase/migrations/`, and `supabase/functions/`. |
 | Migration history | Pass | Linked history is aligned through `20260615070000` after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000`. |
 | Migration safety | Pass | Delivery-order RLS validation passed: anon read/write denied, branch own recent update allowed, cross-branch/historical branch writes blocked, branch hard delete blocked, admin delete allowed, and audit traceability preserved. |
-| Owner hardening | Partial pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live owner browser/session QA is pending because no active owner profile exists. |
+| Owner hardening | Partial pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live owner browser/session QA is pending because no authenticated owner session is available. |
 | QC survey area RPC | Pass | `get_quality_feedback_branch_areas()` exists as a stable security-definer function with `search_path=public`; anon/authenticated/service_role execute is intentional, direct anon reads on source delivery tables are denied, and anon RPC call returns only 4 governorate names. |
 | Role model | Pending decision | `driver` is absent from TypeScript roles, UI allowlists, Edge Function assignable roles, and DB constraints/RPCs. Option A/B/C must be approved before implementation. |
 | Data model | Pending decision | Existing `delivery_orders` and `delivery_drivers` must be extended or linked through companion tables; replacement tables are not approved. |
@@ -72,8 +87,8 @@ Gate result:
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
 | Role compatibility | Local pass | `owner` remains valid in DB/types/helpers/live role constraint and is now included in Settings UI assignable/module-layout roles. |
-| Migration safety | Pass, applied | `20260615023000_owner_readonly_dashboard_hardening.sql` removes owner write/control paths, drops a legacy broad branch-update policy, and adds owner audit read. It has been applied and SQL/policy-validated; owner browser-session QA remains pending until an owner profile exists. |
-| Current remote RLS | Blocker until migration | Live remote still includes owner in maintenance control, branch-login approval, branch delivery profile manage, and quality feedback question manage paths, plus a legacy broad `public.branches` update policy. |
+| Migration safety | Pass, applied | `20260615023000_owner_readonly_dashboard_hardening.sql` removes owner write/control paths, drops a legacy broad branch-update policy, and adds owner audit read. It has been applied and SQL/policy-validated; owner browser-session QA remains pending until an approved owner session is available. |
+| Current remote RLS | Pass, browser pending | Owner hardening migration is applied and SQL/policy-validated on the linked project; authenticated owner-session browser QA remains pending. |
 | Dashboard code review | Pass | Owner dashboard UI and service layer are read-only; no owner-dashboard insert/update/delete/upsert/RPC mutation calls found. |
 | Browser QA | Pending | Local login smoke passed with no observed console errors, but no authenticated owner session/password was available. |
 | Verification | Pass | `npm run typecheck`, `npm run build`, and `npm ls --depth=0` passed. |
@@ -96,7 +111,7 @@ B) dedicated-client staging-ready only
 | Owner read-only routing | Local pass | Owner is restricted to `owner-dashboard`; other operational/admin tabs are denied. |
 | Owner permission cap | Local pass | `lib/access.ts` downgrades accidental owner `edit` access to `read`. |
 | Pending migration chain | Pass | The chain is applied/aligned through `20260615070000`; delivery-order RLS, owner/QC SQL validations, and Phase 1 lifecycle SQL/RLS validation passed. |
-| DB validation | Partial | App profiles are `admin=1`, `branch=20`; owner profiles `0`; non-branch profiles with `branch_id` `0`; `branches` still has one legacy `manager` row. |
+| DB validation | Partial | Latest aggregate check shows active app profiles `admin=1`, `owner=1`, `branch=20`; supervisor/warehouse/accounts were not present in the active role aggregate; `branches` still has one legacy `manager` row. |
 | Browser QA | Pending | Local login smoke passed without console errors; authenticated role sessions are unavailable. |
 
 Checked on: 2026-06-14
