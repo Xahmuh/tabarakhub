@@ -1,5 +1,71 @@
 # Final Production Readiness Gate Results
 
+## Delivery Driver Mobile Phase 1 Readiness Gate - 2026-06-15
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Phase 1 status:
+
+```text
+READY
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Discovery reconciliation | Pass | `DISCOVERY_FINDINGS.md` confirms the actual repo is single Vite app structure with no `src/`, no monorepo, and no generated Supabase `Database` types. |
+| Adjusted plan | Pass | `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md` now maps Phase 1 to `app/`, `services/`, `lib/`, `types.ts`, `supabase/migrations/`, and `supabase/functions/`. |
+| Migration history | Pass | Linked history is aligned through `20260615050000` after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, and `20260615050000`. |
+| Migration safety | Pass | Delivery-order RLS validation passed: anon read/write denied, branch own recent update allowed, cross-branch/historical branch writes blocked, branch hard delete blocked, admin delete allowed, and audit traceability preserved. |
+| Owner hardening | Partial pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live owner browser/session QA is pending because no active owner profile exists. |
+| QC survey area RPC | Pass | `get_quality_feedback_branch_areas()` exists as a stable security-definer function with `search_path=public`; anon/authenticated/service_role execute is intentional, direct anon reads on source delivery tables are denied, and anon RPC call returns only 4 governorate names. |
+| Role model | Pending decision | `driver` is absent from TypeScript roles, UI allowlists, Edge Function assignable roles, and DB constraints/RPCs. Option A/B/C must be approved before implementation. |
+| Data model | Pending decision | Existing `delivery_orders` and `delivery_drivers` must be extended or linked through companion tables; replacement tables are not approved. |
+| Implementation | Not started | No Phase 1 driver role/schema/RLS/mobile implementation was started during readiness. |
+
+## Owner Read-only Dashboard Gate - 2026-06-15
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Gate result:
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Role compatibility | Local pass | `owner` remains valid in DB/types/helpers/live role constraint and is now included in Settings UI assignable/module-layout roles. |
+| Migration safety | Pass, applied | `20260615023000_owner_readonly_dashboard_hardening.sql` removes owner write/control paths, drops a legacy broad branch-update policy, and adds owner audit read. It has been applied and SQL/policy-validated; owner browser-session QA remains pending until an owner profile exists. |
+| Current remote RLS | Blocker until migration | Live remote still includes owner in maintenance control, branch-login approval, branch delivery profile manage, and quality feedback question manage paths, plus a legacy broad `public.branches` update policy. |
+| Dashboard code review | Pass | Owner dashboard UI and service layer are read-only; no owner-dashboard insert/update/delete/upsert/RPC mutation calls found. |
+| Browser QA | Pending | Local login smoke passed with no observed console errors, but no authenticated owner session/password was available. |
+| Verification | Pass | `npm run typecheck`, `npm run build`, and `npm ls --depth=0` passed. |
+
+Do not provision owner access on the linked project until authenticated owner-session QA passes.
+
+Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
+
+## Owner Role Reconciliation Gate - 2026-06-15
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Owner assignable in Settings UI | Local pass | `owner` is included as `Owner / Read-only Executive` in assignable roles and module-layout roles. |
+| Owner read-only routing | Local pass | Owner is restricted to `owner-dashboard`; other operational/admin tabs are denied. |
+| Owner permission cap | Local pass | `lib/access.ts` downgrades accidental owner `edit` access to `read`. |
+| Pending migration chain | Pass | The chain is applied/aligned through `20260615050000`; delivery-order RLS and owner/QC SQL validations passed. |
+| DB validation | Partial | App profiles are `admin=1`, `branch=20`; owner profiles `0`; non-branch profiles with `branch_id` `0`; `branches` still has one legacy `manager` row. |
+| Browser QA | Pending | Local login smoke passed without console errors; authenticated role sessions are unavailable. |
+
 Checked on: 2026-06-14
 
 Current decision:

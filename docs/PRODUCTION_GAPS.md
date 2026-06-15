@@ -1,5 +1,56 @@
 # Production Gaps
 
+## Delivery Driver Mobile Phase 1 Readiness Gap - 2026-06-15
+
+Phase 1 Driver Mobile migration readiness is complete. Implementation has not started yet and still needs explicit approval for the driver role and delivery data-model decisions.
+
+Current Phase 1 status:
+
+```text
+READY
+```
+
+Current deployment status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Open items:
+
+- Migration history is aligned through `20260615050000` on the linked project after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, and `20260615050000`.
+- Delivery-order RLS validation passed: anon read/write denied; branch own recent update allowed; cross-branch and historical branch writes blocked; branch hard delete blocked; admin delete allowed; audit traceability preserved.
+- Owner hardening SQL/policy validation passed, but live owner browser/session QA remains pending because no active owner profile exists.
+- QC survey Branch Area RPC validation passed: safe `search_path`, security-definer read-only function, no direct anon source-table reads, and limited anon RPC execution returns only governorate names.
+- `driver` is not an existing app role. It is absent from `types.ts`, role allowlists, admin Edge Function assignable roles, and DB role constraints/RPCs.
+- Existing `delivery_orders` and `delivery_drivers` must be extended/reconciled, not replaced.
+- No generated Supabase `Database` types exist in this repo; Phase 1 should continue with root `types.ts` unless a generated-type workflow is separately approved.
+
+Detailed readiness plan: `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md`.
+
+## Owner Read-only Dashboard Gap - 2026-06-15
+
+Owner Read-only Dashboard is implemented locally and validates as read-only in code review, but production cannot be claimed yet.
+
+Remaining items:
+
+- The owner hardening migration has been applied and SQL/policy-validated; do not provision an owner account until authenticated owner-session QA passes.
+- The linked Supabase project currently has no active owner profile, so live owner browser/session validation remains pending.
+- Owner is now locally assignable in `Project Settings > Users & Roles` as `Owner / Read-only Executive`; authenticated admin browser confirmation remains pending.
+- Create a real owner profile/session and complete authenticated browser QA for Overview, Delivery Map, Traceability, Drivers, and Pharmacies.
+- Repeat RLS validation for owner, supervisor, warehouse, and accounts after those profiles exist on the dedicated client project.
+
+Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
+
+## Owner Role Reconciliation Gap - 2026-06-15
+
+Owner is locally reconciled as an assignable read-only executive role, but production remains blocked:
+
+- Pending migration chain has now been applied and validated through `20260615050000`; owner live-session QA remains pending because the linked database has no active owner profile.
+- `20260615023000_owner_readonly_dashboard_hardening.sql` has been applied; owner profile provisioning still requires explicit approval and live-session QA.
+- The linked database currently has no owner profile to test and still has one legacy `public.branches.role = manager` row.
+- Authenticated owner/admin/branch/supervisor/warehouse/accounts browser QA remains pending.
+
 Current status:
 
 ```text
@@ -24,12 +75,12 @@ Delivery module is locally hardened, pending real Supabase RLS/manual validation
 Branch Login Approval Flow is implemented and its migration has been applied to the linked Supabase project, pending real Supabase RLS/manual validation; see docs/BRANCH_LOGIN_APPROVAL_FLOW.md.
 Manual role-session QA for branch scope and login approval is partially executed in docs/MANUAL_ROLE_SESSION_QA_RESULTS.md. The linked Supabase RLS fix 20260614120000_tighten_branch_scoped_workflow_rls.sql has been applied with explicit approval. Branch T001/H003 targeted cross-branch reads now return 0 rows for delivery_orders, lost_sales, shortages, pharmacist_branches, cash_differences, operations_tasks, and branch_login_approvals. Anon selects are denied on sensitive branch-scoped tables. Warehouse/accounts-equivalent read behavior and approval denial also pass. The shortages performance migration 20260614123000_optimize_sales_shortages_branch_timestamp_indexes.sql has also been applied with explicit approval. Explicit own-branch and dashboard date-range shortage reads now return quickly. Production rule: branch-facing shortages reads must include explicit branch/date bounds or use service methods that enforce them; unbounded direct shortages reads are not a supported app query shape. Browser UI approve/reject/sign-out checks, manager/admin credentials, and supervisor scope remain open.
 
-Branch Delivery Zones and Markers are implemented locally and `20260614163000_add_branch_delivery_profiles.sql` has been applied to the currently linked Supabase project with explicit validation. Current linked results: migration history aligned, `branch_delivery_profiles` exists, RLS enabled, anon grants = 0, 20/20 expected profiles seeded, expected duplicate origin blocks are H002/T001 on 729 and H004/S004 on 745, anon REST read denied, and branch T001 can see only its own profile while H003 is hidden. Before production, repeat the migration and checks per target client project, verify manager/owner write access, supervisor assigned-branch scope, warehouse read-only behavior, real branch browser UI scope, and marker/ring/zone-classification smoke tests on the real deployment URL.
+Branch Delivery Zones and Markers are implemented locally and `20260614163000_add_branch_delivery_profiles.sql` has been applied to the currently linked Supabase project with explicit validation. Current linked results: migration history aligned, `branch_delivery_profiles` exists, RLS enabled, anon grants = 0, 20/20 expected profiles seeded, expected duplicate origin blocks are H002/T001 on 729 and H004/S004 on 745, anon REST read denied, and branch T001 can see only its own profile while H003 is hidden. Before production, repeat the migration and checks per target client project, verify manager write access, owner read-only behavior, supervisor assigned-branch scope, warehouse read-only behavior, real branch browser UI scope, and marker/ring/zone-classification smoke tests on the real deployment URL.
 Authenticated browser QA for Branch Delivery Zones and Markers was attempted locally on 2026-06-14. The local app opened to the login page without observed console errors, but no authenticated browser session or usable credentials were available, and linked `app_user_profiles` currently contains only 20 active branch profiles with no manager, owner, supervisor, warehouse, or accounts profile rows. Delivery Zones settings UI, Delivery Coverage map markers, duplicate clusters, animated rings, toggles, zone details, and role-specific browser behavior remain pending until valid role sessions are available.
 Delivery Governorate KPIs and Purchase Power Proxy are implemented locally for internal analysis only. They use `delivery_orders.governorate`, `delivery_blocks`, and `value_bhd`; no fake governorate mapping, population data, or income data is used. Before production, validate the Governorate KPIs tab with real manager/owner/supervisor sessions, confirm RLS-scoped branch/governorate results, and confirm the Purchase Power Proxy wording remains clearly internal/non-economic.
 Final production-readiness gate results are documented in docs/FINAL_PRODUCTION_READINESS_GATE_RESULTS.md.
 Quality Feedback question migration has been applied and recorded on the linked Supabase project: `feedback_questions` remains as 28-row locked legacy backup, `quality_feedback_questions` now has 28 app-source rows, duplicate `field_key` groups = 0, anon can read active questions, branch users cannot manage questions, and Admin can manage questions by SQL/RLS validation after the Admin role migration. Browser QA for the public/staff form and Admin question manager remains pending because no authenticated browser session/password was available. See docs/QUALITY_FEEDBACK_QUESTIONS_MIGRATION.md.
-Migration history is currently aligned on the linked Supabase project through `20260614203000_branding_logo_system_settings.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, and Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
+Migration history is currently aligned on the linked Supabase project through `20260615050000_quality_feedback_branch_area_options.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, and QC area RPC `20260615050000` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
 Module Layout settings migration `20260614200000_module_display_settings.sql` has been applied and recorded on the linked Supabase project. The feature is presentation-only: it controls module launcher order and badges from `system_settings.module_display_settings` and does not grant access or bypass Users & Roles/RLS. Authenticated browser QA for Project Settings > Module Layout and branch restrictions remains pending because no valid admin/manager/owner/branch browser session was available. See docs/MODULE_LAYOUT_SETTINGS.md.
 Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql` has been applied and recorded on the linked Supabase project. `system_settings` now includes `pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` with expected non-null defaults. The migration does not change RLS, grants, role permissions, branch permissions, or app_user_feature_permissions. Authenticated browser QA for Project Settings > Branding & logos remains pending because no valid admin/manager/owner session was available.
 POST_MIGRATION helper/RPC anon EXECUTE blocker is remediated on the linked project: `20260614133000_harden_contributions_storage_and_rpc_grants.sql` was applied with approval and unsafe non-allowlisted anon EXECUTE count is now 0.
@@ -71,7 +122,7 @@ Database-level pharmacist assignment RLS remains broad authenticated-read in the
 Delivery Coverage Analytics is read-only and adds no migration, but it inherits the delivery RLS validation requirement: confirm branch users see only their own coverage, supervisors see only assigned branches, and managers/owner see all, on the target Supabase project.
 Delivery Coverage Advanced Analytics (campaign engine, demand trend, branch catchment, overlap, capacity pressure, expansion review) is read-only and adds no migration. It can create operations_tasks with source_module='delivery_coverage' (manager-only, dedup-warned); operations_tasks RLS must be validated per client. Advanced sections are gated by VITE_DELIVERY_COVERAGE_ADVANCED_ANALYTICS (default on). SLA/product/customer analytics are intentionally NOT built because delivery_orders has no timing/status/customer/product fields — documented as future work; no fake analytics shipped. See docs/DELIVERY_COVERAGE_ADVANCED_ANALYTICS.md.
 Delivery Coverage integrates a real Bahrain block polygon dataset (public/data/bahrain-blocks.geojson, 491 blocks, BLOCK_NO) rendered as an inline SVG map with a matrix fallback. The map is ACCEPTED FOR INTERNAL USE and stays enabled — it is not blocked. The Bahrain block map is enabled for internal operational use. The current dataset is suitable for internal staging/operations, but its license is not confirmed for external resale, redistribution, or commercial client packaging (source repo has no LICENSE file; 2021 static export). If this product is sold externally, replace the dataset with a licensed/approved source or obtain written permission. See docs/BAHRAIN_BLOCK_GEOJSON_VALIDATION.md and docs/BAHRAIN_BLOCK_GEOJSON_INTEGRATION.md. No fake geometry is shipped; 4 seeded blocks (532, 534, 535, 610) have no polygon and stay in the matrix view.
-Branch Login Approval Flow adds branch_login_approvals and manager/owner/admin approval UI. The linked Supabase migration is applied, but do not claim it production-ready until branch pending/approve/reject/expire/refresh/fail-closed tests and anon/branch/manager/owner/accounts RLS checks pass on the target Supabase project.
+Branch Login Approval Flow adds branch_login_approvals and admin/legacy-manager approval UI. The linked Supabase migration is applied, and owner approval access has been removed by the applied owner hardening migration. Do not claim it production-ready until branch pending/approve/reject/expire/refresh/fail-closed tests and anon/branch/admin/owner/accounts RLS checks pass on the target Supabase project.
 Manual role-session QA remains a production blocker: branch A/B SQL/RLS isolation and anon denial now pass in API tests, but supervisor assigned-branch scope, manager/admin browser approval, reject/expire/cancel sign-out through real UI sessions, and full workflow browser smoke still require follow-up. Service-level date-bounded dashboard queries are prepared locally and explicit branch/date shortage reads are fast after the index migration. Direct unfiltered branch-session shortages reads remain unsupported and must not be solved by weakening RLS.
 ```
 

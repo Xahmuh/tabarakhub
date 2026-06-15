@@ -86,7 +86,7 @@ export const useDashboardData = (filters: DashboardFilters) => {
     if (isLoading) return null;
 
     const count = responses.length;
-    
+
     // Read score from ratings JSONB (new) or flat column (legacy)
     const getScore = (r: any, fieldKey: string): number =>
       r.ratings?.[fieldKey] ?? r[fieldKey] ?? 0;
@@ -201,7 +201,7 @@ export const useDashboardData = (filters: DashboardFilters) => {
       comments: responses.flatMap(r => {
         const list: any[] = [];
         const date = r.submitted_at || r.created_at || new Date().toISOString();
-        
+
         // 1. Biggest Issue (Primary Feedback)
         if (r.biggest_issue) {
           list.push({
@@ -247,7 +247,7 @@ export const useDashboardData = (filters: DashboardFilters) => {
             if (key.startsWith('note_') && value && String(value).trim() !== '') {
               const fieldKey = key.replace('note_', '');
               const question = questions.find(q => q.field_key === fieldKey);
-              
+
               list.push({
                 id: `${r.id}_${fieldKey}`,
                 created_at: date,
@@ -268,9 +268,9 @@ export const useDashboardData = (filters: DashboardFilters) => {
         return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
       }),
       by_experience: Object.entries(experienceCounts).map(([name, value]) => ({ name, value })),
-      by_cluster: Object.entries(clusterScores).map(([cluster, data]) => ({ 
-        cluster, 
-        score: Number((data.total / data.count).toFixed(1)) 
+      by_cluster: Object.entries(clusterScores).map(([cluster, data]) => ({
+        cluster,
+        score: Number((data.total / data.count).toFixed(1))
       })),
       correlation_data: trends.map(t => {
         const s = salesData.find(sd => sd.month === t.month);
@@ -298,11 +298,11 @@ export const useDashboardData = (filters: DashboardFilters) => {
     };
   }, [responses, trends, salesData, hrData, questions, isLoading]);
 
-  return { 
-    data: processedData, 
+  return {
+    data: processedData,
     questions,
-    isLoading, 
+    isLoading,
     error,
-    refresh 
+    refresh
   };
 };
