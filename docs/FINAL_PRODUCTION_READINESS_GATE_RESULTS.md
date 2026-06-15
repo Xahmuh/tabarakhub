@@ -1,5 +1,26 @@
 # Final Production Readiness Gate Results
 
+## Phase 1 Delivery Lifecycle Implementation Gate - 2026-06-15
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Clean baseline | Pass | Implementation worktree was created from `origin/main` at readiness commit `5a0459b`; unrelated dirty files in the original worktree were avoided. |
+| Scope guardrails | Pass | No `driver` role, no mobile scaffold, no generated Supabase `Database` types, and no replacement delivery tables were introduced. |
+| Data model | Pass | `delivery_orders` is extended additively and `delivery_order_events` is added as append-only traceability by applied migration `20260615070000_delivery_lifecycle_phase1.sql`. |
+| RLS design | Pass | Event table grants are select-only for authenticated users, scoped through `current_app_can_access_branch(branch_id)`; lifecycle writes use `app_delivery_transition_order()` after branch/admin access checks. |
+| App/UI | Local pass | Delivery Dispatch tab added for internal lifecycle tracking. Owner/supervisor/warehouse access remains read-only through existing `DeliveryHub` permissions. |
+| SQL/RLS validation | Pass | `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed for anon denial, branch own-recent RPC transitions, cross-branch/historical/direct-write denial, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, invalid transition rejection, and lifecycle event audit metadata. |
+| Verification | Pass | Final verification passed: `npm run typecheck`, `npm run build`, `npm ls --depth=0`, `git diff --check`, and `supabase migration list --linked` aligned through `20260615070000`. |
+| Browser QA | Pending | Clean worktree has no local environment file and no authenticated role sessions; no secrets were copied or printed. |
+
+Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
+
 ## Delivery Driver Mobile Phase 1 Readiness Gate - 2026-06-15
 
 Decision:
@@ -18,7 +39,7 @@ READY
 | --- | --- | --- |
 | Discovery reconciliation | Pass | `DISCOVERY_FINDINGS.md` confirms the actual repo is single Vite app structure with no `src/`, no monorepo, and no generated Supabase `Database` types. |
 | Adjusted plan | Pass | `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md` now maps Phase 1 to `app/`, `services/`, `lib/`, `types.ts`, `supabase/migrations/`, and `supabase/functions/`. |
-| Migration history | Pass | Linked history is aligned through `20260615050000` after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, and `20260615050000`. |
+| Migration history | Pass | Linked history is aligned through `20260615070000` after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000`. |
 | Migration safety | Pass | Delivery-order RLS validation passed: anon read/write denied, branch own recent update allowed, cross-branch/historical branch writes blocked, branch hard delete blocked, admin delete allowed, and audit traceability preserved. |
 | Owner hardening | Partial pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live owner browser/session QA is pending because no active owner profile exists. |
 | QC survey area RPC | Pass | `get_quality_feedback_branch_areas()` exists as a stable security-definer function with `search_path=public`; anon/authenticated/service_role execute is intentional, direct anon reads on source delivery tables are denied, and anon RPC call returns only 4 governorate names. |
@@ -62,7 +83,7 @@ B) dedicated-client staging-ready only
 | Owner assignable in Settings UI | Local pass | `owner` is included as `Owner / Read-only Executive` in assignable roles and module-layout roles. |
 | Owner read-only routing | Local pass | Owner is restricted to `owner-dashboard`; other operational/admin tabs are denied. |
 | Owner permission cap | Local pass | `lib/access.ts` downgrades accidental owner `edit` access to `read`. |
-| Pending migration chain | Pass | The chain is applied/aligned through `20260615050000`; delivery-order RLS and owner/QC SQL validations passed. |
+| Pending migration chain | Pass | The chain is applied/aligned through `20260615070000`; delivery-order RLS, owner/QC SQL validations, and Phase 1 lifecycle SQL/RLS validation passed. |
 | DB validation | Partial | App profiles are `admin=1`, `branch=20`; owner profiles `0`; non-branch profiles with `branch_id` `0`; `branches` still has one legacy `manager` row. |
 | Browser QA | Pending | Local login smoke passed without console errors; authenticated role sessions are unavailable. |
 

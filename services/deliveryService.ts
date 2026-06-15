@@ -5,12 +5,16 @@ import {
   DeliveryBlock,
   DeliveryCostSetting,
   DeliveryDriver,
+  DeliveryLifecycleStatus,
   DeliveryOrder,
+  DeliveryOrderEvent,
+  DeliveryOrderLifecycleInput,
   DeliveryOrderInput,
   DeliverySupervisor
 } from '../types';
 
 const PAYMENT_TYPES = new Set(['BP', 'CARD', 'CASH', 'TALABAT']);
+const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
 
 const isValidDateKey = (value: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -86,6 +90,11 @@ const assertActiveDriver = async (driverId?: string | null) => {
   if (!data?.is_active) throw new Error('Selected driver is inactive or unavailable.');
 };
 
+const toLifecycleStatus = (value: string | null | undefined): DeliveryLifecycleStatus =>
+  LIFECYCLE_STATUSES.includes(value as DeliveryLifecycleStatus)
+    ? value as DeliveryLifecycleStatus
+    : 'recorded';
+
 const toOrder = (row: any): DeliveryOrder => ({
   id: row.id,
   branchId: row.branch_id,
@@ -103,6 +112,32 @@ const toOrder = (row: any): DeliveryOrder => ({
   governorate: row.governorate,
   isOutsideGovernorate: !!row.is_outside_governorate,
   notes: row.notes || undefined,
+  createdAt: row.created_at,
+  deliveryStatus: toLifecycleStatus(row.delivery_status),
+  assignedAt: row.assigned_at || null,
+  pickedUpAt: row.picked_up_at || null,
+  deliveredAt: row.delivered_at || null,
+  cancelledAt: row.cancelled_at || null,
+  cancelledReason: row.cancelled_reason || null,
+  lifecycleUpdatedAt: row.lifecycle_updated_at || null
+});
+
+const toOrderEvent = (row: any): DeliveryOrderEvent => ({
+  id: row.id,
+  orderId: row.order_id,
+  branchId: row.branch_id,
+  branchName: row.branch?.name || null,
+  eventType: toLifecycleStatus(row.event_type),
+  previousStatus: row.previous_status ? toLifecycleStatus(row.previous_status) : null,
+  newStatus: toLifecycleStatus(row.new_status),
+  driverId: row.driver_id,
+  driverCode: row.driver?.driver_code || null,
+  driverName: row.driver?.name || null,
+  actorUserId: row.actor_user_id,
+  actorRole: row.actor_role,
+  notes: row.notes,
+  idempotencyKey: row.idempotency_key,
+  metadata: row.metadata || {},
   createdAt: row.created_at
 });
 
@@ -130,6 +165,14 @@ export interface DeliveryOrderFilters {
   driverId?: string;
   pharmacistId?: string;
   governorate?: string;
+}
+
+export interface DeliveryOrderEventFilters {
+  orderId?: string;
+  branchId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
 }
 
 export const deliveryService = {
@@ -264,6 +307,38 @@ export const deliveryService = {
       const { data, error } = await query;
       if (error) return null;
       return data && data.length > 0 ? toOrder(data[0]) : null;
+    }
+  },
+
+  lifecycle: {
+    listEvents: async (filters: DeliveryOrderEventFilters = {}): Promise<DeliveryOrderEvent[]> => {
+      let query = supabaseClient
+        .from('delivery_order_events')
+        .select('*, driver:delivery_drivers(name, driver_code), branch:branches(name)')
+        .order('created_at', { ascending: false })
+        .limit(filters.limit || 200);
+      if (filters.orderId) query = query.eq('order_id', filters.orderId);
+      if (filters.branchId && filters.branchId !== 'all') query = query.eq('branch_id', filters.branchId);
+      if (filters.dateFrom) query = query.gte('created_at', `${filters.dateFrom}T00:00:00`);
+      if (filters.dateTo) query = query.lte('created_at', `${filters.dateTo}T23:59:59.999`);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(toOrderEvent);
+    },
+
+    transition: async (input: DeliveryOrderLifecycleInput): Promise<DeliveryOrderEvent> => {
+      if (!input.orderId) throw new Error('Delivery order is required.');
+      if (!LIFECYCLE_STATUSES.includes(input.nextStatus)) throw new Error('A valid delivery status is required.');
+      if (input.driverId) await assertActiveDriver(input.driverId);
+      const { data, error } = await supabaseClient.rpc('app_delivery_transition_order', {
+        p_order_id: input.orderId,
+        p_next_status: input.nextStatus,
+        p_driver_id: input.driverId || null,
+        p_notes: input.notes?.trim() || null,
+        p_idempotency_key: input.idempotencyKey || null
+      });
+      if (error) throw error;
+      return toOrderEvent(data);
     }
   },
 

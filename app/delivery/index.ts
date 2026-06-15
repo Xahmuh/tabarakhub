@@ -1,4 +1,5 @@
 export { DeliveryHub } from './DeliveryHub';
+export { DeliveryLifecycleBoard } from './DeliveryLifecycleBoard';
 export { BranchRecordingPage } from './BranchRecordingPage';
 export { BranchDeliveryDashboard } from './BranchDeliveryDashboard';
 export { AdminDeliveryAnalytics } from './AdminDeliveryAnalytics';

@@ -12,9 +12,34 @@ Phase 1 is currently:
 READY
 ```
 
-Reason: the pending migration chain has been reviewed, applied, and validated on the linked Supabase project through `20260615050000`. The prior unsafe version of `20260615011000_allow_branch_delete_old_delivery_orders.sql` was rewritten before apply; branch hard delete is blocked, branch updates are own-branch today/yesterday only, immutable traceability fields are guarded, and the delivery audit trigger remains active.
+Reason: the readiness migration chain has been reviewed, applied, and validated on the linked Supabase project through `20260615050000`, and the Phase 1 Delivery Lifecycle migration has now been applied and validated through `20260615070000`. The prior unsafe version of `20260615011000_allow_branch_delete_old_delivery_orders.sql` was rewritten before apply; branch hard delete is blocked, branch updates are own-branch today/yesterday only, immutable traceability fields are guarded, the delivery audit trigger remains active, and Phase 1 lifecycle writes are restricted to the reviewed RPC path.
 
-Implementation approvals still required before writing Phase 1 feature code:
+## Phase 1 Local Implementation Update - 2026-06-15
+
+Phase 1 has started in a clean worktree from `origin/main` / readiness commit `5a0459b`.
+
+Implemented scope is the safe fallback from the adjusted plan: internal admin/branch-managed delivery lifecycle tracking only.
+
+- No `driver` app role was added.
+- No mobile scaffold was added.
+- No generated Supabase `Database` types were introduced.
+- Existing `delivery_orders` and `delivery_drivers` were extended/reused.
+- Migration `20260615070000_delivery_lifecycle_phase1.sql` was reviewed, applied to the linked Supabase project, and aligned in local/remote history.
+- Validation script `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed against the linked Supabase project after apply.
+- Results are documented in `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
+
+Phase 1 Delivery Lifecycle validation result:
+
+- migration list is aligned through `20260615070000`;
+- anon cannot read lifecycle events or execute lifecycle transitions;
+- branch users can transition own recent branch delivery orders only through `app_delivery_transition_order()`;
+- branch users cannot cross-branch transition, mutate old locked orders, hard-delete orders, directly update lifecycle columns, or insert events;
+- admin can transition recent and historical orders and read all lifecycle events;
+- owner, supervisor, and warehouse remain read-only for lifecycle mutation;
+- lifecycle event audit rows are written with actor/source metadata;
+- authenticated browser QA remains pending because the clean worktree has no local environment file or live role sessions.
+
+Additional approvals still required before writing driver-facing/mobile Phase 1 feature code:
 
 - `driver` is not an existing app role and needs explicit product/security approval before adding it.
 - The driver identity model must be reconciled with existing `delivery_drivers`.
@@ -197,6 +222,7 @@ Decision required before implementation:
 - Keep driver operations admin/branch-managed only.
 - Useful if Phase 1 is limited to internal dispatch/admin views.
 - Not sufficient for mobile driver self-service.
+- Current local Phase 1 implementation follows this option as a safe fallback because `driver` role approval remains outstanding.
 
 #### Option C - Separate controlled flow later
 
@@ -244,3 +270,12 @@ Required approvals before implementation:
 ## Stop Point
 
 This readiness step intentionally stops before Phase 1 feature implementation. No driver role, driver schema, order lifecycle schema, mobile scaffold, deployment, push, or commit is included here.
+
+## Post-Readiness Stop Point
+
+The local Phase 1 implementation now exists but remains staging-only:
+
+- migration `20260615070000_delivery_lifecycle_phase1.sql` is applied and local/remote history is aligned through `20260615070000`;
+- validation script `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed against the linked Supabase project;
+- authenticated browser QA pending;
+- no commit, push, or deploy is included in this implementation step.
