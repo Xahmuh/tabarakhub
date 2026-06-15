@@ -8,6 +8,49 @@ Final status:
 B) dedicated-client staging-ready only
 ```
 
+## Post-Deploy Validation - 2026-06-15
+
+Deployment checked:
+
+- Production domain: `https://www.tabarakpharmacy.com`
+- Deployed commit: `fe16f96 feat: add internal delivery lifecycle dispatch tracking`
+- Source branch: `main`
+- Vercel status reported by operator: Ready
+
+Git/deployment alignment:
+
+- `origin/main` includes `fe16f96`.
+- Current validation worktree is clean on `codex/phase1-delivery-lifecycle`.
+- Local `main` in this worktree is divergent from `origin/main` because it still points at a separate owner-dashboard commit; do not continue from local `main` without reconciling.
+
+Supabase validation:
+
+- `supabase migration list --linked` is aligned through `20260615070000`.
+- `delivery_order_events` exists with RLS enabled.
+- `app_delivery_transition_order(uuid,text,uuid,text,text)` exists.
+- All 8 lifecycle columns exist on `delivery_orders`.
+- Event table grants remain safe: anon grants `0`, authenticated event write grants `0`, authenticated event select grants `1`.
+- RPC execute grants remain safe: anon `false`, authenticated `true`.
+- Aggregate production delivery order count read-only check returned `4`.
+
+RLS validation:
+
+- `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed.
+- `supabase/tests/delivery_orders_rls_update_delete_validation.sql` passed.
+- Owner live-session write validation remains pending because no active owner profile exists in the linked project.
+
+Production browser smoke:
+
+- Root domain loads to `hub | Tabarak Pharmacy` login screen.
+- Root login screen shows the Sign In UI.
+- Browser console error count on root smoke: `0`.
+- Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
+- Vercel SPA fallback fix is prepared in `vercel.json`, rewriting `/(.*)` to `/index.html` so direct client routes load the React app before auth/route handling.
+- Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings` with HTTP 200 and the React app shell.
+- Production redeploy is still required to confirm the Vercel rewrite on `https://www.tabarakpharmacy.com/delivery`.
+- Authenticated Delivery module, Dispatch tab, lifecycle row rendering, transition buttons, and lifecycle transition action remain pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
+- No test delivery records were created and no production data was deleted.
+
 ## Scope Implemented
 
 Phase 1 was implemented from a clean worktree at readiness commit `5a0459b`.

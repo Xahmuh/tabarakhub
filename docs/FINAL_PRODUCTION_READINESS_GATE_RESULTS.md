@@ -21,6 +21,18 @@ B) dedicated-client staging-ready only
 
 Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
 
+Post-deploy validation on 2026-06-15:
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Deployment commit | Pass | Production domain `https://www.tabarakpharmacy.com` is deployed from `main` at `fe16f96 feat: add internal delivery lifecycle dispatch tracking`. |
+| Git alignment | Partial | Current validation branch and `origin/main` point at `fe16f96`; local `main` is divergent and must be reconciled before further local-main work. |
+| Supabase migration | Pass | `supabase migration list --linked` is aligned through `20260615070000`. |
+| DB objects/grants | Pass | `delivery_order_events` exists with RLS enabled; lifecycle RPC exists; lifecycle columns count is 8; anon event grants are 0; authenticated event write grants are 0; authenticated RPC execute is true and anon RPC execute is false. |
+| SQL/RLS validation | Pass | Phase 1 lifecycle validation and delivery-order update/delete validation both passed; owner live-session validation remains pending due no active owner profile. |
+| Public browser smoke | Partial | Root domain loads the Sign In UI with no captured console errors. Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix. `vercel.json` fallback rewrite is prepared and local preview route smoke passes for `/`, `/delivery`, `/spin-win`, and `/project-settings`; production redeploy must confirm the live `/delivery` route. Authenticated Delivery module QA remains pending. |
+| Cleanup | Pass | No test records were created and no production data was deleted. |
+
 ## Delivery Driver Mobile Phase 1 Readiness Gate - 2026-06-15
 
 Decision:

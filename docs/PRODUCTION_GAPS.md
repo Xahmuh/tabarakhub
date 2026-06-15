@@ -26,6 +26,19 @@ Open blockers:
 
 Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
 
+Post-deploy validation on 2026-06-15:
+
+- Production domain `https://www.tabarakpharmacy.com` loads the deployed app root at commit `fe16f96`.
+- `origin/main` contains `fe16f96`.
+- Supabase migration history is aligned through `20260615070000`.
+- Phase 1 DB object checks passed: lifecycle event table exists, RLS enabled, lifecycle RPC exists, lifecycle columns exist, anon event grants `0`, authenticated event write grants `0`.
+- Phase 1 lifecycle SQL/RLS validation passed; delivery-order update/delete RLS validation also passed.
+- Browser smoke without credentials reached the Sign In UI with no console errors.
+- Authenticated Delivery/Dispatch browser QA remains pending because no valid role sessions were available.
+- Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
+- `vercel.json` SPA fallback rewrite is prepared to serve `/index.html` for direct client routes.
+- Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`; production redeploy is required to verify `https://www.tabarakpharmacy.com/delivery`.
+
 ## Delivery Driver Mobile Phase 1 Readiness Gap - 2026-06-15
 
 Phase 1 Driver Mobile migration readiness is complete. Implementation has not started yet and still needs explicit approval for the driver role and delivery data-model decisions.

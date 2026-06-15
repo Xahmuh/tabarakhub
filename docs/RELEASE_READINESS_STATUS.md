@@ -20,6 +20,19 @@ Summary:
 
 Reference: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
 
+Post-deploy validation on 2026-06-15:
+
+- Domain `https://www.tabarakpharmacy.com` is deployed from `main` at `fe16f96`.
+- Root app loads to `hub | Tabarak Pharmacy` Sign In UI with no captured console errors.
+- Linked Supabase migration history is aligned through `20260615070000`.
+- Phase 1 database object checks passed for `delivery_order_events`, lifecycle columns, lifecycle RPC, RLS, policies, and grants.
+- Phase 1 lifecycle SQL/RLS validation passed for anon denial, branch own-recent transitions, cross-branch and historical protection, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, and lifecycle event audit rows.
+- Existing delivery-order update/delete RLS validation passed; owner live-session row remains pending because no active owner profile exists.
+- Authenticated Delivery module and Dispatch tab production QA remains pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
+- Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
+- `vercel.json` SPA fallback rewrite is prepared and local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
+- Production redeploy is required to confirm `https://www.tabarakpharmacy.com/delivery` no longer returns Vercel `404: NOT_FOUND`.
+
 ## Delivery Driver Mobile Phase 1 Readiness - 2026-06-15
 
 Status:
