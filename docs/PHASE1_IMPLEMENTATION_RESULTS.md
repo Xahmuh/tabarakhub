@@ -37,7 +37,7 @@ RLS validation:
 
 - `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed.
 - `supabase/tests/delivery_orders_rls_update_delete_validation.sql` passed.
-- Owner live-session write validation remains pending because no active owner profile exists in the linked project.
+- Owner live-session write validation remains pending because no authenticated owner browser session is available.
 
 Production browser smoke:
 
@@ -45,11 +45,70 @@ Production browser smoke:
 - Root login screen shows the Sign In UI.
 - Browser console error count on root smoke: `0`.
 - Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
-- Vercel SPA fallback fix is prepared in `vercel.json`, rewriting `/(.*)` to `/index.html` so direct client routes load the React app before auth/route handling.
+- Vercel SPA fallback fix is deployed from `vercel.json`, rewriting `/(.*)` to `/index.html` so direct client routes load the React app before auth/route handling.
 - Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings` with HTTP 200 and the React app shell.
-- Production redeploy is still required to confirm the Vercel rewrite on `https://www.tabarakpharmacy.com/delivery`.
+- Follow-up production route smoke confirms `https://www.tabarakpharmacy.com/` and `https://www.tabarakpharmacy.com/delivery` return HTTP 200 and serve the React app shell.
+- Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
 - Authenticated Delivery module, Dispatch tab, lifecycle row rendering, transition buttons, and lifecycle transition action remain pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
 - No test delivery records were created and no production data was deleted.
+
+## Authenticated Production QA Attempt - 2026-06-15
+
+Preflight:
+
+- Local verification passed: `npm run typecheck`, `npm run build`, `npm ls --depth=0`, and `git diff --check`.
+- `supabase migration list --linked` remains aligned through `20260615070000`.
+- `origin/main` includes `71dc82d` and newer commits; reconcile the validation worktree with `origin/main` before committing follow-up documentation.
+
+Route smoke:
+
+- `https://www.tabarakpharmacy.com/` returns HTTP 200 and serves the React app shell.
+- `https://www.tabarakpharmacy.com/delivery` returns HTTP 200 and serves the React app shell.
+- Browser `/delivery` check lands on the Sign In screen, does not show Vercel `404: NOT_FOUND`, and captured no console errors.
+
+Authenticated session availability:
+
+- In-app browser has no Supabase/auth local storage and shows only the Sign In screen.
+- Chrome profile automation is unavailable because Codex cannot communicate with the Codex Chrome Extension.
+- No credentials were entered, read, printed, or stored.
+
+Aggregate production state checked with read-only SQL:
+
+- Active app profiles by role: admin `1`, owner `1`, branch `20`.
+- No active supervisor, warehouse, or accounts profile appeared in the aggregate role count.
+- `delivery_orders` count: `4`.
+- Recent/open delivery orders count: `4`.
+- `delivery_order_events` count: `0`.
+
+Authenticated QA result:
+
+- Admin Delivery/Dispatch browser QA: pending authenticated session.
+- Branch Delivery/Dispatch browser QA: pending authenticated session.
+- Owner browser QA: pending authenticated session, even though an active owner profile now exists.
+- Supervisor/warehouse/accounts browser QA: pending because no active profiles/sessions were available in the aggregate role check.
+- Lifecycle transition/event browser QA: not executed because no authenticated admin/branch session was available and no production data should be mutated without a safe session.
+- Cleanup: not needed; no test records were created and no production data was deleted.
+
+## QA Role-Session Readiness - 2026-06-15
+
+Read-only role/profile inventory:
+
+- Active admin profiles: `1`.
+- Active branch profiles: `20`, including a T001 branch profile.
+- Active owner profiles: `1`.
+- Active supervisor profiles: `0`.
+- Active warehouse profiles: `0`.
+- Active accounts profiles: `0`.
+
+Browser QA readiness:
+
+- Admin Dispatch QA can start only after the operator logs in with an approved admin session.
+- Branch Dispatch QA can start only after the operator logs in with an approved branch session, preferably T001.
+- Owner read-only QA can start only after the operator logs in with an approved owner session.
+- Supervisor, warehouse, and accounts QA cannot start until approved profiles/sessions exist.
+- No users were created and no passwords, tokens, or full email addresses were documented.
+
+Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
 ## Scope Implemented
 

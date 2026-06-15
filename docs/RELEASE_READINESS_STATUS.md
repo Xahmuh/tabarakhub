@@ -27,11 +27,20 @@ Post-deploy validation on 2026-06-15:
 - Linked Supabase migration history is aligned through `20260615070000`.
 - Phase 1 database object checks passed for `delivery_order_events`, lifecycle columns, lifecycle RPC, RLS, policies, and grants.
 - Phase 1 lifecycle SQL/RLS validation passed for anon denial, branch own-recent transitions, cross-branch and historical protection, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, and lifecycle event audit rows.
-- Existing delivery-order update/delete RLS validation passed; owner live-session row remains pending because no active owner profile exists.
+- Existing delivery-order update/delete RLS validation passed; owner live-session row remains pending because no authenticated owner browser session is available.
 - Authenticated Delivery module and Dispatch tab production QA remains pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
 - Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
-- `vercel.json` SPA fallback rewrite is prepared and local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
-- Production redeploy is required to confirm `https://www.tabarakpharmacy.com/delivery` no longer returns Vercel `404: NOT_FOUND`.
+- `vercel.json` SPA fallback rewrite is deployed and local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
+- Follow-up production route smoke confirms `/` and `/delivery` now return HTTP 200 and serve the React app shell.
+- Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
+- Authenticated Admin/Branch/Owner Dispatch QA remains pending because no authenticated browser session or credentials were available; Chrome existing-profile validation is also unavailable because the Codex Chrome Extension connection is not available.
+- Read-only aggregate inventory shows active admin `1`, owner `1`, and branch `20` profiles, but no active supervisor/warehouse/accounts role counts.
+- T001 has an active branch profile for preferred branch-scope QA, but an authenticated browser session is still required.
+- Supervisor, warehouse, and accounts QA remains blocked until approved profiles/sessions exist.
+- No users were created automatically; any temporary QA accounts must be created through Supabase Auth UI / secure Admin API without storing passwords in docs or migrations.
+- No lifecycle transition was performed and `delivery_order_events` remains at count `0`; no test records were created or deleted.
+
+Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
 ## Delivery Driver Mobile Phase 1 Readiness - 2026-06-15
 
@@ -54,7 +63,7 @@ Summary:
 - The repo is a single Vite app using `app/`, `services/`, `lib/`, root `types.ts`, `supabase/migrations/`, and `supabase/functions/`; no `src/` or monorepo assumptions should be used.
 - Linked migration history is aligned through `20260615070000`.
 - `20260615011000_allow_branch_delete_old_delivery_orders.sql` was applied in its rewritten safe form: branch hard delete blocked, branch update limited to own today/yesterday orders, immutable traceability fields guarded, and audit traceability preserved.
-- Delivery-order RLS validation passed; owner SQL/policy hardening validation passed with owner browser/session QA pending due no active owner profile; QC survey area RPC validation passed.
+- Delivery-order RLS validation passed; owner SQL/policy hardening validation passed with owner browser/session QA pending due no authenticated owner session; QC survey area RPC validation passed.
 - `driver` role, driver identity linkage, and mobile app structure remain explicit decisions before any driver-facing/mobile implementation.
 
 Do not commit, push, deploy, or begin driver-facing/mobile implementation until the checkpoint scope and role/data-model decisions are approved.
@@ -71,9 +80,9 @@ Summary:
 
 - Local implementation is complete for owner performance, delivery map, traceability, driver KPIs, and pharmacy KPIs.
 - Role compatibility check confirms `owner` is valid in DB/types/helpers and is now locally assignable in Settings UI as `Owner / Read-only Executive`.
-- The linked Supabase project has no owner profile; authenticated owner browser QA is pending.
-- The owner hardening migration has been applied and SQL/policy-validated; authenticated owner browser QA is still pending because no owner profile exists.
-- Do not commit, push, deploy, or provision owner access until the pending migration chain and owner provisioning decision are handled intentionally.
+- The linked Supabase project now has an active owner profile in aggregate checks; authenticated owner browser QA is pending because no owner session is available.
+- The owner hardening migration has been applied and SQL/policy-validated; authenticated owner browser QA is still pending because no owner session is available.
+- Do not provision owner access for production use until authenticated owner browser QA passes.
 
 Reference: `docs/OWNER_READONLY_DASHBOARD.md`.
 
@@ -90,7 +99,7 @@ Update:
 - Owner is now locally assignable in Settings UI as `Owner / Read-only Executive`.
 - Owner app navigation is restricted to the Owner Dashboard only.
 - Owner `edit` feature defaults/overrides are capped to read-only in the permission resolver.
-- Pending migrations have been applied through `20260615070000`; owner live-session QA remains pending until an owner profile is provisioned.
+- Pending migrations have been applied through `20260615070000`; owner live-session QA remains pending until an approved owner session is available.
 
 Current status:
 
