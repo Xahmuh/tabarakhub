@@ -81,11 +81,11 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
 
   const handleDelete = async (order: DeliveryOrder) => {
     const confirm = await Swal.fire({
-      title: 'Cancel delivery invoice?',
-      text: `Cancel this recorded invoice (${order.valueBhd.toFixed(3)} BHD)?`,
+      title: 'Delete recorded invoice?',
+      text: `Delete this recorded invoice (${order.valueBhd.toFixed(3)} BHD) from recording and dispatch?`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Cancel invoice',
+      confirmButtonText: 'Delete recording',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
@@ -93,7 +93,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
       await deliveryService.orders.delete(order.id);
       setOrders(prev => prev.filter(o => o.id !== order.id));
     } catch (e: any) {
-      Swal.fire('Cancel failed', e?.message || 'Could not cancel this delivery invoice.', 'error');
+      Swal.fire('Delete failed', e?.message || 'Could not delete this recorded delivery invoice.', 'error');
     }
   };
 

@@ -285,7 +285,9 @@ export const deliveryService = {
     },
 
     delete: async (id: string) => {
-      const { error } = await supabaseClient.from('delivery_orders').delete().eq('id', id);
+      const { error } = await supabaseClient.rpc('app_delivery_delete_recorded_order' as any, {
+        p_order_id: id
+      });
       if (error) throw error;
       return true;
     },

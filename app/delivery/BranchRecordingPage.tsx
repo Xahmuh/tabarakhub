@@ -478,11 +478,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   const handleDelete = async (order: DeliveryOrder) => {
     const confirm = await Swal.fire({
-      title: 'Cancel delivery invoice?',
+      title: 'Delete recorded invoice?',
       text: `${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Cancel invoice',
+      confirmButtonText: 'Delete recording',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
@@ -495,7 +495,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
         return next;
       });
     } catch (e: any) {
-      Swal.fire('Cancel failed', e?.message || 'Could not cancel this delivery invoice.', 'error');
+      Swal.fire('Delete failed', e?.message || 'Could not delete this recorded delivery invoice.', 'error');
     }
   };
 
@@ -618,18 +618,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const handleBulkDelete = async () => {
     if (selectedHistoryOrders.length === 0 || isHistoryBulkCancelling) return;
     const confirm = await Swal.fire({
-      title: 'Cancel selected invoices?',
-      text: `${selectedHistoryOrders.length.toLocaleString()} delivery invoices will be cancelled.`,
+      title: 'Delete selected recorded invoices?',
+      text: `${selectedHistoryOrders.length.toLocaleString()} delivery invoices will be removed from recording and dispatch if they have not started.`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Cancel selected',
+      confirmButtonText: 'Delete selected',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
 
     setIsHistoryBulkCancelling(true);
     Swal.fire({
-      title: 'Cancelling selected...',
+      title: 'Deleting selected...',
       html: renderDeliveryUploadProgressHtml(5, 'Preparing selected invoices'),
       allowOutsideClick: false,
       allowEscapeKey: false,
@@ -644,7 +644,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
         Swal.update({
           html: renderDeliveryUploadProgressHtml(
             8 + Math.round((index / Math.max(selectedHistoryOrders.length, 1)) * 86),
-            'Cancelling invoices',
+            'Deleting recorded invoices',
             `${index.toLocaleString()} of ${selectedHistoryOrders.length.toLocaleString()} invoices processed`
           )
         });
@@ -652,7 +652,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
           await deliveryService.orders.delete(order.id);
           deletedIds.add(order.id);
         } catch (error: any) {
-          failed.push({ id: order.id, message: error?.message || 'Could not cancel invoice.' });
+          failed.push({ id: order.id, message: error?.message || 'Could not delete invoice.' });
         }
       }
 
@@ -663,13 +663,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       if (failed.length > 0) {
         Swal.fire(
           'Some invoices failed',
-          `${deletedIds.size.toLocaleString()} cancelled, ${failed.length.toLocaleString()} failed.`,
+          `${deletedIds.size.toLocaleString()} deleted, ${failed.length.toLocaleString()} failed.`,
           'warning'
         );
         return;
       }
 
-      Swal.fire('Cancelled', `${deletedIds.size.toLocaleString()} delivery invoices were cancelled.`, 'success');
+      Swal.fire('Deleted', `${deletedIds.size.toLocaleString()} delivery invoices were deleted.`, 'success');
     } finally {
       setIsHistoryBulkCancelling(false);
     }
@@ -985,7 +985,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                {isHistoryBulkCancelling ? 'Cancelling...' : 'Cancel selected'}
+                {isHistoryBulkCancelling ? 'Deleting...' : 'Delete selected'}
               </button>
             )}
           </div>
