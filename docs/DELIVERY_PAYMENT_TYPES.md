@@ -6,7 +6,7 @@
 B) dedicated-client staging-ready only
 ```
 
-Dynamic delivery payment types are implemented, committed, pushed, deployed by Vercel from `6d5b2b3`, and the migration has been applied to the linked Supabase project. The feature is database-validated and SQL/RLS-validated, but authenticated browser QA is still pending until approved role sessions are available.
+Dynamic delivery payment types are implemented, committed, pushed, deployed by Vercel from `6d5b2b3`, and the migration has been applied to the linked Supabase project. The feature is database-validated and SQL/RLS-validated, with authenticated browser QA completed for Admin payment persistence, T001 Branch Talabat no-block save/lifecycle cancellation, and Owner read-only dashboard coverage. Production sign-off still requires remaining optional role sessions and broader production-readiness blockers outside this feature.
 
 ## Default Types
 
@@ -81,7 +81,7 @@ SQL role simulation results:
 | owner | Can read active payment types; insert/update/delete denied. |
 | supervisor/warehouse/accounts | No active profiles were available on the linked project, so live role simulation remains pending. |
 
-Temporary QA payment rows were cleaned up after validation. No production delivery data was deleted.
+SQL-validation temporary QA payment rows were cleaned up after validation. Browser QA created `QA_TEST_PAYMENT`, edited it safely, and left it disabled/inactive for traceability. No production delivery data was deleted.
 
 ## App Validation
 
@@ -96,16 +96,17 @@ Combined authenticated production QA attempt on 2026-06-15:
 
 - Public production route smoke passed for `/` and `/delivery`: both returned HTTP 200, served the React app shell, and did not show Vercel `404: NOT_FOUND`.
 - Production shell asset observed: `assets/index-D_9-Xigh.js`, matching the Vercel production build for commit `6d5b2b3`.
-- Chrome is installed and running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles, so existing Chrome authenticated sessions could not be used.
+- Initial authenticated browser QA attempts were blocked because the selected Chrome profiles did not have the Codex Chrome Extension enabled.
+- Follow-up Chrome Default profile alignment enabled browser control for T001 Branch, Admin, and Owner sessions.
+- T001 Branch browser QA passed for the controlled branch flow: Branch Recording loaded dynamic active payment options (`BP`, `Cash`, `Card`, `Talabat`, `Insurance`), payment settings/admin controls were hidden, `Talabat` disabled block/area requirements, a single `0.001 BHD` `Talabat` T001/Jerdab test order saved with block omitted, and `Insurance` save without block was blocked with a `Block required` validation modal while delivery history stayed unchanged during the negative test.
+- T001 Dispatch lifecycle QA passed for the same test order: the order appeared in Dispatch as `RECORDED`, one safe terminal `cancelled` transition was performed with note `QA TEST TALABAT NO BLOCK - SAFE TO IGNORE`, and read-only SQL confirmed order short id `cc9f3541`, `event_count=1`, `recorded_to_cancelled_events=1`, actor role `branch`, source `internal_dispatch_phase1`, branch `T001`, and cross-branch note events `0`.
+- Admin Payments browser QA passed for persistence: `Delivery Settings > Payments` loaded, default labels/codes were visible (`BP`, `CASH`, `CARD`, `TALABAT`, `INSURANCE`), `QA_TEST_PAYMENT` was created, edited to `QA_TEST_PAYMENT_UPDATED`, its stable code remained read-only as `QA_TEST_PAYMENT`, `requires_block` was toggled off, and the test type was disabled/inactivated without altering default payment types.
+- Owner read-only dashboard QA passed for the payment-aware executive surfaces: Overview, Delivery Map, Traceability, Drivers, and Pharmacies loaded without write controls or console errors.
 - No passwords, tokens, cookies, or local storage were inspected.
-- No test payment type or delivery order was created in this pass.
+- One controlled T001 test delivery order was created because the live Branch Recording form does not expose customer/phone/notes fields; it is safely identifiable by T001/Jerdab, `0.001 BHD`, `TALABAT`, block omitted, and the lifecycle cancellation note. The temporary `QA_TEST_PAYMENT` row remains disabled/inactive and clearly marked after Admin browser QA.
 
 Authenticated browser QA remains pending:
 
-- Admin Payments tab add/edit/disable flow.
-- Branch Recording dynamic dropdown.
-- `TALABAT` no-block save behavior.
-- `INSURANCE` block-required save behavior.
-- Console/network smoke under real admin and branch sessions.
+- Supervisor/warehouse/accounts role-session browser QA if those roles are required for final release.
 
 No credentials were entered or exposed during this validation pass.

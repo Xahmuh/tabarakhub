@@ -2,7 +2,7 @@
 
 ## Dynamic Delivery Payment Types Gap - 2026-06-15
 
-Dynamic delivery payment types are implemented and the linked Supabase project is aligned through `20260615110000_delivery_payment_types.sql`, but production sign-off still requires authenticated browser QA.
+Dynamic delivery payment types are implemented and the linked Supabase project is aligned through `20260615110000_delivery_payment_types.sql`. Admin Payments, Owner read-only, and the controlled T001 Branch Talabat no-block save / lifecycle cancellation path have browser QA coverage; production sign-off still requires optional role sessions and broader production-readiness blockers outside this feature.
 
 Current status:
 
@@ -16,13 +16,16 @@ Validated:
 - `TALABAT.requires_block = false`; `INSURANCE.requires_block = true`.
 - Existing `delivery_orders` payment types remain compatible: `BP=13`, `CARD=7`, `CASH=2`.
 - RLS simulation passed for anon denial, branch active read-only access, admin management, and owner read-only access.
-- Temporary QA payment rows were cleaned up; no production delivery orders were deleted or rewritten.
-- Combined authenticated production QA was attempted on 2026-06-15, but authenticated UI checks remain pending because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. Public production route smoke still passed for `/` and `/delivery`.
+- SQL-validation temporary QA payment rows were cleaned up. Browser QA created clearly marked `QA_TEST_PAYMENT`, edited it, and left it disabled/inactive for traceability; no production delivery orders were deleted or rewritten.
+- Initial combined authenticated production QA was attempted on 2026-06-15, but authenticated UI checks were blocked because the selected Chrome profiles did not have the Codex Chrome Extension enabled. Public production route smoke still passed for `/` and `/delivery`.
+- Follow-up Chrome Default profile alignment enabled browser control for T001 Branch, Admin, and Owner sessions.
+- After Chrome Default profile alignment, T001 Branch browser QA passed for the controlled payment flow: dynamic options loaded, branch payment-management controls stayed hidden, `Talabat` disabled block requirements, one `0.001 BHD` `TALABAT` no-block order saved, and `Insurance` without block was blocked before save while delivery history stayed unchanged during the negative test.
+- T001 Dispatch lifecycle/event QA passed for the same controlled test order: it was cancelled/closed with note `QA TEST TALABAT NO BLOCK - SAFE TO IGNORE`; read-only SQL confirmed order short id `cc9f3541`, one `recorded -> cancelled` event, actor role `branch`, source `internal_dispatch_phase1`, branch `T001`, and cross-branch note events `0`.
+- Admin Payments browser QA passed after Admin login: `Delivery Settings > Payments` loaded, default labels/codes were visible, `QA_TEST_PAYMENT` was created, edited, verified with read-only code protection, and disabled/inactivated without altering default payment types.
+- Owner read-only browser QA passed after Owner login: Owner Dashboard opened with only read-only executive surfaces, payment-aware traceability/driver/pharmacy views loaded, and no write controls or console errors appeared.
 
 Open blockers:
 
-- Authenticated admin browser QA for `Delivery Settings > Payments`.
-- Authenticated branch browser QA for dynamic payment selection and order save behavior.
 - Live supervisor/warehouse/accounts validation after approved profiles/sessions exist.
 
 Detailed record: `docs/DELIVERY_PAYMENT_TYPES.md`.
@@ -47,8 +50,8 @@ Local implementation:
 
 Open blockers:
 
-- Authenticated browser QA must verify admin/branch write behavior and owner/supervisor/warehouse read-only behavior.
-- Clean-worktree browser smoke remains pending because no local environment file or live role sessions are available.
+- Authenticated browser QA has verified the controlled T001 branch save/lifecycle transition path with clearly marked test data; supervisor/warehouse read-only behavior remains pending if those role sessions are approved.
+- Clean-worktree browser smoke remains partially covered by production Chrome Default sessions; any additional admin-specific delivery-order/lifecycle mutation checks require separately approved test data.
 - `driver` role and mobile app remain future product/security decisions.
 
 Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
@@ -61,18 +64,21 @@ Post-deploy validation on 2026-06-15:
 - Phase 1 DB object checks passed: lifecycle event table exists, RLS enabled, lifecycle RPC exists, lifecycle columns exist, anon event grants `0`, authenticated event write grants `0`.
 - Phase 1 lifecycle SQL/RLS validation passed; delivery-order update/delete RLS validation also passed.
 - Browser smoke without credentials reached the Sign In UI with no console errors.
-- Authenticated Delivery/Dispatch browser QA remains pending because no valid role sessions were available.
+- Authenticated Delivery/Dispatch browser QA now has partial Admin and Owner coverage plus a passed controlled T001 Branch lifecycle path; supervisor/warehouse/accounts sessions remain unavailable.
 - Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
 - `vercel.json` SPA fallback rewrite is deployed to serve `/index.html` for direct client routes.
 - Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
 - Follow-up production smoke confirms `/` and `/delivery` return HTTP 200 and serve the React app shell; `/delivery` reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
-- Authenticated Dispatch QA remains blocked because no approved authenticated browser session was available through automation; Chrome is running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
+- Initial authenticated Dispatch QA was blocked by Chrome profile/extension setup; Chrome Default alignment later enabled Admin, T001 Branch, and Owner browser checks.
 - Aggregate read-only role inventory shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts profiles were not present in the aggregate role count.
-- T001 has an active branch profile available for preferred branch-scope QA, but no authenticated browser session was available.
+- T001 Branch authenticated browser session was available and completed controlled branch-scope QA for payment validation, Talabat no-block save, Dispatch cancellation, event audit, dispatch isolation, and historical closed-order protection.
 - Supervisor, warehouse, and accounts profiles/sessions are missing for Phase 1 browser QA.
-- Operator must log in with approved admin, T001 branch, and owner sessions, or approve temporary QA accounts through Supabase Auth UI / secure Admin API.
-- `delivery_order_events` count is currently `1` by aggregate read-only SQL (`recorded -> cancelled`, actor role `branch`); no lifecycle transition was performed by this QA pass because no safe authenticated admin/branch session was available.
-- No test records were created and no production data was deleted during the authenticated QA attempt.
+- Remaining browser QA needs supervisor/warehouse/accounts sessions if those roles are required; Admin Dispatch transition may be repeated later only with separately approved safe test data.
+- Controlled T001 Branch read-only SQL audit found order short id `cc9f3541`, `event_count=1`, `recorded_to_cancelled_events=1`, actor role `branch`, source `internal_dispatch_phase1`, branch `T001`, lifecycle actor populated, and cross-branch note events `0`.
+- Follow-up Chrome Default profile alignment unblocked browser control; one controlled lifecycle transition was performed on the T001 test order only, and the order was left cancelled/closed for traceability.
+- After Chrome Default profile alignment, T001 Branch Dispatch browser QA passed for the controlled flow: the Dispatch tab loaded, only T001/Jerdab data was visible, branch selector/admin settings/payment settings/delete/hard-delete controls were absent, the new `0.001 BHD` `TALABAT` order was cancelled, and the lifecycle trace showed the QA note.
+- Admin Dispatch browser QA partially passed after Admin login: all-branch Dispatch loaded with rows and action buttons, lifecycle tracking text was visible, and no hard-delete control appeared. No transition was performed because no clearly marked safe test order was available.
+- One controlled T001 test record was created and left cancelled/closed for audit; no production data was deleted during the authenticated QA attempt.
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
@@ -96,7 +102,7 @@ Open items:
 
 - Migration history is aligned through `20260615070000` on the linked project after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000`.
 - Delivery-order RLS validation passed: anon read/write denied; branch own recent update allowed; cross-branch and historical branch writes blocked; branch hard delete blocked; admin delete allowed; audit traceability preserved.
-- Owner hardening SQL/policy validation passed, but live owner browser/session QA remains pending because no authenticated owner session is available.
+- Owner hardening SQL/policy validation passed, and live Owner read-only browser QA passed in Chrome Default with no write controls exposed.
 - QC survey Branch Area RPC validation passed: safe `search_path`, security-definer read-only function, no direct anon source-table reads, and limited anon RPC execution returns only governorate names.
 - `driver` is not an existing app role. It is absent from `types.ts`, role allowlists, admin Edge Function assignable roles, and DB role constraints/RPCs.
 - Existing `delivery_orders` and `delivery_drivers` must be extended/reconciled, not replaced.
@@ -104,16 +110,16 @@ Open items:
 
 Detailed readiness plan: `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md`.
 
-## Owner Read-only Dashboard Gap - 2026-06-15
+## Owner Read-only Dashboard QA - 2026-06-15
 
-Owner Read-only Dashboard is implemented locally and validates as read-only in code review, but production cannot be claimed yet.
+Owner Read-only Dashboard is implemented and validated as read-only in code review and authenticated Chrome Default browser QA, but overall production readiness remains staging-only due unrelated remaining blockers.
 
 Remaining items:
 
-- The owner hardening migration has been applied and SQL/policy-validated; do not provision an owner account until authenticated owner-session QA passes.
-- The linked Supabase project now has an active owner profile in aggregate checks, but live owner browser/session validation remains pending because no authenticated owner session is available.
-- Owner is now locally assignable in `Project Settings > Users & Roles` as `Owner / Read-only Executive`; authenticated admin browser confirmation remains pending.
-- Use an approved owner session and complete authenticated browser QA for Overview, Delivery Map, Traceability, Drivers, and Pharmacies.
+- The owner hardening migration has been applied and SQL/policy-validated.
+- The linked Supabase project has an active owner profile in aggregate checks, and the approved Owner session passed authenticated read-only browser QA.
+- Owner is locally assignable in `Project Settings > Users & Roles` as `Owner / Read-only Executive`; Admin Payments browser persistence passed and Admin Dispatch browser checks partially passed.
+- Authenticated Owner QA passed for Overview, Delivery Map, Traceability, Drivers, and Pharmacies with no write controls or console errors.
 - Repeat RLS validation for owner, supervisor, warehouse, and accounts after those profiles exist on the dedicated client project.
 
 Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
@@ -122,10 +128,10 @@ Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
 
 Owner is locally reconciled as an assignable read-only executive role, but production remains blocked:
 
-- Pending migration chain has now been applied and validated through `20260615070000`; owner live-session QA remains pending because no authenticated owner session is available.
-- `20260615023000_owner_readonly_dashboard_hardening.sql` has been applied; owner session access still requires explicit approval and live-session QA.
-- The linked database now has an active owner profile in aggregate checks, but no owner session was available for browser QA; it still has one legacy `public.branches.role = manager` row.
-- Authenticated owner/admin/branch/supervisor/warehouse/accounts browser QA remains pending.
+- Pending migration chain has now been applied and validated through `20260615070000`; Owner live-session read-only QA passed in Chrome Default.
+- `20260615023000_owner_readonly_dashboard_hardening.sql` has been applied; owner session access was validated for read-only dashboard behavior.
+- The linked database now has an active owner profile in aggregate checks, and the approved Owner browser session was validated; it still has one legacy `public.branches.role = manager` row.
+- Authenticated admin/branch QA has partial coverage; supervisor/warehouse/accounts browser QA remains pending if required.
 
 Current status:
 

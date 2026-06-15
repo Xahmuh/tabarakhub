@@ -16,8 +16,8 @@ B) dedicated-client staging-ready only
 | Existing orders | Pass | Existing payment types remain compatible: `BP=13`, `CARD=7`, `CASH=2`. |
 | RLS validation | Partial pass | anon read/write denied; branch can read active rows and cannot write; admin can manage a temporary QA payment type; owner can read active rows and cannot write. Supervisor/warehouse/accounts profiles were unavailable for live simulation. |
 | App/UI | Local pass | Delivery Settings adds Payments management; Branch Recording loads dynamic active options; import, analytics, coverage, and owner dashboard use payment-type config for block-required behavior. |
-| Browser QA | Pending | Combined authenticated production QA was attempted on 2026-06-15. Public `/` and `/delivery` route smoke passed, but authenticated admin/branch sessions could not be automated because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. |
-| Cleanup | Pass | Temporary QA payment rows were deleted; no production delivery data was deleted. |
+| Browser QA | Partial pass | Combined authenticated production QA was attempted on 2026-06-15. Public `/` and `/delivery` route smoke passed. After Chrome Default profile alignment, T001 Branch payment validation, Talabat no-block save, dispatch isolation, and lifecycle cancellation/event audit passed for a controlled test order; Admin Payments persistence QA passed with `QA_TEST_PAYMENT`; Owner read-only dashboard QA passed for Overview, Delivery Map, Traceability, Drivers, and Pharmacies. |
+| Cleanup | Partial pass | SQL-validation temporary QA payment rows were deleted. Browser QA `QA_TEST_PAYMENT` was left disabled/inactive for traceability. One T001 `0.001 BHD` `TALABAT` test delivery order remains cancelled/closed for audit; no production delivery data was deleted. |
 
 Detailed record: `docs/DELIVERY_PAYMENT_TYPES.md`.
 
@@ -38,7 +38,7 @@ B) dedicated-client staging-ready only
 | App/UI | Local pass | Delivery Dispatch tab added for internal lifecycle tracking. Owner/supervisor/warehouse access remains read-only through existing `DeliveryHub` permissions. |
 | SQL/RLS validation | Pass | `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed for anon denial, branch own-recent RPC transitions, cross-branch/historical/direct-write denial, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, invalid transition rejection, and lifecycle event audit metadata. |
 | Verification | Pass | Final verification passed: `npm run typecheck`, `npm run build`, `npm ls --depth=0`, `git diff --check`, and `supabase migration list --linked` aligned through `20260615070000`. |
-| Browser QA | Pending | Clean worktree has no local environment file and no authenticated role sessions; no secrets were copied or printed. |
+| Browser QA | Partial pass | Clean-worktree browser QA was initially pending due no local environment/session, but later Chrome Default production sessions provided partial Admin/T001 coverage and Owner read-only pass. No secrets were copied or printed. |
 
 Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
 
@@ -50,23 +50,23 @@ Post-deploy validation on 2026-06-15:
 | Git alignment | Partial | Current validation branch and `origin/main` point at `fe16f96`; local `main` is divergent and must be reconciled before further local-main work. |
 | Supabase migration | Pass | `supabase migration list --linked` is aligned through `20260615070000`. |
 | DB objects/grants | Pass | `delivery_order_events` exists with RLS enabled; lifecycle RPC exists; lifecycle columns count is 8; anon event grants are 0; authenticated event write grants are 0; authenticated RPC execute is true and anon RPC execute is false. |
-| SQL/RLS validation | Pass | Phase 1 lifecycle validation and delivery-order update/delete validation both passed; owner live-session validation remains pending due no authenticated owner session. |
-| Public browser smoke | Pass | Root domain and direct unauthenticated `/delivery` return HTTP 200 and serve the React app shell. `/delivery` reaches the Sign In screen, no longer returns Vercel `404: NOT_FOUND`, and has no captured console errors. Authenticated Delivery module QA remains pending. |
-| Cleanup | Pass | No test records were created and no production data was deleted. |
+| SQL/RLS validation | Pass | Phase 1 lifecycle validation and delivery-order update/delete validation both passed; Owner live-session read-only browser validation also passed. |
+| Public browser smoke | Pass | Root domain and direct unauthenticated `/delivery` return HTTP 200 and serve the React app shell. `/delivery` reaches the Sign In screen, no longer returns Vercel `404: NOT_FOUND`, and has no captured console errors. Authenticated Delivery module QA is partially complete for Admin, T001 Branch, and Owner read-only surfaces. |
+| Cleanup | Pass for original smoke | No test records were created during the original post-deploy smoke and no production data was deleted. A later controlled T001 test order was created/cancelled and is documented in the authenticated production QA follow-up below. |
 
 Authenticated production QA follow-up on 2026-06-15:
 
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
 | Route smoke | Pass | `/` and `/delivery` return HTTP 200 and serve the React app shell; browser `/delivery` reaches Sign In, not Vercel `404: NOT_FOUND`, with no captured console errors. |
-| Session availability | Blocked | Chrome is installed and running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. No credentials were entered or exposed. |
+| Session availability | Partial pass | Chrome Default profile alignment enabled browser control for T001 Branch, Admin, and Owner sessions. Supervisor, warehouse, and accounts sessions remain unavailable. No credentials were entered or exposed. |
 | Role inventory | Partial | Read-only aggregate SQL shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts did not appear in the active role aggregate. |
-| Role-session readiness | Partial | T001 has an active branch profile for preferred branch QA; admin, T001 branch, and owner still require operator login sessions. Supervisor, warehouse, and accounts require approved profiles/sessions before browser QA. |
-| Admin Dispatch QA | Pending | No authenticated admin browser session was available. |
-| Branch Dispatch QA | Pending | No authenticated branch browser session was available. |
-| Owner/Supervisor/Warehouse QA | Pending | Owner profile exists but no owner session was available; supervisor/warehouse/accounts profiles/sessions were unavailable. |
-| Lifecycle transition/event QA | Pending | No safe authenticated admin/branch session was available, so no production lifecycle transition was performed by this pass. `delivery_order_events` count is currently `1` by aggregate SQL (`recorded -> cancelled`, actor role `branch`). |
-| Cleanup | Pass | No test delivery records were created and no production data was deleted. |
+| Role-session readiness | Partial | T001 Branch, Admin, and Owner browser sessions were used for QA. Supervisor, warehouse, and accounts require approved profiles/sessions before browser QA. |
+| Admin Dispatch QA | Partial pass | Admin Dispatch loaded all operational branches with rows and action buttons, lifecycle tracking text was visible, and no hard-delete control appeared. No transition was performed because no clearly marked safe test order was available. |
+| Branch Dispatch QA | Pass for controlled T001 flow | T001 Branch Dispatch tab loaded with only T001/Jerdab data visible; no cross-branch data, branch selector, admin settings, payment settings, or delete/hard-delete controls appeared. One controlled `0.001 BHD` `TALABAT` test order moved `recorded -> cancelled` and was left closed for audit. |
+| Owner/Supervisor/Warehouse QA | Partial pass | Owner read-only dashboard QA passed in Chrome Default; supervisor/warehouse/accounts profiles/sessions were unavailable. |
+| Lifecycle transition/event QA | Pass for controlled T001 flow | Read-only SQL confirmed order short id `cc9f3541`, `event_count=1`, `recorded_to_cancelled_events=1`, `event_branch_matches_order=true`, `event_actor_populated=true`, `event_actor_roles=branch`, `event_sources=internal_dispatch_phase1`, and `cross_branch_note_events=0`. |
+| Cleanup | Partial pass | One controlled T001 test delivery record was created and left cancelled/closed for audit. No hard delete was used and no production data was deleted. |
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
@@ -90,7 +90,7 @@ READY
 | Adjusted plan | Pass | `PHASE1_IMPLEMENTATION_PLAN_ADJUSTED.md` now maps Phase 1 to `app/`, `services/`, `lib/`, `types.ts`, `supabase/migrations/`, and `supabase/functions/`. |
 | Migration history | Pass | Linked history is aligned through `20260615070000` after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000`. |
 | Migration safety | Pass | Delivery-order RLS validation passed: anon read/write denied, branch own recent update allowed, cross-branch/historical branch writes blocked, branch hard delete blocked, admin delete allowed, and audit traceability preserved. |
-| Owner hardening | Partial pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live owner browser/session QA is pending because no authenticated owner session is available. |
+| Owner hardening | Pass | SQL/policy validation passed: owner removed from maintenance and branch-login approval control, legacy broad branch update policy removed, owner has audit read only. Live Owner read-only browser/session QA passed in Chrome Default. |
 | QC survey area RPC | Pass | `get_quality_feedback_branch_areas()` exists as a stable security-definer function with `search_path=public`; anon/authenticated/service_role execute is intentional, direct anon reads on source delivery tables are denied, and anon RPC call returns only 4 governorate names. |
 | Role model | Pending decision | `driver` is absent from TypeScript roles, UI allowlists, Edge Function assignable roles, and DB constraints/RPCs. Option A/B/C must be approved before implementation. |
 | Data model | Pending decision | Existing `delivery_orders` and `delivery_drivers` must be extended or linked through companion tables; replacement tables are not approved. |
@@ -109,13 +109,13 @@ Gate result:
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
 | Role compatibility | Local pass | `owner` remains valid in DB/types/helpers/live role constraint and is now included in Settings UI assignable/module-layout roles. |
-| Migration safety | Pass, applied | `20260615023000_owner_readonly_dashboard_hardening.sql` removes owner write/control paths, drops a legacy broad branch-update policy, and adds owner audit read. It has been applied and SQL/policy-validated; owner browser-session QA remains pending until an approved owner session is available. |
-| Current remote RLS | Pass, browser pending | Owner hardening migration is applied and SQL/policy-validated on the linked project; authenticated owner-session browser QA remains pending. |
+| Migration safety | Pass, applied | `20260615023000_owner_readonly_dashboard_hardening.sql` removes owner write/control paths, drops a legacy broad branch-update policy, and adds owner audit read. It has been applied and SQL/policy-validated; Owner browser-session read-only QA also passed. |
+| Current remote RLS | Pass | Owner hardening migration is applied and SQL/policy-validated on the linked project; authenticated Owner read-only browser QA passed. |
 | Dashboard code review | Pass | Owner dashboard UI and service layer are read-only; no owner-dashboard insert/update/delete/upsert/RPC mutation calls found. |
-| Browser QA | Pending | Local login smoke passed with no observed console errors, but no authenticated owner session/password was available. |
+| Browser QA | Pass | Authenticated Owner session opened Owner Dashboard; Overview, Delivery Map, Traceability, Drivers, and Pharmacies loaded read-only with no write controls or console errors. |
 | Verification | Pass | `npm run typecheck`, `npm run build`, and `npm ls --depth=0` passed. |
 
-Do not provision owner access on the linked project until authenticated owner-session QA passes.
+Do not claim overall production readiness until remaining staging-only blockers are closed.
 
 Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
 
@@ -134,7 +134,7 @@ B) dedicated-client staging-ready only
 | Owner permission cap | Local pass | `lib/access.ts` downgrades accidental owner `edit` access to `read`. |
 | Pending migration chain | Pass | The chain is applied/aligned through `20260615070000`; delivery-order RLS, owner/QC SQL validations, and Phase 1 lifecycle SQL/RLS validation passed. |
 | DB validation | Partial | Latest aggregate check shows active app profiles `admin=1`, `owner=1`, `branch=20`; supervisor/warehouse/accounts were not present in the active role aggregate; `branches` still has one legacy `manager` row. |
-| Browser QA | Pending | Local login smoke passed without console errors; authenticated role sessions are unavailable. |
+| Browser QA | Partial pass | Authenticated Owner browser QA passed; Admin and T001 Branch have partial browser coverage; supervisor/warehouse/accounts sessions remain unavailable. |
 
 Checked on: 2026-06-14
 
@@ -155,7 +155,7 @@ B) dedicated-client staging-ready only
 | Query performance | Pass for supported app shape | Branch/date bounded shortages reads are fast after indexes. Unbounded direct branch-session shortages reads are unsupported and must not be enabled by weakening RLS. |
 | Delivery coverage / map | Partial pass | Code/docs confirm internal-use Bahrain GeoJSON, matrix fallback, no fake geometry, cautious expansion language, and no schema change. Browser map smoke remains pending. |
 | Spin Static QR SQL/RPC security | Pass | `20260614150000_harden_spin_static_qr_exchange_rpc.sql` was applied with explicit approval. `docs/SPIN_STATIC_QR_SECURITY_CHECKS.sql` now passes all rows. H003 exchange, token validation, invalid/disabled generic denial, invalid token fail-safe, voucher generation, rapid exchange throttling, cleanup, and no branch UUID output passed at SQL/API level. |
-| Spin Google Maps return flow | Partial pass, return still pending | Hardened frontend was deployed with `vercel deploy --prod --yes` and aliased to `https://www.tabarakpharmacy.com`. Deployed smoke passed public load, node-to-token exchange, customer detail entry, rating step, and Google review/sign-in URL opening. Return/refresh/Continue/spin/voucher validation remains pending because the in-app browser lost the app tab after Google opened, and the approved Chrome fallback could not run because the Codex Chrome Extension is not installed/enabled in the selected Chrome profile. See `docs/SPIN_GOOGLE_MAPS_RETURN_FLOW_QA.md`. |
+| Spin Google Maps return flow | Partial pass, return still pending | Hardened frontend was deployed with `vercel deploy --prod --yes` and aliased to `https://www.tabarakpharmacy.com`. Deployed smoke passed public load, node-to-token exchange, customer detail entry, rating step, and Google review/sign-in URL opening. Return/refresh/Continue/spin/voucher validation remains pending because the app tab was lost after Google opened; the earlier approved Chrome fallback was blocked before Chrome Default profile alignment and still needs a dedicated retry. See `docs/SPIN_GOOGLE_MAPS_RETURN_FLOW_QA.md`. |
 | Edge functions / secrets / CORS | Fail | Linked secrets list still shows only Supabase defaults. Local Edge Function code is prepared with non-wildcard dynamic CORS on browser-called functions and placeholder-safe email function configuration, but it was not deployed in this pass. Required production secrets such as FUNCTION_SECRET, ALLOWED_ORIGIN/CLIENT_APP_URL, RESEND_API_KEY, email settings, and optional ANTHROPIC_API_KEY are not configured in the linked project. Operator checklist added: `docs/EDGE_FUNCTIONS_DEPLOYMENT_CHECKLIST.md`. |
 | Env vars | Partial pass | `.env.example.production` separates frontend-safe VITE values from server-only secrets. Actual deployment env cannot be fully validated here; `.env.production` is not present. |
 | Storage policies | Partial pass | `contributions` public exposure was remediated on the linked project: bucket public=false, legacy public policies count=0, anon upload denied, public URL fetch denied, authenticated download works. Manager write policies exist, but real manager Storage API upload/update/delete remains pending because manager browser credentials are invalid. |

@@ -18,7 +18,11 @@ Summary:
 - Migration `20260615110000_delivery_payment_types.sql` was reviewed, applied, and aligned on the linked Supabase project.
 - SQL validation passed for table existence, defaults, duplicates, and existing delivery-order compatibility.
 - RLS validation passed for anon denial, branch read-only active access, admin management, and owner read-only access.
-- Combined authenticated production QA was attempted on 2026-06-15. Public production route smoke passed for `/` and `/delivery`, but authenticated Admin Payments and Branch Recording checks remain pending because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
+- Combined authenticated production QA was attempted on 2026-06-15. Public production route smoke passed for `/` and `/delivery`; initial authenticated checks were blocked until the Chrome Default profile was aligned with the Codex Chrome Extension.
+- Follow-up Chrome Default profile alignment enabled browser control for T001 Branch, Admin, and Owner sessions.
+- Chrome Default profile alignment unblocked browser control. T001 Branch QA passed for the controlled payment flow: active dynamic payment types appeared, branch payment-management controls were hidden, `Talabat` removed block requirement, one `0.001 BHD` `TALABAT` no-block order saved, and `Insurance` without block was blocked before save while delivery history stayed unchanged during the negative test.
+- Admin Payments QA passed after Admin login: `Delivery Settings > Payments` loaded, default labels/codes were visible, `QA_TEST_PAYMENT` was created, edited to `QA_TEST_PAYMENT_UPDATED`, stable code remained read-only, `requires_block` was toggled off, and the test type was disabled/inactivated without altering defaults.
+- Owner read-only QA passed after Owner login: Owner Dashboard opened with Overview, Delivery Map, Traceability, Drivers, and Pharmacies, no write controls were visible, and no console errors were observed.
 
 Reference: `docs/DELIVERY_PAYMENT_TYPES.md`.
 
@@ -38,7 +42,7 @@ Summary:
 - No `driver` app role, mobile scaffold, generated Supabase `Database` types, deployment, push, or commit was performed.
 - Migration `20260615070000_delivery_lifecycle_phase1.sql` was reviewed, applied to the linked Supabase project, and aligned in local/remote history through `20260615070000`.
 - Phase 1 SQL/RLS validation passed for anon denial, branch own-recent RPC transitions, cross-branch/historical/direct-write denial, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, invalid transition rejection, and lifecycle event audit metadata.
-- Authenticated browser QA remains pending because the clean worktree has no local environment file or live role sessions.
+- Authenticated browser QA has production Chrome Default coverage for Admin Payments persistence, T001 Branch payment validation/Talabat no-block save/Dispatch cancellation/event audit, and Owner read-only surfaces; supervisor/warehouse/accounts sessions remain unavailable.
 
 Reference: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
 
@@ -49,18 +53,21 @@ Post-deploy validation on 2026-06-15:
 - Linked Supabase migration history is aligned through `20260615070000`.
 - Phase 1 database object checks passed for `delivery_order_events`, lifecycle columns, lifecycle RPC, RLS, policies, and grants.
 - Phase 1 lifecycle SQL/RLS validation passed for anon denial, branch own-recent transitions, cross-branch and historical protection, admin full-control, owner/supervisor/warehouse read-only lifecycle behavior, and lifecycle event audit rows.
-- Existing delivery-order update/delete RLS validation passed; owner live-session row remains pending because no authenticated owner browser session is available.
-- Authenticated Delivery module and Dispatch tab production QA remains pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
+- Existing delivery-order update/delete RLS validation passed; Owner live-session read-only dashboard QA passed in Chrome Default.
+- Authenticated Delivery module and Dispatch tab production QA is partially complete for Admin and Owner read-only surfaces and passed for the controlled T001 Branch lifecycle path; supervisor/warehouse sessions remain pending.
 - Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
 - `vercel.json` SPA fallback rewrite is deployed and local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
 - Follow-up production route smoke confirms `/` and `/delivery` now return HTTP 200 and serve the React app shell.
 - Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
-- Authenticated Admin/Branch/Owner Dispatch QA remains pending because no authenticated browser session could be automated; Chrome is running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
+- Initial authenticated Admin/Branch/Owner Dispatch QA was blocked by Chrome profile/extension setup.
+- Follow-up Chrome Default profile alignment enabled T001 Branch, Admin, and Owner browser control.
+- Chrome Default profile alignment unblocked browser control. T001 Branch Dispatch QA passed for the controlled flow: Dispatch tab loaded, only T001/Jerdab data was visible, no branch selector/admin settings/payment settings/delete/hard-delete controls appeared, one test order moved `recorded -> cancelled`, and the lifecycle trace showed the QA note.
+- Admin Dispatch QA partially passed after Admin login: all-branch Dispatch loaded with lifecycle rows and action buttons, lifecycle tracking text was visible, and no hard-delete control appeared. No transition was attempted because no clearly marked safe test order was available.
 - Read-only aggregate inventory shows active admin `1`, owner `1`, and branch `20` profiles, but no active supervisor/warehouse/accounts role counts.
-- T001 has an active branch profile for preferred branch-scope QA, but an authenticated browser session is still required.
+- T001, Admin, and Owner have now been browser-checked for read/dialog/negative-validation/dispatch-isolation/read-only flows; T001 also passed controlled save/transition/event-audit QA.
 - Supervisor, warehouse, and accounts QA remains blocked until approved profiles/sessions exist.
 - No users were created automatically; any temporary QA accounts must be created through Supabase Auth UI / secure Admin API without storing passwords in docs or migrations.
-- No lifecycle transition was performed by this QA pass. `delivery_order_events` currently has `1` aggregate event (`recorded -> cancelled`, actor role `branch`) from existing activity; no test records were created or deleted by this pass.
+- Controlled T001 lifecycle transition was performed on one test order only. Read-only SQL confirmed order short id `cc9f3541`, one `recorded -> cancelled` event, actor role `branch`, source `internal_dispatch_phase1`, event branch matched T001, and cross-branch note events `0`. Admin browser QA created/edited/deactivated `QA_TEST_PAYMENT`; the T001 test order remains cancelled/closed for audit and no production data was deleted.
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
@@ -85,7 +92,7 @@ Summary:
 - The repo is a single Vite app using `app/`, `services/`, `lib/`, root `types.ts`, `supabase/migrations/`, and `supabase/functions/`; no `src/` or monorepo assumptions should be used.
 - Linked migration history is aligned through `20260615070000`.
 - `20260615011000_allow_branch_delete_old_delivery_orders.sql` was applied in its rewritten safe form: branch hard delete blocked, branch update limited to own today/yesterday orders, immutable traceability fields guarded, and audit traceability preserved.
-- Delivery-order RLS validation passed; owner SQL/policy hardening validation passed with owner browser/session QA pending due no authenticated owner session; QC survey area RPC validation passed.
+- Delivery-order RLS validation passed; owner SQL/policy hardening and authenticated Owner read-only browser QA passed; QC survey area RPC validation passed.
 - `driver` role, driver identity linkage, and mobile app structure remain explicit decisions before any driver-facing/mobile implementation.
 
 Do not commit, push, deploy, or begin driver-facing/mobile implementation until the checkpoint scope and role/data-model decisions are approved.
@@ -102,9 +109,9 @@ Summary:
 
 - Local implementation is complete for owner performance, delivery map, traceability, driver KPIs, and pharmacy KPIs.
 - Role compatibility check confirms `owner` is valid in DB/types/helpers and is now locally assignable in Settings UI as `Owner / Read-only Executive`.
-- The linked Supabase project now has an active owner profile in aggregate checks; authenticated owner browser QA is pending because no owner session is available.
-- The owner hardening migration has been applied and SQL/policy-validated; authenticated owner browser QA is still pending because no owner session is available.
-- Do not provision owner access for production use until authenticated owner browser QA passes.
+- The linked Supabase project now has an active owner profile in aggregate checks; authenticated Owner read-only browser QA passed in Chrome Default.
+- The owner hardening migration has been applied and SQL/policy-validated; authenticated Owner Dashboard browser QA also passed.
+- Do not claim overall production readiness until remaining staging-only blockers are closed.
 
 Reference: `docs/OWNER_READONLY_DASHBOARD.md`.
 
@@ -121,7 +128,7 @@ Update:
 - Owner is now locally assignable in Settings UI as `Owner / Read-only Executive`.
 - Owner app navigation is restricted to the Owner Dashboard only.
 - Owner `edit` feature defaults/overrides are capped to read-only in the permission resolver.
-- Pending migrations have been applied through `20260615070000`; owner live-session QA remains pending until an approved owner session is available.
+- Pending migrations have been applied through `20260615070000`; Owner live-session read-only QA passed in Chrome Default.
 
 Current status:
 

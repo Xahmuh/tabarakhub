@@ -37,7 +37,7 @@ RLS validation:
 
 - `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed.
 - `supabase/tests/delivery_orders_rls_update_delete_validation.sql` passed.
-- Owner live-session write validation remains pending because no authenticated owner browser session is available.
+- Owner live-session read-only dashboard validation passed in Chrome Default; no write controls were exposed and no production data was changed.
 
 Production browser smoke:
 
@@ -49,8 +49,8 @@ Production browser smoke:
 - Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings` with HTTP 200 and the React app shell.
 - Follow-up production route smoke confirms `https://www.tabarakpharmacy.com/` and `https://www.tabarakpharmacy.com/delivery` return HTTP 200 and serve the React app shell.
 - Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
-- Authenticated Delivery module, Dispatch tab, lifecycle row rendering, transition buttons, and lifecycle transition action remain pending until valid admin/branch/owner/supervisor/warehouse sessions are available.
-- No test delivery records were created and no production data was deleted.
+- Authenticated Delivery module, Dispatch tab, lifecycle row rendering, and Owner Dashboard read-only surfaces now have browser QA coverage for Admin, T001 Branch, and Owner sessions. T001 Branch payment validation, Talabat no-block save, Dispatch cancellation, event audit, dispatch isolation, and historical closed-order protection were browser-checked; supervisor/warehouse/accounts sessions remain unavailable.
+- One controlled T001/Jerdab `0.001 BHD` `TALABAT` test delivery order was created and left cancelled/closed with audit note `QA TEST TALABAT NO BLOCK - SAFE TO IGNORE`; no production data was deleted.
 
 ## Authenticated Production QA Attempt - 2026-06-15
 
@@ -69,7 +69,7 @@ Route smoke:
 Authenticated session availability:
 
 - In-app browser has no Supabase/auth local storage and shows only the Sign In screen.
-- Chrome profile automation is unavailable because Codex cannot communicate with the Codex Chrome Extension.
+- Initial Chrome profile automation was unavailable until Chrome Default profile alignment enabled Codex Chrome Extension control.
 - No credentials were entered, read, printed, or stored.
 
 Aggregate production state checked with read-only SQL:
@@ -82,12 +82,12 @@ Aggregate production state checked with read-only SQL:
 
 Authenticated QA result:
 
-- Admin Delivery/Dispatch browser QA: pending authenticated session.
-- Branch Delivery/Dispatch browser QA: pending authenticated session.
-- Owner browser QA: pending authenticated session, even though an active owner profile now exists.
+- Admin Delivery/Dispatch browser QA: partial pass for read/dialog checks; transition action pending safe test data.
+- Branch Delivery/Dispatch browser QA: pass for T001 payment validation, Talabat no-block save, own-branch dispatch isolation, safe cancellation transition, event audit, and closed-order protection checks.
+- Owner browser QA: pass for read-only dashboard surfaces in Chrome Default Owner session.
 - Supervisor/warehouse/accounts browser QA: pending because no active profiles/sessions were available in the aggregate role check.
-- Lifecycle transition/event browser QA: not executed because no authenticated admin/branch session was available and no production data should be mutated without a safe session.
-- Cleanup: not needed; no test records were created and no production data was deleted.
+- Lifecycle transition/event browser QA: pass for controlled T001 test order; read-only SQL confirmed one `recorded -> cancelled` event with actor role `branch`, source `internal_dispatch_phase1`, matching T001 branch, and cross-branch note leakage count `0`.
+- Cleanup: controlled T001 test order remains cancelled/closed for audit; no production delivery data was deleted.
 
 ## Combined Delivery Payment Types + Dispatch QA Attempt - 2026-06-15
 
@@ -106,7 +106,8 @@ Production route smoke:
 Authenticated session availability:
 
 - Chrome is installed and running.
-- Codex Chrome Extension is not installed/enabled in the selected Chrome profiles, so existing Chrome sessions could not be automated for authenticated QA.
+- Initial Chrome profiles did not have the Codex Chrome Extension enabled, so early authenticated browser QA was blocked.
+- Follow-up Chrome Default profile alignment enabled browser control for T001 Branch, Admin, and Owner sessions.
 - No cookies, local storage, passwords, tokens, or credentials were inspected or printed.
 
 Read-only SQL evidence:
@@ -120,14 +121,14 @@ Read-only SQL evidence:
 
 Authenticated QA result:
 
-- Admin Payments tab QA: pending because no approved authenticated admin browser session was available through automation.
-- Branch Recording payment QA: pending because no approved authenticated branch browser session was available through automation.
-- Admin Dispatch QA: pending because no approved authenticated admin browser session was available through automation.
-- Branch T001 Dispatch QA: pending because no approved authenticated branch browser session was available through automation.
-- Owner read-only QA: pending because no approved authenticated owner browser session was available through automation.
+- Admin Payments tab QA: pass for browser persistence with Admin session; Payments loaded, default labels/codes were visible, `QA_TEST_PAYMENT` was created, edited to `QA_TEST_PAYMENT_UPDATED`, its stable code stayed read-only, `requires_block` was toggled off, and the test payment was disabled/inactivated without altering defaults.
+- Branch Recording payment QA: pass with T001 Branch session; dynamic options `BP`, `Cash`, `Card`, `Talabat`, and `Insurance` loaded, payment settings controls were hidden, `Talabat` removed block/area requirement in the form, a single `0.001 BHD` `TALABAT` order saved with block omitted, and `Insurance` save without block was blocked before record creation while history stayed unchanged during the negative test.
+- Admin Dispatch QA: partial pass; Dispatch loaded for all operational branches with rows and action buttons visible, lifecycle tracking text present, and no hard-delete control visible. No transition was performed because no clearly marked safe test order was available.
+- Branch T001 Dispatch QA: pass for controlled flow; Dispatch tab loaded with only T001/Jerdab lifecycle data visible, no cross-branch data, branch selector, admin settings, payment settings, delete, or hard-delete controls appeared, the test order moved `recorded -> cancelled`, and the visible cancelled orders were closed with append-only lifecycle traces.
+- Owner read-only QA: pass with approved Chrome Default Owner session; module launcher showed only Owner Dashboard, Overview/Delivery Map/Traceability/Drivers/Pharmacies loaded, no write controls appeared, and no console errors were observed.
 - Supervisor/warehouse/accounts QA: pending because no active profiles/sessions exist.
-- Lifecycle transition/event QA: not executed; no production data was mutated.
-- Cleanup: not needed; no test records were created and no production data was deleted.
+- Lifecycle transition/event QA: pass for controlled T001 test order short id `cc9f3541`; read-only SQL confirmed `event_count=1`, `recorded_to_cancelled_events=1`, `event_actor_roles=branch`, `event_sources=internal_dispatch_phase1`, `event_branch_matches_order=true`, and `cross_branch_note_events=0`.
+- Cleanup: `QA_TEST_PAYMENT` remains disabled/inactive for traceability after Admin browser QA; controlled T001 test delivery order remains cancelled/closed for audit; no delivery orders were hard-deleted.
 
 ## QA Role-Session Readiness - 2026-06-15
 
@@ -142,9 +143,9 @@ Read-only role/profile inventory:
 
 Browser QA readiness:
 
-- Admin Dispatch QA can start only after the operator logs in with an approved admin session.
-- Branch Dispatch QA can start only after the operator logs in with an approved branch session, preferably T001.
-- Owner read-only QA can start only after the operator logs in with an approved owner session.
+- Admin Payments browser persistence passed with clearly marked `QA_TEST_PAYMENT`; Dispatch transition tests still need an approved clearly marked safe active test order.
+- T001 Branch payment validation, Talabat no-block save, Dispatch cancellation, event audit, dispatch isolation, and historical closed-order checks have browser QA coverage.
+- Owner read-only QA passed in the approved Chrome Default Owner session; no production data was changed.
 - Supervisor, warehouse, and accounts QA cannot start until approved profiles/sessions exist.
 - No users were created and no passwords, tokens, or full email addresses were documented.
 
