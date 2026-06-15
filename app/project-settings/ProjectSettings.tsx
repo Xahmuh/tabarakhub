@@ -778,74 +778,68 @@ export const ProjectSettings: React.FC<{
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-[330px_minmax(0,1fr)]">
-                    <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="mb-4 flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Control areas</p>
-                                    <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">{settingsMode === 'access' ? 'Access map' : settingsMode === 'system' ? 'System map' : 'Operations map'}</h2>
-                                </div>
-                                <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">{visibleSettingsTabs.length}</span>
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm shadow-brand/15">
+                                <ActiveTabIcon size={19} />
                             </div>
-
-                            <nav className="space-y-2" aria-label="Settings sections">
-                                {visibleSettingsTabs.map(tab => {
-                                    const meta = TAB_META[tab];
-                                    const Icon = meta.icon;
-                                    const isActive = activeTab === tab;
-
-                                    return (
-                                        <button
-                                            key={tab}
-                                            onClick={() => {
-                                                setActiveTab(tab);
-                                                if (tab === 'permissions') setSearchTerm('');
-                                            }}
-                                            className={`w-full rounded-xl border p-3 text-left transition-all focus-ring ${
-                                                isActive
-                                                    ? 'border-brand/30 bg-brand/5 text-brand shadow-sm shadow-brand/10'
-                                                    : 'border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
-                                                    isActive ? 'border-brand/10 bg-brand text-white' : 'border-slate-200 bg-white text-slate-400'
-                                                }`}>
-                                                    <Icon size={18} />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="break-words text-sm font-black tracking-tight">{meta.label}</span>
-                                                        {tab === 'system' && maintenanceEnabled && (
-                                                            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-700">On</span>
-                                                        )}
-                                                    </div>
-                                                    <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-400">{meta.description}</p>
-                                                </div>
-                                                <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isActive ? 'translate-x-0 text-brand' : 'text-slate-300'}`} />
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </nav>
-                        </section>
-
-                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Current workspace</p>
-                            <div className="mt-4 flex items-start gap-3 rounded-xl border border-brand/10 bg-brand/5 p-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
-                                    <ActiveTabIcon size={18} />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black tracking-tight text-slate-950">{activeTabMeta.label}</h3>
-                                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{activeTabMeta.description}</p>
-                                </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Control areas</p>
+                                <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">{settingsMode === 'access' ? 'Access map' : settingsMode === 'system' ? 'System map' : 'Operations map'}</h2>
                             </div>
-                        </section>
-                    </aside>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">{visibleSettingsTabs.length} areas</span>
+                            {maintenanceEnabled && (
+                                <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">Maintenance on</span>
+                            )}
+                        </div>
+                    </div>
 
-                    <section className="min-w-0 space-y-5">
+                    <nav className="custom-scrollbar flex gap-2 overflow-x-auto p-3" aria-label="Settings sections">
+                        {visibleSettingsTabs.map(tab => {
+                            const meta = TAB_META[tab];
+                            const Icon = meta.icon;
+                            const isActive = activeTab === tab;
+
+                            return (
+                                <button
+                                    key={tab}
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveTab(tab);
+                                        if (tab === 'permissions') setSearchTerm('');
+                                    }}
+                                    aria-current={isActive ? 'page' : undefined}
+                                    className={`group flex min-w-[190px] flex-1 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all focus-ring ${
+                                        isActive
+                                            ? 'border-brand bg-brand text-white shadow-sm shadow-brand/20'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:border-brand/25 hover:bg-brand/5 hover:text-slate-950'
+                                    }`}
+                                >
+                                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                                        isActive ? 'border-white/15 bg-white/15 text-white' : 'border-slate-200 bg-slate-50 text-slate-400 group-hover:border-brand/20 group-hover:text-brand'
+                                    }`}>
+                                        <Icon size={18} />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="flex items-center gap-2">
+                                            <span className="truncate text-sm font-black tracking-tight">{meta.label}</span>
+                                            {tab === 'system' && maintenanceEnabled && (
+                                                <span className={`rounded-md px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>On</span>
+                                            )}
+                                        </span>
+                                        <span className={`mt-0.5 block truncate text-xs font-semibold ${isActive ? 'text-white/70' : 'text-slate-400'}`}>{meta.description}</span>
+                                    </span>
+                                    <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isActive ? 'text-white/80' : 'text-slate-300 group-hover:text-brand'}`} />
+                                </button>
+                            );
+                        })}
+                    </nav>
+                </section>
+
+                <section className="min-w-0 space-y-5">
                         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
                             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                                 <div className="flex min-w-0 items-start gap-3">
@@ -1788,7 +1782,6 @@ export const ProjectSettings: React.FC<{
                     )}
                         </div>
                     </section>
-                </div>
             </div>
 
             {/* Branch Modal */}
