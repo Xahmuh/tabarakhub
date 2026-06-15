@@ -511,7 +511,17 @@ export interface SupervisorBranchAssignment {
 // --- Delivery Recording & Traceability Types ---
 
 export type Governorate = 'Capital' | 'Muharraq' | 'Northern' | 'Southern';
-export type DeliveryPaymentType = 'BP' | 'CARD' | 'CASH' | 'TALABAT';
+export type DeliveryPaymentType = string;
+
+export interface DeliveryPaymentTypeConfig {
+  code: DeliveryPaymentType;
+  label: string;
+  requiresBlock: boolean;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface DeliveryBlock {
   blockNumber: string;

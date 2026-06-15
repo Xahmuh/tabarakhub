@@ -1,5 +1,26 @@
 # Final Production Readiness Gate Results
 
+## Dynamic Delivery Payment Types Gate - 2026-06-15
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Migration safety | Pass | `20260615110000_delivery_payment_types.sql` creates `delivery_payment_types`, seeds defaults, relaxes `delivery_orders.payment_type` safely, and does not delete or rewrite production delivery orders. |
+| Migration status | Pass | `supabase migration list --linked` is aligned through `20260615110000`. |
+| Default values | Pass | `BP`, `CASH`, `CARD`, `TALABAT`, and `INSURANCE` exist; `TALABAT.requires_block = false`; `INSURANCE.requires_block = true`; duplicate code check returned zero rows. |
+| Existing orders | Pass | Existing payment types remain compatible: `BP=13`, `CARD=5`, `CASH=2`. |
+| RLS validation | Partial pass | anon read/write denied; branch can read active rows and cannot write; admin can manage a temporary QA payment type; owner can read active rows and cannot write. Supervisor/warehouse/accounts profiles were unavailable for live simulation. |
+| App/UI | Local pass | Delivery Settings adds Payments management; Branch Recording loads dynamic active options; import, analytics, coverage, and owner dashboard use payment-type config for block-required behavior. |
+| Browser QA | Pending | No authenticated admin/branch browser sessions were available; admin add/edit/disable and branch save flows remain pending. |
+| Cleanup | Pass | Temporary QA payment rows were deleted; no production delivery data was deleted. |
+
+Detailed record: `docs/DELIVERY_PAYMENT_TYPES.md`.
+
 ## Phase 1 Delivery Lifecycle Implementation Gate - 2026-06-15
 
 Decision:
@@ -127,7 +148,7 @@ B) dedicated-client staging-ready only
 
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
-| Migration status | Pass for current linked history alignment | Approved migration history is aligned through `20260614203000_branding_logo_system_settings.sql`, including Quality Feedback, Admin Role Access, user-permission grant hardening, Module Layout settings, and Branding Logo settings. Future database changes must still be reviewed intentionally; do not run blind `supabase db push`. |
+| Migration status | Pass for current linked history alignment | Approved migration history is aligned through `20260615110000_delivery_payment_types.sql`, including Quality Feedback, Admin Role Access, user-permission grant hardening, Module Layout settings, Branding Logo settings, Phase 1 Delivery Lifecycle, recorded delivery-order delete, and Dynamic Delivery Payment Types. Future database changes must still be reviewed intentionally; do not run blind `supabase db push`. |
 | RLS / role isolation | Partial pass | Real branch T001/H003 sessions passed targeted cross-branch reads returning 0 rows across delivery_orders, lost_sales, shortages, cash_differences, pharmacist_branches, operations_tasks, and branch_login_approvals. Anon select denied on the same sensitive tables. Helper/RPC anon grant remediation was applied to the linked project; unsafe non-allowlisted anon EXECUTE count is now 0. Supervisor/browser QA remains pending. |
 | Branch login approval | Partial pass | Branch pending request creation, branch self-approval denial, cross-branch approval read denial, warehouse list/approval denial, and cancel passed at API/RLS layer. Manager/admin browser approve/reject and sign-out UX remain pending. |
 | Branch-scoped workflows | Partial pass | SQL/RLS checks passed for branch A/B on core branch-scoped tables. UI smoke tests for Delivery, Cash Tracker, Lost Sales, Shortages, Live Shift Coverage, pharmacist assignment, feature permissions, and operations task creation remain pending. |

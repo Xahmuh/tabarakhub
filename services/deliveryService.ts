@@ -10,10 +10,15 @@ import {
   DeliveryOrderEvent,
   DeliveryOrderLifecycleInput,
   DeliveryOrderInput,
+  DeliveryPaymentTypeConfig,
   DeliverySupervisor
 } from '../types';
+import {
+  DEFAULT_DELIVERY_PAYMENT_TYPES,
+  normalizeDeliveryPaymentCode,
+  normalizeDeliveryPaymentLabel
+} from '../lib/deliveryPaymentTypes';
 
-const PAYMENT_TYPES = new Set(['BP', 'CARD', 'CASH', 'TALABAT']);
 const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
 
 const isValidDateKey = (value: string) => {
@@ -28,19 +33,52 @@ const isValidDateKey = (value: string) => {
     && date.getUTCDate() === day;
 };
 
-const normalizeOrderInput = (input: DeliveryOrderInput): DeliveryOrderInput => {
+const toPaymentTypeConfig = (row: any): DeliveryPaymentTypeConfig => ({
+  code: normalizeDeliveryPaymentCode(row.code),
+  label: normalizeDeliveryPaymentLabel(row.label) || normalizeDeliveryPaymentCode(row.code),
+  requiresBlock: row.requires_block !== false,
+  isActive: row.is_active !== false,
+  displayOrder: Number(row.sort_order ?? 100),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
+const listPaymentTypes = async (includeInactive = false): Promise<DeliveryPaymentTypeConfig[]> => {
+  const { data, error } = await supabaseClient
+    .from('delivery_payment_types')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('label', { ascending: true });
+  if (error || !data) {
+    console.warn('Delivery payment types load failed; using safe defaults.', error);
+    return DEFAULT_DELIVERY_PAYMENT_TYPES.filter(type => includeInactive || type.isActive);
+  }
+  const types = data.map(toPaymentTypeConfig);
+  return types.filter(type => includeInactive || type.isActive);
+};
+
+const resolvePaymentType = async (paymentType: string | null | undefined) => {
+  const code = normalizeDeliveryPaymentCode(paymentType);
+  if (!code) throw new Error('A valid payment type is required.');
+  const config = (await listPaymentTypes(true)).find(type => type.code === code);
+  if (!config) throw new Error('Payment type is not configured. Add it in Delivery Settings first.');
+  if (!config.isActive) throw new Error('Selected payment type is inactive.');
+  return config;
+};
+
+const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryOrderInput> => {
   const branchId = input.branchId?.trim();
   const orderDate = input.orderDate?.trim();
-  const paymentType = input.paymentType;
+  const paymentTypeConfig = await resolvePaymentType(input.paymentType);
+  const paymentType = paymentTypeConfig.code;
   const valueBhd = Number(input.valueBhd);
   const blockNumber = input.blockNumber?.trim() || null;
 
   if (!branchId) throw new Error('Branch is required for delivery orders.');
   if (!orderDate || !isValidDateKey(orderDate)) throw new Error('A valid order date is required.');
-  if (!PAYMENT_TYPES.has(paymentType)) throw new Error('A valid payment type is required.');
   if (!Number.isFinite(valueBhd) || valueBhd <= 0) throw new Error('Order value must be greater than zero.');
-  if (paymentType !== 'TALABAT' && !blockNumber) {
-    throw new Error('Block number is required for non-Talabat delivery orders.');
+  if (paymentTypeConfig.requiresBlock && !blockNumber) {
+    throw new Error(`Block number is required for ${paymentTypeConfig.label} delivery orders.`);
   }
 
   return {
@@ -52,7 +90,7 @@ const normalizeOrderInput = (input: DeliveryOrderInput): DeliveryOrderInput => {
     pharmacistId: input.pharmacistId || null,
     pharmacistName: input.pharmacistName?.trim() || null,
     driverId: input.driverId || null,
-    blockNumber: paymentType === 'TALABAT' ? null : blockNumber,
+    blockNumber: paymentTypeConfig.requiresBlock ? blockNumber : null,
     notes: input.notes?.trim() || undefined
   };
 };
@@ -210,7 +248,7 @@ export const deliveryService = {
     },
 
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {
-      const normalized = normalizeOrderInput(input);
+      const normalized = await normalizeOrderInput(input);
       const pharmacistName = await resolveActivePharmacistForBranch(normalized.branchId, normalized.pharmacistId);
       await assertActiveDriver(normalized.driverId);
       const { data: session } = await supabaseClient.auth.getSession();
@@ -249,8 +287,9 @@ export const deliveryService = {
         payload.value_bhd = valueBhd;
       }
       if (input.paymentType !== undefined) {
-        if (!PAYMENT_TYPES.has(input.paymentType)) throw new Error('A valid payment type is required.');
-        payload.payment_type = input.paymentType;
+        const paymentTypeConfig = await resolvePaymentType(input.paymentType);
+        payload.payment_type = paymentTypeConfig.code;
+        if (!paymentTypeConfig.requiresBlock) payload.block_number = null;
       }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
       if (input.pharmacistName !== undefined) payload.pharmacist_name = input.pharmacistName;
@@ -260,7 +299,10 @@ export const deliveryService = {
       }
       if (input.blockNumber !== undefined) payload.block_number = input.blockNumber?.trim() || null;
       if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
-      if (payload.payment_type === 'TALABAT') payload.block_number = null;
+      if (payload.payment_type) {
+        const paymentTypeConfig = await resolvePaymentType(payload.payment_type);
+        if (!paymentTypeConfig.requiresBlock) payload.block_number = null;
+      }
 
       if (input.pharmacistId) {
         const { data: current, error: currentError } = await supabaseClient
@@ -294,7 +336,7 @@ export const deliveryService = {
 
     /** Possible duplicate: same branch/date/value/payment/driver created in the last N minutes. */
     findRecentDuplicate: async (input: DeliveryOrderInput, windowMinutes = 10): Promise<DeliveryOrder | null> => {
-      const normalized = normalizeOrderInput(input);
+      const normalized = await normalizeOrderInput(input);
       const since = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
       let query = supabaseClient
         .from('delivery_orders')
@@ -341,6 +383,31 @@ export const deliveryService = {
       });
       if (error) throw error;
       return toOrderEvent(data);
+    }
+  },
+
+  paymentTypes: {
+    list: listPaymentTypes,
+    upsert: async (paymentType: Partial<DeliveryPaymentTypeConfig>): Promise<DeliveryPaymentTypeConfig> => {
+      const code = normalizeDeliveryPaymentCode(paymentType.code || paymentType.label);
+      const label = normalizeDeliveryPaymentLabel(paymentType.label || code);
+      if (!code) throw new Error('Payment code is required.');
+      if (!label) throw new Error('Payment label is required.');
+      const payload = {
+        code,
+        label,
+        requires_block: paymentType.requiresBlock !== false,
+        is_active: paymentType.isActive ?? true,
+        sort_order: Number.isFinite(paymentType.displayOrder) ? paymentType.displayOrder : 100,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabaseClient
+        .from('delivery_payment_types')
+        .upsert(payload, { onConflict: 'code' })
+        .select()
+        .single();
+      if (error) throw error;
+      return toPaymentTypeConfig(data);
     }
   },
 

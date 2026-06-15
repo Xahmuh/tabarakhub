@@ -25,12 +25,14 @@ import {
   DeliveryFieldAvailability,
   DeliveryGovernorateKpiQuality,
   DeliveryPaymentType,
+  DeliveryPaymentTypeConfig,
   DeliveryGovernorateCoverage,
   DeliveryOrder,
   DeliveryWhiteSpace,
   GovernoratePerformanceKpi,
   Governorate
 } from '../types';
+import { isDeliveryPaymentBlockExempt } from '../lib/deliveryPaymentTypes';
 
 export interface DeliveryCoverageFilters {
   dateFrom?: string;
@@ -354,11 +356,12 @@ const buildSummary = (
   branches: Branch[],
   directoryBlocks: DeliveryBlock[],
   nameFor: (id: string, fallback?: string | null) => string,
-  range: { from: string; to: string }
+  range: { from: string; to: string },
+  paymentTypes: DeliveryPaymentTypeConfig[] = []
 ): DeliveryCoverageSummary => {
   const totalOrders = orders.length;
-  const talabat = orders.filter(o => o.paymentType === 'TALABAT');
-  const mappable = orders.filter(o => o.paymentType !== 'TALABAT');
+  const talabat = orders.filter(o => isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
+  const mappable = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
   const withBlock = mappable.filter(o => blockKey(o).length > 0);
   const withoutBlock = mappable.filter(o => blockKey(o).length === 0);
   const unresolved = withBlock.filter(o => !o.areaName);
@@ -508,9 +511,10 @@ const buildAdvanced = (
   orders: DeliveryOrder[],
   summary: DeliveryCoverageSummary,
   directoryBlocks: Array<{ blockNumber: string; areaName: string; governorate: Governorate }>,
-  range: { from: string; to: string }
+  range: { from: string; to: string },
+  paymentTypes: DeliveryPaymentTypeConfig[] = []
 ): DeliveryAdvancedCoverage => {
-  const mappable = orders.filter(o => o.paymentType !== 'TALABAT');
+  const mappable = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
   const withBlock = mappable.filter(o => blockKey(o).length > 0);
 
   // value_bhd is the only optional analytic field present; the rest are absent.
@@ -800,7 +804,7 @@ export const deliveryCoverageService = {
     const range = filters.dateFrom && filters.dateTo
       ? { from: filters.dateFrom, to: filters.dateTo }
       : defaultRange();
-    const [orders, branches, directory] = await Promise.all([
+    const [orders, branches, directory, paymentTypes] = await Promise.all([
       deliveryService.orders.list({
         branchId: filters.branchId || undefined,
         dateFrom: range.from,
@@ -809,14 +813,15 @@ export const deliveryCoverageService = {
         governorate: filters.governorate && filters.governorate !== 'Unknown' ? filters.governorate : undefined
       }),
       branchService.list(),
-      deliveryService.blocks.list().catch(() => [])
+      deliveryService.blocks.list().catch(() => []),
+      deliveryService.paymentTypes.list(true)
     ]);
     const scopedOrders = filters.governorate === 'Unknown'
       ? orders.filter(order => !getOrderGovernorate(order, new Map((directory || []).map(block => [block.blockNumber.trim(), block]))))
       : orders;
     const branchNames = new Map(branches.map(b => [b.id, b.name]));
     const nameFor = (id: string, fallback?: string | null) => fallback || branchNames.get(id) || 'Unknown branch';
-    return buildSummary(scopedOrders, branches, directory || [], nameFor, range);
+    return buildSummary(scopedOrders, branches, directory || [], nameFor, range, paymentTypes);
   },
 
   /** Base summary + advanced analytics in one scoped fetch. */
@@ -825,7 +830,7 @@ export const deliveryCoverageService = {
       ? { from: filters.dateFrom, to: filters.dateTo }
       : defaultRange();
 
-    const [orders, branches, directory] = await Promise.all([
+    const [orders, branches, directory, paymentTypes] = await Promise.all([
       deliveryService.orders.list({
         branchId: filters.branchId || undefined,
         dateFrom: range.from,
@@ -834,7 +839,8 @@ export const deliveryCoverageService = {
         governorate: filters.governorate && filters.governorate !== 'Unknown' ? filters.governorate : undefined
       }),
       branchService.list(),
-      deliveryService.blocks.list().catch(() => [])
+      deliveryService.blocks.list().catch(() => []),
+      deliveryService.paymentTypes.list(true)
     ]);
     const scopedOrders = filters.governorate === 'Unknown'
       ? orders.filter(order => !getOrderGovernorate(order, new Map((directory || []).map(block => [block.blockNumber.trim(), block]))))
@@ -843,13 +849,13 @@ export const deliveryCoverageService = {
     const branchNames = new Map(branches.map(b => [b.id, b.name]));
     const nameFor = (id: string, fallback?: string | null) => fallback || branchNames.get(id) || 'Unknown branch';
 
-    const summary = buildSummary(scopedOrders, branches, directory || [], nameFor, range);
+    const summary = buildSummary(scopedOrders, branches, directory || [], nameFor, range, paymentTypes);
     const directoryBlocks = (directory || []).map(b => ({
       blockNumber: b.blockNumber,
       areaName: b.areaName,
       governorate: b.governorate
     }));
-    const advanced = buildAdvanced(scopedOrders, summary, directoryBlocks, range);
+    const advanced = buildAdvanced(scopedOrders, summary, directoryBlocks, range, paymentTypes);
     return { summary, advanced };
   }
 };

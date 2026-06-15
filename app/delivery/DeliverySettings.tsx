@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, Bike, Building2, Map, MapPin, Plus, Search, UsersRound } from 'lucide-react';
+import { AlertTriangle, Bike, Building2, CreditCard, Map, MapPin, Plus, Search, UsersRound } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import {
-  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliverySupervisor, Governorate
+  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
+import { isDeliveryPaymentBlockExempt, normalizeDeliveryPaymentCode } from '../../lib/deliveryPaymentTypes';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 
-type SettingsTab = 'drivers' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
+type SettingsTab = 'drivers' | 'payments' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
 
 const escapeHtml = (value?: string | null) =>
   String(value || '')
@@ -23,6 +24,7 @@ const escapeHtml = (value?: string | null) =>
 export const DeliverySettings: React.FC = () => {
   const [tab, setTab] = useState<SettingsTab>('drivers');
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
   const [supervisors, setSupervisors] = useState<DeliverySupervisor[]>([]);
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
@@ -34,8 +36,9 @@ export const DeliverySettings: React.FC = () => {
   const load = async () => {
     setIsLoading(true);
     try {
-      const [driverResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
+      const [driverResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
         deliveryService.drivers.list(true),
+        deliveryService.paymentTypes.list(true),
         deliveryService.areas.list(true),
         deliveryService.supervisors.list(true),
         deliveryService.blocks.list(true),
@@ -43,6 +46,7 @@ export const DeliverySettings: React.FC = () => {
         deliveryService.classifications.list()
       ]);
       setDrivers(driverResult.status === 'fulfilled' ? driverResult.value : []);
+      setPaymentTypes(paymentResult.status === 'fulfilled' ? paymentResult.value : []);
       setAreas(areaResult.status === 'fulfilled' ? areaResult.value : []);
       setSupervisors(supervisorResult.status === 'fulfilled' ? supervisorResult.value : []);
       setBlocks(blockResult.status === 'fulfilled' ? blockResult.value : []);
@@ -220,6 +224,81 @@ export const DeliverySettings: React.FC = () => {
     }
   };
 
+  // ----- Payment types -----
+  const editPaymentType = async (paymentType?: DeliveryPaymentTypeConfig) => {
+    const { value } = await Swal.fire({
+      title: `<span class="text-xl font-black tracking-tight">${paymentType ? 'Edit' : 'Add'} payment type</span>`,
+      html: `
+        <div class="space-y-3 text-left p-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Label</label>
+            <input id="swal-payment-label" value="${escapeHtml(paymentType?.label)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="Insurance">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Code</label>
+            <input id="swal-payment-code" value="${escapeHtml(paymentType?.code)}" ${paymentType ? 'readonly' : ''} class="w-full p-3 ${paymentType ? 'bg-slate-100 text-slate-500' : 'bg-slate-50'} border border-slate-200 rounded-lg text-sm font-black uppercase" placeholder="INSURANCE">
+            <p class="mt-1 text-[10px] font-bold text-slate-400">Used in saved orders. Existing codes are locked to protect history.</p>
+          </div>
+          <label class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600">
+            <input id="swal-payment-requires-block" type="checkbox" class="mt-0.5" ${paymentType?.requiresBlock === false ? '' : 'checked'}>
+            <span>
+              Requires block / area mapping
+              <span class="mt-1 block text-[10px] font-bold text-slate-400">Turn this off only for marketplace/external channels like Talabat.</span>
+            </span>
+          </label>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Display order</label>
+            <input id="swal-payment-order" type="number" value="${paymentType?.displayOrder ?? 100}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+          </div>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Save payment type',
+      confirmButtonColor: '#B91c1c',
+      preConfirm: () => {
+        const label = (document.getElementById('swal-payment-label') as HTMLInputElement).value.trim();
+        const rawCode = (document.getElementById('swal-payment-code') as HTMLInputElement).value.trim() || label;
+        const code = normalizeDeliveryPaymentCode(rawCode);
+        const requiresBlock = (document.getElementById('swal-payment-requires-block') as HTMLInputElement).checked;
+        const displayOrder = Number((document.getElementById('swal-payment-order') as HTMLInputElement).value || 100);
+        if (!label) {
+          Swal.showValidationMessage('Payment label is required.');
+          return false;
+        }
+        if (!code) {
+          Swal.showValidationMessage('Payment code is required.');
+          return false;
+        }
+        if (!paymentType && paymentTypes.some(type => type.code === code)) {
+          Swal.showValidationMessage('This payment code already exists.');
+          return false;
+        }
+        return { code, label, requiresBlock, displayOrder };
+      }
+    });
+    if (!value) return;
+    try {
+      await deliveryService.paymentTypes.upsert({
+        code: paymentType?.code || value.code,
+        label: value.label,
+        requiresBlock: value.requiresBlock,
+        displayOrder: Number.isFinite(value.displayOrder) ? value.displayOrder : 100,
+        isActive: paymentType?.isActive ?? true
+      });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Save failed', e?.message || 'Could not save payment type.', 'error');
+    }
+  };
+
+  const togglePaymentType = async (paymentType: DeliveryPaymentTypeConfig) => {
+    try {
+      await deliveryService.paymentTypes.upsert({ ...paymentType, isActive: !paymentType.isActive });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Update failed', e?.message || 'Could not update payment type.', 'error');
+    }
+  };
+
   // ----- Blocks -----
   const editBlock = async (block?: DeliveryBlock) => {
     const selectedAreaId = block?.areaId || areas.find(area =>
@@ -370,6 +449,7 @@ export const DeliverySettings: React.FC = () => {
       <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50 w-fit max-w-full overflow-x-auto">
         {([
           { id: 'drivers', label: 'Drivers', icon: Bike },
+          { id: 'payments', label: 'Payments', icon: CreditCard },
           { id: 'areas', label: 'Areas', icon: Map },
           { id: 'supervisors', label: 'Supervisors', icon: UsersRound },
           { id: 'blocks', label: 'Blocks', icon: MapPin },
@@ -424,6 +504,45 @@ export const DeliverySettings: React.FC = () => {
               </div>
             ))}
             {drivers.length === 0 && <p className="text-xs font-bold text-slate-400">No drivers yet — add the first one.</p>}
+          </div>
+        </section>
+      ) : tab === 'payments' ? (
+        <section className="operational-panel p-4 md:p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery payment types</h3>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">
+                Add payment channels for delivery recording. Turn off block mapping only for external marketplace channels.
+              </p>
+            </div>
+            <button onClick={() => editPaymentType()} className="btn-primary text-[10px] uppercase tracking-widest">
+              <Plus className="h-3.5 w-3.5" /> Add payment
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {paymentTypes.map(paymentType => (
+              <div key={paymentType.code} className={`rounded-lg border p-3 ${paymentType.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-800">{paymentType.label}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand">{paymentType.code}</p>
+                  </div>
+                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${paymentType.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                    {paymentType.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] font-bold text-slate-500">
+                  {paymentType.requiresBlock ? 'Requires block / area mapping' : 'No block required'}
+                </p>
+                <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                  <button onClick={() => editPaymentType(paymentType)} className="text-slate-500 hover:text-brand">Edit</button>
+                  <button onClick={() => togglePaymentType(paymentType)} className="text-slate-400 hover:text-brand">
+                    {paymentType.isActive ? 'Deactivate' : 'Reactivate'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {paymentTypes.length === 0 && <p className="text-xs font-bold text-slate-400">No payment types yet - add Cash, Card, BP, Talabat, and Insurance.</p>}
           </div>
         </section>
       ) : tab === 'areas' ? (
@@ -581,7 +700,7 @@ export const DeliverySettings: React.FC = () => {
           </div>
         </section>
       ) : (
-        <DataQualityPanel blocks={blocks} classifications={classifications} branches={branches} />
+        <DataQualityPanel blocks={blocks} classifications={classifications} branches={branches} paymentTypes={paymentTypes} />
       )}
     </div>
   );
@@ -592,7 +711,8 @@ const DataQualityPanel: React.FC<{
   blocks: DeliveryBlock[];
   classifications: BranchClassification[];
   branches: Branch[];
-}> = ({ classifications, branches }) => {
+  paymentTypes: DeliveryPaymentTypeConfig[];
+}> = ({ classifications, branches, paymentTypes }) => {
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -607,8 +727,8 @@ const DataQualityPanel: React.FC<{
   const issues = useMemo(() => {
     const missingDriver = orders.filter(o => !o.driverId);
     const missingPharmacist = orders.filter(o => !o.pharmacistId && !o.pharmacistName);
-    const unknownBlock = orders.filter(o => o.paymentType !== 'TALABAT' && o.blockNumber && !o.areaName);
-    const missingBlock = orders.filter(o => o.paymentType !== 'TALABAT' && !o.blockNumber);
+    const unknownBlock = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes) && o.blockNumber && !o.areaName);
+    const missingBlock = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes) && !o.blockNumber);
     const outside = orders.filter(o => o.isOutsideGovernorate);
     const classifiedIds = new Set(classifications.filter(c => c.governorate).map(c => c.branchId));
     const unclassifiedBranches = branches.filter(b => !classifiedIds.has(b.id));

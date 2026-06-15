@@ -30,6 +30,7 @@ import { exportBreakdownToExcel, exportOrdersToExcel, printReport } from '../del
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey } from '../delivery/utils';
 import { deliveryService } from '../../services/deliveryService';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { DEFAULT_DELIVERY_PAYMENT_TYPES, isDirectDeliveryOrder, sortDeliveryPaymentTypes } from '../../lib/deliveryPaymentTypes';
 import {
   OwnerBranchKpi,
   OwnerDashboardBundle,
@@ -40,7 +41,6 @@ import {
 import { buildOwnerZoneAnalysis, ownerGeometryStats, ownerMapBlocksWithGeometry } from './ownerZoneAnalysis';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
-const PAYMENT_TYPES: DeliveryPaymentType[] = ['BP', 'CARD', 'CASH', 'TALABAT'];
 const OWNER_DASHBOARD_LANGUAGE_KEY = 'tabarak-owner-dashboard-language';
 
 type OwnerDashboardLanguage = 'en' | 'ar';
@@ -656,6 +656,11 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
     })),
     [bundle?.drivers, copy.common.active, copy.common.inactive]
   );
+  const paymentOptions = useMemo(
+    () => sortDeliveryPaymentTypes(bundle?.paymentTypes?.length ? bundle.paymentTypes : DEFAULT_DELIVERY_PAYMENT_TYPES)
+      .filter(type => type.isActive || type.code === paymentFilter),
+    [bundle?.paymentTypes, paymentFilter]
+  );
 
   const zoneAnalysis = useMemo(
     () => buildOwnerZoneAnalysis(bundle?.coverage.summary || null, bundle?.branchProfiles || [], geometry),
@@ -916,7 +921,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
           <SearchableSelect options={branchOptions} value={branchFilter} onChange={setBranchFilter} placeholder={copy.filters.allBranches} dir={copy.direction} searchPlaceholder={copy.filters.selectSearch} noMatchesLabel={copy.filters.noMatches} />
-          <SearchableSelect options={PAYMENT_TYPES.map(type => ({ value: type, label: type }))} value={paymentFilter} onChange={setPaymentFilter} placeholder={copy.filters.allPayments} dir={copy.direction} searchPlaceholder={copy.filters.selectSearch} noMatchesLabel={copy.filters.noMatches} />
+          <SearchableSelect options={paymentOptions.map(type => ({ value: type.code, label: type.label }))} value={paymentFilter} onChange={setPaymentFilter} placeholder={copy.filters.allPayments} dir={copy.direction} searchPlaceholder={copy.filters.selectSearch} noMatchesLabel={copy.filters.noMatches} />
           <SearchableSelect options={driverOptions} value={driverFilter} onChange={setDriverFilter} placeholder={copy.filters.allDrivers} dir={copy.direction} searchPlaceholder={copy.filters.selectSearch} noMatchesLabel={copy.filters.noMatches} />
           <SearchableSelect options={GOVERNORATES.map(gov => ({ value: gov, label: copy.governorates[gov] }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder={copy.filters.allGovernorates} dir={copy.direction} searchPlaceholder={copy.filters.selectSearch} noMatchesLabel={copy.filters.noMatches} />
           <div className="relative xl:col-span-2">
@@ -978,7 +983,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   <KpiCard label={copy.overview.orders} value={bundle.overview.totalOrders} sub={rangeLabel} icon={<Package className="h-4 w-4" />} tone="brand" />
                   <KpiCard label={copy.overview.deliveryValue} value={money(bundle.overview.totalValueBhd)} sub={`${copy.common.avg} ${money(bundle.overview.averageOrderValueBhd)}`} icon={<Wallet className="h-4 w-4" />} tone="emerald" />
-                  <KpiCard label={copy.overview.direct} value={bundle.overview.directOrders} sub={money(bundle.orders.filter(order => order.paymentType !== 'TALABAT').reduce((sum, order) => sum + order.valueBhd, 0))} icon={<Truck className="h-4 w-4" />} tone="brand" />
+                  <KpiCard label={copy.overview.direct} value={bundle.overview.directOrders} sub={money(bundle.orders.filter(order => isDirectDeliveryOrder(order, bundle.paymentTypes)).reduce((sum, order) => sum + order.valueBhd, 0))} icon={<Truck className="h-4 w-4" />} tone="brand" />
                   <KpiCard label={copy.overview.talabat} value={bundle.overview.talabatOrders} sub={copy.common.noBlockByDesign} icon={<Package className="h-4 w-4" />} />
                   <KpiCard label={copy.overview.knownBlocks} value={formatPercent(bundle.overview.knownBlockRate)} sub={`${bundle.coverage.summary.uniqueBlocksServed} ${copy.common.uniqueBlocks}`} icon={<MapPinned className="h-4 w-4" />} tone={bundle.overview.knownBlockRate >= 85 ? 'emerald' : 'amber'} />
                   <KpiCard label={copy.overview.unknownBlocks} value={formatPercent(bundle.overview.unknownBlockRate)} sub={copy.common.dataQuality} icon={<AlertTriangle className="h-4 w-4" />} tone={bundle.overview.unknownBlockRate > 10 ? 'red' : 'slate'} />
@@ -1132,7 +1137,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                           <td className="px-4 py-3 font-black text-slate-800">{order.branchName || copy.common.unknownBranch}</td>
                           <td className="px-4 py-3 font-bold text-slate-600">{order.driverCode ? `${order.driverCode} - ${order.driverName}` : order.driverName || copy.common.empty}</td>
                           <td className="px-4 py-3"><StatusPill status={order.paymentType} /></td>
-                          <td className="px-4 py-3 font-black text-slate-700 tabular-nums">{order.blockNumber || (order.paymentType === 'TALABAT' ? copy.overview.talabat : copy.common.empty)}</td>
+                          <td className="px-4 py-3 font-black text-slate-700 tabular-nums">{order.blockNumber || (!isDirectDeliveryOrder(order, bundle.paymentTypes) ? copy.overview.talabat : copy.common.empty)}</td>
                           <td className="px-4 py-3 font-bold text-slate-500">{order.areaName || (order.governorate ? copy.governorates[order.governorate] : copy.common.empty)}</td>
                           <td className={classNames('px-4 py-3 font-black text-slate-900 tabular-nums', endTextClass)}>{money(order.valueBhd)}</td>
                         </tr>

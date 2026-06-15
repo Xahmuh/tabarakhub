@@ -4,7 +4,7 @@ import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
-  Branch, BranchClassification, DeliveryDriver, DeliveryOrder, Governorate, Pharmacist
+  Branch, BranchClassification, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, Governorate, Pharmacist
 } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
 import { SearchableSelect } from './components/SearchableSelect';
@@ -84,6 +84,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
   const [classifications, setClassifications] = useState<BranchClassification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,11 +97,13 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     Promise.all([
       branchService.list(),
       deliveryService.drivers.list(true),
+      deliveryService.paymentTypes.list(true),
       pharmacistService.listAll(),
       deliveryService.classifications.list()
-    ]).then(([b, d, p, c]) => {
+    ]).then(([b, d, pay, p, c]) => {
       setBranches(b.filter(x => x.role === 'branch'));
       setDrivers(d);
+      setPaymentTypes(pay);
       setPharmacists(p as Pharmacist[]);
       setClassifications(c);
     }).catch(e => console.error('Analytics reference load failed', e));
@@ -145,8 +148,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     return orders.filter(o => supervisedBranchIds.has(o.branchId));
   }, [orders, supervisorFilter, classifications]);
 
-  const direct = useMemo(() => filteredOrders.filter(isDirectOrder), [filteredOrders]);
-  const talabat = useMemo(() => filteredOrders.filter(o => o.paymentType === 'TALABAT'), [filteredOrders]);
+  const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
+  const talabat = useMemo(() => filteredOrders.filter(order => !isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
   const totalValue = sumValue(filteredOrders);
   const avgValue = filteredOrders.length ? totalValue / filteredOrders.length : 0;
 
@@ -271,7 +274,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           <SearchableSelect options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))} value={branchFilter} onChange={setBranchFilter} placeholder="All branches" />
           <SearchableSelect options={supervisorOptions} value={supervisorFilter} onChange={setSupervisorFilter} placeholder="All supervisors" />
           <SearchableSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" />
-          <SearchableSelect options={['BP', 'CARD', 'CASH', 'TALABAT'].map(p => ({ value: p, label: p }))} value={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" />
+          <SearchableSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} value={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" />
           <SearchableSelect
             options={drivers.map(d => ({
               value: d.id,

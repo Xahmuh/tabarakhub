@@ -1,5 +1,31 @@
 # Production Gaps
 
+## Dynamic Delivery Payment Types Gap - 2026-06-15
+
+Dynamic delivery payment types are implemented and the linked Supabase project is aligned through `20260615110000_delivery_payment_types.sql`, but production sign-off still requires authenticated browser QA.
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Default payment types exist: `BP`, `CASH`, `CARD`, `TALABAT`, and `INSURANCE`.
+- `TALABAT.requires_block = false`; `INSURANCE.requires_block = true`.
+- Existing `delivery_orders` payment types remain compatible: `BP=13`, `CARD=5`, `CASH=2`.
+- RLS simulation passed for anon denial, branch active read-only access, admin management, and owner read-only access.
+- Temporary QA payment rows were cleaned up; no production delivery orders were deleted or rewritten.
+
+Open blockers:
+
+- Authenticated admin browser QA for `Delivery Settings > Payments`.
+- Authenticated branch browser QA for dynamic payment selection and order save behavior.
+- Live supervisor/warehouse/accounts validation after approved profiles/sessions exist.
+
+Detailed record: `docs/DELIVERY_PAYMENT_TYPES.md`.
+
 ## Phase 1 Delivery Lifecycle Implementation Gap - 2026-06-15
 
 Phase 1 internal delivery lifecycle tracking is implemented from a clean baseline, with its reviewed migration applied and SQL/RLS-validated on the linked Supabase project. It is still not production-ready.
@@ -129,7 +155,7 @@ Authenticated browser QA for Branch Delivery Zones and Markers was attempted loc
 Delivery Governorate KPIs and Purchase Power Proxy are implemented locally for internal analysis only. They use `delivery_orders.governorate`, `delivery_blocks`, and `value_bhd`; no fake governorate mapping, population data, or income data is used. Before production, validate the Governorate KPIs tab with real manager/owner/supervisor sessions, confirm RLS-scoped branch/governorate results, and confirm the Purchase Power Proxy wording remains clearly internal/non-economic.
 Final production-readiness gate results are documented in docs/FINAL_PRODUCTION_READINESS_GATE_RESULTS.md.
 Quality Feedback question migration has been applied and recorded on the linked Supabase project: `feedback_questions` remains as 28-row locked legacy backup, `quality_feedback_questions` now has 28 app-source rows, duplicate `field_key` groups = 0, anon can read active questions, branch users cannot manage questions, and Admin can manage questions by SQL/RLS validation after the Admin role migration. Browser QA for the public/staff form and Admin question manager remains pending because no authenticated browser session/password was available. See docs/QUALITY_FEEDBACK_QUESTIONS_MIGRATION.md.
-Migration history is currently aligned on the linked Supabase project through `20260615070000_delivery_lifecycle_phase1.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, QC area RPC `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
+Migration history is currently aligned on the linked Supabase project through `20260615110000_delivery_payment_types.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, QC area RPC `20260615050000`, Phase 1 Delivery Lifecycle `20260615070000`, recorded delivery-order delete `20260615083000`, and Dynamic Delivery Payment Types `20260615110000` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
 Module Layout settings migration `20260614200000_module_display_settings.sql` has been applied and recorded on the linked Supabase project. The feature is presentation-only: it controls module launcher order and badges from `system_settings.module_display_settings` and does not grant access or bypass Users & Roles/RLS. Authenticated browser QA for Project Settings > Module Layout and branch restrictions remains pending because no valid admin/manager/owner/branch browser session was available. See docs/MODULE_LAYOUT_SETTINGS.md.
 Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql` has been applied and recorded on the linked Supabase project. `system_settings` now includes `pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` with expected non-null defaults. The migration does not change RLS, grants, role permissions, branch permissions, or app_user_feature_permissions. Authenticated browser QA for Project Settings > Branding & logos remains pending because no valid admin/manager/owner session was available.
 POST_MIGRATION helper/RPC anon EXECUTE blocker is remediated on the linked project: `20260614133000_harden_contributions_storage_and_rpc_grants.sql` was applied with approval and unsafe non-allowlisted anon EXECUTE count is now 0.

@@ -6,6 +6,7 @@ import {
   DeliveryDriver,
   DeliveryOrder,
   DeliveryPaymentType,
+  DeliveryPaymentTypeConfig,
   Governorate,
   LostSale,
   Shortage
@@ -99,6 +100,7 @@ export interface OwnerDashboardBundle {
   branches: Branch[];
   drivers: DeliveryDriver[];
   branchProfiles: BranchDeliveryProfile[];
+  paymentTypes: DeliveryPaymentTypeConfig[];
   orders: DeliveryOrder[];
   sales: LostSale[];
   shortages: Shortage[];
@@ -143,8 +145,13 @@ const lostCustomerKey = (sale: LostSale) => {
 const countLostCustomers = (sales: LostSale[]) =>
   new Set(sales.map(lostCustomerKey)).size;
 
-const buildTodayKpis = (orders: DeliveryOrder[], sales: LostSale[], shortages: Shortage[]): OwnerTodayKpis => {
-  const direct = orders.filter(isDirectOrder);
+const buildTodayKpis = (
+  orders: DeliveryOrder[],
+  sales: LostSale[],
+  shortages: Shortage[],
+  paymentTypes: DeliveryPaymentTypeConfig[]
+): OwnerTodayKpis => {
+  const direct = orders.filter(order => isDirectOrder(order, paymentTypes));
   return {
     orders: orders.length,
     valueBhd: sumValue(orders),
@@ -157,8 +164,13 @@ const buildTodayKpis = (orders: DeliveryOrder[], sales: LostSale[], shortages: S
   };
 };
 
-const buildOverview = (orders: DeliveryOrder[], sales: LostSale[], shortages: Shortage[]): OwnerOverviewKpis => {
-  const direct = orders.filter(isDirectOrder);
+const buildOverview = (
+  orders: DeliveryOrder[],
+  sales: LostSale[],
+  shortages: Shortage[],
+  paymentTypes: DeliveryPaymentTypeConfig[]
+): OwnerOverviewKpis => {
+  const direct = orders.filter(order => isDirectOrder(order, paymentTypes));
   const knownBlockOrders = direct.filter(order => !!order.blockNumber).length;
   const unknownBlockOrders = direct.length - knownBlockOrders;
   const outsideGovernorateOrders = direct.filter(order => order.isOutsideGovernorate).length;
@@ -277,11 +289,12 @@ const buildBranchKpis = (
   branches: Branch[],
   orders: DeliveryOrder[],
   sales: LostSale[],
-  shortages: Shortage[]
+  shortages: Shortage[],
+  paymentTypes: DeliveryPaymentTypeConfig[]
 ): OwnerBranchKpi[] => {
   return branches.map(branch => {
     const branchOrders = orders.filter(order => order.branchId === branch.id);
-    const direct = branchOrders.filter(isDirectOrder);
+    const direct = branchOrders.filter(order => isDirectOrder(order, paymentTypes));
     const knownBlockOrders = direct.filter(order => !!order.blockNumber).length;
     const unknownBlockRate = pct(direct.length - knownBlockOrders, direct.length);
     const outsideGovernorateRate = pct(direct.filter(order => order.isOutsideGovernorate).length, direct.length);
@@ -383,6 +396,7 @@ export const ownerDashboardService = {
       allBranches,
       drivers,
       costSettings,
+      paymentTypes,
       rawOrders,
       coverage,
       branchProfiles,
@@ -395,6 +409,7 @@ export const ownerDashboardService = {
       branchService.list(),
       deliveryService.drivers.list(true),
       deliveryService.costSettings.list(),
+      deliveryService.paymentTypes.list(true),
       deliveryService.orders.list(orderFilters),
       deliveryCoverageService.getDeliveryCoverageBundle(coverageFilters),
       branchDeliveryProfileService.listBranchDeliveryProfiles().catch(() => []),
@@ -417,13 +432,14 @@ export const ownerDashboardService = {
       branches,
       drivers,
       branchProfiles,
+      paymentTypes,
       orders,
       sales,
       shortages,
       coverage,
-      today: buildTodayKpis(todayOrders, todaySales, todayShortages),
-      overview: buildOverview(orders, sales, shortages),
-      branchKpis: buildBranchKpis(branches, orders, sales, shortages),
+      today: buildTodayKpis(todayOrders, todaySales, todayShortages, paymentTypes),
+      overview: buildOverview(orders, sales, shortages, paymentTypes),
+      branchKpis: buildBranchKpis(branches, orders, sales, shortages, paymentTypes),
       driverKpis: buildDriverKpis(orders, drivers, costSettings, range.days)
     };
   }

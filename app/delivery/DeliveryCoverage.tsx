@@ -575,9 +575,9 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           {/* KPI cards */}
           {section === 'overview' && (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            <KpiCard label="Total orders" value={String(summary.totalOrders)} sub={`${summary.talabatOrders} Talabat (no block)`} />
+            <KpiCard label="Total orders" value={String(summary.totalOrders)} sub={`${summary.talabatOrders} no-block payment orders`} />
             <KpiCard label="Known block orders" value={String(summary.knownBlockOrders)} sub={`${summary.uniqueBlocksServed} unique blocks`} />
-            <KpiCard label="Unknown block orders" value={String(summary.unknownBlockOrders)} sub="non-Talabat, no block #" />
+            <KpiCard label="Unknown block orders" value={String(summary.unknownBlockOrders)} sub="mappable orders, no block #" />
             <KpiCard label="Unknown block rate" value={`${Math.round(summary.unknownBlockRate * 100)}%`} sub="of mappable orders" />
             <KpiCard label="Unique blocks served" value={String(summary.uniqueBlocksServed)} />
             <KpiCard
@@ -1053,10 +1053,10 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           {section === 'quality' && (
             <>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <KpiCard label="Unknown block orders" value={String(summary.unknownBlockOrders)} sub="non-Talabat, no block #" />
+                <KpiCard label="Unknown block orders" value={String(summary.unknownBlockOrders)} sub="mappable orders, no block #" />
                 <KpiCard label="Unknown block rate" value={`${Math.round(summary.unknownBlockRate * 100)}%`} sub="of mappable orders" />
                 <KpiCard label="Unresolved blocks" value={String(summary.unresolvedBlockOrders)} sub="not in directory" />
-                <KpiCard label="Talabat (no block)" value={String(summary.talabatOrders)} />
+                <KpiCard label="No-block payments" value={String(summary.talabatOrders)} />
               </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <KpiCard label="Branch profiles" value={String(zoneAnalysis.metrics.totalBranchProfiles)} sub={`${zoneAnalysis.metrics.mappedBranchMarkers} mapped markers`} />

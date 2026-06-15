@@ -3,8 +3,14 @@ import {
   DeliveryDriver,
   DeliveryOrderInput,
   DeliveryPaymentType,
+  DeliveryPaymentTypeConfig,
   Pharmacist
 } from '../types';
+import {
+  DEFAULT_DELIVERY_PAYMENT_TYPES,
+  isDeliveryPaymentBlockExempt,
+  normalizeDeliveryPaymentCode
+} from '../lib/deliveryPaymentTypes';
 
 export const DELIVERY_ORDER_IMPORT_ACCEPT = '.xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const MAX_DELIVERY_ORDER_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -29,6 +35,7 @@ export interface DeliveryOrderImportContext {
   pharmacists: Pharmacist[];
   drivers: DeliveryDriver[];
   blocks: DeliveryBlock[];
+  paymentTypes?: DeliveryPaymentTypeConfig[];
 }
 
 export interface DeliveryOrderImportRow {
@@ -303,13 +310,26 @@ const parseValueBhd = (value: unknown) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-const parsePaymentType = (value: unknown): DeliveryPaymentType | null => {
+const parsePaymentType = (value: unknown, paymentTypes?: DeliveryPaymentTypeConfig[]): DeliveryPaymentType | null => {
   const normalized = normalizeLookup(value).replace(/\s+/g, '');
   if (!normalized) return null;
-  if (normalized === 'bp' || normalized === 'benefit' || normalized === 'benefitpay') return 'BP';
-  if (normalized === 'card' || normalized === 'visa' || normalized === 'mastercard' || normalized === 'debit' || normalized === 'credit') return 'CARD';
-  if (normalized === 'cash') return 'CASH';
-  if (normalized === 'talabat' || normalized === 'talabatgo') return 'TALABAT';
+  const configured = paymentTypes && paymentTypes.length > 0 ? paymentTypes : DEFAULT_DELIVERY_PAYMENT_TYPES;
+  const aliases = new Map<string, DeliveryPaymentType>();
+  configured.forEach(type => {
+    aliases.set(normalizeLookup(type.code).replace(/\s+/g, ''), type.code);
+    aliases.set(normalizeLookup(type.label).replace(/\s+/g, ''), type.code);
+  });
+  aliases.set('benefit', 'BP');
+  aliases.set('benefitpay', 'BP');
+  aliases.set('visa', 'CARD');
+  aliases.set('mastercard', 'CARD');
+  aliases.set('debit', 'CARD');
+  aliases.set('credit', 'CARD');
+  aliases.set('talabatgo', 'TALABAT');
+  const match = aliases.get(normalized);
+  if (match) return match;
+  const code = normalizeDeliveryPaymentCode(value == null ? '' : String(value));
+  if (configured.some(type => type.code === code)) return code;
   return null;
 };
 
@@ -347,9 +367,10 @@ const resolveBlockNumber = (
   blockValue: unknown,
   areaValue: unknown,
   paymentType: DeliveryPaymentType,
-  blocks: DeliveryBlock[]
+  blocks: DeliveryBlock[],
+  paymentTypes?: DeliveryPaymentTypeConfig[]
 ) => {
-  if (paymentType === 'TALABAT') return { blockNumber: null, error: null };
+  if (isDeliveryPaymentBlockExempt(paymentType, paymentTypes)) return { blockNumber: null, error: null };
 
   const blockText = normalizeBlockNumber(blockValue);
   if (blockText) {
@@ -375,7 +396,7 @@ const resolveBlockNumber = (
     }
   }
 
-  return { blockNumber: null, error: 'Block number is required for non-Talabat delivery orders.' };
+  return { blockNumber: null, error: 'Block number is required for this payment type.' };
 };
 
 export const parseDeliveryOrderUpload = async (
@@ -405,7 +426,7 @@ export const parseDeliveryOrderUpload = async (
 
     const orderDate = parseDateKey(getFieldValue(row, 'orderDate'));
     const valueBhd = parseValueBhd(getFieldValue(row, 'valueBhd'));
-    const paymentType = parsePaymentType(getFieldValue(row, 'paymentType'));
+    const paymentType = parsePaymentType(getFieldValue(row, 'paymentType'), context.paymentTypes);
 
     if (!orderDate) {
       errors.push({ row: row.rowNumber, message: 'Missing or invalid order date.' });
@@ -416,7 +437,7 @@ export const parseDeliveryOrderUpload = async (
       return;
     }
     if (!paymentType) {
-      errors.push({ row: row.rowNumber, message: 'Missing or invalid payment type. Use BP, CARD, CASH, or TALABAT.' });
+      errors.push({ row: row.rowNumber, message: 'Missing or invalid payment type. Use a configured payment type such as BP, CASH, CARD, TALABAT, or INSURANCE.' });
       return;
     }
 
@@ -436,7 +457,8 @@ export const parseDeliveryOrderUpload = async (
       getFieldValue(row, 'blockNumber'),
       getFieldValue(row, 'areaName'),
       paymentType,
-      context.blocks
+      context.blocks,
+      context.paymentTypes
     );
     if (block.error) {
       errors.push({ row: row.rowNumber, message: block.error });

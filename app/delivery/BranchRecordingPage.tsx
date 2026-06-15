@@ -4,10 +4,16 @@ import { AlertTriangle, CheckCircle2, Lock, MapPin, Pencil, Plus, Trash2, Unlock
 import { deliveryService } from '../../services/deliveryService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
-  Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentType, Pharmacist
+  Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentType, DeliveryPaymentTypeConfig, Pharmacist
 } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
 import { formatBhd, todayKey, yesterdayKey } from './utils';
+import {
+  DEFAULT_DELIVERY_PAYMENT_TYPES,
+  getDeliveryPaymentLabel,
+  isDeliveryPaymentBlockExempt,
+  sortDeliveryPaymentTypes
+} from '../../lib/deliveryPaymentTypes';
 import {
   DELIVERY_ORDER_IMPORT_ACCEPT,
   MAX_DELIVERY_ORDER_IMPORT_BYTES,
@@ -15,10 +21,8 @@ import {
   parseDeliveryOrderUpload
 } from '../../utils/deliveryImportUtils';
 
-const PAYMENT_TYPES: DeliveryPaymentType[] = ['BP', 'CARD', 'CASH', 'TALABAT'];
-
-const paymentBadge = (type: string) =>
-  type === 'TALABAT'
+const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
+  isDeliveryPaymentBlockExempt(type, paymentTypes)
     ? 'border-orange-200 bg-orange-50 text-orange-700'
     : 'border-brand/10 bg-brand/5 text-brand';
 
@@ -94,6 +98,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>(DEFAULT_DELIVERY_PAYMENT_TYPES);
   const [historyOrders, setHistoryOrders] = useState<DeliveryOrder[]>([]);
   const [historyFrom, setHistoryFrom] = useState(todayKey());
   const [historyTo, setHistoryTo] = useState(todayKey());
@@ -131,9 +136,25 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     hint: `${block.areaName} - ${block.governorate}`
   })), [blocks]);
 
-  const isTalabat = paymentType === 'TALABAT';
-  const areaPreview = isTalabat
-    ? 'Not required for Talabat'
+  const activePaymentTypes = useMemo(
+    () => sortDeliveryPaymentTypes(paymentTypes).filter(type => type.isActive),
+    [paymentTypes]
+  );
+  const paymentOptions = useMemo(() => {
+    const sorted = sortDeliveryPaymentTypes(paymentTypes);
+    const active = sorted.filter(type => type.isActive);
+    if (paymentType && !active.some(type => type.code === paymentType)) {
+      const current = sorted.find(type => type.code === paymentType);
+      if (current) return [...active, current];
+    }
+    return active;
+  }, [paymentTypes, paymentType]);
+  const defaultPaymentType = activePaymentTypes.find(type => type.code === 'CASH')?.code || activePaymentTypes[0]?.code || 'CASH';
+  const selectedPaymentType = paymentOptions.find(type => type.code === paymentType);
+  const requiresBlock = selectedPaymentType?.requiresBlock ?? !isDeliveryPaymentBlockExempt(paymentType, paymentTypes);
+  const isBlockExemptPayment = !requiresBlock;
+  const areaPreview = !requiresBlock
+    ? `Not required for ${selectedPaymentType?.label || paymentType}`
     : selectedBlock
       ? `${selectedBlock.areaName} | ${selectedBlock.governorate}`
       : 'Search by area name, then choose the block number';
@@ -164,6 +185,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       setDrivers(driverList);
       setPharmacists(pharmacistList);
       setBlocks(blockList);
+      deliveryService.paymentTypes.list()
+        .then(types => setPaymentTypes(sortDeliveryPaymentTypes(types)))
+        .catch(error => console.warn('Delivery payment types load failed', error));
     } catch (e) {
       console.error('Delivery reference load failed', e);
     }
@@ -187,6 +211,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   useEffect(() => { loadReference(); }, [branch.id]);
   useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
+  useEffect(() => {
+    if (paymentOptions.length === 0) return;
+    if (!paymentOptions.some(type => type.code === paymentType)) {
+      setPaymentType(defaultPaymentType);
+    }
+  }, [defaultPaymentType, paymentOptions, paymentType]);
 
   useEffect(() => {
     setSelectedHistoryIds(prev => {
@@ -251,7 +281,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     let cancelled = false;
     setIsBlockSearching(false);
     const trimmed = blockInput.trim();
-    if (!trimmed || isTalabat) {
+    if (!trimmed || isBlockExemptPayment) {
       setResolvedBlock(null);
       setBlockMatches([]);
       setBlockNotFound(false);
@@ -294,7 +324,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       setIsBlockSearching(false);
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [blockInput, isTalabat, resolvedBlock, blocks]);
+  }, [blockInput, isBlockExemptPayment, resolvedBlock, blocks]);
 
   const selectResolvedBlock = (block: DeliveryBlock) => {
     setBlockInput(block.blockNumber);
@@ -323,7 +353,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     setEditingOrder(null);
     if (!preserveBatchContext) {
       setOrderDate(todayKey());
-      setPaymentType('CASH');
+      setPaymentType(defaultPaymentType);
     }
     if (!isPharmacistLocked) {
       setPharmacistId(null);
@@ -366,7 +396,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     setPaymentType(order.paymentType);
     setPharmacistId(order.pharmacistId || null);
     setDriverId(order.driverId || null);
-    setBlockInput(order.paymentType === 'TALABAT' ? '' : order.blockNumber || '');
+    setBlockInput(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? '' : order.blockNumber || '');
     setResolvedBlock(null);
     setBlockMatches([]);
     setBlockNotFound(false);
@@ -402,11 +432,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       Swal.fire('Driver required', 'Select the driver before saving this delivery order.', 'warning');
       return;
     }
-    if (!isTalabat && !blockInput.trim()) {
-      Swal.fire('Block required', 'Block number is required for all orders except Talabat.', 'warning');
+    if (requiresBlock && !blockInput.trim()) {
+      Swal.fire('Block required', `Block number is required for ${selectedPaymentType?.label || paymentType} delivery orders.`, 'warning');
       return;
     }
-    if (!isTalabat && !selectedBlock) {
+    if (requiresBlock && !selectedBlock) {
       Swal.fire(
         'Select block number',
         'Search by area name or block number, then choose a real block number from the list before saving.',
@@ -414,7 +444,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       );
       return;
     }
-    if (!isTalabat && blockNotFound) {
+    if (requiresBlock && blockNotFound) {
       const proceed = await Swal.fire({
         title: 'Unknown block',
         text: `Block ${blockInput.trim()} is not in the block directory. The order will be saved without an area — ask the manager to add this block.`,
@@ -434,7 +464,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
       driverId,
-      blockNumber: isTalabat ? null : selectedBlock?.blockNumber || null
+      blockNumber: requiresBlock ? selectedBlock?.blockNumber || null : null
     };
 
     setIsSubmitting(true);
@@ -455,7 +485,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       if (duplicate) {
         const proceed = await Swal.fire({
           title: 'Possible duplicate',
-          html: `An identical order (<b>${formatBhd(duplicate.valueBhd)} / ${duplicate.paymentType}</b>) was recorded a few minutes ago.<br/>Save this one as well?`,
+          html: `An identical order (<b>${formatBhd(duplicate.valueBhd)} / ${getDeliveryPaymentLabel(duplicate.paymentType, paymentTypes)}</b>) was recorded a few minutes ago.<br/>Save this one as well?`,
           icon: 'warning',
           showCancelButton: true,
           confirmButtonText: 'Save anyway',
@@ -543,7 +573,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     try {
       const { validRows, errors, totalRows } = await parseDeliveryOrderUpload(
         file,
-        { branchId: branch.id, pharmacists, drivers, blocks },
+        { branchId: branch.id, pharmacists, drivers, blocks, paymentTypes },
         progress => updateUploadProgress(progress.percent, progress.label, progress.detail)
       );
 
@@ -769,20 +799,25 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Payment type <RequiredMark />
               </label>
-              <div className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200/50 bg-slate-100/60 p-1">
-                {PAYMENT_TYPES.map(type => (
+              <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200/50 bg-slate-100/60 p-1 sm:grid-cols-3 xl:grid-cols-5">
+                {paymentOptions.map(type => (
                   <button
-                    key={type}
+                    key={type.code}
                     type="button"
-                    onClick={() => setPaymentType(type)}
+                    onClick={() => setPaymentType(type.code)}
                     className={`rounded-md py-2 text-[11px] font-black transition-all ${
-                      paymentType === type ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      paymentType === type.code ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    {type}
+                    {type.label}
                   </button>
                 ))}
               </div>
+              {selectedPaymentType && !selectedPaymentType.requiresBlock && (
+                <p className="mt-1 text-[10px] font-bold text-orange-600">
+                  {selectedPaymentType.label} orders do not require block/area mapping.
+                </p>
+              )}
             </div>
 
             <div className="order-2 space-y-1 lg:col-start-1 lg:row-start-2">
@@ -844,20 +879,20 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
             <div className="order-6 space-y-1 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Block or Area {!isTalabat && <RequiredMark />} {isTalabat ? '(not required for Talabat)' : ''}
+                Block or Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}
               </label>
               <SearchableSelect
                 options={blockOptions}
-                value={isTalabat ? null : blockInput || null}
+                value={!requiresBlock ? null : blockInput || null}
                 onChange={handleBlockChange}
-                placeholder={isTalabat ? 'Disabled for Talabat' : 'Search area or block number...'}
-                disabled={isTalabat || blocks.length === 0}
+                placeholder={!requiresBlock ? `Disabled for ${selectedPaymentType?.label || paymentType}` : 'Search area or block number...'}
+                disabled={!requiresBlock || blocks.length === 0}
                 allowClear
               />
-              {!isTalabat && isBlockSearching && (
+              {requiresBlock && isBlockSearching && (
                 <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>
               )}
-              {!isTalabat && blockMatches.length > 1 && !resolvedBlock && (
+              {requiresBlock && blockMatches.length > 1 && !resolvedBlock && (
                 <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
                   {blockMatches.map(block => (
                     <button
@@ -872,12 +907,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   ))}
                 </div>
               )}
-              {!isTalabat && resolvedBlock && (
+              {requiresBlock && resolvedBlock && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-600">
                   <MapPin className="h-3 w-3" /> {resolvedBlock.areaName} · {resolvedBlock.governorate}
                 </p>
               )}
-              {!isTalabat && blockNotFound && blockInput.trim() && (
+              {requiresBlock && blockNotFound && blockInput.trim() && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-600">
                   <AlertTriangle className="h-3 w-3" /> Block not found in directory
                 </p>
@@ -886,7 +921,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
             <div className="order-7 space-y-1 lg:col-start-2 lg:row-start-4 lg:border-l lg:border-slate-100 lg:pl-6">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Area {!isTalabat && <RequiredMark />}
+                Area {requiresBlock && <RequiredMark />}
               </label>
               <div className={`flex min-h-[42px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${
                 resolvedBlock
@@ -1047,14 +1082,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       </td>
                       <td className="py-2.5 pr-3 text-right font-black text-slate-900 tabular-nums">{order.valueBhd.toFixed(3)}</td>
                       <td className="py-2.5 px-3">
-                        <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType)}`}>
-                          {order.paymentType}
+                        <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType, paymentTypes)}`}>
+                          {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
                         </span>
                       </td>
                       <td className="py-2.5 pr-3 font-bold text-slate-600">{order.pharmacistName || '—'}</td>
                       <td className="py-2.5 pr-3 font-bold text-slate-600">{order.driverName || '—'}</td>
                       <td className="py-2.5 pr-3 text-xs font-bold text-slate-500">
-                        {order.paymentType === 'TALABAT'
+                        {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
                           ? '—'
                           : order.blockNumber
                             ? `${order.blockNumber}${order.areaName ? ` · ${order.areaName}` : ' · Unknown area'}`
@@ -1096,15 +1131,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                           aria-label={`Select invoice ${order.orderDate}`}
                         />
                       )}
-                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType)}`}>
-                        {order.paymentType}
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType, paymentTypes)}`}>
+                        {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
                       </span>
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
                     {order.driverName && <span>🛵 {order.driverName}</span>}
-                    {order.paymentType !== 'TALABAT' && order.blockNumber && (
+                    {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span>Block {order.blockNumber}{order.areaName ? ` · ${order.areaName}` : ''}</span>
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}

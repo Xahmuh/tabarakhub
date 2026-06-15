@@ -1,4 +1,6 @@
 import { DeliveryOrder } from '../../types';
+import { DeliveryPaymentTypeConfig } from '../../types';
+import { isDirectDeliveryOrder } from '../../lib/deliveryPaymentTypes';
 
 export type PeriodPreset = 'today' | 'yesterday' | 'month' | 'custom';
 
@@ -42,8 +44,9 @@ export const periodLabel = (preset: PeriodPreset, from: string, to: string) => {
   return from === to ? from : `${from} → ${to}`;
 };
 
-/** WhatsApp/direct = everything that is not TALABAT. */
-export const isDirectOrder = (order: DeliveryOrder) => order.paymentType !== 'TALABAT';
+/** Direct/mappable = payment channels that require block/area mapping. */
+export const isDirectOrder = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[] | null) =>
+  isDirectDeliveryOrder(order, paymentTypes);
 
 export const sumValue = (orders: DeliveryOrder[]) => orders.reduce((acc, o) => acc + o.valueBhd, 0);
 

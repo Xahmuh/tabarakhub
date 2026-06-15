@@ -1,5 +1,27 @@
 # Release Readiness Status
 
+## Dynamic Delivery Payment Types - 2026-06-15
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Added configurable delivery payment types for delivery recording.
+- Default active types are `BP`, `CASH`, `CARD`, `TALABAT`, and `INSURANCE`.
+- `TALABAT` is no-block by configuration; `INSURANCE` requires block/area mapping.
+- `Delivery Settings > Payments` manages labels, order, block-required behavior, and active state.
+- Branch Recording, import parsing, delivery analytics, coverage, and owner dashboard now use payment-type configuration where block-required behavior matters.
+- Migration `20260615110000_delivery_payment_types.sql` was reviewed, applied, and aligned on the linked Supabase project.
+- SQL validation passed for table existence, defaults, duplicates, and existing delivery-order compatibility.
+- RLS validation passed for anon denial, branch read-only active access, admin management, and owner read-only access.
+- Authenticated browser QA remains pending because no approved admin/branch browser sessions were available in this pass.
+
+Reference: `docs/DELIVERY_PAYMENT_TYPES.md`.
+
 ## Phase 1 Delivery Lifecycle Implementation - 2026-06-15
 
 Status:
@@ -145,7 +167,7 @@ Branch Login Approval Flow is implemented: branch users wait for approval after 
 Manual role-session QA has been partially executed in docs/MANUAL_ROLE_SESSION_QA_RESULTS.md. Branch T001, branch H003, and warehouse/accounts-equivalent sessions were tested with real Supabase Auth. The linked Supabase RLS fix 20260614120000_tighten_branch_scoped_workflow_rls.sql has been applied with explicit approval. Branch A/B targeted cross-branch reads now return 0 rows on delivery_orders, lost_sales, shortages, pharmacist_branches, cash_differences, operations_tasks, and branch_login_approvals; anon select is denied on the same sensitive tables. Warehouse/accounts-equivalent read behavior and branch-login approval denial checks pass. Manager broad access passes by SQL role simulation, but manager browser credentials remain invalid. The shortages performance migration 20260614123000_optimize_sales_shortages_branch_timestamp_indexes.sql has also been applied with explicit approval. Explicit own-branch and dashboard date-range shortage reads are fast. Production rule: branch-facing shortages reads must include explicit branch/date bounds or use service methods that enforce them; unbounded direct shortages reads are not a supported app query shape. Supervisor scope and browser UI approve/reject/sign-out validation remain pending.
 Final production-readiness gate result is documented in docs/FINAL_PRODUCTION_READINESS_GATE_RESULTS.md.
 Quality Feedback question migration has been applied and recorded on the linked Supabase project: `quality_feedback_questions` now has the 28 migrated app-source rows, legacy `feedback_questions` remains locked as backup with 28 rows, duplicate `field_key` groups = 0, and SQL/RLS validation passed for anon read, branch no-management, and Admin question management after the Admin role migration. Public/staff form browser QA and Admin question manager browser QA remain pending because no authenticated browser session/password was available.
-Migration history is reconciled on the linked Supabase project through `20260615070000_delivery_lifecycle_phase1.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, QC area RPC `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000` were applied/recorded with explicit task approval. Do not run blind `supabase db push`; review/apply future migrations intentionally only after approval.
+Migration history is reconciled on the linked Supabase project through `20260615110000_delivery_payment_types.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, QC area RPC `20260615050000`, Phase 1 Delivery Lifecycle `20260615070000`, recorded delivery-order delete `20260615083000`, and Dynamic Delivery Payment Types `20260615110000` were applied/recorded with explicit task approval. Do not run blind `supabase db push`; review/apply future migrations intentionally only after approval.
 Module Layout settings are implemented and the linked Supabase project is aligned through `20260614200000_module_display_settings.sql`. `Project Settings > Module Layout` controls module launcher order and visible badges only; it does not control permissions or RLS. SQL/schema validation passed for `system_settings.module_display_settings`; authenticated browser QA remains pending until valid admin/manager/owner and branch sessions are available. See docs/MODULE_LAYOUT_SETTINGS.md.
 Branding Logo settings are implemented and the linked Supabase project is aligned through `20260614203000_branding_logo_system_settings.sql`. `Project Settings > Branding & logos` controls the app logo, HUB logo, browser icon, and loading spinner paths only; it does not control permissions or RLS. SQL/schema validation passed for the four non-null branding columns in `system_settings`; authenticated browser QA remains pending until valid admin/manager/owner sessions are available.
 Edge Function production secrets/CORS are incomplete in the linked project. `supabase secrets list` currently shows only Supabase default secrets. Local Edge Function code is prepared with dynamic non-wildcard CORS for browser-called functions and protected email functions reject placeholder/example email/dashboard configuration, but the linked project still needs real secrets configured and functions redeployed with approval before production. Operator checklist is prepared in docs/EDGE_FUNCTIONS_DEPLOYMENT_CHECKLIST.md.
