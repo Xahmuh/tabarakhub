@@ -1,5 +1,25 @@
 # Release Readiness Status
 
+## Driver Mobile MVP QA - 2026-06-16
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- The driver mobile MVP implementation is present on `origin/main` at `ecd77ea Implement delivery driver mobile MVP`.
+- Production route smoke passed for `https://www.tabarakpharmacy.com/` and `https://www.tabarakpharmacy.com/delivery`; both serve the React app shell.
+- Production JS contains the Driver role UI, linked delivery driver selector, and assignment RPC integration.
+- Supabase migration history is aligned through `20260616020000`.
+- Local driver app runs in Expo web mode at `http://localhost:8091`; HTML and bundle returned HTTP 200.
+- Verification passed for root typecheck/build, `npm ls --depth=0`, `git diff --check`, driver mobile typecheck, and Expo dependency check.
+- Real driver E2E remains pending because a Driver login must be created from the Admin dashboard with an operator-entered password and linked to an active delivery driver. No password was requested, printed, stored, or committed.
+
+Reference: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Dynamic Delivery Payment Types - 2026-06-15
 
 Status:
@@ -184,7 +204,7 @@ Spin Static QR SQL/API security checks now pass after applying 20260614150000_ha
 Customer Engagement Generator / Generate QR & Link redesign is implemented locally. Authenticated browser QA was attempted on 2026-06-14, but the available in-app browser reached only the login page and no authorized manager/admin/owner browser session or usable credentials were available. Static/Single/Multi generator UI, responsive layout, copy/download behavior, and Talabat/WhatsApp panels remain pending for authenticated browser validation. Limited public static QR smoke passed locally through branch-code URL load, token exchange, and customer details screen without login or observed console errors; no customer details, Google return, spin, or voucher completion were executed.
 Typecheck passes locally.
 Production build passes locally.
-npm audit remediation is prepared locally as of 2026-06-14. Vite/esbuild high findings are removed by upgrading Vite to 8.0.16 and @vitejs/plugin-react to 6.0.2. ExcelJS/uuid moderate findings are removed by overriding transitive uuid to 11.1.1. Verification passed for typecheck, production build, npm ls, npm audit --audit-level=moderate, UUID require smoke, ExcelJS workbook write smoke, and local login browser smoke. This remediation is pending explicit diff approval and commit.
+npm audit remediation is active on current `origin/main` as of 2026-06-16. `npm audit --audit-level=moderate` returns 0 vulnerabilities with Vite 8.0.16, @vitejs/plugin-react 6.0.2, ExcelJS 4.4.0, and transitive `uuid` overridden to 11.1.1. `npm explain esbuild` reports no installed matching dependency.
 The earlier esbuild@0.28.1 override attempt remains rejected because it broke the production build on the PDF bundle.
 No lint/test scripts currently exist (no `lint` or `test` npm script in package.json).
 AI insights are optional existing scope and default disabled for production validation unless configured.
@@ -225,7 +245,7 @@ Storage bucket policies are hardened so no bucket allows unauthenticated writes 
 No frontend secrets are exposed.
 Previously known approved local migration gaps were resolved on the linked Supabase project: the seven schema-present/manual-applied migrations have been repaired as applied, and 20260613103000, 20260613131500, 20260613134500, 20260614150000, 20260614173000, 20260614190000, 20260614193000, 20260614200000, and 20260614203000 have been applied and recorded. Re-check migration history for each future target Supabase project before deployment.
 Legacy `public.branches` placeholder row `code/name/role = manager` must be archived or removed only after explicit backup-retention approval because it is referenced by `legacy_branch_password_backups`.
-Prepared npm audit remediation is approved/committed, or any future dependency risk is formally accepted.
+npm audit remains clean, or any future dependency risk is formally remediated or accepted.
 ```
 
 ## Release Decision Rules
@@ -240,7 +260,7 @@ Demo Auth users and app_user_profiles work.
 Frontend env uses VITE_DEMO_MODE=false.
 Build deploys successfully.
 Manual smoke tests pass.
-Known audit risk is documented.
+Known dependency audit risk is remediated or documented.
 ```
 
 Fail:

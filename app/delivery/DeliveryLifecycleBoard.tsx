@@ -255,7 +255,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
           <div>
             <p className="font-black">Phase 1 internal lifecycle tracking</p>
             <p className="mt-1 text-xs font-bold text-blue-800/80">
-              This board uses existing delivery orders and drivers. Driver mobile login is not enabled yet; lifecycle changes stay admin/branch-managed through a strict RPC after the migration is approved.
+              This board uses existing delivery orders and drivers. Orders assigned to a linked driver account appear in the driver mobile app, while admin/branch lifecycle changes continue through strict audited RPCs.
             </p>
           </div>
         </div>

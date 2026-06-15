@@ -8,6 +8,25 @@ Final status:
 B) dedicated-client staging-ready only
 ```
 
+## Driver Mobile MVP QA Attempt - 2026-06-16
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+- `origin/main` and local `HEAD` are aligned at `ecd77ea Implement delivery driver mobile MVP`.
+- Production `https://www.tabarakpharmacy.com/` and direct `/delivery` both return HTTP 200 and serve the React app shell.
+- Production JS contains the Driver role UI, `Linked delivery driver` UI, and `app_delivery_record_and_assign_order` integration, so the latest driver MVP code is deployed.
+- Linked Supabase migration history is aligned through `20260616020000`.
+- Driver mobile local browser mode is available at `http://localhost:8091`; the Expo HTML and JS bundle returned HTTP 200.
+- Verification passed for root `npm run typecheck`, root `npm run build`, `npm ls --depth=0`, `git diff --check`, driver-mobile typecheck, and `npx expo install --check`.
+- Real Driver login E2E was not executed because no Admin-dashboard session/operator-entered password was available to create and link a Driver login. No credentials were requested, printed, stored, or committed.
+- Read-only SQL that completed reported `linked_delivery_drivers = 0`; the next QA pass must create a Driver login from Settings & Permissions > Users & Roles and link it to an active delivery driver before creating the marked test order.
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Post-Deploy Validation - 2026-06-15
 
 Deployment checked:

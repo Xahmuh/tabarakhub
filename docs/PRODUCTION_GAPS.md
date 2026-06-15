@@ -1,5 +1,31 @@
 # Production Gaps
 
+## Driver Mobile MVP Real E2E QA Gap - 2026-06-16
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- `origin/main` and local `HEAD` are aligned at `ecd77ea Implement delivery driver mobile MVP`.
+- Linked Supabase migration history includes `20260616020000_driver_mobile_mvp.sql`.
+- Production `/` and `/delivery` return HTTP 200 and serve the app shell.
+- Production JS includes the Driver role UI, `Linked delivery driver` UI, and `app_delivery_record_and_assign_order` integration.
+- Driver mobile local browser mode runs at `http://localhost:8091`; Expo HTML and bundle returned HTTP 200.
+- Driver mobile dependencies are aligned with Expo, and driver-mobile typecheck passes.
+
+Open blockers:
+
+- A real Driver login was not created because the required Admin-dashboard session/operator-entered password was not available in this pass.
+- Read-only aggregate SQL that completed reported `linked_delivery_drivers = 0`, so no existing linked driver login was available for login QA.
+- Some later read-only Supabase CLI queries were blocked by temporary pooler authentication/circuit-breaker errors; do not repeat blind query loops until the temporary condition clears or `SUPABASE_DB_PASSWORD` is intentionally configured by the operator.
+- Real E2E remains pending: create Driver login, link existing active driver, create one clearly marked test delivery order, login in driver app, start shift, verify assigned-only visibility, mark picked up, mark delivered, and verify event/audit rows.
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Dynamic Delivery Payment Types Gap - 2026-06-15
 
 Dynamic delivery payment types are implemented and the linked Supabase project is aligned through `20260615110000_delivery_payment_types.sql`. Admin Payments, Owner read-only, and the controlled T001 Branch Talabat no-block save / lifecycle cancellation path have browser QA coverage; production sign-off still requires optional role sessions and broader production-readiness blockers outside this feature.
@@ -145,10 +171,9 @@ The operations task workflow also requires client-project RLS validation before 
 ## Remaining Gaps
 
 ```text
-ExcelJS/uuid audit risk remains open (runtime/product; accepted temporarily for staging only, Option A — 2026-06-13).
-Vite/esbuild audit risk remains open (build-tool/dev; esbuild@0.28.1 override attempted 2026-06-13 and reverted because it broke the production build — no safe non-breaking fix exists today).
-npm audit exact output and risk categories must stay documented in docs/ACCEPTED_SECURITY_RISKS.md.
-Superseding local remediation prepared on 2026-06-14: Vite/esbuild high findings are removed by upgrading Vite to 8.0.16 and @vitejs/plugin-react to 6.0.2; ExcelJS/uuid moderate findings are removed by overriding transitive uuid to 11.1.1. npm audit --audit-level=moderate now returns 0 vulnerabilities in the local prepared diff. This still requires explicit diff approval and commit before it is part of main.
+npm audit blocker is cleared on current `origin/main` as of 2026-06-16: `npm audit --audit-level=moderate` returns 0 vulnerabilities.
+The active dependency state is Vite 8.0.16, @vitejs/plugin-react 6.0.2, ExcelJS 4.4.0, and transitive `uuid` forced to 11.1.1 through npm overrides; `npm explain esbuild` reports no installed matching dependency.
+No accepted npm audit risk is currently required; future dependency alerts should be reviewed through the same no-force, build-verified process.
 Demo deployment still needs validation against the smoke test plan.
 Post-migration security checks must be run per client Supabase project.
 Operations task security checks must be run per client Supabase project.

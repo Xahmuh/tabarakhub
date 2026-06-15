@@ -35,6 +35,17 @@ const parseFunctionErrorBody = async (error: any): Promise<string | null> => {
 
 const throwFunctionError = async (error: any, fallback: string): Promise<never> => {
   const serverMessage = await parseFunctionErrorBody(error);
+  const message = String(error?.message || '');
+
+  if (message.toLowerCase().includes('failed to send a request to the edge function')) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const originHint = origin ? ` Current origin: ${origin}.` : '';
+    throw new Error(
+      `Could not reach the user-management Edge Function.${originHint} ` +
+      'If you are testing from localhost or a preview URL, open the production domain or add this origin to Supabase ALLOWED_ORIGIN / CLIENT_APP_URL.'
+    );
+  }
+
   throw new Error(serverMessage || error?.message || fallback);
 };
 

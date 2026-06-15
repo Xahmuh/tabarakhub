@@ -1,5 +1,29 @@
 # Final Production Readiness Gate Results
 
+## Driver Mobile MVP QA Gate - 2026-06-16
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Git alignment | Pass | `origin/main` and local `HEAD` are `ecd77ea Implement delivery driver mobile MVP`. |
+| Migration status | Pass | `supabase migration list --linked` is aligned through `20260616020000`. |
+| Production route smoke | Pass | `https://www.tabarakpharmacy.com/` and `/delivery` return HTTP 200 and serve the React app shell. |
+| Deployment content | Pass | Production JS contains Driver role UI, `Linked delivery driver` UI, and `app_delivery_record_and_assign_order` integration. |
+| Driver feature objects | Pass | Driver role model, Admin create-user function support, mobile RPCs, driver-scoped policy/RPC logic, and Expo app are present. |
+| Local driver app | Pass | `http://localhost:8091` returned HTTP 200 and the Expo bundle returned HTTP 200. |
+| Real Driver login setup | Blocked | No Admin-dashboard session/operator-entered password was available; no password was requested or stored. Read-only aggregate SQL that completed reported `linked_delivery_drivers = 0`. |
+| Test order lifecycle | Blocked | No Driver login was created, so no marked QA delivery order was created or transitioned. |
+| RLS/audit runtime validation | Partial | SQL implementation is present and scoped by `current_delivery_driver_id()`, but runtime RLS/audit validation requires the pending real Driver login and marked test order. |
+| Verification | Pass | Root typecheck/build, `npm ls --depth=0`, `git diff --check`, driver mobile typecheck, and Expo dependency check passed. |
+| Cleanup | Pass | No test driver user or order was created; no production data was deleted. |
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Dynamic Delivery Payment Types Gate - 2026-06-15
 
 Decision:
@@ -163,7 +187,7 @@ B) dedicated-client staging-ready only
 | Admin Role Access model | Partial pass | `20260614190000_admin_role_access_model.sql` and `20260614193000_harden_app_user_feature_permissions_grants.sql` were applied and recorded. First Admin was bootstrapped for `ahmedelsherbiinii@gmail.com`; SQL/RLS role simulations passed for Admin, Branch, Supervisor, Warehouse, Accounts, and user-level permissions. Browser QA is pending because no password/session was available. `public.branches` still contains one legacy `manager` placeholder row referenced by `legacy_branch_password_backups`, requiring explicit cleanup approval. |
 | Module Layout settings | Partial pass | `20260614200000_module_display_settings.sql` was applied and recorded on the linked project. Schema/data validation passed for `system_settings.module_display_settings` as non-null jsonb with default `{"items":[]}`. Code review confirms presentation-only order/badge behavior, permission filtering before sorting, text-safe badges, and default fallback. Authenticated browser QA remains pending because no valid admin/manager/owner/branch session was available. |
 | Branding logo settings | Partial pass | `20260614203000_branding_logo_system_settings.sql` was applied and recorded on the linked project. Schema/data validation passed for `system_settings.pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` as non-null text columns with expected defaults. Authenticated Project Settings browser QA remains pending because no valid admin/manager/owner session was available. |
-| Audit risk | Prepared pass, pending approval | Local npm audit remediation prepared on 2026-06-14: Vite upgraded to 8.0.16, @vitejs/plugin-react upgraded to 6.0.2, and transitive uuid overridden to 11.1.1 for ExcelJS. `npm audit --audit-level=moderate` now returns 0 vulnerabilities locally. Typecheck, production build, npm ls, UUID require smoke, ExcelJS workbook write smoke, and local login browser smoke passed. Commit/push is pending explicit approval. |
+| Audit risk | Pass | Current `origin/main` dependency state has Vite 8.0.16, @vitejs/plugin-react 6.0.2, ExcelJS 4.4.0, and transitive uuid overridden to 11.1.1. `npm audit --audit-level=moderate` returns 0 vulnerabilities on 2026-06-16, and `npm explain esbuild` reports no installed matching dependency. |
 | Smoke tests | Pending | Spin Static QR SQL/API smoke passed after remediation. Deployed frontend QR smoke partially passed through Google opening, but return/refresh/Continue/spin/voucher remains pending due browser automation limits. No working manager/admin browser credentials were available, so full browser smoke remains pending. |
 | Documentation | Updated | Release, gaps, manual QA, migration gap, security, security acceptance, accepted risks, and handover docs updated with final gate status. |
 
@@ -326,15 +350,15 @@ lint/test scripts: not present in package.json
 dist secret-marker scan: passed for SUPABASE_SERVICE_ROLE_KEY, FUNCTION_SECRET, ANTHROPIC_API_KEY, RESEND_API_KEY
 ```
 
-NPM audit remediation prepared on 2026-06-14:
+NPM audit remediation status:
 
 ```text
 before: npm.cmd audit --audit-level=moderate failed with 5 vulnerabilities: 2 moderate uuid/exceljs and 3 high esbuild/vite
 rejected safe patch attempt: npm override esbuild=0.28.1 reduced audit findings but broke production build on the PDF bundle
 accepted prepared dependency changes: vite 6.4.3 -> 8.0.16, @vitejs/plugin-react 5.1.2 -> 6.0.2, transitive uuid 8.3.2 -> 11.1.1 via npm overrides
-after: npm.cmd audit --audit-level=moderate passed with 0 vulnerabilities
+after: npm.cmd audit --audit-level=moderate passed with 0 vulnerabilities on 2026-06-16
 runtime smoke: require('uuid').v4 passed, ExcelJS workbook writeBuffer passed, local login page rendered at http://127.0.0.1:3000 with no console errors
-approval state: package/docs diff prepared locally; commit and push pending explicit approval
+approval state: safe dependency state is present on origin/main; 2026-06-16 pass only reconciles documentation
 ```
 
 Remediation pass verification on 2026-06-14:
