@@ -143,6 +143,14 @@ const trendLabel = (trend?: DeliveryBlockMetric['trend']) => {
   return trend.replace('_', ' ');
 };
 
+const compactBranchCode = (profile: BranchDeliveryProfile) => {
+  const rawCode = (profile.branchCode || '').trim();
+  const numericCode = rawCode.match(/\d+/g)?.join('');
+  const fallback = rawCode || (profile.branchName || 'B').trim();
+  const code = numericCode || fallback || 'B';
+  return code.length > 4 ? code.slice(-4) : code;
+};
+
 const TrendPill: React.FC<{ trend: DeliveryBlockMetric['trend'] }> = ({ trend }) => {
   const icon = trend === 'up'
     ? <TrendingUp className="h-3.5 w-3.5" />
@@ -641,6 +649,8 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     return (radiusKm / 111.32) * projection.scale;
   };
 
+  const branchMarkerScale = Math.max(0.46, viewport.width / VIEW_W);
+
   const selectedRecommendation = useMemo<DeliveryCoverageRecommendation | undefined>(
     () => selectedBlock
       ? summary.recommendedActions.find(action => action.blockNumber === selectedBlock.blockNumber)
@@ -963,7 +973,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                 );
               })}
               {showServiceRings && branchMarkers.map(marker => (
-                <g key={`rings:${marker.key}`}>
+                <g key={`rings:${marker.key}`} pointerEvents="none" aria-hidden="true">
                   <circle
                     cx={marker.x}
                     cy={marker.y}
@@ -998,43 +1008,41 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                 </g>
               ))}
               {showBranchMarkers && branchMarkers.map(marker => {
-                const code = marker.profile.branchCode || marker.profile.branchName || 'Branch';
-                const labelWidth = Math.max(34, code.length * 7 + 14);
+                const code = compactBranchCode(marker.profile);
+                const fontSize = code.length > 3 ? 4.3 : code.length > 2 ? 4.9 : 5.5;
+                const connectorX = (marker.x - marker.markerX) / branchMarkerScale;
+                const connectorY = (marker.y - marker.markerY) / branchMarkerScale;
                 return (
-                  <g key={marker.key} transform={`translate(${marker.markerX.toFixed(1)} ${marker.markerY.toFixed(1)})`} style={{ cursor: 'default' }}>
+                  <g
+                    key={marker.key}
+                    transform={`translate(${marker.markerX.toFixed(1)} ${marker.markerY.toFixed(1)}) scale(${branchMarkerScale.toFixed(3)})`}
+                    pointerEvents="none"
+                    aria-hidden="true"
+                  >
                     <title>
                       {`${code}${marker.profile.branchName ? ` | ${marker.profile.branchName}` : ''} | Origin block ${marker.originBlockNumber} | ${marker.profile.isDeliveryEnabled ? 'Delivery enabled' : 'Delivery disabled'} | Core ${marker.profile.coreRadiusKm}km, Standard ${marker.profile.standardRadiusKm}km, Extended ${marker.profile.extendedRadiusKm}km${marker.duplicateCount > 1 ? ` | Cluster ${marker.duplicateIndex + 1}/${marker.duplicateCount}` : ''}`}
                     </title>
                     <line
-                      x1={(marker.x - marker.markerX).toFixed(1)}
-                      y1={(marker.y - marker.markerY).toFixed(1)}
+                      x1={connectorX.toFixed(1)}
+                      y1={connectorY.toFixed(1)}
                       x2="0"
                       y2="0"
                       stroke="#7f1d1d"
-                      strokeWidth="1"
-                      opacity={marker.duplicateCount > 1 ? 0.45 : 0}
+                      strokeWidth="0.8"
+                      opacity={marker.duplicateCount > 1 ? 0.38 : 0}
                     />
-                    <rect
-                      x={-(labelWidth / 2)}
-                      y="-30"
-                      width={labelWidth}
-                      height="18"
-                      rx="6"
-                      fill="#7f1d1d"
-                      opacity="0.96"
-                    />
+                    <circle r="5.2" fill="#991b1b" stroke="#ffffff" strokeWidth="1.25" />
+                    <circle r="1.15" fill="#ffffff" opacity="0.2" />
                     <text
                       x="0"
-                      y="-17"
+                      y="1.7"
                       textAnchor="middle"
-                      fontSize="10"
-                      fontWeight="900"
+                      fontSize={fontSize}
+                      fontWeight="800"
                       fill="#ffffff"
                     >
                       {code}
                     </text>
-                    <circle r="8" fill="#b91c1c" stroke="#ffffff" strokeWidth="2.3" />
-                    <circle r="3" fill="#ffffff" opacity="0.92" />
                   </g>
                 );
               })}

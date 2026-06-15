@@ -36,6 +36,7 @@ export interface OwnerTodayKpis {
   talabatOrders: number;
   activeBranches: number;
   lostSalesValueBhd: number;
+  lostCustomers: number;
   criticalShortages: number;
 }
 
@@ -50,6 +51,7 @@ export interface OwnerOverviewKpis {
   unknownBlockRate: number;
   outsideGovernorateRate: number;
   lostSalesValueBhd: number;
+  lostCustomers: number;
   noRecoveryLostSales: number;
   criticalShortages: number;
 }
@@ -131,6 +133,16 @@ const pct = (part: number, total: number) => total > 0 ? (part / total) * 100 : 
 const formatBranchName = (branch: Branch) =>
   [branch.code, branch.name].filter(Boolean).join(' - ') || 'Unknown branch';
 
+const lostCustomerKey = (sale: LostSale) => {
+  if (sale.sessionId) return sale.sessionId;
+  const timestamp = new Date(sale.timestamp).getTime();
+  const timestampKey = Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : sale.id;
+  return `${sale.branchId}:${sale.lostDate}:${sale.lostHour}:${timestampKey}`;
+};
+
+const countLostCustomers = (sales: LostSale[]) =>
+  new Set(sales.map(lostCustomerKey)).size;
+
 const buildTodayKpis = (orders: DeliveryOrder[], sales: LostSale[], shortages: Shortage[]): OwnerTodayKpis => {
   const direct = orders.filter(isDirectOrder);
   return {
@@ -140,6 +152,7 @@ const buildTodayKpis = (orders: DeliveryOrder[], sales: LostSale[], shortages: S
     talabatOrders: orders.length - direct.length,
     activeBranches: new Set(orders.map(order => order.branchId)).size,
     lostSalesValueBhd: sales.reduce((sum, sale) => sum + Number(sale.totalValue || 0), 0),
+    lostCustomers: countLostCustomers(sales),
     criticalShortages: shortages.filter(shortage => shortage.status === 'Critical' || shortage.status === 'Out of Stock').length
   };
 };
@@ -161,6 +174,7 @@ const buildOverview = (orders: DeliveryOrder[], sales: LostSale[], shortages: Sh
     unknownBlockRate: pct(unknownBlockOrders, direct.length),
     outsideGovernorateRate: pct(outsideGovernorateOrders, direct.length),
     lostSalesValueBhd: sales.reduce((sum, sale) => sum + Number(sale.totalValue || 0), 0),
+    lostCustomers: countLostCustomers(sales),
     noRecoveryLostSales: sales.filter(sale => !sale.alternativeGiven && !sale.internalTransfer).length,
     criticalShortages: shortages.filter(shortage => shortage.status === 'Critical' || shortage.status === 'Out of Stock').length
   };

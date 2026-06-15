@@ -14,14 +14,26 @@ interface SearchableSelectProps {
   placeholder: string;
   disabled?: boolean;
   allowClear?: boolean;
+  dir?: 'ltr' | 'rtl';
+  searchPlaceholder?: string;
+  noMatchesLabel?: string;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
-  options, value, onChange, placeholder, disabled, allowClear = true
+  options,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  allowClear = true,
+  dir = 'ltr',
+  searchPlaceholder = 'Search...',
+  noMatchesLabel = 'No matches'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const isRtl = dir === 'rtl';
 
   const selected = options.find(o => o.value === value) || null;
 
@@ -43,12 +55,12 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   }, []);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative" dir={dir}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(o => !o)}
-        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm font-bold transition-colors ${
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${isRtl ? 'text-right' : 'text-left'} ${
           disabled
             ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
             : isOpen
@@ -73,29 +85,29 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       {isOpen && !disabled && (
         <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           <div className="relative border-b border-slate-100 p-2">
-            <Search className="absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300" />
+            <Search className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300 ${isRtl ? 'right-4' : 'left-4'}`} />
             <input
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search…"
-              className="w-full rounded-md bg-slate-50 py-2 pl-8 pr-3 text-sm font-bold outline-none"
+              placeholder={searchPlaceholder}
+              className={`w-full rounded-md bg-slate-50 py-2 text-sm font-bold outline-none ${isRtl ? 'pl-3 pr-8 text-right' : 'pl-8 pr-3 text-left'}`}
             />
           </div>
           <div className="max-h-52 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="p-3 text-center text-xs font-bold text-slate-400">No matches</p>
+              <p className="p-3 text-center text-xs font-bold text-slate-400">{noMatchesLabel}</p>
             ) : filtered.map(option => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => { onChange(option.value); setIsOpen(false); setQuery(''); }}
-                className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-bold transition-colors hover:bg-brand/5 ${
+                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm font-bold transition-colors hover:bg-brand/5 ${isRtl ? 'text-right' : 'text-left'} ${
                   option.value === value ? 'bg-brand/5 text-brand' : 'text-slate-700'
                 }`}
               >
                 <span className="truncate">{option.label}</span>
-                {option.hint && <span className="ml-2 shrink-0 text-[10px] font-bold text-slate-400">{option.hint}</span>}
+                {option.hint && <span className={`${isRtl ? 'mr-2' : 'ml-2'} shrink-0 text-[10px] font-bold text-slate-400`}>{option.hint}</span>}
               </button>
             ))}
           </div>

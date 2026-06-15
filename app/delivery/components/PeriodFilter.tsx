@@ -6,6 +6,8 @@ interface PeriodFilterProps {
   customFrom: string;
   customTo: string;
   onChange: (preset: PeriodPreset, customFrom?: string, customTo?: string) => void;
+  labels?: Partial<Record<PeriodPreset, string>>;
+  separatorLabel?: string;
 }
 
 const PRESETS: Array<{ id: PeriodPreset; label: string }> = [
@@ -15,7 +17,14 @@ const PRESETS: Array<{ id: PeriodPreset; label: string }> = [
   { id: 'custom', label: 'Custom' }
 ];
 
-export const PeriodFilter: React.FC<PeriodFilterProps> = ({ preset, customFrom, customTo, onChange }) => (
+export const PeriodFilter: React.FC<PeriodFilterProps> = ({
+  preset,
+  customFrom,
+  customTo,
+  onChange,
+  labels,
+  separatorLabel = '→'
+}) => (
   <div className="flex flex-wrap items-center gap-2">
     <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
       {PRESETS.map(p => (
@@ -27,7 +36,7 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({ preset, customFrom, 
             preset === p.id ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          {p.label}
+          {labels?.[p.id] || p.label}
         </button>
       ))}
     </div>
@@ -39,7 +48,7 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({ preset, customFrom, 
           onChange={e => onChange('custom', e.target.value, customTo)}
           className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold outline-none focus:border-brand/40"
         />
-        <span className="text-xs font-bold text-slate-400">→</span>
+        <span className="text-xs font-bold text-slate-400">{separatorLabel}</span>
         <input
           type="date"
           value={customTo}
