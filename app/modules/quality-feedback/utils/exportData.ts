@@ -26,7 +26,7 @@ export const exportToExcel = async (dashboardData: any, fileName: string, questi
       'User ID': r.user_id,
       'Branch': r.branch_name,
       'Department': r.department_name,
-      'Cluster': r.branch_cluster,
+      'Governorate': r.branch_cluster,
       'Experience Range': r.experience_range,
       'Overall Average Score': r.overall_avg,
       'Sentiment Label': r.sentiment_label || 'Not Analyzed',
@@ -94,9 +94,9 @@ export const exportToExcel = async (dashboardData: any, fileName: string, questi
     }));
 
   // --- 5. Heatmap: Weak Areas (Question-level Analysis) ---
-  const questionScores: Record<string, { total: number, count: number, cluster: string }> = {};
+  const questionScores: Record<string, { total: number, count: number, section: string }> = {};
   questions.forEach(q => {
-    questionScores[q.text_en] = { total: 0, count: 0, cluster: q.cluster };
+    questionScores[q.text_en] = { total: 0, count: 0, section: q.section };
   });
 
   raw_responses.forEach((r: any) => {
@@ -115,7 +115,7 @@ export const exportToExcel = async (dashboardData: any, fileName: string, questi
     .filter(([, stats]) => stats.count > 0)
     .map(([text, stats]) => ({
       'Question': text,
-      'Category/Cluster': stats.cluster,
+      'Category': stats.section,
       'Average Score': Number((stats.total / stats.count).toFixed(2)),
       'Sample Size': stats.count
     }))

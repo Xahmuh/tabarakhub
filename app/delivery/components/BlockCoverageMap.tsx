@@ -338,7 +338,10 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
   onOpenMatrix
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
+  const panStartRef = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: MapViewport } | null>(null);
+  const suppressClickRef = useRef(false);
   const [hovered, setHovered] = useState<HoverInfo | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
   const [showBranchMarkers, setShowBranchMarkers] = useState(true);
   const [showServiceRings, setShowServiceRings] = useState(true);
   const [showServedBlocks, setShowServedBlocks] = useState(true);
@@ -506,6 +509,54 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     }));
   };
 
+  const handlePanStart = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    panStartRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      viewport
+    };
+    suppressClickRef.current = false;
+    setIsPanning(true);
+    setHovered(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePanMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    const start = panStartRef.current;
+    if (!start || !mapRef.current || start.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const rect = mapRef.current.getBoundingClientRect();
+    const dx = event.clientX - start.clientX;
+    const dy = event.clientY - start.clientY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      suppressClickRef.current = true;
+    }
+    setViewport(clampViewport({
+      ...start.viewport,
+      x: start.viewport.x - (dx / Math.max(rect.width, 1)) * start.viewport.width,
+      y: start.viewport.y - (dy / Math.max(rect.height, 1)) * start.viewport.height
+    }));
+  };
+
+  const handlePanEnd = (event: React.PointerEvent<SVGSVGElement>) => {
+    const start = panStartRef.current;
+    if (start?.pointerId === event.pointerId) {
+      panStartRef.current = null;
+    }
+    setIsPanning(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (suppressClickRef.current) {
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+  };
+
   const resetViewport = () => {
     setViewport(INITIAL_VIEWPORT);
     setSearchError('');
@@ -599,10 +650,11 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
 
   const emptyOrders = summary.totalOrders === 0;
   const mapSvgClassName = compact
-    ? `${compactMapHeightClass} w-full touch-pan-y`
-    : 'h-auto w-full touch-pan-y';
+    ? `${compactMapHeightClass} w-full touch-none select-none`
+    : 'h-auto w-full touch-none select-none';
 
   const handleHover = (event: React.MouseEvent<SVGPathElement>, row: PathRow) => {
+    if (panStartRef.current) return;
     const rect = mapRef.current?.getBoundingClientRect();
     const block = row.block;
     if (!rect) return;
@@ -802,9 +854,14 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
             <svg
               viewBox={`${viewport.x.toFixed(2)} ${viewport.y.toFixed(2)} ${viewport.width.toFixed(2)} ${viewport.height.toFixed(2)}`}
               className={mapSvgClassName}
+              style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
               role="img"
               aria-label="Bahrain block delivery coverage map"
               onWheel={handleWheelZoom}
+              onPointerDown={handlePanStart}
+              onPointerMove={handlePanMove}
+              onPointerUp={handlePanEnd}
+              onPointerCancel={handlePanEnd}
             >
               <defs>
                 <style>
@@ -857,7 +914,14 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                         : `Block ${row.blockNumber}, no delivery orders`
                     }
                     aria-pressed={interactive ? selected : undefined}
-                    onClick={() => { if (block) onSelect(block); }}
+                    onClick={event => {
+                      if (suppressClickRef.current) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                      }
+                      if (block) onSelect(block);
+                    }}
                     onKeyDown={event => {
                       if (!block) return;
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -887,7 +951,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                               : MAP_BOUNDARY_COLOR,
                       strokeWidth: selected ? 2.2 : highlightedByGovernorate ? 1.8 : hoveredBlock ? 1.45 : 0.8,
                       opacity: dimmedByGovernorate ? 0.32 : 1,
-                      cursor: interactive ? 'pointer' : 'default',
+                      cursor: isPanning ? 'grabbing' : 'grab',
                       filter: selected ? 'url(#selected-block-shadow)' : undefined,
                       transition: 'fill 140ms ease, stroke 140ms ease, stroke-width 140ms ease, opacity 140ms ease, filter 140ms ease'
                     }}

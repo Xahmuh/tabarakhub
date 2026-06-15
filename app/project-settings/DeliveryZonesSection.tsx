@@ -245,7 +245,7 @@ export const DeliveryZonesSection: React.FC<DeliveryZonesSectionProps> = ({ bran
                       {draft.isDeliveryEnabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>
-                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{branch.name}</p>
+                  <p className="mt-1 break-words text-xs font-bold leading-5 text-slate-500">{branch.name}</p>
                 </div>
                 {mapped ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <AlertTriangle className="h-5 w-5 text-amber-500" />}
               </div>

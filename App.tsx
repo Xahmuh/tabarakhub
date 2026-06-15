@@ -14,7 +14,7 @@ import {
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, OwnerDashboardPage
 } from './app/index';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
@@ -26,7 +26,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery';
+type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
@@ -75,7 +75,7 @@ const getRecoverableSpinToken = () => {
 };
 
 const canControlMaintenance = (role?: string | null) =>
-  isManagerRole(role) || role === 'owner';
+  isManagerRole(role);
 
 const storeBranchLoginApprovalRequest = (requestId: string | null) => {
   try {
@@ -166,9 +166,12 @@ const App: React.FC = () => {
 
   const isTabEnabled = (tab: AppTab | null, role = authState.user?.role) => {
     if (!tab || tab === 'selector') return true;
+    if (role === 'owner' && tab !== 'owner-dashboard') return false;
     switch (tab) {
       case 'command-center':
         return true;
+      case 'owner-dashboard':
+        return role === 'owner';
       case 'pos':
         return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role) || canUseFeature('shortages', 'edit', role));
       case 'dashboard':
@@ -187,19 +190,20 @@ const App: React.FC = () => {
       case 'corporate-codex':
         return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role);
       case 'settings':
+      case 'system-settings':
+      case 'access-control':
         return isModuleEnabled('settings') && (
           (isManagerRole(role) && canUseFeature('settings', 'edit', role))
-          || role === 'owner'
           || role === 'admin'
         );
       case 'feedback-form':
         return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role);
       case 'feedback-admin':
-        return isModuleEnabled('qualityFeedback') && (isManagerRole(role) || role === 'owner') && canUseFeature('quality_feedback', 'read', role);
+        return isModuleEnabled('qualityFeedback') && isManagerRole(role) && canUseFeature('quality_feedback', 'read', role);
       case 'employee-contributions':
         return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role);
       case 'block-analyzer':
-        return (isManagerRole(role) || role === 'owner') && canUseFeature('block_analyzer', 'read', role);
+        return isManagerRole(role) && canUseFeature('block_analyzer', 'read', role);
       case 'delivery':
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
       default:
@@ -271,8 +275,8 @@ const App: React.FC = () => {
     setIsMaintenanceAdminLoginOpen(false);
 
     if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(user.role) && isModuleEnabled('settings')) {
-      sessionStorage.setItem('tabarak_active_tab', 'settings');
-      startTransition(() => setActiveTab('settings'));
+      sessionStorage.setItem('tabarak_active_tab', 'system-settings');
+      startTransition(() => setActiveTab('system-settings'));
     } else {
       handleTabChange('selector');
     }
@@ -773,6 +777,8 @@ const App: React.FC = () => {
         </div>
         {activeTab === 'command-center' ? (
           <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
+        ) : activeTab === 'owner-dashboard' ? (
+          <OwnerDashboardPage user={authState.user!} onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'pos' ? (
           <POSPage branch={activePOSBranch || authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
         ) : activeTab === 'spin-win' ? (
@@ -818,6 +824,10 @@ const App: React.FC = () => {
           />
         ) : activeTab === 'settings' ? (
           <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
+        ) : activeTab === 'system-settings' ? (
+          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="system" />
+        ) : activeTab === 'access-control' ? (
+          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="access" />
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (

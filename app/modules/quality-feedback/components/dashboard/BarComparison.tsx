@@ -11,7 +11,7 @@ const COLORS = ['#0F172A', '#1E293B', '#334155', '#475569', '#64748B'];
 export const BarComparison: React.FC<Props> = ({ data, isLoading }) => {
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-[350px] flex flex-col">
-      <h3 className="text-lg font-black text-slate-900 mb-6 tracking-tight">By Cluster</h3>
+      <h3 className="text-lg font-black text-slate-900 mb-6 tracking-tight">By Governorate</h3>
       <div className="flex-1">
         {isLoading ? (
           <div className="w-full h-full bg-slate-50 rounded-xl animate-pulse" />

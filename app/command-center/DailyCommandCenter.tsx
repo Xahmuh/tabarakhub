@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
-  AlertTriangle,
   Activity,
-  Building2,
   CheckCircle2,
   Clock,
   Download,
@@ -10,7 +8,6 @@ import {
   ListChecks,
   PackageX,
   RefreshCcw,
-  ShieldCheck,
   ClipboardList,
   TrendingDown
 } from 'lucide-react';
@@ -19,7 +16,7 @@ import { BackToModulesButton } from '../shared';
 import { useCommandCenterSummary } from './useCommandCenterSummary';
 import { operationsTaskService } from './operationsTaskService';
 import { exportYesterdayLostSales, exportYesterdayOperationsPack, exportYesterdayShortages } from './yesterdayExports';
-import { ActionQueueItem, ActionQueueStatus, BranchHealthStatus, CommandCenterSeverity, CommandCenterSourceModule, TodayRisk } from './types';
+import { ActionQueueItem, ActionQueueStatus, CommandCenterSeverity, CommandCenterSourceModule } from './types';
 import { isManagerRole } from '../../lib/access';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { BranchCoverageMapWidget } from './BranchCoverageMapWidget';
@@ -34,14 +31,6 @@ const severityClasses: Record<CommandCenterSeverity, string> = {
   high: 'bg-amber-50 text-amber-700 border-amber-100',
   medium: 'bg-blue-50 text-blue-700 border-blue-100',
   low: 'bg-emerald-50 text-emerald-700 border-emerald-100'
-};
-
-const healthClasses: Record<BranchHealthStatus, string> = {
-  healthy: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  watch: 'bg-blue-50 text-blue-700 border-blue-100',
-  risk: 'bg-amber-50 text-amber-700 border-amber-100',
-  critical: 'bg-red-50 text-red-700 border-red-100',
-  insufficient_data: 'bg-slate-50 text-slate-600 border-slate-200'
 };
 
 const sourceToTab: Partial<Record<CommandCenterSourceModule, string>> = {
@@ -138,10 +127,31 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
   const canCreateTasks = canManageTasks;
   const digest = summary.yesterdayDigest;
   const isBranchUser = user?.role === 'branch';
-  const activeRiskCount = summary.todaysRisks.length;
+  const showDeliveryMap = Boolean(user && isModuleEnabled('delivery'));
   const activeActionCount = summary.actionQueue.filter(action => action.status === 'open' || action.status === 'in_progress').length;
-  const savedTaskCount = summary.operationsTasks.length;
-  const watchedBranchCount = summary.branchHealth.filter(branch => branch.status !== 'healthy' && branch.status !== 'insufficient_data').length;
+  const criticalSignalCount = (digest?.criticalShortageCount || 0) + (digest?.outOfStockCount || 0);
+  const recoveryFocusItems = [
+    ...(digest?.topLostItems || []).map(item => ({
+      id: `lost-${item.name}`,
+      type: 'Lost sales',
+      name: item.name,
+      metric: formatBhd(item.value || 0),
+      detail: `${formatCount(item.count)} units lost yesterday`,
+      reason: 'Recover demand',
+      tone: 'border-brand/10 bg-brand/5 text-brand'
+    })),
+    ...(digest?.topShortageItems || []).map(item => ({
+      id: `shortage-${item.name}`,
+      type: 'Shortage',
+      name: item.name,
+      metric: item.status || 'Shortage',
+      detail: `${formatCount(item.count)} shortage reports yesterday`,
+      reason: item.status === 'Out of Stock' ? 'Urgent stock action' : 'Stock follow-up',
+      tone: item.status === 'Out of Stock'
+        ? 'border-red-100 bg-red-50 text-red-700'
+        : 'border-amber-100 bg-amber-50 text-amber-700'
+    }))
+  ].slice(0, 6);
 
   const canUpdateSavedTask = (action: ActionQueueItem) => {
     if (!action.taskId) return false;
@@ -196,11 +206,19 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
     }
   };
 
-  const handleCreateTask = async (risk: TodayRisk) => {
-    const alert = summary.alerts.find(item => item.id === risk.id);
+  const handleCreateTaskFromAction = async (action: ActionQueueItem) => {
+    const alert = summary.alerts.find(item =>
+      item.id === action.relatedAlertId
+      || (
+        item.sourceModule === action.sourceModule
+        && item.title === action.title
+        && (item.relatedRecordId || null) === (action.relatedRecordId || null)
+        && (item.relatedRecordType || null) === (action.relatedRecordType || null)
+      )
+    );
     if (!alert) return;
 
-    setBusyId(`create-${risk.id}`);
+    setBusyId(`create-${action.id}`);
     setNotice(null);
     try {
       const task = await operationsTaskService.createTaskFromAlert(alert);
@@ -249,7 +267,7 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Operations module</p>
                 <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Daily Command Center</h2>
                 <p className="mt-1 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
-                  Risks, saved tasks, branch health, and pending work in one control view.
+                  Morning brief for yesterday performance, delivery coverage, and the few actions worth following today.
                 </p>
               </div>
             </div>
@@ -272,32 +290,32 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
         </div>
         <div className="grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-4">
           <CommandMetric
-            label="Active risks"
-            value={activeRiskCount}
-            detail={`${summary.alerts.length} total alerts`}
-            icon={<AlertTriangle className="h-4 w-4" />}
-            tone={activeRiskCount > 0 ? 'red' : 'emerald'}
+            label="Yesterday lost sales"
+            value={formatCount(digest?.lostSalesCount || 0)}
+            detail={formatBhd(digest?.lostSalesValue || 0)}
+            icon={<TrendingDown className="h-4 w-4" />}
+            tone={(digest?.lostSalesCount || 0) > 0 ? 'red' : 'emerald'}
           />
           <CommandMetric
-            label="Pending actions"
-            value={activeActionCount}
-            detail={`${summary.actionQueue.length} in queue`}
-            icon={<ClipboardList className="h-4 w-4" />}
-            tone={activeActionCount > 0 ? 'amber' : 'emerald'}
+            label="Yesterday shortages"
+            value={formatCount(digest?.shortageCount || 0)}
+            detail={`${formatCount(criticalSignalCount)} critical signals`}
+            icon={<PackageX className="h-4 w-4" />}
+            tone={criticalSignalCount > 0 ? 'amber' : 'slate'}
           />
           <CommandMetric
-            label="Saved tasks"
-            value={savedTaskCount}
-            detail="Persisted follow-up"
+            label="Recovery focus"
+            value={recoveryFocusItems.length}
+            detail="top items to recover"
             icon={<ListChecks className="h-4 w-4" />}
             tone="brand"
           />
           <CommandMetric
-            label="Branch watch"
-            value={watchedBranchCount}
-            detail={`${summary.branchHealth.length} branches scored`}
-            icon={<Building2 className="h-4 w-4" />}
-            tone={watchedBranchCount > 0 ? 'amber' : 'slate'}
+            label="Operations inbox"
+            value={activeActionCount}
+            detail={`${summary.actionQueue.length} total items`}
+            icon={<ClipboardList className="h-4 w-4" />}
+            tone={activeActionCount > 0 ? 'amber' : 'emerald'}
           />
         </div>
       </div>
@@ -314,12 +332,8 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
         </div>
       )}
 
-      {user && isModuleEnabled('delivery') && (
-        <BranchCoverageMapWidget user={user} onOpenDelivery={() => onNavigate?.('delivery')} />
-      )}
-
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className={`${showDeliveryMap ? 'xl:col-span-5' : 'xl:col-span-12'} rounded-lg border border-slate-200 bg-white p-5 shadow-sm`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-brand">
@@ -391,159 +405,109 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
               {exportBusy === 'pack' ? 'Preparing...' : 'Day pack'}
             </button>
           </div>
-        </div>
 
-        <div className="xl:col-span-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-black text-slate-700">Recovery shortlist</h4>
-              <ListChecks className="h-4 w-4 text-slate-300" />
-            </div>
-            <div className="mt-4 space-y-3">
-              {(digest?.topLostItems || []).length > 0 ? (
-                digest!.topLostItems.map(item => (
-                  <div key={item.name} className="rounded-lg border border-slate-200 bg-white p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-black text-slate-900">{item.name}</p>
-                      <span className="rounded-md bg-brand/10 px-2 py-1 text-[10px] font-black text-brand">{formatBhd(item.value || 0)}</span>
-                    </div>
-                    <p className="mt-1 text-[11px] font-bold text-slate-400">{formatCount(item.count)} units lost yesterday</p>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm font-bold text-slate-400">
-                  No lost-sale drivers were recorded yesterday.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-sm font-black text-slate-700">Quick actions</h4>
-              <ShieldCheck className="h-4 w-4 text-slate-300" />
-            </div>
-            <div className="mt-4 space-y-3">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={openYesterdayDashboard}
-                className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/5 focus-ring"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors hover:border-brand/30 hover:bg-brand/5 focus-ring"
               >
-                <p className="text-sm font-black text-slate-900">Open yesterday performance</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Review dashboard with the yesterday filter pre-selected.</p>
+                <p className="text-xs font-black uppercase tracking-widest text-slate-700">Open yesterday performance</p>
               </button>
               {isBranchUser && (
                 <button
                   type="button"
                   onClick={() => onNavigate?.('pos')}
-                  className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition-colors hover:border-brand/30 hover:bg-brand/5 focus-ring"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors hover:border-brand/30 hover:bg-brand/5 focus-ring"
                 >
-                  <p className="text-sm font-black text-slate-900">Log today's lost sales or shortage</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">Jump straight to branch entry without leaving the daily flow.</p>
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-700">Log today's lost sales or shortage</p>
                 </button>
               )}
-              {(digest?.topShortageItems || []).slice(0, 2).map(item => (
-                <div key={item.name} className="rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-black text-slate-900">{item.name}</p>
-                    <span className="rounded-md bg-red-50 px-2 py-1 text-[10px] font-black text-red-700">{item.status || 'Shortage'}</span>
+          </div>
+        </div>
+
+        {showDeliveryMap && (
+          <div className="xl:col-span-7">
+            <BranchCoverageMapWidget user={user} onOpenDelivery={() => onNavigate?.('delivery')} />
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+              <ListChecks className="h-4 w-4" />
+              Yesterday recovery focus
+            </div>
+            <h4 className="mt-2 text-xl font-black tracking-tight text-slate-950">Items worth recovering first</h4>
+            <p className="mt-1.5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+              Top lost-demand and shortage signals from yesterday, reduced to a short working list.
+            </p>
+          </div>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            {recoveryFocusItems.length} focus items
+          </span>
+        </div>
+
+        <div className="mt-4">
+          {isLoading ? (
+            <div className="h-28 rounded-lg bg-slate-100 animate-pulse" />
+          ) : recoveryFocusItems.length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {recoveryFocusItems.map(item => (
+                <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${item.tone}`}>
+                      {item.type}
+                    </span>
+                    <span className="rounded-md bg-white px-2 py-1 text-[10px] font-black text-slate-700 shadow-sm">
+                      {item.metric}
+                    </span>
                   </div>
-                  <p className="mt-1 text-[11px] font-bold text-slate-400">{formatCount(item.count)} shortage reports yesterday</p>
+                  <p className="text-sm font-black leading-5 text-slate-950">{item.name}</p>
+                  <p className="mt-2 text-xs font-bold text-slate-500">{item.detail}</p>
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-brand">{item.reason}</p>
                 </div>
               ))}
             </div>
-          </div>
+          ) : (
+            <EmptyState title="No recovery focus" detail="Yesterday has no lost-sales or shortage signals in this scope." />
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        <div className="xl:col-span-4 operational-panel p-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h4 className="text-sm font-black text-slate-800">Today's Risks</h4>
-              <p className="mt-1 text-xs font-medium text-slate-500">Signals that need operational attention today.</p>
+      <div className="operational-panel p-4 md:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+              <ClipboardList className="h-4 w-4" />
+              Operations inbox
             </div>
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-black text-slate-500">{summary.alerts.length}</span>
+            <h4 className="mt-2 text-xl font-black tracking-tight text-slate-950">Open work that needs a decision</h4>
+            <p className="mt-1.5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+              Saved tasks and suggested alerts are merged here so the daily page has one action list.
+            </p>
           </div>
-          <div className="space-y-3">
-            {isLoading ? (
-              <div className="h-28 rounded-lg bg-slate-100 animate-pulse" />
-            ) : summary.todaysRisks.length > 0 ? (
-              summary.todaysRisks.slice(0, 5).map(risk => (
-                <div
-                  key={risk.id}
-                  className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-brand/30 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
-                          {sourceLabels[risk.sourceModule]}
-                        </span>
-                        {risk.branchName && (
-                          <span className="text-[10px] font-bold text-slate-400">{risk.branchName}</span>
-                        )}
-                      </div>
-                      <p className="text-sm font-black text-slate-900">{risk.title || risk.riskType}</p>
-                      <p className="text-xs font-medium text-slate-500 mt-1">{risk.message}</p>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase ${severityClasses[risk.severity]}`}>
-                      {risk.severity}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-[11px] font-bold text-slate-500">Next: {risk.recommendedAction}</p>
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-slate-400">{risk.ownerRole || risk.owner || 'Owner not assigned'}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => openModule(risk.sourceModule)}
-                      className="btn-secondary px-3 py-2 text-xs"
-                    >
-                      Open
-                    </button>
-                    {canCreateTasks && (
-                      <button
-                        onClick={() => handleCreateTask(risk)}
-                        disabled={busyId === `create-${risk.id}`}
-                        className="btn-primary px-3 py-2 text-xs"
-                      >
-                        {busyId === `create-${risk.id}` ? 'Saving...' : 'Create task'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState title="No active risks" detail="No shortage, cash, or HR risk signals are currently open." />
-            )}
-          </div>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
+            {activeActionCount} active
+          </span>
         </div>
 
-        <div className="xl:col-span-4 operational-panel p-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h4 className="text-sm font-black text-slate-800">Pending Actions</h4>
-              <p className="mt-1 text-xs font-medium text-slate-500">Saved tasks and suggested follow-up work.</p>
-            </div>
-            <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
-              <ClipboardList className="h-4 w-4" />
-            </span>
-          </div>
-          <div className="space-y-3">
-            {isLoading ? (
-              <div className="h-28 rounded-lg bg-slate-100 animate-pulse" />
-            ) : summary.actionQueue.length > 0 ? (
-              summary.actionQueue.slice(0, 5).map(action => {
-                const canUpdateStatus = canUpdateSavedTask(action);
-                const actionStatusOptions = getStatusOptions(action);
-                return (
-                  <div
-                    key={action.id}
-                    className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-brand/30 transition-colors"
-                  >
-                  <div className="flex items-center justify-between gap-3">
+        {isLoading ? (
+          <div className="h-32 rounded-lg bg-slate-100 animate-pulse" />
+        ) : summary.actionQueue.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {summary.actionQueue.slice(0, 8).map(action => {
+              const canUpdateStatus = canUpdateSavedTask(action);
+              const actionStatusOptions = getStatusOptions(action);
+              const canSaveSuggestedAction = canCreateTasks && action.queueSource !== 'saved_task';
+              return (
+                <div key={action.id} className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-brand/30">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase ${action.queueSource === 'saved_task' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-                        {action.queueSource === 'saved_task' ? 'saved task' : 'suggested only'}
+                        {action.queueSource === 'saved_task' ? 'saved task' : 'suggested'}
                       </span>
                       <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase ${severityClasses[action.priority]}`}>
                         {action.priority}
@@ -556,21 +520,28 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
                       {action.status}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm font-black text-slate-900">{action.title}</p>
-                  <p className="mt-2 text-xs font-medium text-slate-500">{action.nextStep}</p>
-                  <div className="mt-3 flex items-center gap-3 text-[11px] font-bold text-slate-400">
-                    <Clock className="w-3.5 h-3.5" />
+                  <p className="mt-3 text-sm font-black text-slate-950">{action.title}</p>
+                  <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{action.nextStep}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-bold text-slate-400">
+                    <Clock className="h-3.5 w-3.5" />
                     <span>{formatTime(action.createdAt)}</span>
                     {action.branchName && <span>{action.branchName}</span>}
                     {(action.ownerRole || action.owner) && <span>{action.ownerRole || action.owner}</span>}
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => openModule(action.sourceModule)}
-                      className="btn-secondary px-3 py-2 text-xs"
-                    >
-                      Open
+                    <button type="button" onClick={() => openModule(action.sourceModule)} className="btn-secondary px-3 py-2 text-xs">
+                      Open source
                     </button>
+                    {canSaveSuggestedAction && (
+                      <button
+                        type="button"
+                        onClick={() => handleCreateTaskFromAction(action)}
+                        disabled={busyId === `create-${action.id}`}
+                        className="btn-primary px-3 py-2 text-xs"
+                      >
+                        {busyId === `create-${action.id}` ? 'Saving...' : 'Save task'}
+                      </button>
+                    )}
                     {canUpdateStatus && (
                       <select
                         aria-label="Update task status"
@@ -587,85 +558,11 @@ export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, on
                   </div>
                 </div>
               );
-            })
-            ) : (
-              <EmptyState title="Action queue is clear" detail="No open operational actions were found from enabled modules." />
-            )}
+            })}
           </div>
-        </div>
-
-        <div className="xl:col-span-4 grid grid-cols-1 gap-4">
-          <div className="operational-panel p-4">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-sm font-black text-slate-800">Branch Health</h4>
-                <p className="mt-1 text-xs font-medium text-slate-500">Branch-level status across visible signals.</p>
-              </div>
-              <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
-                <Building2 className="h-4 w-4" />
-              </span>
-            </div>
-            {isLoading ? (
-              <div className="h-24 rounded-lg bg-slate-100 animate-pulse" />
-            ) : summary.branchHealth.length > 0 ? (
-              <div className="space-y-3">
-                {summary.branchHealth.slice(0, 4).map(branch => (
-                  <div key={branch.branchId} className="rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-black text-slate-900">{branch.branchName}</p>
-                      <span className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase ${healthClasses[branch.status]}`}>
-                        {branch.status === 'insufficient_data' ? 'insufficient data' : `${branch.score} ${branch.status}`}
-                      </span>
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      {branch.topReasons.slice(0, 3).map(reason => (
-                        <p key={reason} className="text-xs font-medium text-slate-500">- {reason}</p>
-                      ))}
-                    </div>
-                    {branch.hasSufficientData && (
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {branch.riskCount} alerts, {branch.pendingCount} action items
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Branch health is stable" detail="No branch-specific signals require attention right now." />
-            )}
-          </div>
-
-          <div className="operational-panel p-4">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-sm font-black text-slate-800">Pending Items</h4>
-                <p className="mt-1 text-xs font-medium text-slate-500">Module shortcuts with unresolved work.</p>
-              </div>
-              <span className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-300">
-                <ShieldCheck className="h-4 w-4" />
-              </span>
-            </div>
-            {summary.pendingItems.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">
-                {summary.pendingItems.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => sourceToTab[item.sourceModule] && onNavigate?.(sourceToTab[item.sourceModule])}
-                    className="rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-brand/30 transition-colors focus-ring"
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-black text-slate-500 uppercase tracking-wider">{item.label}</p>
-                      <AlertTriangle className="w-4 h-4 text-slate-300" />
-                    </div>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{item.count}</p>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="No pending items" detail="Enabled modules are not reporting pending work." />
-            )}
-          </div>
-        </div>
+        ) : (
+          <EmptyState title="Operations inbox is clear" detail="No saved tasks or suggested actions were found from enabled modules." />
+        )}
       </div>
       {statusDialog && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">

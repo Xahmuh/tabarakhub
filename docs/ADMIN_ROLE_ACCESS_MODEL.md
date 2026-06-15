@@ -12,10 +12,33 @@ Operational branch records should remain in `public.branches` only with `role = 
 Supported admin-panel roles:
 
 - Admin
+- Owner / Read-only Executive
 - Branch
 - Supervisor
 - Warehouse
 - Accounts
+
+## Owner Role Reconciliation - 2026-06-15
+
+Current business decision:
+
+```text
+Admin = full-control project admin
+Owner = read-only executive dashboard role
+Manager = legacy alias only
+Branch / Supervisor / Warehouse / Accounts = existing operational roles
+```
+
+Local code now includes `owner` as an assignable Settings UI role with the label `Owner / Read-only Executive`.
+
+Owner is deliberately not an admin-equivalent role:
+
+- Owner can open the Owner Dashboard only.
+- Owner cannot open Settings, Users & Roles, branch-login approval controls, POS, delivery recording, or standard admin dashboards.
+- Owner cannot create/update/delete operational records through normal app navigation.
+- Owner feature access is capped in `lib/access.ts` so accidental `edit` defaults resolve to read-only.
+- Owner provisioning on the linked project remains blocked until `20260615023000_owner_readonly_dashboard_hardening.sql` is applied.
+- Current live RLS still includes older owner write/control helpers and a legacy broad `public.branches` update policy; the pending owner hardening migration now removes those owner-facing gaps.
 
 ## Applied Migrations
 
@@ -82,7 +105,7 @@ Admin accounts are protected from admin-panel suspension, demotion, user-level p
 
 The local `admin-delete-user` Edge Function rejects admin/legacy-manager targets. The admin role assignment RPC rejects attempts to demote or suspend admin/legacy-manager profiles.
 
-The local `admin-create-user` Edge Function and Access Control UI now force newly created Admin users to be active.
+The local `admin-create-user` Edge Function now accepts Owner as an assignable role and the Access Control UI forces newly created Admin users to be active. Owner creation/provisioning must wait for the owner RLS hardening migration before use on the linked project.
 
 ## Remaining Data Blocker
 

@@ -8,8 +8,8 @@ import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
 import { isModuleEnabled } from '../../config/clientConfig';
 
-const ASSIGNABLE_ROLES: Role[] = ['admin', 'branch', 'supervisor', 'warehouse', 'accounts'];
-const MODULE_LAYOUT_ROLES: Role[] = ['admin', 'supervisor', 'warehouse', 'accounts', 'branch'];
+const ASSIGNABLE_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts'];
+const MODULE_LAYOUT_ROLES: Role[] = ['admin', 'owner', 'supervisor', 'warehouse', 'accounts', 'branch'];
 
 const FEATURE_LABELS = getEnabledAccessFeatures().map(({ id, label }) => ({ id, label }));
 
@@ -21,6 +21,19 @@ const accessBadgeClass = (level: 'none' | 'read' | 'edit') =>
         : level === 'read'
             ? 'border-blue-200 bg-blue-50 text-blue-700'
             : 'border-slate-200 bg-slate-50 text-slate-400';
+
+const roleBadgeClass = (role: Role) =>
+    role === 'admin' || role === 'manager'
+        ? 'border-brand/15 bg-brand/5 text-brand'
+        : role === 'owner'
+            ? 'border-violet-200 bg-violet-50 text-violet-700'
+            : role === 'supervisor'
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : role === 'warehouse'
+                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                    : role === 'accounts'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-700';
 
 const escapeHtml = (value: string | null | undefined) =>
     String(value || '')
@@ -372,10 +385,12 @@ export const AccessControlSection: React.FC<{
                   <div class="space-y-2 text-left">
                     <p class="text-xs font-semibold leading-5 text-slate-500">
                       Leave a module on Role default to inherit the role matrix. Pick None, Read, or Edit to override this user only.
+                      Owner users are capped at Read because Owner is a read-only executive role.
                     </p>
                     <div class="max-h-[420px] space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
                       ${FEATURE_LABELS.map(feature => {
                         const selected = byFeature.get(feature.id) || '';
+                        const isOwnerUser = user.role === 'owner';
                         return `
                           <label class="grid grid-cols-[1fr_120px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
                             <span class="text-sm font-bold text-slate-700">${escapeHtml(feature.label)}</span>
@@ -383,7 +398,7 @@ export const AccessControlSection: React.FC<{
                               <option value="" ${selected === '' ? 'selected' : ''}>Role default</option>
                               <option value="none" ${selected === 'none' ? 'selected' : ''}>None</option>
                               <option value="read" ${selected === 'read' ? 'selected' : ''}>Read</option>
-                              <option value="edit" ${selected === 'edit' ? 'selected' : ''}>Edit</option>
+                              ${isOwnerUser ? '' : `<option value="edit" ${selected === 'edit' ? 'selected' : ''}>Edit</option>`}
                             </select>
                           </label>
                         `;
@@ -435,6 +450,7 @@ export const AccessControlSection: React.FC<{
 
         const buildLayoutForRole = (role: Role): RoleModuleLayoutItem[] => {
             const isManager = role === 'admin' || role === 'manager';
+            const isOwner = role === 'owner';
             const isWarehouse = role === 'warehouse';
             const isSupervisor = role === 'supervisor';
             const canUseSales = isModuleEnabled('sales');
@@ -452,9 +468,16 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'pos',
                     title: MODULE_DISPLAY_LABELS.pos,
-                    visible: canUseSales && !isWarehouse && (hasAccess(role, 'lost_sales', 'edit') || hasAccess(role, 'shortages', 'edit')),
+                    visible: canUseSales && !isWarehouse && !isOwner && (hasAccess(role, 'lost_sales', 'edit') || hasAccess(role, 'shortages', 'edit')),
                     access: hasAccess(role, 'lost_sales', 'edit') || hasAccess(role, 'shortages', 'edit') ? 'edit' : 'none',
                     reason: 'Needs edit access to Lost Sales or Shortages.'
+                },
+                {
+                    key: 'owner-dashboard',
+                    title: MODULE_DISPLAY_LABELS['owner-dashboard'],
+                    visible: isOwner,
+                    access: 'read',
+                    reason: 'Owner read-only executive dashboard.'
                 },
                 {
                     key: 'dashboard-manager',
@@ -480,7 +503,7 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'dashboard-branch',
                     title: MODULE_DISPLAY_LABELS['dashboard-branch'],
-                    visible: !isManager && !isWarehouse && canOpenDashboard && (hasAccess(role, 'lost_sales') || hasAccess(role, 'shortages')),
+                    visible: !isManager && !isOwner && !isWarehouse && canOpenDashboard && (hasAccess(role, 'lost_sales') || hasAccess(role, 'shortages')),
                     access: hasAccess(role, 'lost_sales') || hasAccess(role, 'shortages') ? 'read' : 'none',
                     reason: 'Branch-style dashboard needs read access to Lost Sales or Shortages.'
                 },
@@ -501,42 +524,49 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'cash-flow',
                     title: MODULE_DISPLAY_LABELS['cash-flow'],
-                    visible: isModuleEnabled('cashFlow') && hasAccess(role, 'cash_flow'),
+                    visible: !isOwner && isModuleEnabled('cashFlow') && hasAccess(role, 'cash_flow'),
                     access: getDefault(role, 'cash_flow'),
                     reason: 'Needs Cash Flow access.'
                 },
                 {
                     key: 'cash-tracker',
                     title: MODULE_DISPLAY_LABELS['cash-tracker'],
-                    visible: !isManager && isModuleEnabled('cashTracker') && hasAccess(role, 'cash_tracker'),
+                    visible: !isManager && !isOwner && isModuleEnabled('cashTracker') && hasAccess(role, 'cash_tracker'),
                     access: getDefault(role, 'cash_tracker'),
                     reason: 'Needs Branch Cash Tracker access.'
                 },
                 {
                     key: 'corporate-codex',
                     title: MODULE_DISPLAY_LABELS['corporate-codex'],
-                    visible: isModuleEnabled('corporateCodex') && hasAccess(role, 'corporate_codex'),
+                    visible: !isOwner && isModuleEnabled('corporateCodex') && hasAccess(role, 'corporate_codex'),
                     access: getDefault(role, 'corporate_codex'),
                     reason: 'Needs Corporate Codex access.'
                 },
                 {
-                    key: 'settings',
-                    title: MODULE_DISPLAY_LABELS.settings,
+                    key: 'system-settings',
+                    title: MODULE_DISPLAY_LABELS['system-settings'],
                     visible: isModuleEnabled('settings') && isManager,
                     access: isManager ? 'edit' : getDefault(role, 'settings'),
-                    reason: 'Admin settings and branch-login approval control.'
+                    reason: 'System settings, branding, module layout, and branch setup control.'
+                },
+                {
+                    key: 'access-control',
+                    title: MODULE_DISPLAY_LABELS['access-control'],
+                    visible: isModuleEnabled('settings') && isManager,
+                    access: isManager ? 'edit' : getDefault(role, 'settings'),
+                    reason: 'Users, roles, branch permissions, and login approval control.'
                 },
                 {
                     key: 'spin-win',
                     title: isManager ? 'Reward Control' : MODULE_DISPLAY_LABELS['spin-win'],
-                    visible: isModuleEnabled('spinWin') && hasAccess(role, 'spin_win'),
+                    visible: !isOwner && isModuleEnabled('spinWin') && hasAccess(role, 'spin_win'),
                     access: getDefault(role, 'spin_win'),
                     reason: 'Needs Spin & Win access.'
                 },
                 {
                     key: 'feedback-form',
                     title: MODULE_DISPLAY_LABELS['feedback-form'],
-                    visible: isModuleEnabled('qualityFeedback') && hasAccess(role, 'quality_feedback'),
+                    visible: !isOwner && isModuleEnabled('qualityFeedback') && hasAccess(role, 'quality_feedback'),
                     access: getDefault(role, 'quality_feedback'),
                     reason: 'Needs Quality Feedback access.'
                 },
@@ -550,14 +580,14 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'employee-contributions',
                     title: MODULE_DISPLAY_LABELS['employee-contributions'],
-                    visible: isModuleEnabled('employeeContributions') && hasAccess(role, 'employee_contributions'),
+                    visible: !isOwner && isModuleEnabled('employeeContributions') && hasAccess(role, 'employee_contributions'),
                     access: getDefault(role, 'employee_contributions'),
                     reason: 'Needs Team Contributions access.'
                 },
                 {
                     key: 'delivery',
                     title: MODULE_DISPLAY_LABELS.delivery,
-                    visible: isModuleEnabled('delivery') && hasAccess(role, 'delivery'),
+                    visible: !isOwner && isModuleEnabled('delivery') && hasAccess(role, 'delivery'),
                     access: getDefault(role, 'delivery'),
                     reason: 'None disables delivery, Read shows overview/map, Edit allows delivery recording.'
                 },
@@ -571,7 +601,7 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'command-center',
                     title: MODULE_DISPLAY_LABELS['command-center'],
-                    visible: hasAccess(role, 'command_center'),
+                    visible: !isOwner && hasAccess(role, 'command_center'),
                     access: getDefault(role, 'command_center'),
                     reason: 'Needs Daily Command Center access.'
                 }
@@ -594,7 +624,8 @@ export const AccessControlSection: React.FC<{
     const cycleDefault = async (role: Role, feature: string) => {
         if (role === 'admin' || role === 'manager') return; // admin always has full access
         const current = getDefault(role, feature);
-        const next = ACCESS_CYCLE[(ACCESS_CYCLE.indexOf(current) + 1) % ACCESS_CYCLE.length];
+        const cycle = role === 'owner' ? (['none', 'read'] as Array<'none' | 'read' | 'edit'>) : ACCESS_CYCLE;
+        const next = cycle[(cycle.indexOf(current) + 1) % cycle.length] || 'none';
         setSavingKey(`${role}:${feature}`);
         try {
             await permissionService.upsertRoleDefault({ role, featureName: feature, accessLevel: next });
@@ -613,6 +644,11 @@ export const AccessControlSection: React.FC<{
             setSavingKey(null);
         }
     };
+
+    const activeUserCount = users.filter(user => user.isActive).length;
+    const disabledUserCount = users.length - activeUserCount;
+    const branchLoginCount = users.filter(user => user.role === 'branch').length;
+    const supervisorLoginCount = users.filter(user => user.role === 'supervisor').length;
 
     if (isLoading) {
         return (
@@ -656,13 +692,195 @@ export const AccessControlSection: React.FC<{
             </div>
 
             {view === 'users' ? (
-                <div className="space-y-3">
-                    <p className="text-sm font-medium text-slate-500">
-                        Assign each login a role. Supervisors must be linked to the branches they oversee; branch logins must be linked to one branch.
-                        Admins can create, suspend, delete, and permission user accounts here; temporary passwords are shown only while you type them.
-                    </p>
+                <div className="space-y-5">
+                    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-brand/5 text-brand">
+                                    <UserCog className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Workspace access</p>
+                                    <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Users & Roles</h3>
+                                    <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+                                        Assign login roles, connect branch users to one branch, and keep supervisor branch scopes visible without hunting through a dense table.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[440px]">
+                                {[
+                                    { label: 'Users', value: users.length, tone: 'text-slate-900' },
+                                    { label: 'Active', value: activeUserCount, tone: 'text-emerald-700' },
+                                    { label: 'Branch', value: branchLoginCount, tone: 'text-brand' },
+                                    { label: 'Supervisors', value: supervisorLoginCount, tone: 'text-blue-700' }
+                                ].map(stat => (
+                                    <div key={stat.label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
+                                        <p className={`mt-1 text-xl font-black tabular-nums ${stat.tone}`}>{stat.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        {disabledUserCount > 0 && (
+                            <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800">
+                                {disabledUserCount} disabled login{disabledUserCount === 1 ? '' : 's'} are currently blocked from accessing the dashboard.
+                            </div>
+                        )}
+                    </section>
+
+                    {users.length === 0 ? (
+                        <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                            <UserCog className="mx-auto h-9 w-9 text-slate-300" />
+                            <p className="mt-3 text-sm font-black text-slate-800">No login users found</p>
+                            <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Create the first login user to start assigning roles and branch scopes.</p>
+                        </section>
+                    ) : (
+                        <section className="min-w-0 space-y-4">
+                            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Identity roster</p>
+                                    <h4 className="mt-1 text-base font-black tracking-tight text-slate-950">Login accounts</h4>
+                                </div>
+                                <span className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 sm:w-fit">
+                                    {users.length} account{users.length === 1 ? '' : 's'}
+                                </span>
+                            </div>
+
+                            <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-2">
+                                {users.map(user => {
+                                    const isSelf = user.userId === currentUserId;
+                                    const isSaving = savingKey === user.userId;
+                                    const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
+                                    const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
+                                    const supervisorBranchIds = supervisorAssignments[user.userId] || [];
+                                    const assignedBranches = branchOptions.filter(branch => supervisorBranchIds.includes(branch.id));
+                                    const scopeSummary = user.role === 'branch'
+                                        ? (user.branchName || 'No branch linked')
+                                        : user.role === 'supervisor'
+                                            ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
+                                            : 'All branches';
+                                    const scopeDetail = user.role === 'branch'
+                                        ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
+                                        : user.role === 'supervisor'
+                                            ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 4).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
+                                            : 'Cross-branch visibility follows this role.';
+                                    const roleLocked = isSelf || isSaving || isProtectedAdmin;
+
+                                    return (
+                                        <article key={`roster-${user.userId}`} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/30 hover:shadow-md hover:shadow-brand/5">
+                                            <div className="border-b border-slate-100 bg-slate-50/80 p-3 sm:p-4">
+                                                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-white text-sm font-black uppercase text-brand shadow-sm sm:h-11 sm:w-11">
+                                                            {user.email.slice(0, 2)}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="break-all text-sm font-black leading-5 text-slate-950">{user.email}</p>
+                                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${roleBadgeClass(user.role)}`}>
+                                                                    {ROLE_LABELS[user.role] || user.role}
+                                                                </span>
+                                                                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${user.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                                                                    {user.isActive ? 'Active' : 'Disabled'}
+                                                                </span>
+                                                                {isSelf && (
+                                                                    <span className="rounded-full border border-brand/10 bg-brand/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                                                                        Current user
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {(isSaving || isPermissionsSaving) && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-brand" />}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid min-w-0 gap-4 p-3 sm:p-4">
+                                                <div className="grid min-w-0 gap-3 md:grid-cols-2">
+                                                    <label className="min-w-0 space-y-1.5">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login role</span>
+                                                        <select
+                                                            value={user.role}
+                                                            disabled={roleLocked}
+                                                            onChange={event => handleRoleChange(user, event.target.value as Role)}
+                                                            className="min-h-[46px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                                                        >
+                                                            {ASSIGNABLE_ROLES.map(role => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
+                                                            {!ASSIGNABLE_ROLES.includes(user.role) && <option value={user.role}>{ROLE_LABELS[user.role] || user.role}</option>}
+                                                        </select>
+                                                        {isProtectedAdmin && <p className="text-[10px] font-bold text-slate-400">Protected system role.</p>}
+                                                    </label>
+
+                                                    <div className="min-w-0 space-y-1.5">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch / scope</span>
+                                                        {user.role === 'supervisor' ? (
+                                                            <button
+                                                                onClick={() => handleSupervisorBranches(user)}
+                                                                disabled={isSaving}
+                                                                title={assignedBranches.map(branch => `${branch.name} (${branch.code})`).join(', ')}
+                                                                className="flex min-h-[46px] w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-brand/30 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <span className="min-w-0">
+                                                                    <span className="block truncate text-sm font-black text-slate-800">{scopeSummary}</span>
+                                                                    <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-slate-400">{scopeDetail}</span>
+                                                                </span>
+                                                                <Users className="h-4 w-4 shrink-0 text-brand" />
+                                                            </button>
+                                                        ) : (
+                                                            <div className="min-h-[46px] rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                                                <p className="break-words text-sm font-black leading-5 text-slate-800">{scopeSummary}</p>
+                                                                <p className="mt-0.5 break-words text-[10px] font-bold uppercase tracking-widest text-slate-400">{scopeDetail}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                                    <button
+                                                        onClick={() => handleActiveToggle(user)}
+                                                        disabled={isSelf || isSaving || isProtectedAdmin}
+                                                        className={`inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-40 sm:px-3 ${user.isActive ? 'border-slate-200 bg-white text-slate-500 hover:border-brand/30 hover:text-brand' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                                                    >
+                                                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : user.isActive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                                        {user.isActive ? 'Suspend' : 'Activate'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUserPermissions(user)}
+                                                        disabled={isSelf || isSaving || isProtectedAdmin || isPermissionsSaving}
+                                                        className="inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
+                                                    >
+                                                        {isPermissionsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shield className="h-3.5 w-3.5" />}
+                                                        Permissions
+                                                    </button>
+                                                    {user.role === 'branch' && (
+                                                        <button
+                                                            onClick={() => handleResetPassword(user)}
+                                                            disabled={isSelf || isSaving}
+                                                            className="inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
+                                                        >
+                                                            <KeyRound className="h-3.5 w-3.5" />
+                                                            Password
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleDeleteUser(user)}
+                                                        disabled={isSelf || isSaving || isProtectedAdmin}
+                                                        className="inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-2 py-2 text-[10px] font-black uppercase tracking-widest text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 sm:px-3"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    )}
+
                     {/* Desktop table */}
-                    <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+                    <div className="hidden">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="bg-slate-50 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -759,68 +977,122 @@ export const AccessControlSection: React.FC<{
                         </table>
                     </div>
                     {/* Mobile cards */}
-                    <div className="space-y-3 md:hidden">
+                    <div className="hidden">
                         {users.map(user => {
                             const isSelf = user.userId === currentUserId;
                             const isSaving = savingKey === user.userId;
                             const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
+                            const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
+                            const supervisorBranchIds = supervisorAssignments[user.userId] || [];
+                            const assignedBranches = branchOptions.filter(branch => supervisorBranchIds.includes(branch.id));
+                            const scopeSummary = user.role === 'branch'
+                                ? (user.branchName || 'No branch linked')
+                                : user.role === 'supervisor'
+                                    ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
+                                    : 'All branches';
+                            const scopeDetail = user.role === 'branch'
+                                ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
+                                : user.role === 'supervisor'
+                                    ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 3).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
+                                    : 'Cross-branch visibility follows this role.';
                             return (
-                                <div key={user.userId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="min-w-0 truncate text-sm font-bold text-slate-900">{user.email}</p>
-                                        <span className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-black uppercase ${user.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                                            {user.isActive ? 'Active' : 'Disabled'}
-                                        </span>
+                                <div key={user.userId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/25 hover:shadow-md hover:shadow-brand/5">
+                                    <div className="border-b border-slate-100 bg-slate-50/70 p-4">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0">
+                                                <p className="break-all text-sm font-black leading-5 text-slate-950">{user.email}</p>
+                                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                    <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${roleBadgeClass(user.role)}`}>
+                                                        {ROLE_LABELS[user.role] || user.role}
+                                                    </span>
+                                                    <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${user.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                                                        {user.isActive ? 'Active' : 'Disabled'}
+                                                    </span>
+                                                    {isSelf && (
+                                                        <span className="rounded-full border border-brand/10 bg-brand/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                                                            You
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {(isSaving || isPermissionsSaving) && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-brand" />}
+                                        </div>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <select
+                                    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.72fr)]">
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <label className="min-w-0 space-y-1.5">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login role</span>
+                                                <select
                                             value={user.role}
                                             disabled={isSelf || isSaving || isProtectedAdmin}
                                             onChange={e => handleRoleChange(user, e.target.value as Role)}
-                                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold outline-none disabled:opacity-50"
+                                                    className="min-h-[44px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                                         >
                                             {ASSIGNABLE_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                                             {!ASSIGNABLE_ROLES.includes(user.role) && <option value={user.role}>{ROLE_LABELS[user.role] || user.role}</option>}
-                                        </select>
-                                        {user.role === 'supervisor' && (
-                                            <button onClick={() => handleSupervisorBranches(user)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">
-                                                {(supervisorAssignments[user.userId] || []).length} branches
-                                            </button>
-                                        )}
+                                                </select>
+                                                {isProtectedAdmin && <p className="text-[10px] font-bold text-slate-400">Protected system role.</p>}
+                                            </label>
+                                            <div className="min-w-0 space-y-1.5">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch / scope</span>
+                                                {user.role === 'supervisor' ? (
+                                                    <button
+                                                        onClick={() => handleSupervisorBranches(user)}
+                                                        disabled={isSaving}
+                                                        className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-brand/30 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60"
+                                                    >
+                                                        <span className="min-w-0">
+                                                            <span className="block truncate text-sm font-black text-slate-800">{scopeSummary}</span>
+                                                            <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-slate-400">{scopeDetail}</span>
+                                                        </span>
+                                                        <Users className="h-4 w-4 shrink-0 text-brand" />
+                                                    </button>
+                                                ) : (
+                                                    <div className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                                        <p className="break-words text-sm font-black leading-5 text-slate-800">{scopeSummary}</p>
+                                                        <p className="mt-0.5 break-words text-[10px] font-bold uppercase tracking-widest text-slate-400">{scopeDetail}</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         {user.role === 'branch' && (
                                             <span className="text-xs font-bold text-slate-500">{user.branchCode || '—'}</span>
                                         )}
                                         <button
                                             onClick={() => handleActiveToggle(user)}
                                             disabled={isSelf || isSaving || isProtectedAdmin}
-                                            className="ml-auto text-xs font-bold text-slate-400 disabled:opacity-40"
+                                            className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-40 ${user.isActive ? 'border-slate-200 bg-white text-slate-500 hover:border-brand/30 hover:text-brand' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
                                         >
+                                            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : user.isActive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                             {user.isActive ? 'Suspend' : 'Activate'}
                                         </button>
                                         <button
                                             onClick={() => handleDeleteUser(user)}
                                             disabled={isSelf || isSaving || isProtectedAdmin}
-                                            className="text-xs font-bold text-slate-300 disabled:opacity-40"
+                                            className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
                                         >
+                                            <Trash2 className="h-3.5 w-3.5" />
                                             Delete
                                         </button>
                                         {user.role === 'branch' && (
                                             <button
                                                 onClick={() => handleResetPassword(user)}
                                                 disabled={isSelf || isSaving}
-                                                className="text-xs font-bold text-slate-400 disabled:opacity-40"
+                                                className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
                                             >
-                                                Set Password
+                                                <KeyRound className="h-3.5 w-3.5" />
+                                                Password
                                             </button>
                                         )}
                                         <button
                                             onClick={() => handleUserPermissions(user)}
                                             disabled={isSelf || isSaving || isProtectedAdmin}
-                                            className="text-xs font-bold text-slate-400 disabled:opacity-40"
+                                            className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
                                         >
+                                            {isPermissionsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shield className="h-3.5 w-3.5" />}
                                             Permissions
                                         </button>
                                     </div>
+                                </div>
                                 </div>
                             );
                         })}
@@ -847,12 +1119,12 @@ export const AccessControlSection: React.FC<{
                             </span>
                         </div>
 
-                        <div className="grid gap-3 xl:grid-cols-5">
+                        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
                             {roleModuleLayouts.map(roleLayout => (
-                                <article key={roleLayout.role} className="flex min-h-[260px] flex-col rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                <article key={roleLayout.role} className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-3">
                                     <div className="mb-3 flex items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-sm font-black text-slate-950">{ROLE_LABELS[roleLayout.role]}</p>
+                                        <div className="min-w-0">
+                                            <p className="break-words text-sm font-black leading-5 text-slate-950">{ROLE_LABELS[roleLayout.role]}</p>
                                             <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
                                                 {roleLayout.visible.length} visible
                                             </p>
@@ -862,7 +1134,7 @@ export const AccessControlSection: React.FC<{
                                         </span>
                                     </div>
 
-                                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                                    <div className="flex-1 space-y-2">
                                         {roleLayout.visible.length === 0 ? (
                                             <div className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-center">
                                                 <EyeOff className="mx-auto h-5 w-5 text-slate-300" />
@@ -871,9 +1143,9 @@ export const AccessControlSection: React.FC<{
                                         ) : roleLayout.visible.map((module, index) => (
                                             <div key={module.key} className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-xs font-black text-slate-800">{index + 1}. {module.title}</p>
-                                                        <p className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{module.key}</p>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="break-words text-xs font-black leading-5 text-slate-800">{index + 1}. {module.title}</p>
+                                                        <p className="mt-0.5 break-all text-[9px] font-black uppercase tracking-widest text-slate-400">{module.key}</p>
                                                     </div>
                                                     <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase ${accessBadgeClass(module.access || 'none')}`}>
                                                         {module.access || 'show'}
@@ -892,7 +1164,7 @@ export const AccessControlSection: React.FC<{
                                             <span className="text-xs font-black tabular-nums text-slate-600">{roleLayout.hidden.length}</span>
                                         </div>
                                         {roleLayout.hidden.length > 0 && (
-                                            <p className="mt-1 truncate text-[10px] font-semibold text-slate-400" title={roleLayout.hidden.map(item => item.title).join(', ')}>
+                                            <p className="mt-1 break-words text-[10px] font-semibold leading-5 text-slate-400" title={roleLayout.hidden.map(item => item.title).join(', ')}>
                                                 {roleLayout.hidden.slice(0, 2).map(item => item.title).join(', ')}
                                                 {roleLayout.hidden.length > 2 ? ` +${roleLayout.hidden.length - 2} more` : ''}
                                             </p>

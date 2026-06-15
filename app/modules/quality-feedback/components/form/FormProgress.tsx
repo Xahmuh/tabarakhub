@@ -6,23 +6,25 @@ interface FormProgressProps {
 }
 
 export const FormProgress: React.FC<FormProgressProps> = ({ currentStep, totalSteps }) => {
-  const progress = (currentStep / totalSteps) * 100;
+  const safeTotal = Math.max(totalSteps, 1);
+  const safeCurrent = Math.min(Math.max(currentStep, 1), safeTotal);
+  const progress = (safeCurrent / safeTotal) * 100;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
+      <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
         <span className="flex items-center gap-2">
-          <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-[10px]">
-            {currentStep}
+          <span className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] text-slate-700 shadow-sm">
+            {safeCurrent}
           </span>
-          Step
+          Step progress
         </span>
-        <span className="text-brand">{Math.round(progress)}% Complete</span>
+        <span className="text-brand">{Math.round(progress)}% complete</span>
       </div>
 
-      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/70">
         <div
-          className="h-full bg-brand transition-all duration-700 ease-out rounded-full"
+          className="h-full rounded-full bg-brand transition-all duration-700 ease-out"
           style={{ width: `${progress}%` }}
         />
       </div>

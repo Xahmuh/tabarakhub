@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, LogOut, RefreshCcw, Settings, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, LogOut, RefreshCcw, Settings, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { AuthState, MaintenanceSettings } from '../../types';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
 import { isManagerRole } from '../../lib/access';
@@ -29,12 +29,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onLogout,
   settings
 }) => {
-  const canOpenApprovalQueue = isManagerRole(authState.user?.role) || authState.user?.role === 'owner';
+  const canOpenApprovalQueue = isManagerRole(authState.user?.role);
   const headerLogoUrl = settings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
   const canShowSwitcher =
     !!onTabChange &&
     !!checkPermission &&
-    (activeTab === 'pos' || activeTab === 'dashboard' || activeTab === 'settings') &&
+    (activeTab === 'pos' || activeTab === 'dashboard' || activeTab === 'settings' || activeTab === 'system-settings' || activeTab === 'access-control') &&
     !isWarehouse;
 
   return (
@@ -99,15 +99,29 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {isModuleEnabled('settings') && ((isManagerRole(authState.user?.role) && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
                 <button
                   type="button"
-                  onClick={() => onTabChange('settings')}
+                  onClick={() => onTabChange('system-settings')}
                   className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
-                    activeTab === 'settings' 
+                    activeTab === 'settings' || activeTab === 'system-settings'
                       ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  <Settings className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
-                  <span>Settings</span>
+                  <Settings className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'settings' || activeTab === 'system-settings' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
+                  <span>System</span>
+                </button>
+              )}
+              {isModuleEnabled('settings') && ((isManagerRole(authState.user?.role) && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
+                <button
+                  type="button"
+                  onClick={() => onTabChange('access-control')}
+                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
+                    activeTab === 'access-control'
+                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <ShieldCheck className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'access-control' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
+                  <span>Access</span>
                 </button>
               )}
             </div>

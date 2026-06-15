@@ -8,8 +8,50 @@ import {
 } from '../types/feedback.types';
 import { isModuleEnabled } from '../../../../config/clientConfig';
 
+const DEFAULT_BRANCH_AREAS = ['Capital', 'Muharraq', 'Northern', 'Southern'];
+const BRANCH_AREA_ORDER = new Map(DEFAULT_BRANCH_AREAS.map((area, index) => [area, index]));
+
+const normalizeBranchAreas = (values: Array<string | null | undefined>) => {
+  const unique = new Set<string>();
+  values.forEach(value => {
+    const area = typeof value === 'string' ? value.trim() : '';
+    if (area) unique.add(area);
+  });
+
+  return Array.from(unique).sort((a, b) => {
+    const orderA = BRANCH_AREA_ORDER.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const orderB = BRANCH_AREA_ORDER.get(b) ?? Number.MAX_SAFE_INTEGER;
+    return orderA - orderB || a.localeCompare(b);
+  });
+};
+
 export const feedbackService = {
   // --- Public Form Methods ---
+
+  // Branch Area options are backed by operational governorate data.
+  fetchBranchAreaOptions: async (): Promise<string[]> => {
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('get_quality_feedback_branch_areas');
+
+    if (!rpcError) {
+      const rpcAreas = normalizeBranchAreas((rpcData || []).map((row: any) => row?.area || row?.governorate || row));
+      if (rpcAreas.length > 0) return rpcAreas;
+    }
+
+    const sourceQueries = [
+      supabase.from('delivery_areas').select('governorate').eq('is_active', true),
+      supabase.from('branch_classifications').select('governorate'),
+      supabase.from('delivery_blocks').select('governorate').eq('is_active', true)
+    ];
+
+    const results = await Promise.allSettled(sourceQueries);
+    const tableAreas = normalizeBranchAreas(results.flatMap(result => {
+      if (result.status !== 'fulfilled' || result.value.error) return [];
+      return (result.value.data || []).map((row: any) => row.governorate);
+    }));
+
+    return tableAreas.length > 0 ? tableAreas : DEFAULT_BRANCH_AREAS;
+  },
   
   // Submit feedback
   submitFeedback: async (data: FeedbackFormData): Promise<void> => {

@@ -19,7 +19,7 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
     const isManager = isManagerRole(role);
     const isOwner = role === 'owner';
     const isWarehouse = role === 'warehouse';
-    const canApproveBranchLogins = isManager || role === 'owner';
+    const canApproveBranchLogins = isManager;
     const hubLogoUrl = settings?.hubLogoUrl?.trim() || DEFAULT_FOOTER_LOGO_URL;
     const configuredFooterLogoUrl = settings?.footerLogoUrl?.trim() ?? '';
     const footerLogoUrl = configuredFooterLogoUrl || hubLogoUrl;
@@ -33,19 +33,23 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
     // Mirroring SuitePage display logic
 
     // Daily Command Center
-    if (checkPermission('command_center')) {
+    if (!isOwner && checkPermission('command_center')) {
+        enabledModuleCount += 1;
+    }
+
+    if (isOwner) {
         enabledModuleCount += 1;
     }
 
     // 1. Lost Sales & Shortage
-    if (isModuleEnabled('sales') && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit'))) {
+    if (!isOwner && isModuleEnabled('sales') && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit'))) {
         enabledModuleCount += 1;
     }
 
     // 2. Performance Portal
     if (isModuleEnabled('reports') && isWarehouse && isModuleEnabled('adminDashboard') && (checkPermission('lost_sales') || checkPermission('shortages'))) {
         enabledModuleCount += 1;
-    } else if (isModuleEnabled('reports') && (isManager || isOwner || role === 'supervisor') && isModuleEnabled('managerDashboard')) {
+    } else if (isModuleEnabled('reports') && (isManager || role === 'supervisor') && isModuleEnabled('managerDashboard')) {
         enabledModuleCount += 1;
     } else if (isModuleEnabled('reports') && role === 'branch' && isModuleEnabled('branchDashboard') && (checkPermission('lost_sales') || checkPermission('shortages'))) {
         enabledModuleCount += 1;
@@ -64,33 +68,33 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
     }
 
     // 5. Cash Flow Planner / Branch Cash Tracker
-    if (isModuleEnabled('cashFlow') && checkPermission('cash_flow')) {
+    if (!isOwner && isModuleEnabled('cashFlow') && checkPermission('cash_flow')) {
         enabledModuleCount += 1;
-    } else if (isModuleEnabled('cashTracker') && !isManager && checkPermission('cash_tracker')) {
+    } else if (!isOwner && isModuleEnabled('cashTracker') && !isManager && checkPermission('cash_tracker')) {
         enabledModuleCount += 1;
     }
 
     // 6. Corporate Codex
-    if (isModuleEnabled('corporateCodex') && checkPermission('corporate_codex')) {
+    if (!isOwner && isModuleEnabled('corporateCodex') && checkPermission('corporate_codex')) {
         enabledModuleCount += 1;
     }
 
     // 7. Spin & Win
-    if (isModuleEnabled('spinWin') && checkPermission('spin_win')) {
+    if (!isOwner && isModuleEnabled('spinWin') && checkPermission('spin_win')) {
         enabledModuleCount += 1;
     }
 
-    // 8. Settings / permissions, plus branch login approval queue
+    // 8. System Settings + Access Control
     if (isModuleEnabled('settings') && (isManager || canApproveBranchLogins)) {
-        enabledModuleCount += 1;
+        enabledModuleCount += 2;
     }
 
-    if (isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {
+    if (!isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {
         enabledModuleCount += 1;
         if (isManager || isOwner) enabledModuleCount += 1;
     }
 
-    if (isModuleEnabled('employeeContributions') && checkPermission('employee_contributions')) {
+    if (!isOwner && isModuleEnabled('employeeContributions') && checkPermission('employee_contributions')) {
         enabledModuleCount += 1;
     }
 

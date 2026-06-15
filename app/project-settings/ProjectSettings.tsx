@@ -73,6 +73,48 @@ const DEFAULT_PHARMACY_LOGO_URL = clientConfig.logoUrl;
 const DEFAULT_LOADING_SPINNER_URL = '/spinner.svg';
 
 type SettingsTab = 'branches' | 'module-layout' | 'delivery-zones' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
+type SettingsMode = 'combined' | 'system' | 'access';
+
+const SETTINGS_MODE_TABS: Record<SettingsMode, SettingsTab[]> = {
+    combined: ['branches', 'module-layout', 'delivery-zones', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'],
+    system: ['system', 'module-layout', 'delivery-zones', 'branches'],
+    access: ['access-control', 'pharmacists', 'permissions', 'login-approvals']
+};
+
+const SETTINGS_MODE_META: Record<SettingsMode, {
+    title: string;
+    eyebrow: string;
+    description: string;
+    icon: React.ElementType;
+}> = {
+    combined: {
+        title: 'Admin Control',
+        eyebrow: 'Control center',
+        description: 'Manage system setup, staff access, login roles, module layout, and operational defaults.',
+        icon: Settings
+    },
+    system: {
+        title: 'System Settings',
+        eyebrow: 'System control',
+        description: 'Control maintenance mode, branding, module layout, delivery zones, and branch operating records.',
+        icon: Settings
+    },
+    access: {
+        title: 'Access Control',
+        eyebrow: 'Identity control',
+        description: 'Manage people, users, role defaults, branch permissions, and trusted login approvals.',
+        icon: Lock
+    }
+};
+
+const getVisibleTabsForMode = (
+    mode: SettingsMode,
+    canManageSettings: boolean,
+    canManageDeliveryZones: boolean,
+    canApproveLoginRequests: boolean
+) => SETTINGS_MODE_TABS[mode].filter(tab =>
+    canManageSettings || (tab === 'delivery-zones' && canManageDeliveryZones) || (tab === 'login-approvals' && canApproveLoginRequests)
+);
 
 const TAB_META: Record<SettingsTab, {
     label: string;
@@ -171,9 +213,9 @@ const BranchInfoItem: React.FC<{
     <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
         <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
             <Icon size={13} className="shrink-0" />
-            <span className="truncate">{label}</span>
+            <span className="break-words">{label}</span>
         </div>
-        <p className="mt-1 truncate text-xs font-black text-slate-800">{value || 'Not assigned'}</p>
+        <p className="mt-1 break-words text-xs font-black leading-5 text-slate-800">{value || 'Not assigned'}</p>
     </div>
 );
 
@@ -232,11 +274,15 @@ export const ProjectSettings: React.FC<{
     onBack: () => void;
     onSettingsChange?: (settings: MaintenanceSettings) => void;
     currentRole?: Role;
-}> = ({ onBack, onSettingsChange, currentRole = 'admin' }) => {
+    mode?: SettingsMode;
+}> = ({ onBack, onSettingsChange, currentRole = 'admin', mode: requestedMode = 'combined' }) => {
+    const settingsMode = requestedMode as SettingsMode;
     const canManageSettings = currentRole === 'admin' || currentRole === 'manager';
     const canManageDeliveryZones = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
     const canApproveLoginRequests = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
-    const [activeTab, setActiveTab] = useState<SettingsTab>(() => canManageSettings ? 'branches' : 'login-approvals');
+    const [activeTab, setActiveTab] = useState<SettingsTab>(() =>
+        getVisibleTabsForMode(settingsMode, canManageSettings, canManageDeliveryZones, canApproveLoginRequests)[0] || 'login-approvals'
+    );
     const [branches, setBranches] = useState<Branch[]>([]);
     const [branchClassifications, setBranchClassifications] = useState<BranchClassification[]>([]);
     const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
@@ -277,9 +323,8 @@ export const ProjectSettings: React.FC<{
     }, []);
 
     const visibleSettingsTabs = useMemo(
-        () => (['branches', 'module-layout', 'delivery-zones', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'] as SettingsTab[])
-            .filter(tab => canManageSettings || (tab === 'delivery-zones' && canManageDeliveryZones) || (tab === 'login-approvals' && canApproveLoginRequests)),
-        [canApproveLoginRequests, canManageDeliveryZones, canManageSettings]
+        () => getVisibleTabsForMode(settingsMode, canManageSettings, canManageDeliveryZones, canApproveLoginRequests),
+        [canApproveLoginRequests, canManageDeliveryZones, canManageSettings, settingsMode]
     );
 
     useEffect(() => {
@@ -660,6 +705,8 @@ export const ProjectSettings: React.FC<{
     const assignedBranchManagerOptionCount = branchManagerOptions.filter(pharmacist => selectedBranchAssignedPharmacistIds.has(pharmacist.id)).length;
 
     const selectedBranch = branches.find(branch => branch.id === selectedBranchForPerms);
+    const modeMeta = SETTINGS_MODE_META[settingsMode];
+    const ModeIcon = modeMeta.icon;
     const activeTabMeta = TAB_META[activeTab];
     const ActiveTabIcon = activeTabMeta.icon;
     const branchCount = branches.length;
@@ -694,18 +741,18 @@ export const ProjectSettings: React.FC<{
                         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
                             <div className="flex min-w-0 items-start gap-4 md:gap-5">
                                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/15">
-                                    <Settings className="h-6 w-6" />
+                                    <ModeIcon className="h-6 w-6" />
                                 </div>
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">Control center</p>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">{modeMeta.eyebrow}</p>
                                         <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${maintenanceEnabled ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                             {maintenanceEnabled ? 'Maintenance on' : 'Live'}
                                         </span>
                                     </div>
-                                    <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Settings & Permissions</h1>
+                                    <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{modeMeta.title}</h1>
                                     <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-slate-500 md:text-base">
-                                        Manage branches, staff records, login roles, module access, and domain maintenance from one operational surface.
+                                        {modeMeta.description}
                                     </p>
                                 </div>
                             </div>
@@ -737,7 +784,7 @@ export const ProjectSettings: React.FC<{
                             <div className="mb-4 flex items-center justify-between gap-3">
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Control areas</p>
-                                    <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">Operations map</h2>
+                                    <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">{settingsMode === 'access' ? 'Access map' : settingsMode === 'system' ? 'System map' : 'Operations map'}</h2>
                                 </div>
                                 <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">{visibleSettingsTabs.length}</span>
                             </div>
@@ -769,12 +816,12 @@ export const ProjectSettings: React.FC<{
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="truncate text-sm font-black tracking-tight">{meta.label}</span>
+                                                        <span className="break-words text-sm font-black tracking-tight">{meta.label}</span>
                                                         {tab === 'system' && maintenanceEnabled && (
                                                             <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-amber-700">On</span>
                                                         )}
                                                     </div>
-                                                    <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-slate-400">{meta.description}</p>
+                                                    <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-400">{meta.description}</p>
                                                 </div>
                                                 <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isActive ? 'translate-x-0 text-brand' : 'text-slate-300'}`} />
                                             </div>
@@ -850,7 +897,7 @@ export const ProjectSettings: React.FC<{
                             </div>
                         </section>
 
-                        <div className="operational-panel overflow-hidden min-h-[560px] rounded-2xl">
+                        <div className="operational-panel min-h-[560px] overflow-visible rounded-2xl">
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center h-[560px] space-y-4">
                             <div className="w-12 h-12 border-4 border-slate-100 border-t-brand rounded-full animate-spin"></div>
@@ -888,7 +935,7 @@ export const ProjectSettings: React.FC<{
                                         description="Try another search term or add a new operational branch."
                                     />
                                 ) : (
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                    <div className="space-y-4">
                                         {filteredBranches.map(branch => {
                                             const classification = branchClassificationMap.get(branch.id);
                                             const enabledModules = [
@@ -896,66 +943,92 @@ export const ProjectSettings: React.FC<{
                                                 branch.isKPIDashboardEnabled && 'KPI',
                                                 branch.isSpinEnabled && 'Spin'
                                             ].filter(Boolean);
+                                            const moduleStates = [
+                                                { label: 'Items Entry', enabled: Boolean(branch.isItemsEntryEnabled) },
+                                                { label: 'KPI Dashboard', enabled: Boolean(branch.isKPIDashboardEnabled) },
+                                                { label: 'Spin & Win', enabled: Boolean(branch.isSpinEnabled) }
+                                            ];
                                             const areaName = classification?.area
                                                 ? `${classification.area}${classification.governorate ? ` / ${classification.governorate}` : ''}`
                                                 : undefined;
 
                                             return (
-                                                <article key={branch.id} className="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="flex min-w-0 items-start gap-3">
-                                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
-                                                                <Store size={20} />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{branch.name}</h3>
-                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                                    <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500">{branch.code}</span>
-                                                                    <span className="rounded-md bg-brand/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">Branch</span>
+                                                <article key={branch.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
+                                                    <div className="grid gap-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+                                                        <div className="p-5 md:p-6">
+                                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                                                <div className="flex min-w-0 flex-1 items-start gap-4">
+                                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-brand/5 text-brand">
+                                                                        <Store size={22} />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                            <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500">{branch.code || 'No code'}</span>
+                                                                            <span className="rounded-md bg-brand/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">Operational branch</span>
+                                                                        </div>
+                                                                        <h3 className="mt-2 break-words text-2xl font-black leading-8 tracking-tight text-slate-950">{branch.name}</h3>
+                                                                        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+                                                                            {areaName || 'Area not assigned'}{classification?.supervisorName ? ` - ${classification.supervisorName}` : ''}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex shrink-0 gap-2">
+                                                                    <button
+                                                                        onClick={() => { setBranchForm(branch); setIsBranchModalOpen(true); }}
+                                                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
+                                                                        title="Edit branch"
+                                                                        aria-label={`Edit ${branch.name}`}
+                                                                    >
+                                                                        <Edit2 size={17} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDeleteBranch(branch.id)}
+                                                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100"
+                                                                        title="Delete branch"
+                                                                        aria-label={`Delete ${branch.name}`}
+                                                                    >
+                                                                        <Trash2 size={17} />
+                                                                    </button>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                        <div className="flex shrink-0 gap-2">
-                                                            <button
-                                                                onClick={() => { setBranchForm(branch); setIsBranchModalOpen(true); }}
-                                                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
-                                                                title="Edit branch"
-                                                            >
-                                                                <Edit2 size={16} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteBranch(branch.id)}
-                                                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100"
-                                                                title="Delete branch"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
 
-                                                    <div className="mt-5 space-y-4">
-                                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                            <BranchInfoItem label="Area" value={areaName} icon={Building2} />
-                                                            <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
-                                                            <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
-                                                            <BranchInfoItem label="CR No." value={branch.crNumber} icon={Hash} />
-                                                            <div className="sm:col-span-2">
+                                                            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                                                <BranchInfoItem label="Area" value={areaName} icon={Building2} />
+                                                                <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
+                                                                <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
+                                                                <BranchInfoItem label="CR No." value={branch.crNumber} icon={Hash} />
                                                                 <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
                                                             </div>
                                                         </div>
 
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            {['Items', 'KPI', 'Spin'].map(module => {
-                                                                const enabled = enabledModules.includes(module);
-                                                                return (
-                                                                    <div key={module} className={`rounded-lg border px-2 py-2 text-center text-[9px] font-black uppercase tracking-widest ${
-                                                                        enabled ? 'border-brand/10 bg-brand/5 text-brand' : 'border-slate-100 bg-slate-50 text-slate-300'
-                                                                    }`}>
-                                                                        {module}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
+                                                        <aside className="border-t border-slate-100 bg-slate-50/70 p-5 md:p-6 xl:border-l xl:border-t-0">
+                                                            <div className="flex items-start justify-between gap-4">
+                                                                <div>
+                                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Module availability</p>
+                                                                    <p className="mt-1 text-sm font-black text-slate-900">{enabledModules.length}/3 active</p>
+                                                                </div>
+                                                                <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${enabledModules.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                                                                    {enabledModules.length > 0 ? 'Enabled' : 'Paused'}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                                                                {moduleStates.map(module => {
+                                                                    return (
+                                                                        <div key={module.label} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs font-black ${
+                                                                            module.enabled ? 'border-brand/10 bg-white text-brand' : 'border-slate-200 bg-white/70 text-slate-400'
+                                                                        }`}>
+                                                                            <span className="break-words">{module.label}</span>
+                                                                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${module.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+
+                                                            <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">
+                                                                Use edit to update branch identity, licenses, module flags, and branch manager assignment.
+                                                            </p>
+                                                        </aside>
                                                     </div>
                                                 </article>
                                             );
@@ -976,59 +1049,114 @@ export const ProjectSettings: React.FC<{
                                         description="Try another search term or add a new specialist profile."
                                     />
                                 ) : (
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                                        {filteredPharmacists.map(phar => (
-                                            <article key={phar.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex min-w-0 items-start gap-3">
-                                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
-                                                            <Users size={20} />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{phar.name}</h3>
-                                                            <div className="mt-2 flex items-center gap-2">
-                                                                <span className="rounded-md bg-red-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">
-                                                                    {phar.code || 'No code'}
-                                                                </span>
-                                                                <span className={`h-2 w-2 rounded-full ${phar.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                                                                <span className={`rounded-md px-2 py-1 text-[9px] font-black uppercase tracking-widest ${
-                                                                    phar.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                                                                }`}>
-                                                                    {phar.isActive ? 'Active' : 'Inactive'}
-                                                                </span>
+                                    <section className="min-w-0 space-y-4">
+                                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">People roster</p>
+                                                <h4 className="mt-1 text-base font-black tracking-tight text-slate-950">Specialist profiles</h4>
+                                            </div>
+                                            <span className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 sm:w-fit">
+                                                {filteredPharmacists.length} profile{filteredPharmacists.length === 1 ? '' : 's'}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                                            {filteredPharmacists.map(phar => {
+                                                const assignedBranches = branches
+                                                    .filter(branch => (pharmacistAssignmentsByBranch[branch.id] || []).includes(phar.id))
+                                                    .sort((a, b) => a.name.localeCompare(b.name));
+                                                const visibleAssignedBranches = assignedBranches.slice(0, 3);
+                                                const hiddenBranchCount = Math.max(0, assignedBranches.length - visibleAssignedBranches.length);
+
+                                                return (
+                                                    <article key={phar.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/30 hover:shadow-md hover:shadow-brand/5">
+                                                        <div className="border-b border-slate-100 bg-slate-50/80 p-3 sm:p-4">
+                                                            <div className="flex min-w-0 items-start gap-3">
+                                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-white text-brand shadow-sm sm:h-11 sm:w-11">
+                                                                    <Users size={19} />
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <h3 className="break-words text-sm font-black leading-5 tracking-tight text-slate-950 sm:text-base sm:leading-6">{phar.name}</h3>
+                                                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                        <span className="rounded-full border border-brand/10 bg-brand/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                                                                            {phar.code || 'No code'}
+                                                                        </span>
+                                                                        <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                                                                            phar.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'
+                                                                        }`}>
+                                                                            {phar.isActive ? 'Active' : 'Inactive'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex shrink-0 gap-2">
-                                                        <button
-                                                            onClick={async () => {
-                                                                const { data } = await supabase.client.from('pharmacist_branches').select('branch_id').eq('pharmacist_id', phar.id);
-                                                                setPharForm({
-                                                                    id: phar.id,
-                                                                    code: phar.code || '',
-                                                                    name: phar.name,
-                                                                    isActive: phar.isActive,
-                                                                    branchIds: data?.map(d => d.branch_id) || []
-                                                                });
-                                                                setIsPharModalOpen(true);
-                                                            }}
-                                                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
-                                                            title="Edit profile"
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeletePharmacist(phar)}
-                                                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100"
-                                                            title="Remove pharmacist"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </article>
-                                        ))}
-                                    </div>
+
+                                                        <div className="grid min-w-0 gap-4 p-3 sm:p-4">
+                                                            <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+                                                                <div className="flex min-w-0 items-center justify-between gap-3">
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch assignments</p>
+                                                                        <p className="mt-1 text-sm font-black text-slate-800">
+                                                                            {assignedBranches.length} branch{assignedBranches.length === 1 ? '' : 'es'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <Building2 className="h-4 w-4 shrink-0 text-brand" />
+                                                                </div>
+
+                                                                {assignedBranches.length === 0 ? (
+                                                                    <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-400">
+                                                                        No branch assigned
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                                        {visibleAssignedBranches.map(branch => (
+                                                                            <span key={branch.id} className="max-w-full rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                                                {branch.code || branch.name}
+                                                                            </span>
+                                                                        ))}
+                                                                        {hiddenBranchCount > 0 && (
+                                                                            <span className="rounded-full border border-brand/10 bg-brand/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                                                                                +{hiddenBranchCount} more
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        const { data } = await supabase.client.from('pharmacist_branches').select('branch_id').eq('pharmacist_id', phar.id);
+                                                                        setPharForm({
+                                                                            id: phar.id,
+                                                                            code: phar.code || '',
+                                                                            name: phar.name,
+                                                                            isActive: phar.isActive,
+                                                                            branchIds: data?.map(d => d.branch_id) || []
+                                                                        });
+                                                                        setIsPharModalOpen(true);
+                                                                    }}
+                                                                    className="inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-all hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
+                                                                    title="Edit profile"
+                                                                >
+                                                                    <Edit2 size={15} />
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeletePharmacist(phar)}
+                                                                    className="inline-flex min-h-[38px] min-w-0 items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-600 transition-all hover:bg-red-100"
+                                                                    title="Remove pharmacist"
+                                                                >
+                                                                    <Trash2 size={15} />
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </article>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
                                 )
                             )}
 
@@ -1064,7 +1192,7 @@ export const ProjectSettings: React.FC<{
                                                         >
                                                             <div className="flex items-center justify-between gap-3">
                                                                 <div className="min-w-0">
-                                                                    <p className="truncate text-[11px] font-black uppercase tracking-wider">{branch.name}</p>
+                                                                <p className="break-words text-[11px] font-black uppercase tracking-wider leading-5">{branch.name}</p>
                                                                     <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${selected ? 'text-white/60' : 'text-slate-400'}`}>Branch / {branch.code}</p>
                                                                 </div>
                                                                 <ChevronRight size={16} className={selected ? 'text-white' : 'text-slate-300'} />
@@ -1672,7 +1800,7 @@ export const ProjectSettings: React.FC<{
                     aria-labelledby="branch-modal-title"
                     aria-describedby="branch-modal-description"
                 >
-                    <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-slate-100 bg-white shadow-xl animate-in zoom-in-95 duration-300">
+                    <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-100 bg-white shadow-xl animate-in zoom-in-95 duration-300">
                         <span id="branch-modal-description" className="sr-only">Configuration form for operational pharmacy branches.</span>
                         <div className="shrink-0 border-b bg-slate-50 p-4 sm:p-5">
                             <div className="flex items-start justify-between gap-4">
@@ -1683,137 +1811,162 @@ export const ProjectSettings: React.FC<{
                             <button onClick={() => setIsBranchModalOpen(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white transition-colors hover:bg-slate-100"><X size={18} /></button>
                             </div>
                         </div>
-                        <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Code</label>
-                                <input
-                                    type="text"
-                                    value={branchForm.code}
-                                    onChange={e => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase(), role: 'branch' })}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                    placeholder="e.g. T001"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Display Name</label>
-                                <input
-                                    type="text"
-                                    value={branchForm.name}
-                                    onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                    placeholder="e.g. Tabarak Jerdab Branch"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Manager Name</label>
-                                <select
-                                    value={selectedBranchManagerOptionValue}
-                                    onChange={e => {
-                                        const selectedPharmacist = branchManagerOptions.find(pharmacist => pharmacist.id === e.target.value);
-                                        setBranchForm({ ...branchForm, branchManagerName: selectedPharmacist?.name || '' });
-                                    }}
-                                    disabled={branchManagerOptions.length === 0}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all disabled:cursor-not-allowed disabled:text-slate-400"
-                                >
-                                    <option value="">{branchManagerOptions.length === 0 ? 'Register active pharmacists first' : 'Select registered pharmacist'}</option>
-                                    {currentBranchManagerName && !selectedBranchManagerOption && (
-                                        <option value={currentBranchManagerName}>
-                                            Current: {currentBranchManagerName} (not in active registered pharmacists)
-                                        </option>
-                                    )}
-                                    {branchManagerOptions.map(pharmacist => {
-                                        const isAssignedToBranch = selectedBranchAssignedPharmacistIds.has(pharmacist.id);
-                                        return (
-                                            <option key={pharmacist.id} value={pharmacist.id}>
-                                                {pharmacist.code ? `${pharmacist.code} - ` : ''}{pharmacist.name}{isAssignedToBranch ? ' - assigned to this branch' : ''}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                                <p className="text-[10px] font-bold text-slate-400">
-                                    {branchManagerOptions.length === 0
-                                        ? 'Add active pharmacist profiles before assigning a branch manager.'
-                                        : `${assignedBranchManagerOptionCount} assigned pharmacist${assignedBranchManagerOptionCount === 1 ? '' : 's'} listed first for this branch.`}
-                                </p>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Support WhatsApp Number</label>
-                                <input
-                                    type="text"
-                                    value={branchForm.whatsappNumber}
-                                    onChange={e => setBranchForm({ ...branchForm, whatsappNumber: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                    placeholder="+973 1234 5678"
-                                />
-                            </div>
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">NHRA Lic No.</label>
-                                    <input
-                                        type="text"
-                                        value={branchForm.nhraLicenseNo || ''}
-                                        onChange={e => setBranchForm({ ...branchForm, nhraLicenseNo: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                        placeholder="Branch NHRA license"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number</label>
-                                    <input
-                                        type="text"
-                                        value={branchForm.crNumber || ''}
-                                        onChange={e => setBranchForm({ ...branchForm, crNumber: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                        placeholder="Branch commercial registration"
-                                    />
-                                </div>
-                            </div>
-                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                                        <Zap size={18} className="text-amber-500" />
+                        <div className="custom-scrollbar flex-1 overflow-y-auto p-4 sm:p-5">
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                                <section className="rounded-lg border border-slate-100 bg-white p-4">
+                                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch Details</p>
+                                            <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">Identity & contacts</h4>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Spin & Win Capability</span>
-                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle customer incentive module</p>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Code</label>
+                                            <input
+                                                type="text"
+                                                value={branchForm.code}
+                                                onChange={e => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase(), role: 'branch' })}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                placeholder="e.g. T001"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Display Name</label>
+                                            <input
+                                                type="text"
+                                                value={branchForm.name}
+                                                onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                placeholder="e.g. Tabarak Jerdab Branch"
+                                            />
+                                        </div>
+                                        <div className="space-y-2 md:col-span-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Manager Name</label>
+                                            <select
+                                                value={selectedBranchManagerOptionValue}
+                                                onChange={e => {
+                                                    const selectedPharmacist = branchManagerOptions.find(pharmacist => pharmacist.id === e.target.value);
+                                                    setBranchForm({ ...branchForm, branchManagerName: selectedPharmacist?.name || '' });
+                                                }}
+                                                disabled={branchManagerOptions.length === 0}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all disabled:cursor-not-allowed disabled:text-slate-400"
+                                            >
+                                                <option value="">{branchManagerOptions.length === 0 ? 'Register active pharmacists first' : 'Select registered pharmacist'}</option>
+                                                {currentBranchManagerName && !selectedBranchManagerOption && (
+                                                    <option value={currentBranchManagerName}>
+                                                        Current: {currentBranchManagerName} (not in active registered pharmacists)
+                                                    </option>
+                                                )}
+                                                {branchManagerOptions.map(pharmacist => {
+                                                    const isAssignedToBranch = selectedBranchAssignedPharmacistIds.has(pharmacist.id);
+                                                    return (
+                                                        <option key={pharmacist.id} value={pharmacist.id}>
+                                                            {pharmacist.code ? `${pharmacist.code} - ` : ''}{pharmacist.name}{isAssignedToBranch ? ' - assigned to this branch' : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                            <p className="text-[10px] font-bold text-slate-400">
+                                                {branchManagerOptions.length === 0
+                                                    ? 'Add active pharmacist profiles before assigning a branch manager.'
+                                                    : `${assignedBranchManagerOptionCount} assigned pharmacist${assignedBranchManagerOptionCount === 1 ? '' : 's'} listed first for this branch.`}
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Support WhatsApp Number</label>
+                                            <input
+                                                type="text"
+                                                value={branchForm.whatsappNumber}
+                                                onChange={e => setBranchForm({ ...branchForm, whatsappNumber: e.target.value })}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                placeholder="+973 1234 5678"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">NHRA Lic No.</label>
+                                            <input
+                                                type="text"
+                                                value={branchForm.nhraLicenseNo || ''}
+                                                onChange={e => setBranchForm({ ...branchForm, nhraLicenseNo: e.target.value })}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                placeholder="Branch NHRA license"
+                                            />
+                                        </div>
+                                        <div className="space-y-2 md:col-span-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number</label>
+                                            <input
+                                                type="text"
+                                                value={branchForm.crNumber || ''}
+                                                onChange={e => setBranchForm({ ...branchForm, crNumber: e.target.value })}
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                placeholder="Branch commercial registration"
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" checked={branchForm.isSpinEnabled} onChange={e => setBranchForm({ ...branchForm, isSpinEnabled: e.target.checked })} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand"></div>
-                                </label>
-                            </div>
+                                </section>
 
-                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                                        <ShoppingCart size={18} className="text-blue-500" />
+                                <section className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                                    <div className="border-b border-slate-200 pb-3">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Module Access</p>
+                                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">Branch capabilities</h4>
                                     </div>
-                                    <div>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Items Entry System</span>
-                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle item logging in POS</p>
-                                    </div>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" checked={branchForm.isItemsEntryEnabled} onChange={e => setBranchForm({ ...branchForm, isItemsEntryEnabled: e.target.checked })} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand"></div>
-                                </label>
-                            </div>
+                                    <div className="mt-4 grid gap-3">
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50">
+                                                        <Zap size={18} className="text-amber-500" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Spin & Win Capability</span>
+                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle customer incentive module</p>
+                                                    </div>
+                                                </div>
+                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                    <input type="checkbox" checked={branchForm.isSpinEnabled} onChange={e => setBranchForm({ ...branchForm, isSpinEnabled: e.target.checked })} className="sr-only peer" />
+                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                </label>
+                                            </div>
+                                        </div>
 
-                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                                        <Activity size={18} className="text-emerald-500" />
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+                                                        <ShoppingCart size={18} className="text-blue-500" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Items Entry System</span>
+                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle item logging in POS</p>
+                                                    </div>
+                                                </div>
+                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                    <input type="checkbox" checked={branchForm.isItemsEntryEnabled} onChange={e => setBranchForm({ ...branchForm, isItemsEntryEnabled: e.target.checked })} className="sr-only peer" />
+                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+                                                        <Activity size={18} className="text-emerald-500" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Dashboard & KPI Analytics</span>
+                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle charts and performance logs</p>
+                                                    </div>
+                                                </div>
+                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                    <input type="checkbox" checked={branchForm.isKPIDashboardEnabled} onChange={e => setBranchForm({ ...branchForm, isKPIDashboardEnabled: e.target.checked })} className="sr-only peer" />
+                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Dashboard & KPI Analytics</span>
-                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle charts and performance logs</p>
-                                    </div>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" checked={branchForm.isKPIDashboardEnabled} onChange={e => setBranchForm({ ...branchForm, isKPIDashboardEnabled: e.target.checked })} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand"></div>
-                                </label>
+                                </section>
                             </div>
                         </div>
                         <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-4 sm:p-5 flex gap-4">

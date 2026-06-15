@@ -169,6 +169,7 @@ export interface BranchLoginApprovalDeviceInfo {
 }
 
 export type ModuleDisplayBadgeStyle = 'hidden' | 'red';
+export type ModuleDisplayGridColumns = 3 | 4;
 
 export interface ModuleDisplayItemSetting {
   key: string;
@@ -179,6 +180,7 @@ export interface ModuleDisplayItemSetting {
 
 export interface ModuleDisplaySettings {
   items: ModuleDisplayItemSetting[];
+  gridColumns: ModuleDisplayGridColumns;
 }
 
 export interface MaintenanceSettings {

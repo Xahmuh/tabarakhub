@@ -120,8 +120,8 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
     ? React.cloneElement(icon, { className: 'h-28 w-36 sm:h-32 sm:w-40' })
     : icon;
   const cardClass = isBrandVariant
-    ? 'group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/15 bg-white p-5 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/70 hover:bg-brand/90 hover:shadow-md hover:shadow-brand/20 active:scale-[0.99] focus-ring'
-    : 'group relative min-h-[184px] overflow-hidden rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring';
+    ? 'group relative min-h-[212px] overflow-hidden rounded-xl border border-brand/15 bg-white p-5 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/70 hover:bg-brand/90 hover:shadow-md hover:shadow-brand/20 active:scale-[0.99] focus-ring'
+    : 'group relative min-h-[212px] overflow-hidden rounded-xl border border-brand/10 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md hover:shadow-brand/10 active:scale-[0.99] focus-ring';
   const contentClass = isBrandVariant
     ? 'relative z-10 flex h-full flex-col items-center justify-center gap-4'
     : 'relative z-10 flex h-full flex-col justify-between gap-5';
@@ -138,17 +138,17 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
   const ctaContainerClass = isBrandVariant
     ? 'inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white shadow-sm shadow-brand/20'
     : 'flex items-center gap-2 text-xs font-bold';
+  const moduleBadgeText = badge?.trim();
+  const showModuleBadge = Boolean(moduleBadgeText && badgeStyle === 'red');
+  const badgeClass = isBrandVariant
+    ? 'inline-flex max-w-full items-center justify-center rounded-full bg-brand px-3 py-1.5 text-center text-[10px] font-black uppercase leading-4 tracking-[0.08em] text-white shadow-sm ring-1 ring-brand/10 transition-colors duration-200 whitespace-normal break-words group-hover:bg-white group-hover:text-brand sm:text-[11px]'
+    : 'inline-flex max-w-full items-center justify-center rounded-full bg-brand px-3 py-1.5 text-center text-[10px] font-black uppercase leading-4 tracking-[0.08em] text-white shadow-sm ring-1 ring-brand/10 whitespace-normal break-words sm:text-[11px]';
 
   return (
     <button
       onClick={onClick}
       className={`${cardClass} ${isPending ? 'opacity-50 pointer-events-none' : ''}`}
     >
-      {badge && badgeStyle === 'red' && (
-        <span className="absolute right-4 top-4 z-20 rounded-full bg-brand/85 px-2.5 py-1 text-[10px] font-black text-white shadow-sm ring-1 ring-brand/10">
-          {badge}
-        </span>
-      )}
       {hasBackgroundIcon && (
         <div className={backgroundIconClass}>
           {backgroundIcon}
@@ -160,9 +160,19 @@ const ModuleCard: React.FC<ModuleCardProps> = ({
             <div className={`flex shrink-0 items-center justify-center transition-colors ${iconFrameClass}`}>
               {icon}
             </div>
+            {showModuleBadge && (
+              <span className={badgeClass}>
+                {moduleBadgeText}
+              </span>
+            )}
           </div>
         )}
         <div>
+          {hasBackgroundIcon && showModuleBadge && (
+            <span className={`mb-3 ${badgeClass}`}>
+              {moduleBadgeText}
+            </span>
+          )}
           <h3 className={titleClass}>{title}</h3>
           <p className={descriptionClass}>{description}</p>
         </div>
@@ -189,11 +199,15 @@ export const SuitePage: React.FC<SuitePageProps> = ({
 }) => {
   const role = authState.user?.role;
   const isOwner = role === 'owner';
-  const canOpenApprovalQueue = isManager || role === 'owner';
-  const moduleDisplayItems = useMemo(
-    () => normalizeModuleDisplaySettings(footerSettings?.moduleDisplaySettings).items,
+  const canOpenApprovalQueue = isManager;
+  const moduleDisplaySettings = useMemo(
+    () => normalizeModuleDisplaySettings(footerSettings?.moduleDisplaySettings),
     [footerSettings?.moduleDisplaySettings]
   );
+  const moduleDisplayItems = moduleDisplaySettings.items;
+  const moduleGridClass = moduleDisplaySettings.gridColumns === 3
+    ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+    : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4';
   const moduleDisplayByKey = useMemo(
     () => new Map(moduleDisplayItems.map(item => [item.key, item])),
     [moduleDisplayItems]
@@ -204,7 +218,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
   const canOpenDashboard = isModuleEnabled('reports') && (
     isWarehouse
       ? isModuleEnabled('adminDashboard')
-      : (isManager || isOwner || role === 'supervisor')
+      : (isManager || role === 'supervisor')
         ? isModuleEnabled('managerDashboard')
         : isModuleEnabled('branchDashboard')
   );
@@ -216,7 +230,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
   const moduleCards: Array<ModuleCardProps & { key: string; visible: boolean }> = [
     {
       key: 'pos',
-      visible: canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
+      visible: !isOwner && canUseSales && !isWarehouse && (checkPermission('lost_sales', 'edit') || checkPermission('shortages', 'edit')),
       title: 'Lost Sales & Shortage Log',
       description: 'Log out-of-stock items and customer requested deficits in real time.',
       icon: <LostSalesShortageIcon />,
@@ -225,6 +239,18 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       onClick: () => handleTabChange('pos'),
       isPending,
       badge: 'Entry'
+    },
+    {
+      key: 'owner-dashboard',
+      visible: isOwner,
+      title: 'Owner Dashboard',
+      description: 'Read-only performance, delivery traceability, map zones, driver KPIs, and pharmacy KPIs.',
+      icon: <ShieldCheck className="h-5 w-5" />,
+      onClick: () => handleTabChange('owner-dashboard'),
+      isPending,
+      badge: 'Owner',
+      cta: 'Open owner view',
+      tone: 'feature'
     },
     {
       key: 'dashboard-manager',
@@ -258,7 +284,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'dashboard-branch',
-      visible: !isManager && !isWarehouse && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
+      visible: !isManager && !isWarehouse && !isOwner && canOpenDashboard && (checkPermission('lost_sales') || checkPermission('shortages')),
       title: 'Performance Dashboard',
       description: 'Review localized branch performance and inventory trends.',
       icon: <BarChart3 className="h-5 w-5" />,
@@ -288,7 +314,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'cash-flow',
-      visible: isModuleEnabled('cashFlow') && checkPermission('cash_flow'),
+      visible: !isOwner && isModuleEnabled('cashFlow') && checkPermission('cash_flow'),
       title: 'Cash Flow Planner',
       description: 'Liquidity forecasting, expense planning, and financial risk monitoring.',
       icon: <Landmark className="h-5 w-5" />,
@@ -299,7 +325,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'cash-tracker',
-      visible: !isManager && isModuleEnabled('cashTracker') && checkPermission('cash_tracker'),
+      visible: !isManager && !isOwner && isModuleEnabled('cashTracker') && checkPermission('cash_tracker'),
       title: 'Branch Cash Tracker',
       description: 'Log and track daily cash differences between POS and count.',
       icon: <WalletCards className="h-5 w-5" />,
@@ -310,7 +336,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'corporate-codex',
-      visible: isModuleEnabled('corporateCodex') && checkPermission('corporate_codex'),
+      visible: !isOwner && isModuleEnabled('corporateCodex') && checkPermission('corporate_codex'),
       title: 'Corporate Codex',
       description: 'Official policies, circulars, and operating protocols.',
       icon: <BookOpenCheck className="h-5 w-5" />,
@@ -320,20 +346,28 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'knowledge'
     },
     {
-      key: 'settings',
+      key: 'system-settings',
       visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
-      title: 'Settings & Permissions',
-      description: isManager
-        ? 'Manage branches, staff access, enabled workflows, and branch login approvals.'
-        : 'Review and approve pending branch login requests.',
+      title: 'System Settings',
+      description: 'Maintenance mode, branding, module layout, delivery zones, and branch operating setup.',
       icon: <Settings2 className="h-5 w-5" />,
-      onClick: () => handleTabChange('settings'),
+      onClick: () => handleTabChange('system-settings'),
       isPending,
-      badge: 'Control'
+      badge: 'System'
+    },
+    {
+      key: 'access-control',
+      visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
+      title: 'Access Control',
+      description: 'Users, roles, read/edit module permissions, people records, and login approvals.',
+      icon: <ShieldCheck className="h-5 w-5" />,
+      onClick: () => handleTabChange('access-control'),
+      isPending,
+      badge: 'Security'
     },
     {
       key: 'spin-win',
-      visible: isModuleEnabled('spinWin') && checkPermission('spin_win'),
+      visible: !isOwner && isModuleEnabled('spinWin') && checkPermission('spin_win'),
       title: isManager ? 'Reward Control' : 'Spin & Win',
       description: 'Generate QR tokens for the customer reward wheel.',
       icon: <QrCode className="h-5 w-5" />,
@@ -344,7 +378,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'feedback-form',
-      visible: isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
+      visible: !isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
       title: 'QC Insights',
       description: 'Submit anonymous quality feedback and suggestions.',
       icon: <MessageSquareText className="h-5 w-5" />,
@@ -355,7 +389,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'feedback-admin',
-      visible: isModuleEnabled('qualityFeedback') && (isManager || isOwner) && checkPermission('quality_feedback'),
+      visible: isModuleEnabled('qualityFeedback') && isManager && checkPermission('quality_feedback'),
       title: 'Feedback Admin',
       description: 'Analyze quality metrics and review anonymous feedback.',
       icon: <PieChart className="h-5 w-5" />,
@@ -366,7 +400,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'employee-contributions',
-      visible: isModuleEnabled('employeeContributions') && checkPermission('employee_contributions'),
+      visible: !isOwner && isModuleEnabled('employeeContributions') && checkPermission('employee_contributions'),
       title: 'Team Contributions',
       description: 'Discover tools, automations, and projects shared by the team.',
       icon: <Lightbulb className="h-5 w-5" />,
@@ -378,7 +412,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'delivery',
-      visible: isModuleEnabled('delivery') && checkPermission('delivery'),
+      visible: role !== 'owner' && isModuleEnabled('delivery') && checkPermission('delivery'),
       title: 'Delivery Recording & Traceability',
       description: role === 'branch'
         ? 'Record daily delivery orders and track WhatsApp & Talabat activity.'
@@ -392,7 +426,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'block-analyzer',
-      visible: (isManager || isOwner) && checkPermission('block_analyzer'),
+      visible: isManager && checkPermission('block_analyzer'),
       title: 'BH Block Analyzer',
       description: 'Analyze block coverage and population data across regions.',
       icon: <MapPinned className="h-5 w-5" />,
@@ -403,7 +437,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'command-center',
-      visible: true,
+      visible: !isOwner,
       title: 'Daily Command Center',
       description: 'Download yesterday branch files, review recovery signals, and follow up daily actions.',
       icon: <Radar className="h-5 w-5" />,
@@ -456,7 +490,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 page-enter">
+        <div className={`grid ${moduleGridClass} gap-4 page-enter`}>
           {moduleCards
             .filter(card => card.visible)
             .sort((a, b) => {

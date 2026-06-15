@@ -123,12 +123,12 @@ export const useDashboardData = (filters: DashboardFilters) => {
       experienceCounts[r.experience_range] = (experienceCounts[r.experience_range] || 0) + 1;
     });
 
-    // Group by cluster
-    const clusterScores: Record<string, { total: number, count: number }> = {};
+    // Group by branch area. The stored column is still branch_cluster for backwards compatibility.
+    const branchAreaScores: Record<string, { total: number, count: number }> = {};
     responses.forEach(r => {
-      if (!clusterScores[r.branch_cluster]) clusterScores[r.branch_cluster] = { total: 0, count: 0 };
-      clusterScores[r.branch_cluster].total += r.overall_avg;
-      clusterScores[r.branch_cluster].count += 1;
+      if (!branchAreaScores[r.branch_cluster]) branchAreaScores[r.branch_cluster] = { total: 0, count: 0 };
+      branchAreaScores[r.branch_cluster].total += r.overall_avg;
+      branchAreaScores[r.branch_cluster].count += 1;
     });
 
     const commentTexts = responses.flatMap(r => [
@@ -268,7 +268,7 @@ export const useDashboardData = (filters: DashboardFilters) => {
         return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
       }),
       by_experience: Object.entries(experienceCounts).map(([name, value]) => ({ name, value })),
-      by_cluster: Object.entries(clusterScores).map(([cluster, data]) => ({
+      by_cluster: Object.entries(branchAreaScores).map(([cluster, data]) => ({
         cluster,
         score: Number((data.total / data.count).toFixed(1))
       })),

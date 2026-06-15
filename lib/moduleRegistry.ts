@@ -39,7 +39,7 @@ export const ACCESS_FEATURES: AccessFeature[] = [
   { id: 'delivery', label: 'Delivery Recording & Traceability', module: 'delivery', description: 'None disables the module, Read keeps dashboards and block coverage visible, Edit allows delivery activity recording.' },
   { id: 'products', label: 'Product Catalogue', module: 'products', description: 'Product catalogue and item management.' },
   { id: 'block_analyzer', label: 'BH Block Analyzer', description: 'Block coverage and population analysis.' },
-  { id: 'settings', label: 'Project Settings', module: 'settings', description: 'Identity, access, and system settings.' }
+  { id: 'settings', label: 'Admin Control', module: 'settings', description: 'Controls System Settings and Access Control modules.' }
 ];
 
 const formatModuleLabel = (moduleKey: string): string =>

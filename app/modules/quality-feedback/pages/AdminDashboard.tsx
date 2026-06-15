@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { KPICard } from '../components/dashboard/KPICard';
 import { CommentsTable } from '../components/dashboard/CommentsTable';
 import { ProtectedRoute } from '../components/shared/ProtectedRoute';
 import { DashboardFilters } from '../types/feedback.types';
+import { feedbackService } from '../services/feedbackService';
 import { 
   Download, 
   Calendar, 
@@ -53,6 +54,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
     role: 'All',
     experience: 'All',
   });
+  const [branchAreaOptions, setBranchAreaOptions] = useState<string[]>([]);
 
   const { data, questions, isLoading, error, refresh } = useDashboardData(filters);
   const aiInsightsEnabled = isModuleEnabled('aiInsights');
@@ -60,6 +62,20 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   const updateFilter = (key: keyof DashboardFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
+
+  useEffect(() => {
+    let isMounted = true;
+    feedbackService.fetchBranchAreaOptions()
+      .then(options => {
+        if (isMounted) setBranchAreaOptions(options);
+      })
+      .catch(() => {
+        if (isMounted) setBranchAreaOptions([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleExport = async () => {
     if (data) {
@@ -176,13 +192,12 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                 );
               })()}
               <label className="flex-1 min-w-[150px]">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Cluster</span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Branch Area</span>
                 <select value={filters.cluster} onChange={e => updateFilter('cluster', e.target.value)} className="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm focus:border-brand focus:ring-brand outline-none">
-                  <option value="All">All Clusters</option>
-                  <option value="North Cluster">North Cluster</option>
-                  <option value="Central Cluster">Central Cluster</option>
-                  <option value="South Cluster">South Cluster</option>
-                  <option value="East Cluster">East Cluster</option>
+                  <option value="All">All Governorates</option>
+                  {branchAreaOptions.map(area => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
                 </select>
               </label>
               <label className="flex-1 min-w-[150px]">

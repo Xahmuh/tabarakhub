@@ -11,89 +11,77 @@ interface SectionRatingProps {
 }
 
 const SCALE = [
-  { value: 1, label: 'Poor',          color: 'bg-red-500',    border: 'border-red-500',    text: 'text-red-500',    track: 'bg-red-500' },
-  { value: 2, label: 'Below Average', color: 'bg-orange-400', border: 'border-orange-400', text: 'text-orange-400', track: 'bg-orange-400' },
-  { value: 3, label: 'Average',       color: 'bg-amber-400',  border: 'border-amber-400',  text: 'text-amber-400',  track: 'bg-amber-400' },
-  { value: 4, label: 'Good',          color: 'bg-blue-500',   border: 'border-blue-500',   text: 'text-blue-500',   track: 'bg-blue-500' },
-  { value: 5, label: 'Excellent',     color: 'bg-emerald-500',border: 'border-emerald-500',text: 'text-emerald-500',track: 'bg-emerald-500' },
+  { value: 1, label: 'Poor', active: 'border-rose-500 bg-rose-500 text-white shadow-rose-500/20', text: 'text-rose-600', dot: 'bg-rose-500' },
+  { value: 2, label: 'Low', active: 'border-orange-400 bg-orange-400 text-white shadow-orange-400/20', text: 'text-orange-600', dot: 'bg-orange-400' },
+  { value: 3, label: 'Okay', active: 'border-amber-400 bg-amber-400 text-slate-950 shadow-amber-400/20', text: 'text-amber-700', dot: 'bg-amber-400' },
+  { value: 4, label: 'Good', active: 'border-sky-500 bg-sky-500 text-white shadow-sky-500/20', text: 'text-sky-600', dot: 'bg-sky-500' },
+  { value: 5, label: 'Excellent', active: 'border-emerald-500 bg-emerald-500 text-white shadow-emerald-500/20', text: 'text-emerald-600', dot: 'bg-emerald-500' },
 ];
 
-export const SectionRating: React.FC<SectionRatingProps> = ({ questionEn, questionAr, lang = 'en', value, onChange, comment, onCommentChange }) => {
+export const SectionRating: React.FC<SectionRatingProps> = ({
+  questionEn,
+  questionAr,
+  lang = 'en',
+  value,
+  onChange,
+  comment,
+  onCommentChange
+}) => {
   const selected = SCALE.find(s => s.value === value);
-  const trackWidth = value > 0 ? `${((value - 1) / 4) * 100}%` : '0%';
   const isAr = lang === 'ar';
   const questionText = isAr && questionAr ? questionAr : questionEn;
   const needsComment = value > 0 && value < 3;
   const commentMissing = needsComment && (!comment || comment.trim().length === 0);
 
   return (
-    <div className="space-y-5 p-6 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 transition-colors shadow-sm" dir={isAr ? 'rtl' : 'ltr'}>
-      <p className={`text-sm font-bold text-slate-800 leading-snug ${isAr ? 'text-right' : ''}`}>{questionText}</p>
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:p-5" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <p className={`text-sm font-black leading-6 text-slate-900 ${isAr ? 'text-right' : ''}`}>{questionText}</p>
+        {value > 0 && selected && (
+          <span className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-black ${selected.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${selected.dot}`} />
+            {value}/5
+          </span>
+        )}
+      </div>
 
-      <div className="space-y-3">
-        {/* Track + Buttons */}
-        <div className="relative flex items-center justify-between" style={{ paddingTop: '2px', paddingBottom: '2px' }}>
-          {/* Base track */}
-          <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-1 bg-slate-100 rounded-full z-0" />
-          {/* Filled track */}
-          {value > 0 && (
-            <div
-              className={`absolute left-[10%] top-1/2 -translate-y-1/2 h-1 rounded-full z-0 transition-all duration-400 ${selected?.track}`}
-              style={{ width: trackWidth }}
-            />
-          )}
-
-          {/* Buttons */}
+      <div className="mt-5 space-y-3">
+        <div className="grid grid-cols-5 gap-2">
           {SCALE.map(item => {
             const isSelected = value === item.value;
-            const isPast = value > item.value;
             return (
               <button
                 key={item.value}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`Rate ${item.value}: ${item.label}`}
                 onClick={() => onChange(item.value)}
-                className={`relative z-10 w-10 h-10 rounded-full border-2 font-black text-sm transition-all duration-200 flex items-center justify-center
-                  ${isSelected
-                    ? `${item.color} ${item.border} text-white scale-110 shadow-lg`
-                    : isPast
-                    ? `${item.color} ${item.border} text-white opacity-60`
-                    : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600'
-                  }`}
+                className={`flex min-h-[64px] flex-col items-center justify-center rounded-xl border text-center transition-all duration-200 ${
+                  isSelected
+                    ? `${item.active} shadow-lg`
+                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-white hover:text-slate-800'
+                }`}
               >
-                {item.value}
+                <span className="text-base font-black leading-none">{item.value}</span>
+                <span className="mt-1 max-w-full text-[10px] font-black uppercase leading-tight tracking-wide">{item.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Labels row */}
-        <div className="flex justify-between">
-          {SCALE.map(item => (
-            <div key={item.value} className="flex-1 text-center">
-              <span className={`text-[9px] font-bold uppercase tracking-wide transition-colors ${
-                value === item.value ? item.text : 'text-slate-300'
-              }`}>
-                {item.label}
-              </span>
-            </div>
-          ))}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+          <span className={isAr ? 'text-right' : ''}>Needs work</span>
+          <span className="h-px w-12 bg-slate-200" />
+          <span className={isAr ? 'text-left' : 'text-right'}>Strong</span>
         </div>
       </div>
 
-      {value > 0 && (
-        <div className={`text-xs font-bold ${selected?.text} flex items-center gap-1.5 animate-in fade-in`}>
-          <span className={`w-2 h-2 rounded-full ${selected?.color}`} />
-          Score {value} — {selected?.label}
-        </div>
-      )}
-
       {needsComment && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-1">
-          <div className={`flex items-center gap-1.5 mb-2 ${isAr ? 'flex-row-reverse' : ''}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+        <div className="mt-5 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className={`mb-2 flex items-center gap-1.5 ${isAr ? 'flex-row-reverse' : ''}`}>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-500" />
             <label className={`text-xs font-bold text-rose-600 ${isAr ? 'text-right' : ''}`}>
-              {isAr
-                ? 'مطلوب — يرجى توضيح سبب تقييمك المنخفض'
-                : 'Required — please explain the reason for this low score'}
+              Required - please explain the reason for this low score
             </label>
           </div>
           <textarea
@@ -101,20 +89,20 @@ export const SectionRating: React.FC<SectionRatingProps> = ({ questionEn, questi
             value={comment || ''}
             onChange={e => onCommentChange?.(e.target.value)}
             rows={3}
-            placeholder={isAr ? 'اكتب ملاحظاتك هنا...' : 'Share your feedback here...'}
-            className={`w-full text-sm p-3 rounded-xl border-2 outline-none resize-none transition-colors
-              ${commentMissing
-                ? 'border-rose-300 bg-rose-50 focus:border-rose-500 placeholder:text-rose-300'
+            placeholder="Share your feedback here..."
+            className={`w-full resize-none rounded-xl border-2 p-3 text-sm outline-none transition-colors ${
+              commentMissing
+                ? 'border-rose-300 bg-rose-50 placeholder:text-rose-300 focus:border-rose-500'
                 : 'border-emerald-300 bg-emerald-50 focus:border-emerald-500'
-              } ${isAr ? 'text-right' : ''}`}
+            } ${isAr ? 'text-right' : ''}`}
           />
           {commentMissing && (
-            <p className={`text-[11px] text-rose-500 font-bold mt-1 ${isAr ? 'text-right' : ''}`}>
-              {isAr ? 'هذا الحقل إلزامي للمتابعة' : 'This field is required to proceed'}
+            <p className={`mt-1 text-[11px] font-bold text-rose-500 ${isAr ? 'text-right' : ''}`}>
+              This field is required to proceed.
             </p>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 };

@@ -61,6 +61,147 @@ const ringsFromGeometry = (geometry) => {
   return [];
 };
 
+const MAP_ZOOM_MIN = 1;
+const MAP_ZOOM_MAX = 3;
+const MAP_ZOOM_STEP = 0.25;
+
+const clampMapZoom = value => Math.min(MAP_ZOOM_MAX, Math.max(MAP_ZOOM_MIN, Number(value.toFixed(2))));
+const zoomTransform = zoom => (
+  `translate(${ANALYZER_MAP_W / 2} ${ANALYZER_MAP_H / 2}) scale(${zoom}) translate(${-ANALYZER_MAP_W / 2} ${-ANALYZER_MAP_H / 2})`
+);
+
+const buildCoverageIndex = (coverageData, pharmacyMap = {}, areaNames = {}) => {
+  const index = new Map();
+  GOVS.forEach(gov => {
+    const zones = coverageData[gov] || {};
+    Object.entries(zones).forEach(([zone, data]) => {
+      (data.covered || []).forEach(block => {
+        const key = normalizeMapBlock(block);
+        const pharmacies = pharmacyMap[key] || [];
+        index.set(key, {
+          blockNumber: key,
+          gov,
+          zone,
+          status: "covered",
+          count: pharmacies.length,
+          pharmacies,
+          area: areaNames[key] || pharmacies[0]?.area || "",
+        });
+      });
+      (data.gaps || []).forEach(block => {
+        const key = normalizeMapBlock(block);
+        index.set(key, {
+          blockNumber: key,
+          gov,
+          zone,
+          status: "gap",
+          count: 0,
+          pharmacies: [],
+          area: areaNames[key] || "",
+        });
+      });
+    });
+  });
+  return index;
+};
+
+const getGeometryBounds = geometry => {
+  if (!geometry?.available) return null;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const feature of geometry.byBlock.values()) {
+    for (const ring of ringsFromGeometry(feature.geometry)) {
+      for (const [lng, lat] of ring) {
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+        minLng = Math.min(minLng, lng);
+        maxLng = Math.max(maxLng, lng);
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+      }
+    }
+  }
+  if (!Number.isFinite(minLng)) return null;
+  return { minLng, maxLng, minLat, maxLat };
+};
+
+const createGeometryProjector = bounds => {
+  if (!bounds) return null;
+  const spanLng = bounds.maxLng - bounds.minLng || 1;
+  const spanLat = bounds.maxLat - bounds.minLat || 1;
+  const scale = Math.min(
+    (ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) / spanLng,
+    (ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) / spanLat
+  );
+  const offsetX = ANALYZER_MAP_PAD + ((ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) - spanLng * scale) / 2;
+  const offsetY = ANALYZER_MAP_PAD + ((ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) - spanLat * scale) / 2;
+  return ([lng, lat]) => ({
+    x: offsetX + (lng - bounds.minLng) * scale,
+    y: offsetY + (bounds.maxLat - lat) * scale,
+  });
+};
+
+const buildAnalyzerMapPaths = (geometry, coverageIndex, activeGov = "all") => {
+  if (!geometry?.available) return [];
+  const project = createGeometryProjector(getGeometryBounds(geometry));
+  if (!project) return [];
+
+  const rows = [];
+  for (const feature of geometry.byBlock.values()) {
+    const blockNumber = normalizeMapBlock(feature.blockNumber);
+    const info = coverageIndex.get(blockNumber);
+    if (activeGov !== "all" && info?.gov !== activeGov) continue;
+
+    let d = "";
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let sumX = 0;
+    let sumY = 0;
+    let pointCount = 0;
+
+    for (const ring of ringsFromGeometry(feature.geometry)) {
+      const points = ring
+        .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat))
+        .map(point => {
+          const projected = project(point);
+          minX = Math.min(minX, projected.x);
+          maxX = Math.max(maxX, projected.x);
+          minY = Math.min(minY, projected.y);
+          maxY = Math.max(maxY, projected.y);
+          sumX += projected.x;
+          sumY += projected.y;
+          pointCount += 1;
+          return `${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
+        });
+      if (points.length > 0) d += `M${points.join("L")}Z`;
+    }
+
+    if (d) {
+      const bbox = {
+        minX: Number.isFinite(minX) ? minX : 0,
+        maxX: Number.isFinite(maxX) ? maxX : 0,
+        minY: Number.isFinite(minY) ? minY : 0,
+        maxY: Number.isFinite(maxY) ? maxY : 0,
+      };
+      rows.push({
+        blockNumber,
+        info,
+        d,
+        bbox,
+        center: pointCount > 0
+          ? { x: sumX / pointCount, y: sumY / pointCount }
+          : { x: (bbox.minX + bbox.maxX) / 2, y: (bbox.minY + bbox.maxY) / 2 },
+      });
+    }
+  }
+
+  const statusRank = { gap: 2, covered: 3 };
+  return rows.sort((a, b) => (statusRank[a.info?.status] || 1) - (statusRank[b.info?.status] || 1));
+};
+
 const blockMapTone = (info) => {
   if (!info) {
     return {
@@ -113,6 +254,7 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
   const [mapError, setMapError] = useState("");
   const [hoveredBlock, setHoveredBlock] = useState("");
   const [selectedBlock, setSelectedBlock] = useState("");
+  const [mapZoom, setMapZoom] = useState(1);
 
   useEffect(() => {
     let mounted = true;
@@ -128,40 +270,10 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
     return () => { mounted = false; };
   }, []);
 
-  const coverageIndex = useMemo(() => {
-    const index = new Map();
-    GOVS.forEach(gov => {
-      const zones = coverageData[gov] || {};
-      Object.entries(zones).forEach(([zone, data]) => {
-        (data.covered || []).forEach(block => {
-          const key = normalizeMapBlock(block);
-          const pharmacies = pharmacyMap[key] || [];
-          index.set(key, {
-            blockNumber: key,
-            gov,
-            zone,
-            status: "covered",
-            count: pharmacies.length,
-            pharmacies,
-            area: areaNames[key] || pharmacies[0]?.area || "",
-          });
-        });
-        (data.gaps || []).forEach(block => {
-          const key = normalizeMapBlock(block);
-          index.set(key, {
-            blockNumber: key,
-            gov,
-            zone,
-            status: "gap",
-            count: 0,
-            pharmacies: [],
-            area: areaNames[key] || "",
-          });
-        });
-      });
-    });
-    return index;
-  }, [coverageData, pharmacyMap, areaNames]);
+  const coverageIndex = useMemo(
+    () => buildCoverageIndex(coverageData, pharmacyMap, areaNames),
+    [coverageData, pharmacyMap, areaNames]
+  );
 
   const registeredStats = useMemo(() => {
     const rows = Array.from(coverageIndex.values()).filter(info => activeGov === "all" || info.gov === activeGov);
@@ -171,90 +283,19 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
     return { total: rows.length, covered, gaps, pharmacies };
   }, [activeGov, coverageIndex]);
 
-  const bounds = useMemo(() => {
-    if (!geometry?.available) return null;
-    let minLng = Infinity;
-    let maxLng = -Infinity;
-    let minLat = Infinity;
-    let maxLat = -Infinity;
-    for (const feature of geometry.byBlock.values()) {
-      for (const ring of ringsFromGeometry(feature.geometry)) {
-        for (const [lng, lat] of ring) {
-          if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-          minLng = Math.min(minLng, lng);
-          maxLng = Math.max(maxLng, lng);
-          minLat = Math.min(minLat, lat);
-          maxLat = Math.max(maxLat, lat);
-        }
-      }
-    }
-    if (!Number.isFinite(minLng)) return null;
-    return { minLng, maxLng, minLat, maxLat };
-  }, [geometry]);
+  const paths = useMemo(
+    () => buildAnalyzerMapPaths(geometry, coverageIndex, activeGov),
+    [activeGov, coverageIndex, geometry]
+  );
 
-  const project = useMemo(() => {
-    if (!bounds) return null;
-    const spanLng = bounds.maxLng - bounds.minLng || 1;
-    const spanLat = bounds.maxLat - bounds.minLat || 1;
-    const scale = Math.min(
-      (ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) / spanLng,
-      (ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) / spanLat
-    );
-    const offsetX = ANALYZER_MAP_PAD + ((ANALYZER_MAP_W - ANALYZER_MAP_PAD * 2) - spanLng * scale) / 2;
-    const offsetY = ANALYZER_MAP_PAD + ((ANALYZER_MAP_H - ANALYZER_MAP_PAD * 2) - spanLat * scale) / 2;
-    return ([lng, lat]) => ({
-      x: offsetX + (lng - bounds.minLng) * scale,
-      y: offsetY + (bounds.maxLat - lat) * scale,
-    });
-  }, [bounds]);
+  const adjustMapZoom = useCallback((amount) => {
+    setMapZoom(current => clampMapZoom(current + amount));
+  }, []);
 
-  const paths = useMemo(() => {
-    if (!geometry?.available || !project) return [];
-
-    const rows = [];
-    for (const feature of geometry.byBlock.values()) {
-      const blockNumber = normalizeMapBlock(feature.blockNumber);
-      const info = coverageIndex.get(blockNumber);
-      if (activeGov !== "all" && info?.gov !== activeGov) continue;
-
-      let d = "";
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
-
-      for (const ring of ringsFromGeometry(feature.geometry)) {
-        const points = ring
-          .filter(([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat))
-          .map(point => {
-            const projected = project(point);
-            minX = Math.min(minX, projected.x);
-            maxX = Math.max(maxX, projected.x);
-            minY = Math.min(minY, projected.y);
-            maxY = Math.max(maxY, projected.y);
-            return `${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
-          });
-        if (points.length > 0) d += `M${points.join("L")}Z`;
-      }
-
-      if (d) {
-        rows.push({
-          blockNumber,
-          info,
-          d,
-          bbox: {
-            minX: Number.isFinite(minX) ? minX : 0,
-            maxX: Number.isFinite(maxX) ? maxX : 0,
-            minY: Number.isFinite(minY) ? minY : 0,
-            maxY: Number.isFinite(maxY) ? maxY : 0,
-          },
-        });
-      }
-    }
-
-    const statusRank = { gap: 2, covered: 3 };
-    return rows.sort((a, b) => (statusRank[a.info?.status] || 1) - (statusRank[b.info?.status] || 1));
-  }, [activeGov, coverageIndex, geometry, project]);
+  const handleMapWheel = useCallback((event) => {
+    event.preventDefault();
+    adjustMapZoom(event.deltaY < 0 ? 0.15 : -0.15);
+  }, [adjustMapZoom]);
 
   const activePath = useMemo(() => {
     const selected = selectedBlock || hoveredBlock;
@@ -305,7 +346,10 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 p-4 sm:p-5">
-          <div className="relative min-h-[420px] rounded-xl border border-gray-100 bg-slate-50 overflow-hidden">
+          <div
+            className="relative min-h-[420px] rounded-xl border border-gray-100 bg-slate-50 overflow-hidden"
+            onWheel={handleMapWheel}
+          >
             <svg
               viewBox={`0 0 ${ANALYZER_MAP_W} ${ANALYZER_MAP_H}`}
               role="img"
@@ -313,7 +357,8 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
               className="h-[420px] sm:h-[520px] w-full"
             >
               <rect width={ANALYZER_MAP_W} height={ANALYZER_MAP_H} fill="#f8fafc" />
-              <g>
+              <g transform={zoomTransform(mapZoom)}>
+                <g>
                 {paths.map(path => {
                   const tone = blockMapTone(path.info);
                   const isSelected = selectedBlock === path.blockNumber;
@@ -362,7 +407,37 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
                   </text>
                 </g>
               )}
+              </g>
             </svg>
+            <div className="absolute right-3 top-3 rounded-xl border border-white/80 bg-white/95 p-1 shadow-sm backdrop-blur">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Zoom out"
+                  onClick={() => adjustMapZoom(-MAP_ZOOM_STEP)}
+                  className="h-8 w-8 rounded-lg border border-gray-200 text-sm font-black text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  disabled={mapZoom <= MAP_ZOOM_MIN}
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapZoom(1)}
+                  className="h-8 min-w-[54px] rounded-lg border border-gray-200 px-2 text-[11px] font-black text-gray-600 hover:bg-gray-50"
+                >
+                  {Math.round(mapZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zoom in"
+                  onClick={() => adjustMapZoom(MAP_ZOOM_STEP)}
+                  className="h-8 w-8 rounded-lg bg-gray-900 text-sm font-black text-white hover:bg-gray-800 disabled:opacity-40"
+                  disabled={mapZoom >= MAP_ZOOM_MAX}
+                >
+                  +
+                </button>
+              </div>
+            </div>
             <div className="absolute left-3 bottom-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
               <div className="flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-wide text-gray-500">
                 {[
@@ -953,6 +1028,228 @@ const GapsOnlyView = ({ govFilter }) => {
 
 
 // ─── POPULATION INTELLIGENCE VIEW ────────────────────────────────────────────
+function PopulationGovernorateMap({ govStats }) {
+  const { coverageData, areaNames } = useContext(DataContext);
+  const [geometry, setGeometry] = useState(null);
+  const [mapError, setMapError] = useState("");
+  const [mapZoom, setMapZoom] = useState(1);
+
+  useEffect(() => {
+    let mounted = true;
+    loadBahrainBlockGeometry()
+      .then(dataset => {
+        if (!mounted) return;
+        setGeometry(dataset);
+        setMapError(dataset?.available ? "" : (dataset?.error || "Bahrain block geometry is unavailable."));
+      })
+      .catch(error => {
+        if (mounted) setMapError(error?.message || "Bahrain block geometry is unavailable.");
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const coverageIndex = useMemo(
+    () => buildCoverageIndex(coverageData, {}, areaNames),
+    [coverageData, areaNames]
+  );
+  const paths = useMemo(
+    () => buildAnalyzerMapPaths(geometry, coverageIndex, "all"),
+    [coverageIndex, geometry]
+  );
+  const statsByGov = useMemo(() => new Map(govStats.map(item => [item.gov, item])), [govStats]);
+  const populationMax = useMemo(() => Math.max(...GOVS.map(gov => POP_DATA[gov].total)), []);
+
+  const govLabels = useMemo(() => GOVS.map(gov => {
+    const govPaths = paths.filter(path => path.info?.gov === gov);
+    const stats = statsByGov.get(gov);
+    if (!govPaths.length || !stats) return null;
+
+    const minX = Math.min(...govPaths.map(path => path.bbox.minX));
+    const maxX = Math.max(...govPaths.map(path => path.bbox.maxX));
+    const minY = Math.min(...govPaths.map(path => path.bbox.minY));
+    const maxY = Math.max(...govPaths.map(path => path.bbox.maxY));
+    const rawX = (minX + maxX) / 2;
+    const rawY = (minY + maxY) / 2;
+    const x = Math.min(ANALYZER_MAP_W - 78, Math.max(78, rawX));
+    const y = Math.min(ANALYZER_MAP_H - 34, Math.max(68, rawY));
+
+    return {
+      gov,
+      x,
+      y,
+      stats,
+      color: GOV_META[gov].color,
+      share: Math.round((stats.pop / TOTAL_POP) * 100),
+    };
+  }).filter(Boolean), [paths, statsByGov]);
+
+  const adjustMapZoom = useCallback((amount) => {
+    setMapZoom(current => clampMapZoom(current + amount));
+  }, []);
+
+  const handleMapWheel = useCallback((event) => {
+    event.preventDefault();
+    adjustMapZoom(event.deltaY < 0 ? 0.15 : -0.15);
+  }, [adjustMapZoom]);
+
+  const sortedStats = [...govStats].sort((a, b) => b.pop - a.pop);
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-gray-900 text-sm">Population Intel Map</h3>
+          <p className="text-xs text-gray-400 mt-1">
+            Governorate population totals projected onto the Bahrain block geometry.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {GOVS.map(gov => (
+            <span
+              key={gov}
+              className="inline-flex items-center gap-1.5 rounded-full border border-gray-100 bg-gray-50 px-2.5 py-1 text-[11px] font-bold text-gray-600"
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background:GOV_META[gov].color }} />
+              {gov}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {mapError ? (
+        <div className="m-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Population map could not be loaded. Population tables are still available. {mapError}
+        </div>
+      ) : !geometry ? (
+        <div className="p-5">
+          <div className="h-[360px] rounded-xl bg-gray-100 animate-pulse" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 p-4 sm:p-5">
+          <div
+            className="relative min-h-[360px] rounded-xl border border-gray-100 overflow-hidden"
+            style={{ background:"#f9eee9" }}
+            onWheel={handleMapWheel}
+          >
+            <svg
+              viewBox={`0 0 ${ANALYZER_MAP_W} ${ANALYZER_MAP_H}`}
+              role="img"
+              aria-label="Bahrain population by governorate"
+              className="h-[360px] sm:h-[450px] w-full"
+            >
+              <rect width={ANALYZER_MAP_W} height={ANALYZER_MAP_H} fill="#f9eee9" />
+              <g transform={zoomTransform(mapZoom)}>
+                {paths.map(path => {
+                  const gov = path.info?.gov;
+                  const color = gov ? GOV_META[gov].color : "#d1d5db";
+                  const stats = gov ? statsByGov.get(gov) : null;
+                  const intensity = stats ? Math.max(0.22, (stats.pop / populationMax) * 0.46) : 0.18;
+                  return (
+                    <path
+                      key={path.blockNumber}
+                      d={path.d}
+                      fill={gov ? `${color}${Math.round(intensity * 255).toString(16).padStart(2, "0")}` : "#e5e7eb"}
+                      stroke={gov ? color : "#9ca3af"}
+                      strokeWidth={gov ? 0.72 : 0.55}
+                      vectorEffect="non-scaling-stroke"
+                    >
+                      <title>
+                        {gov
+                          ? `${gov} Governorate - ${POP_DATA[gov].total.toLocaleString()} population`
+                          : `Block ${path.blockNumber} - Not assigned to analyzer data`}
+                      </title>
+                    </path>
+                  );
+                })}
+
+                {govLabels.map(label => (
+                  <g key={label.gov} transform={`translate(${label.x} ${label.y})`} pointerEvents="none">
+                    <circle r="9" fill={label.color} stroke="white" strokeWidth="3" />
+                    <line x1="0" y1="-8" x2="0" y2="-18" stroke={label.color} strokeWidth="2" />
+                    <rect x="-66" y="-62" width="132" height="44" rx="10" fill="white" stroke={`${label.color}55`} strokeWidth="1.2" />
+                    <text x="0" y="-44" textAnchor="middle" fill="#111827" fontSize="13" fontWeight="800">
+                      {label.gov}
+                    </text>
+                    <text x="0" y="-28" textAnchor="middle" fill={label.color} fontSize="14" fontWeight="900">
+                      {label.stats.pop.toLocaleString()}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            </svg>
+
+            <div className="absolute right-3 top-3 rounded-xl border border-white/80 bg-white/95 p-1 shadow-sm backdrop-blur">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Zoom population map out"
+                  onClick={() => adjustMapZoom(-MAP_ZOOM_STEP)}
+                  className="h-8 w-8 rounded-lg border border-gray-200 text-sm font-black text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  disabled={mapZoom <= MAP_ZOOM_MIN}
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapZoom(1)}
+                  className="h-8 min-w-[54px] rounded-lg border border-gray-200 px-2 text-[11px] font-black text-gray-600 hover:bg-gray-50"
+                >
+                  {Math.round(mapZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  aria-label="Zoom population map in"
+                  onClick={() => adjustMapZoom(MAP_ZOOM_STEP)}
+                  className="h-8 w-8 rounded-lg bg-gray-900 text-sm font-black text-white hover:bg-gray-800 disabled:opacity-40"
+                  disabled={mapZoom >= MAP_ZOOM_MAX}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="absolute left-3 bottom-3 rounded-lg border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Population intensity</div>
+              <div className="mt-1 flex items-center gap-2 text-[11px] font-semibold text-gray-500">
+                <span>Lower</span>
+                <span className="h-2.5 w-20 rounded-full" style={{ background:"linear-gradient(90deg,#e5e7eb,#3b82f6,#10b981,#8b5cf6)" }} />
+                <span>Higher</span>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Governorate Ranking</p>
+            <div className="mt-3 space-y-3">
+              {sortedStats.map(item => {
+                const gm = GOV_META[item.gov];
+                const share = Math.round((item.pop / TOTAL_POP) * 100);
+                return (
+                  <div key={item.gov} className="rounded-xl border border-gray-100 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-gray-900">{item.gov}</p>
+                        <p className="text-[11px] text-gray-400">{share}% of Bahrain population</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black tabular-nums" style={{ color:gm.color }}>{item.pop.toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-400">{item.coveragePct}% coverage</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width:`${share}%`, background:gm.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PopulationView() {
   const { coverageData, areaNames } = useContext(DataContext);
   const [activeTab, setActiveTab] = useState("overview"); // overview | opportunities | density
@@ -1018,6 +1315,8 @@ function PopulationView() {
   // ── Overview tab ──
   const OverviewTab = () => (
     <div className="space-y-6">
+      <PopulationGovernorateMap govStats={govStats} />
+
       {/* Population vs Coverage summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {govStats.map(gs => {

@@ -2,9 +2,21 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
-type AssignableRole = "admin" | "branch" | "supervisor" | "warehouse" | "accounts";
+type AssignableRole = "admin" | "owner" | "branch" | "supervisor" | "warehouse" | "accounts";
 
-const assignableRoles: AssignableRole[] = ["admin", "branch", "supervisor", "warehouse", "accounts"];
+const assignableRoles: AssignableRole[] = ["admin", "owner", "branch", "supervisor", "warehouse", "accounts"];
+
+const friendlyDatabaseError = (message: string | undefined, role?: string) => {
+  const normalized = message || "Database update failed";
+  if (
+    role === "owner" &&
+    (normalized.includes("app_user_profiles_role_check") ||
+      normalized.toLowerCase().includes("violates check constraint"))
+  ) {
+    return "Owner role is not enabled in the database yet. Apply the latest role/access migrations, then try again.";
+  }
+  return normalized;
+};
 
 serve(async (req) => {
   const json = (body: Record<string, unknown>, status = 200) =>
@@ -146,7 +158,7 @@ serve(async (req) => {
 
   if (profileError) {
     await supabase.auth.admin.deleteUser(userId);
-    return json({ error: profileError.message }, 400);
+    return json({ error: friendlyDatabaseError(profileError.message, role) }, 400);
   }
 
   if (role === "supervisor" && supervisorBranchIds.length > 0) {

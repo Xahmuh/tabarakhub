@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, CheckCircle2, Lock, MapPin, Pencil, Plus, Trash2, Unlock, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, X } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
@@ -8,6 +8,12 @@ import {
 } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
 import { formatBhd, todayKey, yesterdayKey } from './utils';
+import {
+  DELIVERY_ORDER_IMPORT_ACCEPT,
+  MAX_DELIVERY_ORDER_IMPORT_BYTES,
+  isSupportedDeliveryOrderImportFile,
+  parseDeliveryOrderUpload
+} from '../../utils/deliveryImportUtils';
 
 const PAYMENT_TYPES: DeliveryPaymentType[] = ['BP', 'CARD', 'CASH', 'TALABAT'];
 
@@ -29,6 +35,52 @@ const sortOrdersNewestFirst = (orders: DeliveryOrder[]) => [...orders].sort((a, 
   b.orderDate.localeCompare(a.orderDate) || b.createdAt.localeCompare(a.createdAt)
 );
 
+const RequiredMark = () => <span className="ml-1 text-red-600" aria-hidden="true">*</span>;
+
+const escapeUploadHtml = (value: string) => value.replace(/[&<>"']/g, char => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+}[char] || char));
+
+const renderDeliveryUploadProgressHtml = (percent: number, label: string, detail?: string) => {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  return `
+    <div style="font-family: inherit; text-align: left;">
+      <p style="margin: 0 0 8px; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8;">Parsing and uploading delivery orders</p>
+      <div style="display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px;">
+        <span style="font-size: 13px; font-weight: 800; color: #334155;">${escapeUploadHtml(label)}</span>
+        <span style="font-size: 18px; font-weight: 900; color: #b91c1c;">${safePercent}%</span>
+      </div>
+      <div style="height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden;">
+        <div style="height: 100%; width: ${safePercent}%; border-radius: 999px; background: linear-gradient(90deg, #991b1b, #ef4444); transition: width 180ms ease;"></div>
+      </div>
+      ${detail ? `<p style="margin: 10px 0 0; font-size: 12px; font-weight: 700; color: #64748b;">${escapeUploadHtml(detail)}</p>` : ''}
+    </div>
+  `;
+};
+
+const renderDeliveryImportErrorsHtml = (errors: { row: number; message: string }[]) => {
+  const visibleErrors = errors.slice(0, 10);
+  const remaining = Math.max(0, errors.length - visibleErrors.length);
+  return `
+    <div style="text-align: left; font-family: inherit;">
+      <p style="margin: 0 0 10px; color: #475569; font-size: 13px; font-weight: 700;">Fix these rows and upload the file again.</p>
+      <div style="max-height: 260px; overflow: auto; border: 1px solid #fee2e2; border-radius: 12px;">
+        ${visibleErrors.map(error => `
+          <div style="padding: 10px 12px; border-bottom: 1px solid #fee2e2;">
+            <span style="display: block; color: #991b1b; font-size: 12px; font-weight: 900;">Row ${error.row}</span>
+            <span style="display: block; margin-top: 2px; color: #475569; font-size: 12px; font-weight: 700;">${escapeUploadHtml(error.message)}</span>
+          </div>
+        `).join('')}
+      </div>
+      ${remaining > 0 ? `<p style="margin: 10px 0 0; color: #64748b; font-size: 12px; font-weight: 800;">+ ${remaining} more errors</p>` : ''}
+    </div>
+  `;
+};
+
 interface BranchRecordingPageProps {
   branch: Branch;
   canEdit: boolean;
@@ -38,13 +90,18 @@ interface BranchRecordingPageProps {
 }
 
 export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch, canEdit, isManager, orderToEdit, onEditDone }) => {
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
+  const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
   const [historyOrders, setHistoryOrders] = useState<DeliveryOrder[]>([]);
   const [historyFrom, setHistoryFrom] = useState(todayKey());
   const [historyTo, setHistoryTo] = useState(todayKey());
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [isHistoryBulkCancelling, setIsHistoryBulkCancelling] = useState(false);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
 
   // Form state
@@ -64,16 +121,22 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [blockNotFound, setBlockNotFound] = useState(false);
   const [isBlockSearching, setIsBlockSearching] = useState(false);
 
+  const selectedBlock = useMemo(
+    () => blocks.find(block => block.blockNumber === blockInput) || resolvedBlock,
+    [blocks, blockInput, resolvedBlock]
+  );
+  const blockOptions = useMemo(() => blocks.map(block => ({
+    value: block.blockNumber,
+    label: `Block ${block.blockNumber}`,
+    hint: `${block.areaName} - ${block.governorate}`
+  })), [blocks]);
+
   const isTalabat = paymentType === 'TALABAT';
   const areaPreview = isTalabat
     ? 'Not required for Talabat'
-    : resolvedBlock
-      ? `${resolvedBlock.areaName} | ${resolvedBlock.governorate}`
-      : blockMatches.length > 0 && blockInput.trim()
-        ? `${blockMatches.length} matching block${blockMatches.length === 1 ? '' : 's'} - select one`
-      : blockNotFound && blockInput.trim()
-        ? 'Block not found'
-        : 'Search by block number or area';
+    : selectedBlock
+      ? `${selectedBlock.areaName} | ${selectedBlock.governorate}`
+      : 'Search by area name, then choose the block number';
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager || editingOrder ? undefined : yesterdayKey();
   const maxDate = isManager || editingOrder ? undefined : todayKey();
@@ -84,15 +147,23 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       : { from: historyTo, to: historyFrom }
   ), [historyFrom, historyTo]);
   const isOrderInsideHistoryRange = (order: DeliveryOrder) => order.orderDate >= historyRange.from && order.orderDate <= historyRange.to;
+  const selectedHistoryOrders = useMemo(
+    () => historyOrders.filter(order => selectedHistoryIds.has(order.id)),
+    [historyOrders, selectedHistoryIds]
+  );
+  const allHistorySelected = historyOrders.length > 0 && historyOrders.every(order => selectedHistoryIds.has(order.id));
+  const canUseHistorySelection = canEdit && historyOrders.length > 0;
 
   const loadReference = async () => {
     try {
-      const [driverList, pharmacistList] = await Promise.all([
+      const [driverList, pharmacistList, blockList] = await Promise.all([
         deliveryService.drivers.list(),
-        pharmacistService.listByBranch(branch.id)
+        pharmacistService.listByBranch(branch.id),
+        deliveryService.blocks.list()
       ]);
       setDrivers(driverList);
       setPharmacists(pharmacistList);
+      setBlocks(blockList);
     } catch (e) {
       console.error('Delivery reference load failed', e);
     }
@@ -116,6 +187,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   useEffect(() => { loadReference(); }, [branch.id]);
   useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
+
+  useEffect(() => {
+    setSelectedHistoryIds(prev => {
+      const visibleIds = new Set(historyOrders.map(order => order.id));
+      const next = new Set([...prev].filter(id => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [historyOrders]);
 
   useEffect(() => {
     setLocksHydrated(false);
@@ -178,6 +257,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       setBlockNotFound(false);
       return;
     }
+    const directoryBlock = blocks.find(block => block.blockNumber.toLowerCase() === trimmed.toLowerCase());
+    if (directoryBlock) {
+      setResolvedBlock(directoryBlock);
+      setBlockMatches([directoryBlock]);
+      setBlockNotFound(false);
+      return;
+    }
     if (
       resolvedBlock
       && (
@@ -202,16 +288,28 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       setBlockMatches(matches);
       setResolvedBlock(selected);
       setBlockNotFound(matches.length === 0);
+      if (selected && selected.blockNumber !== trimmed) {
+        setBlockInput(selected.blockNumber);
+      }
       setIsBlockSearching(false);
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [blockInput, isTalabat, resolvedBlock]);
+  }, [blockInput, isTalabat, resolvedBlock, blocks]);
 
   const selectResolvedBlock = (block: DeliveryBlock) => {
     setBlockInput(block.blockNumber);
     setResolvedBlock(block);
     setBlockMatches([block]);
     setBlockNotFound(false);
+  };
+
+  const handleBlockChange = (blockNumber: string | null) => {
+    const block = blockNumber ? blocks.find(item => item.blockNumber === blockNumber) || null : null;
+    setBlockInput(block?.blockNumber || '');
+    setResolvedBlock(block);
+    setBlockMatches(block ? [block] : []);
+    setBlockNotFound(false);
+    setIsBlockSearching(false);
   };
 
   const resetForm = (preserveBatchContext = true) => {
@@ -296,12 +394,24 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       Swal.fire('Invalid value', 'Enter an order value greater than zero in BHD.', 'warning');
       return;
     }
+    if (!pharmacistId) {
+      Swal.fire('Pharmacist required', 'Select the pharmacist before saving this delivery order.', 'warning');
+      return;
+    }
+    if (!driverId) {
+      Swal.fire('Driver required', 'Select the driver before saving this delivery order.', 'warning');
+      return;
+    }
     if (!isTalabat && !blockInput.trim()) {
       Swal.fire('Block required', 'Block number is required for all orders except Talabat.', 'warning');
       return;
     }
-    if (!isTalabat && blockMatches.length > 0 && !resolvedBlock) {
-      Swal.fire('Select block number', 'This area search found multiple blocks. Choose the correct block number before saving.', 'warning');
+    if (!isTalabat && !selectedBlock) {
+      Swal.fire(
+        'Select block number',
+        'Search by area name or block number, then choose a real block number from the list before saving.',
+        'warning'
+      );
       return;
     }
     if (!isTalabat && blockNotFound) {
@@ -324,7 +434,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
       driverId,
-      blockNumber: isTalabat ? null : (resolvedBlock ? resolvedBlock.blockNumber : blockInput.trim()) || null
+      blockNumber: isTalabat ? null : selectedBlock?.blockNumber || null
     };
 
     setIsSubmitting(true);
@@ -379,8 +489,189 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     try {
       await deliveryService.orders.delete(order.id);
       setHistoryOrders(prev => prev.filter(o => o.id !== order.id));
+      setSelectedHistoryIds(prev => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
     } catch (e: any) {
       Swal.fire('Cancel failed', e?.message || 'Could not cancel this delivery invoice.', 'error');
+    }
+  };
+
+  const handleBulkFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || isBulkUploading) return;
+
+    if (!isSupportedDeliveryOrderImportFile(file)) {
+      Swal.fire('Invalid file', 'Please upload a .xlsx Excel file or .csv file.', 'warning');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_DELIVERY_ORDER_IMPORT_BYTES) {
+      Swal.fire('File too large', 'Delivery bulk upload files must be 5MB or smaller.', 'warning');
+      event.target.value = '';
+      return;
+    }
+
+    if (pharmacists.length === 0) {
+      Swal.fire('No pharmacists assigned', 'Assign pharmacists to this branch before using bulk delivery upload.', 'warning');
+      event.target.value = '';
+      return;
+    }
+
+    if (drivers.length === 0) {
+      Swal.fire('No drivers found', 'Add active delivery drivers before using bulk delivery upload.', 'warning');
+      event.target.value = '';
+      return;
+    }
+
+    const updateUploadProgress = (percent: number, label: string, detail?: string) => {
+      Swal.update({ html: renderDeliveryUploadProgressHtml(percent, label, detail) });
+    };
+
+    setIsBulkUploading(true);
+    Swal.fire({
+      title: 'Processing...',
+      html: renderDeliveryUploadProgressHtml(3, 'Preparing delivery upload', file.name),
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false
+    });
+
+    try {
+      const { validRows, errors, totalRows } = await parseDeliveryOrderUpload(
+        file,
+        { branchId: branch.id, pharmacists, drivers, blocks },
+        progress => updateUploadProgress(progress.percent, progress.label, progress.detail)
+      );
+
+      if (totalRows === 0) {
+        Swal.close();
+        Swal.fire('Empty file', 'No delivery rows were found in this file.', 'warning');
+        return;
+      }
+
+      if (errors.length > 0) {
+        Swal.close();
+        Swal.fire({
+          title: 'Upload validation failed',
+          html: renderDeliveryImportErrorsHtml(errors),
+          icon: 'error',
+          confirmButtonColor: '#B91c1c',
+          width: 640
+        });
+        return;
+      }
+
+      const createdOrders: DeliveryOrder[] = [];
+      for (const [index, row] of validRows.entries()) {
+        updateUploadProgress(
+          72 + Math.round((index / Math.max(validRows.length, 1)) * 24),
+          'Uploading delivery orders',
+          `${index.toLocaleString()} of ${validRows.length.toLocaleString()} rows uploaded`
+        );
+        const created = await deliveryService.orders.insert(row.input);
+        createdOrders.push(created);
+      }
+
+      updateUploadProgress(98, 'Refreshing delivery history', `${createdOrders.length.toLocaleString()} rows uploaded`);
+      const visibleCreated = createdOrders.filter(isOrderInsideHistoryRange);
+      if (visibleCreated.length > 0) {
+        setHistoryOrders(prev => sortOrdersNewestFirst([...visibleCreated, ...prev]));
+      }
+      setSelectedHistoryIds(new Set());
+      updateUploadProgress(100, 'Upload complete', `${createdOrders.length.toLocaleString()} delivery orders uploaded`);
+      setTimeout(() => Swal.close(), 450);
+    } catch (error: any) {
+      Swal.close();
+      Swal.fire('Upload failed', error?.message || 'Could not upload delivery orders.', 'error');
+    } finally {
+      setIsBulkUploading(false);
+      event.target.value = '';
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+    }
+  };
+
+  const toggleHistorySelection = (orderId: string) => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllHistory = () => {
+    setSelectedHistoryIds(prev => {
+      if (historyOrders.length > 0 && historyOrders.every(order => prev.has(order.id))) {
+        return new Set();
+      }
+      return new Set(historyOrders.map(order => order.id));
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedHistoryOrders.length === 0 || isHistoryBulkCancelling) return;
+    const confirm = await Swal.fire({
+      title: 'Cancel selected invoices?',
+      text: `${selectedHistoryOrders.length.toLocaleString()} delivery invoices will be cancelled.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Cancel selected',
+      confirmButtonColor: '#B91c1c'
+    });
+    if (!confirm.isConfirmed) return;
+
+    setIsHistoryBulkCancelling(true);
+    Swal.fire({
+      title: 'Cancelling selected...',
+      html: renderDeliveryUploadProgressHtml(5, 'Preparing selected invoices'),
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false
+    });
+
+    const deletedIds = new Set<string>();
+    const failed: { id: string; message: string }[] = [];
+
+    try {
+      for (const [index, order] of selectedHistoryOrders.entries()) {
+        Swal.update({
+          html: renderDeliveryUploadProgressHtml(
+            8 + Math.round((index / Math.max(selectedHistoryOrders.length, 1)) * 86),
+            'Cancelling invoices',
+            `${index.toLocaleString()} of ${selectedHistoryOrders.length.toLocaleString()} invoices processed`
+          )
+        });
+        try {
+          await deliveryService.orders.delete(order.id);
+          deletedIds.add(order.id);
+        } catch (error: any) {
+          failed.push({ id: order.id, message: error?.message || 'Could not cancel invoice.' });
+        }
+      }
+
+      setHistoryOrders(prev => prev.filter(order => !deletedIds.has(order.id)));
+      setSelectedHistoryIds(new Set(failed.map(item => item.id)));
+      Swal.close();
+
+      if (failed.length > 0) {
+        Swal.fire(
+          'Some invoices failed',
+          `${deletedIds.size.toLocaleString()} cancelled, ${failed.length.toLocaleString()} failed.`,
+          'warning'
+        );
+        return;
+      }
+
+      Swal.fire('Cancelled', `${deletedIds.size.toLocaleString()} delivery invoices were cancelled.`, 'success');
+    } finally {
+      setIsHistoryBulkCancelling(false);
     }
   };
 
@@ -404,26 +695,48 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 </p>
               )}
             </div>
-            {editingOrder && (
+            <div className="flex items-center gap-2">
+              <input
+                ref={bulkFileInputRef}
+                type="file"
+                accept={DELIVERY_ORDER_IMPORT_ACCEPT}
+                onChange={handleBulkFileUpload}
+                className="hidden"
+              />
               <button
                 type="button"
-                onClick={() => resetForm(false)}
-                className={dangerActionClass}
-                title="Cancel edit"
-                aria-label="Cancel edit"
+                onClick={() => bulkFileInputRef.current?.click()}
+                disabled={isBulkUploading || isSubmitting}
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-brand/15 bg-brand/5 px-3 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/30 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Bulk upload delivery orders"
               >
-                <X className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
+                {isBulkUploading ? 'Uploading...' : 'Bulk upload'}
               </button>
-            )}
+              {editingOrder && (
+                <button
+                  type="button"
+                  onClick={() => resetForm(false)}
+                  className={dangerActionClass}
+                  title="Cancel edit"
+                  aria-label="Cancel edit"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Order date</label>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-x-8">
+            <div className="order-1 space-y-1 lg:col-start-1 lg:row-start-1">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Order date <RequiredMark />
+              </label>
               <input
                 type="date"
                 value={orderDate}
                 min={minDate}
                 max={maxDate}
+                required
                 onChange={e => setOrderDate(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold outline-none focus:border-brand/40"
               />
@@ -435,8 +748,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Order value (BHD)</label>
+            <div className="order-4 space-y-1 lg:col-start-2 lg:row-start-1 lg:border-l lg:border-slate-100 lg:pl-6">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Order value (BHD) <RequiredMark />
+              </label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -444,13 +759,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 min="0"
                 placeholder="0.000"
                 value={value}
+                required
                 onChange={e => setValue(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black outline-none focus:border-brand/40"
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Payment type</label>
+            <div className="order-5 space-y-1 lg:col-start-2 lg:row-start-2 lg:border-l lg:border-slate-100 lg:pl-6">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Payment type <RequiredMark />
+              </label>
               <div className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200/50 bg-slate-100/60 p-1">
                 {PAYMENT_TYPES.map(type => (
                   <button
@@ -467,8 +785,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               </div>
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Pharmacist</label>
+            <div className="order-2 space-y-1 lg:col-start-1 lg:row-start-2">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Pharmacist <RequiredMark />
+              </label>
               <SearchableSelect
                 options={pharmacists.map(p => ({
                   value: p.id,
@@ -496,8 +816,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Driver</label>
+            <div className="order-3 space-y-1 lg:col-start-1 lg:row-start-3">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Driver <RequiredMark />
+              </label>
               <SearchableSelect
                 options={drivers.map(d => ({
                   value: d.id,
@@ -520,22 +842,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               </button>
             </div>
 
-            <div>
+            <div className="order-6 space-y-1 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Block or Area {isTalabat ? '(not required for Talabat)' : ''}
+                Block or Area {!isTalabat && <RequiredMark />} {isTalabat ? '(not required for Talabat)' : ''}
               </label>
-              <input
-                type="text"
-                inputMode="text"
-                placeholder={isTalabat ? 'Disabled for Talabat' : 'Search block or area, e.g. 905 or Manama'}
-                value={isTalabat ? '' : blockInput}
-                disabled={isTalabat}
-                onChange={e => setBlockInput(e.target.value)}
-                className={`w-full rounded-lg border px-3 py-2.5 text-sm font-bold outline-none ${
-                  isTalabat
-                    ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
-                    : 'border-slate-200 bg-slate-50 focus:border-brand/40'
-                }`}
+              <SearchableSelect
+                options={blockOptions}
+                value={isTalabat ? null : blockInput || null}
+                onChange={handleBlockChange}
+                placeholder={isTalabat ? 'Disabled for Talabat' : 'Search area or block number...'}
+                disabled={isTalabat || blocks.length === 0}
+                allowClear
               />
               {!isTalabat && isBlockSearching && (
                 <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>
@@ -567,8 +884,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
-            <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Area</label>
+            <div className="order-7 space-y-1 lg:col-start-2 lg:row-start-4 lg:border-l lg:border-slate-100 lg:pl-6">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Area {!isTalabat && <RequiredMark />}
+              </label>
               <div className={`flex min-h-[42px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${
                 resolvedBlock
                   ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
@@ -634,11 +953,41 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:border-brand/40"
               aria-label="History to date"
             />
+            {canUseHistorySelection && (
+              <button
+                type="button"
+                onClick={toggleSelectAllHistory}
+                className="rounded-lg border border-brand/15 bg-brand/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand transition hover:border-brand/30 hover:bg-brand/10"
+              >
+                {allHistorySelected ? 'Clear all' : 'Select all'}
+              </button>
+            )}
           </div>
-          <div className="flex w-full items-center gap-3 text-xs font-bold text-slate-500">
-            <span>{totals.count} orders</span>
-            <span className="text-slate-300">|</span>
-            <span className="text-brand">{formatBhd(totals.value)}</span>
+          <div className="flex w-full flex-wrap items-center justify-between gap-3 text-xs font-bold text-slate-500">
+            <div className="flex items-center gap-3">
+              <span>{totals.count} orders</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-brand">{formatBhd(totals.value)}</span>
+              {selectedHistoryOrders.length > 0 && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span className="rounded-full border border-brand/15 bg-brand/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                    {selectedHistoryOrders.length} selected
+                  </span>
+                </>
+              )}
+            </div>
+            {selectedHistoryOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={isHistoryBulkCancelling}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {isHistoryBulkCancelling ? 'Cancelling...' : 'Cancel selected'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -658,6 +1007,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    {canEdit && (
+                      <th className="w-10 py-2 pr-2">
+                        <input
+                          type="checkbox"
+                          checked={allHistorySelected}
+                          onChange={toggleSelectAllHistory}
+                          className="h-4 w-4 rounded border-slate-300 accent-red-700"
+                          aria-label="Select all delivery invoices"
+                        />
+                      </th>
+                    )}
                     <th className="py-2 pr-3">Date / time</th>
                     <th className="py-2 pr-3 text-right">Value</th>
                     <th className="py-2 px-3">Payment</th>
@@ -670,6 +1030,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 <tbody className="divide-y divide-slate-50">
                   {historyOrders.map(order => (
                     <tr key={order.id} className="hover:bg-slate-50/50">
+                      {canEdit && (
+                        <td className="py-2.5 pr-2 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={selectedHistoryIds.has(order.id)}
+                            onChange={() => toggleHistorySelection(order.id)}
+                            className="h-4 w-4 rounded border-slate-300 accent-red-700"
+                            aria-label={`Select invoice ${order.orderDate}`}
+                          />
+                        </td>
+                      )}
                       <td className="py-2.5 pr-3 text-xs font-bold text-slate-400">
                         <span className="block text-slate-600">{order.orderDate}</span>
                         <span className="text-[11px] text-slate-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -715,9 +1086,20 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 <div key={order.id} className="rounded-lg border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-base font-black text-slate-900 tabular-nums">{formatBhd(order.valueBhd)}</span>
-                    <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType)}`}>
-                      {order.paymentType}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {canEdit && (
+                        <input
+                          type="checkbox"
+                          checked={selectedHistoryIds.has(order.id)}
+                          onChange={() => toggleHistorySelection(order.id)}
+                          className="h-4 w-4 rounded border-slate-300 accent-red-700"
+                          aria-label={`Select invoice ${order.orderDate}`}
+                        />
+                      )}
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType)}`}>
+                        {order.paymentType}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}

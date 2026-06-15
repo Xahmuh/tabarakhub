@@ -1,5 +1,37 @@
 # Access Control QA Results
 
+## Owner Read-only Dashboard Validation - 2026-06-15
+
+Final status: B) dedicated-client staging-ready only
+
+Result:
+
+- `owner` remains valid at DB/type/helper level and is now included in the current Settings UI assignable/module-layout role lists.
+- Live linked profiles currently include only `admin` and `branch`; no owner profile exists for authenticated owner-session QA.
+- Existing admin helper simulation passed full-control expectations.
+- Existing branch helper simulation passed branch-scoped/no-manage expectations.
+- Remote RLS still allows owner write/control through older policies/functions until `20260615023000_owner_readonly_dashboard_hardening.sql` is applied.
+- Target owner hardening migration was not applied because earlier pending migrations `20260614230000` and `20260615011000` are also pending, and `20260615011000` broadens branch delivery-order writes.
+- Local owner dashboard code review confirmed read-only UI and no owner-dashboard mutation calls.
+- Local browser smoke reached login with no observed console errors; authenticated owner dashboard QA remains pending.
+
+See `docs/OWNER_READONLY_DASHBOARD.md` for the detailed validation record.
+
+## Owner Role Reconciliation - 2026-06-15
+
+Final status: B) dedicated-client staging-ready only
+
+Result:
+
+- Owner is now locally assignable in Settings UI as `Owner / Read-only Executive`.
+- Owner appears in module-layout preview with only the Owner Dashboard visible.
+- App routing now denies owner access to all normal operational/admin modules except `owner-dashboard`.
+- Owner permission resolution caps accidental `edit` access to `read`.
+- No owner profile exists on the linked project, so authenticated owner-session QA remains pending.
+- The pending owner hardening migration now also drops the legacy `Allow branch updates` policy on `public.branches`.
+- Pending migration chain was not applied because `20260615011000_allow_branch_delete_old_delivery_orders.sql` broadens branch update/delete access to historical delivery records.
+- Linked database validation still shows one legacy `public.branches.role = manager` row, so branch table is not branch-only yet.
+
 Date: 2026-06-14
 Final status: B) dedicated-client staging-ready only
 
@@ -61,10 +93,11 @@ Failed / pending:
 
 - requires an active Admin or legacy Manager requester;
 - creates Auth users server-side with service role;
-- accepts only Admin, Branch, Supervisor, Warehouse, and Accounts;
+- accepts Admin, Owner, Branch, Supervisor, Warehouse, and Accounts in local source;
 - validates branch links for Branch and Supervisor roles;
 - does not store or log passwords;
 - local code now forces newly created Admin users to active.
+- Owner creation/provisioning must not be used on the linked project until the pending owner RLS hardening migration is applied.
 
 `admin-delete-user`:
 
@@ -94,7 +127,7 @@ Observed:
 Pending:
 
 - Admin can open Project Settings / Access Control.
-- Roles shown: Admin, Branch, Supervisor, Warehouse, Accounts.
+- Roles shown: Admin, Owner / Read-only Executive, Branch, Supervisor, Warehouse, Accounts.
 - Admin cannot be disabled.
 - User-level module permissions UI appears: Role default, None, Read, Edit.
 - Admin remains full-control.

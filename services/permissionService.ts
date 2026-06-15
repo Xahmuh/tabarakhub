@@ -10,6 +10,33 @@ export type AdminCreateUserInput = {
   isActive?: boolean;
 };
 
+const parseFunctionErrorBody = async (error: any): Promise<string | null> => {
+  const response = error?.context;
+  if (!response || typeof response.clone !== 'function') return null;
+
+  try {
+    const text = await response.clone().text();
+    if (!text) return null;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.error === 'string' && parsed.error.trim()) return parsed.error.trim();
+      if (typeof parsed?.message === 'string' && parsed.message.trim()) return parsed.message.trim();
+    } catch {
+      return text.trim();
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const throwFunctionError = async (error: any, fallback: string): Promise<never> => {
+  const serverMessage = await parseFunctionErrorBody(error);
+  throw new Error(serverMessage || error?.message || fallback);
+};
+
 export const permissionService = {
   listForBranch: async (branchId: string) => {
     const { data, error } = await supabaseClient.from('feature_permissions').select('*').eq('branch_id', branchId);
@@ -143,7 +170,7 @@ export const permissionService = {
     const { data, error } = await supabaseClient.functions.invoke('admin-create-user', {
       body: input
     });
-    if (error) throw error;
+    if (error) await throwFunctionError(error, 'Could not create the user.');
     if (data?.error) throw new Error(data.error);
     const user = data?.user;
     if (!user) throw new Error('User was created but no user payload was returned.');
@@ -153,7 +180,7 @@ export const permissionService = {
     const { data, error } = await supabaseClient.functions.invoke('admin-delete-user', {
       body: { userId }
     });
-    if (error) throw error;
+    if (error) await throwFunctionError(error, 'Could not delete the user.');
     if (data?.error) throw new Error(data.error);
     return true;
   },
@@ -161,7 +188,7 @@ export const permissionService = {
     const { data, error } = await supabaseClient.functions.invoke('admin-reset-user-password', {
       body: { userId, password }
     });
-    if (error) throw error;
+    if (error) await throwFunctionError(error, 'Could not reset the user password.');
     if (data?.error) throw new Error(data.error);
     return true;
   },

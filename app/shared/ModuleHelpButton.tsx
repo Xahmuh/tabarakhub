@@ -41,6 +41,8 @@ export type ModuleHelpKey =
   | 'cash-tracker'
   | 'corporate-codex'
   | 'settings'
+  | 'system-settings'
+  | 'access-control'
   | 'feedback-form'
   | 'feedback-admin'
   | 'employee-contributions'
@@ -213,6 +215,34 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
       'Use delivery zones and module layout only when operational data is ready.'
     ],
     tip: 'Settings changes can affect access, so validate with the intended role after saving.'
+  },
+  'system-settings': {
+    title: 'System Settings',
+    eyebrow: 'System module',
+    summary: 'Manage maintenance mode, branding, module layout, delivery zones, and branch operating records.',
+    icon: Settings2,
+    features: ['Maintenance mode', 'Login branding', 'Footer branding', 'Module layout', 'Delivery zones', 'Branches'],
+    steps: [
+      'Start with maintenance status when the domain needs to be paused.',
+      'Update branding and login copy before changing public-facing pages.',
+      'Use Module Layout to arrange launcher cards and badges.',
+      'Maintain branches and delivery zones before relying on branch-level dashboards.'
+    ],
+    tip: 'System changes affect every user, so refresh and verify from the module launcher after saving.'
+  },
+  'access-control': {
+    title: 'Access Control',
+    eyebrow: 'Security module',
+    summary: 'Manage people, users, role defaults, module permissions, and trusted login approvals.',
+    icon: ShieldCheck,
+    features: ['People records', 'Users & roles', 'Role defaults', 'Branch permissions', 'Login approvals'],
+    steps: [
+      'Review the user or role identity before changing permissions.',
+      'Use read/edit levels to separate viewing from operational actions.',
+      'Check the role preview to confirm what each identity will see.',
+      'Approve login requests only when the device and branch context are expected.'
+    ],
+    tip: 'After permission changes, validate with the intended role before treating access as final.'
   },
   'feedback-form': {
     title: 'Quality Feedback',

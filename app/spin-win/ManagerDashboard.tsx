@@ -41,6 +41,8 @@ interface ManagerDashboardProps {
     onBack: () => void;
 }
 
+type ManagerView = 'analytics' | 'prizes' | 'branches';
+
 const REWARD_COLOR_SWATCHES = ['#B91c1c', '#F43F5E', '#EA580C', '#D97706', '#059669', '#2563EB', '#7C3AED', '#0F172A'];
 
 const KPICard: React.FC<{
@@ -87,7 +89,7 @@ const KPICard: React.FC<{
 };
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) => {
-    const [activeView, setActiveView] = useState<'analytics' | 'prizes' | 'branches'>('analytics');
+    const [activeView, setActiveView] = useState<ManagerView>('analytics');
     const [prizes, setPrizes] = useState<SpinPrize[]>([]);
     const [spins, setSpins] = useState<any[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -379,6 +381,29 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
             });
     }, [prizes, rewardSearchTerm, rewardSort, rewardStatusFilter]);
 
+    const branchControlMetrics = useMemo(() => {
+        const branchNodes = branches.filter(branch => branch.role === 'branch');
+        const enabled = branchNodes.filter(branch => branch.isSpinEnabled).length;
+        const disabled = branchNodes.length - enabled;
+        const missingMaps = branchNodes.filter(branch => !branch.googleMapsLink?.trim()).length;
+        const missingWhatsApp = branchNodes.filter(branch => !branch.whatsappNumber?.trim()).length;
+
+        return { branchNodes, enabled, disabled, missingMaps, missingWhatsApp };
+    }, [branches]);
+
+    const navigationItems: Array<{
+        id: ManagerView;
+        label: string;
+        description: string;
+        icon: React.ElementType;
+        stat: string;
+    }> = [
+        { id: 'analytics', label: 'Network Overview', description: 'Traffic, redemption, and audit flow', icon: BarChart3, stat: `${metrics.total} spins` },
+        { id: 'prizes', label: 'Prize Engine', description: 'Reward odds, colors, and live status', icon: Trophy, stat: `${rewardControlMetrics.active}/${prizes.length} live` },
+        { id: 'branches', label: 'Branch Control', description: 'Branch access and contact readiness', icon: Landmark, stat: `${branchControlMetrics.enabled}/${branchControlMetrics.branchNodes.length} active` },
+    ];
+    const activeViewDetails = navigationItems.find(item => item.id === activeView) || navigationItems[0];
+
     return (
         <div className="max-w-[1600px] mx-auto p-4 lg:p-10 animate-in fade-in duration-700 relative">
             {/* Toast */}
@@ -390,49 +415,94 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                 </div>
             )}
 
-            <div className="flex flex-col lg:flex-row gap-8">
-                {/* Sidebar */}
-                <aside className="lg:w-72 space-y-4">
-                    <div className="bg-slate-900 rounded-2xl p-8 text-white">
-                        <h2 className="text-2xl font-black tracking-tight mb-1">Manager<span className="text-red-500">.</span></h2>
-                        <p className="text-white/40 text-xs font-medium">Group Loyalty Hub</p>
+            <div className="space-y-6">
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="grid gap-0 xl:grid-cols-[1.1fr_0.9fr]">
+                        <div className="p-5 sm:p-6">
+                            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0">
+                                    <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-red-700">
+                                        <Trophy className="h-3.5 w-3.5" />
+                                        Reward Control
+                                    </div>
+                                    <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{activeViewDetails.label}</h1>
+                                    <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">{activeViewDetails.description}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        onClick={loadData}
+                                        disabled={isSyncing}
+                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black uppercase tracking-widest text-slate-600 transition-all hover:border-red-200 hover:text-red-700 disabled:opacity-50"
+                                    >
+                                        <RefreshCcw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                        Sync
+                                    </button>
+                                    <BackToModulesButton onClick={onBack} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 bg-slate-50/80 p-4 sm:p-5 xl:border-l xl:border-t-0">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Spin Traffic</p>
+                                    <div className="mt-2 flex items-end justify-between gap-2">
+                                        <span className="text-3xl font-black tabular-nums text-slate-950">{metrics.total}</span>
+                                        <Activity className="h-5 w-5 text-red-600" />
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Live Rewards</p>
+                                    <div className="mt-2 flex items-end justify-between gap-2">
+                                        <span className="text-3xl font-black tabular-nums text-slate-950">{rewardControlMetrics.active}</span>
+                                        <Ticket className="h-5 w-5 text-emerald-600" />
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Branch Nodes</p>
+                                    <div className="mt-2 flex items-end justify-between gap-2">
+                                        <span className="text-3xl font-black tabular-nums text-slate-950">{branchControlMetrics.branchNodes.length}</span>
+                                        <Store className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <nav className="bg-white rounded-2xl border border-slate-100 p-3 space-y-1 shadow-sm sticky top-6">
-                        {[
-                            { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-                            { id: 'prizes', label: 'Prize Engine', icon: Trophy },
-                            { id: 'branches', label: 'Branch Control', icon: Landmark },
-                        ].map(item => (
+                    <nav className="grid gap-2 border-t border-slate-100 bg-slate-100/70 p-2 lg:grid-cols-3">
+                        {navigationItems.map(item => (
                             <button
                                 key={item.id}
-                                onClick={() => setActiveView(item.id as any)}
-                                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeView === item.id
-                                    ? 'bg-red-600 text-white shadow-md'
-                                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                onClick={() => setActiveView(item.id)}
+                                className={`group flex min-h-[88px] items-center gap-4 rounded-xl border p-4 text-left transition-all active:scale-[0.99] ${activeView === item.id
+                                    ? 'border-red-200 bg-white shadow-sm'
+                                    : 'border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80'
                                     }`}
                             >
-                                <item.icon className="w-4 h-4" />
-                                <span>{item.label}</span>
+                                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all ${activeView === item.id ? 'bg-red-600 text-white' : 'bg-white text-slate-500 group-hover:text-red-600'}`}>
+                                    <item.icon className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className={`text-sm font-black ${activeView === item.id ? 'text-slate-950' : 'text-slate-600'}`}>{item.label}</p>
+                                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${activeView === item.id ? 'bg-red-50 text-red-700' : 'bg-white text-slate-400'}`}>{item.stat}</span>
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-slate-400">{item.description}</p>
+                                </div>
                             </button>
                         ))}
-
-                        <div className="pt-6">
-                            <BackToModulesButton onClick={onBack} />
-                        </div>
                     </nav>
-                </aside>
+                </section>
 
-                {/* Main */}
-                <div className="flex-1 space-y-8">
+                <main className="space-y-8">
 
                     {/* ANALYTICS VIEW */}
                     {activeView === 'analytics' && (
                         <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Network Overview</h2>
-                                    <p className="text-slate-400 text-sm font-medium">Real-time performance metrics</p>
+                                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Performance Window</h2>
+                                    <p className="text-slate-400 text-sm font-medium">Real-time reward traffic and redemption metrics</p>
                                 </div>
                                 {/* Date Filter */}
                                 <div className="relative z-50">
@@ -680,9 +750,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                             <div className="min-w-0">
                                                 <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-red-700">
                                                     <Trophy className="h-3.5 w-3.5" />
-                                                    Reward Control
+                                                    Prize Engine
                                                 </div>
-                                                <h3 className="text-2xl font-black tracking-tight text-slate-950">Prize Engine</h3>
+                                                <h3 className="text-2xl font-black tracking-tight text-slate-950">Wheel Reward Setup</h3>
                                                 <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
                                                     Configure wheel rewards, probability weight, color identity, and live availability from one control surface.
                                                 </p>
@@ -1115,116 +1185,222 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                     )}
                     {/* BRANCHES VIEW */}
                     {activeView === 'branches' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
-                            <div className="flex flex-wrap items-center justify-between gap-4">
-                                <div>
-                                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Branch Control</h3>
-                                    <p className="text-slate-400 text-sm font-medium">Manage branch locations and permissions</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => handleBulkStatusChange(true)} disabled={isSyncing}
-                                        className="px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-[0.98]">
-                                        <CheckCircle2 className="w-3.5 h-3.5" /> Enable All
-                                    </button>
-                                    <button onClick={() => handleBulkStatusChange(false)} disabled={isSyncing}
-                                        className="px-4 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all flex items-center gap-1.5 disabled:opacity-50 active:scale-[0.98]">
-                                        <X className="w-3.5 h-3.5" /> Suspend All
-                                    </button>
-                                    <button onClick={() => setIsAddingBranch(true)}
-                                        className="px-4 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors flex items-center gap-1.5">
-                                        <Plus className="w-3.5 h-3.5" /> Add Branch
-                                    </button>
-                                    <div className="bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 flex items-center gap-1.5">
-                                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span className="text-[10px] font-bold text-emerald-800">{branches.filter(b => b.role === 'branch').length} Nodes</span>
+                        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                <div className="flex flex-col gap-5 border-b border-slate-100 p-5 sm:p-6 xl:flex-row xl:items-start xl:justify-between">
+                                    <div className="min-w-0">
+                                        <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-blue-700">
+                                            <Landmark className="h-3.5 w-3.5" />
+                                            Access Desk
+                                        </div>
+                                        <h3 className="text-2xl font-black tracking-tight text-slate-950">Branch Reward Access</h3>
+                                        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-500">
+                                            Control which branches can run Spin & Win, keep customer contact links ready, and spot missing setup before campaigns go live.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                            onClick={() => handleBulkStatusChange(true)}
+                                            disabled={isSyncing}
+                                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-700 disabled:opacity-50 active:scale-[0.98]"
+                                        >
+                                            <CheckCircle2 className="h-4 w-4" /> Enable All
+                                        </button>
+                                        <button
+                                            onClick={() => handleBulkStatusChange(false)}
+                                            disabled={isSyncing}
+                                            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-red-700 disabled:opacity-50 active:scale-[0.98]"
+                                        >
+                                            <X className="h-4 w-4" /> Suspend All
+                                        </button>
+                                        <button
+                                            onClick={() => setIsAddingBranch(prev => !prev)}
+                                            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-xs font-black uppercase tracking-widest transition-all active:scale-[0.98] ${isAddingBranch ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'bg-slate-950 text-white hover:bg-red-700'}`}
+                                        >
+                                            {isAddingBranch ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                            {isAddingBranch ? 'Close Form' : 'Add Branch'}
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
+
+                                <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-4 sm:p-5 lg:grid-cols-4">
+                                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Nodes</p>
+                                        <div className="mt-2 flex items-end justify-between gap-2">
+                                            <span className="text-3xl font-black tabular-nums text-slate-950">{branchControlMetrics.branchNodes.length}</span>
+                                            <Store className="h-5 w-5 text-slate-500" />
+                                        </div>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-100 bg-white p-4">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Enabled</p>
+                                        <div className="mt-2 flex items-end justify-between gap-2">
+                                            <span className="text-3xl font-black tabular-nums text-emerald-600">{branchControlMetrics.enabled}</span>
+                                            <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                                        </div>
+                                    </div>
+                                    <div className="rounded-xl border border-red-100 bg-white p-4">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Suspended</p>
+                                        <div className="mt-2 flex items-end justify-between gap-2">
+                                            <span className="text-3xl font-black tabular-nums text-red-600">{branchControlMetrics.disabled}</span>
+                                            <Activity className="h-5 w-5 text-red-500" />
+                                        </div>
+                                    </div>
+                                    <div className="rounded-xl border border-amber-100 bg-white p-4">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Missing Setup</p>
+                                        <div className="mt-2 flex items-end justify-between gap-2">
+                                            <span className="text-3xl font-black tabular-nums text-amber-600">{branchControlMetrics.missingMaps + branchControlMetrics.missingWhatsApp}</span>
+                                            <Clock className="h-5 w-5 text-amber-500" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
 
                             {isAddingBranch && (
-                                <div className="bg-slate-900 p-8 rounded-2xl text-white">
-                                    <h4 className="text-lg font-bold mb-6">New Branch</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                                    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <h4 className="text-lg font-black tracking-tight text-slate-950">New Branch Node</h4>
+                                            <p className="mt-1 text-sm font-medium text-slate-500">Add the branch identity and customer contact channels.</p>
+                                        </div>
+                                        <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-red-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-red-700">
+                                            <Plus className="h-3.5 w-3.5" />
+                                            Setup
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Name</label>
-                                            <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-500 text-white" placeholder="City Centre Branch"
-                                                value={newBranch.name} onChange={(e) => setNewBranch(p => ({ ...p, name: e.target.value }))} />
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Name</label>
+                                            <input
+                                                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                placeholder="City Centre Branch"
+                                                value={newBranch.name}
+                                                onChange={(e) => setNewBranch(p => ({ ...p, name: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Code</label>
-                                            <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-500 text-white" placeholder="BH-CC-01"
-                                                value={newBranch.code} onChange={(e) => setNewBranch(p => ({ ...p, code: e.target.value }))} />
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Code</label>
+                                            <input
+                                                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                placeholder="BH-CC-01"
+                                                value={newBranch.code}
+                                                onChange={(e) => setNewBranch(p => ({ ...p, code: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider">WhatsApp</label>
-                                            <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-500 text-white" placeholder="97333344445"
-                                                value={newBranch.whatsappNumber} onChange={(e) => setNewBranch(p => ({ ...p, whatsappNumber: e.target.value }))} />
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">WhatsApp</label>
+                                            <input
+                                                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                placeholder="97333344445"
+                                                value={newBranch.whatsappNumber}
+                                                onChange={(e) => setNewBranch(p => ({ ...p, whatsappNumber: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Google Maps Link</label>
-                                            <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-red-500 text-white" placeholder="https://maps.app.goo.gl/..."
-                                                value={newBranch.googleMapsLink} onChange={(e) => setNewBranch(p => ({ ...p, googleMapsLink: e.target.value }))} />
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Google Maps Link</label>
+                                            <input
+                                                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                placeholder="https://maps.app.goo.gl/..."
+                                                value={newBranch.googleMapsLink}
+                                                onChange={(e) => setNewBranch(p => ({ ...p, googleMapsLink: e.target.value }))}
+                                            />
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-end gap-3">
-                                        <button onClick={() => setIsAddingBranch(false)} className="px-5 py-2.5 text-xs font-bold text-white/40 hover:text-white">Cancel</button>
-                                        <button onClick={handleCreateBranch} className="bg-red-600 text-white px-6 py-2.5 rounded-lg text-xs font-bold hover:bg-red-700">Create Branch</button>
+                                    <div className="mt-5 flex items-center justify-end gap-3">
+                                        <button onClick={() => setIsAddingBranch(false)} className="px-5 py-2.5 text-xs font-black uppercase tracking-widest text-slate-400 transition-colors hover:text-slate-700">Cancel</button>
+                                        <button onClick={handleCreateBranch} className="rounded-xl bg-red-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-red-700">Create Branch</button>
                                     </div>
-                                </div>
+                                </section>
                             )}
 
-                            <div className="space-y-3">
-                                {branches.filter(b => b.role === 'branch').map((b) => (
-                                    <div key={b.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                                        <div className="flex items-center gap-5 flex-1">
-                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white transition-all ${b.isSpinEnabled ? 'bg-red-600' : 'bg-slate-200 text-slate-400'}`}>
-                                                <Store className="w-6 h-6" />
-                                            </div>
-                                            <div className="flex-1 space-y-2">
-                                                <div className="flex items-center gap-2">
-                                                    <h4 className="text-lg font-bold text-slate-900 tracking-tight">{b.name}</h4>
-                                                    <span className="px-2 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-400">{b.code}</span>
-                                                </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 focus-within:border-red-300 transition-all">
-                                                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                        <input type="text" defaultValue={b.googleMapsLink || ''}
-                                                            onBlur={async (e) => { if (e.target.value !== b.googleMapsLink) { await spinWinService.management.branches.update(b.id, { googleMapsLink: e.target.value }); loadData(); } }}
-                                                            placeholder="Google Maps Link..." className="bg-transparent border-none outline-none text-[10px] font-semibold text-slate-700 w-full placeholder:text-slate-300" />
-                                                    </div>
-                                                    <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 focus-within:border-red-300 transition-all">
-                                                        <MessageCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                        <input type="text" defaultValue={b.whatsappNumber || ''}
-                                                            onBlur={async (e) => { if (e.target.value !== b.whatsappNumber) { await spinWinService.management.branches.update(b.id, { whatsappNumber: e.target.value }); loadData(); } }}
-                                                            placeholder="WhatsApp Number..." className="bg-transparent border-none outline-none text-[10px] font-semibold text-slate-700 w-full placeholder:text-slate-300" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                {branchControlMetrics.branchNodes.map((b) => {
+                                    const isReady = Boolean(b.googleMapsLink?.trim() && b.whatsappNumber?.trim());
+                                    const enabled = Boolean(b.isSpinEnabled);
 
-                                        <div className="flex items-center gap-5 shrink-0">
-                                            <button
-                                                onClick={async () => {
-                                                    await spinWinService.management.branches.update(b.id, { isSpinEnabled: !b.isSpinEnabled });
-                                                    loadData();
-                                                    showNotification('success', `${b.name} ${!b.isSpinEnabled ? 'enabled' : 'disabled'}`);
-                                                }}
-                                                className={`w-14 h-7 rounded-full p-1 transition-all duration-300 ${b.isSpinEnabled ? 'bg-red-600' : 'bg-slate-200'}`}
-                                                title={b.isSpinEnabled ? 'Disable Spin' : 'Enable Spin'}
-                                                aria-label={b.isSpinEnabled ? 'Disable Spin' : 'Enable Spin'}
-                                            >
-                                                <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${b.isSpinEnabled ? 'translate-x-7' : 'translate-x-0'}`}></div>
-                                            </button>
-                                            <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border ${b.isSpinEnabled ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                                                {b.isSpinEnabled ? 'ENABLED' : 'DISABLED'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    return (
+                                        <article key={b.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-red-100 hover:shadow-md">
+                                            <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between">
+                                                <div className="flex min-w-0 items-start gap-4">
+                                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all ${enabled ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                        <Store className="h-6 w-6" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <h4 className="truncate text-lg font-black tracking-tight text-slate-950">{b.name}</h4>
+                                                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">{b.code || 'NO CODE'}</span>
+                                                        </div>
+                                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                                <span className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                                                {enabled ? 'Live' : 'Suspended'}
+                                                            </span>
+                                                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${isReady ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                                {isReady ? <ShieldCheck className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                                                                {isReady ? 'Ready' : 'Needs Setup'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={async () => {
+                                                        await spinWinService.management.branches.update(b.id, { isSpinEnabled: !b.isSpinEnabled });
+                                                        loadData();
+                                                        showNotification('success', `${b.name} ${!b.isSpinEnabled ? 'enabled' : 'disabled'}`);
+                                                    }}
+                                                    className={`relative h-9 w-16 shrink-0 rounded-full p-1 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-100 ${enabled ? 'bg-red-600' : 'bg-slate-200'}`}
+                                                    title={enabled ? 'Disable Spin' : 'Enable Spin'}
+                                                    aria-label={enabled ? 'Disable Spin' : 'Enable Spin'}
+                                                >
+                                                    <span className={`block h-7 w-7 rounded-full bg-white shadow transition-transform duration-300 ${enabled ? 'translate-x-7' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2">
+                                                <label className="space-y-1.5">
+                                                    <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                        <MapPin className="h-3.5 w-3.5" />
+                                                        Maps Link
+                                                    </span>
+                                                    <input
+                                                        type="text"
+                                                        defaultValue={b.googleMapsLink || ''}
+                                                        onBlur={async (e) => {
+                                                            if (e.target.value !== b.googleMapsLink) {
+                                                                await spinWinService.management.branches.update(b.id, { googleMapsLink: e.target.value });
+                                                                loadData();
+                                                            }
+                                                        }}
+                                                        placeholder="Google Maps Link..."
+                                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                    />
+                                                </label>
+                                                <label className="space-y-1.5">
+                                                    <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                        <MessageCircle className="h-3.5 w-3.5" />
+                                                        WhatsApp
+                                                    </span>
+                                                    <input
+                                                        type="text"
+                                                        defaultValue={b.whatsappNumber || ''}
+                                                        onBlur={async (e) => {
+                                                            if (e.target.value !== b.whatsappNumber) {
+                                                                await spinWinService.management.branches.update(b.id, { whatsappNumber: e.target.value });
+                                                                loadData();
+                                                            }
+                                                        }}
+                                                        placeholder="WhatsApp Number..."
+                                                        className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                    />
+                                                </label>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
-                </div>
+                </main>
             </div>
         </div>
     );

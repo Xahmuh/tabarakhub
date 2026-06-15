@@ -3,7 +3,7 @@ import { FeaturePermission, Role, RolePermission } from '../types';
 export const ALL_ROLES: Role[] = ['admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager'];
 
 export const ROLE_LABELS: Record<Role, string> = {
-  owner: 'Owner',
+  owner: 'Owner / Read-only Executive',
   admin: 'Admin',
   manager: 'Manager (Legacy)',
   accounts: 'Accounts',
@@ -40,9 +40,9 @@ export const resolveAccessLevel = (
 ): AccessLevel => {
   if (isAdminRole(role)) return 'edit';
   const override = overrides?.find(p => p.featureName === feature);
-  if (override) return override.accessLevel;
+  if (override) return role === 'owner' && override.accessLevel === 'edit' ? 'read' : override.accessLevel;
   const roleDefault = roleDefaults?.find(p => p.featureName === feature);
-  if (roleDefault) return roleDefault.accessLevel;
+  if (roleDefault) return role === 'owner' && roleDefault.accessLevel === 'edit' ? 'read' : roleDefault.accessLevel;
   return 'none';
 };
 
