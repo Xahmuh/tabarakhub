@@ -35,6 +35,9 @@ Post-deploy validation on 2026-06-15:
 - Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
 - Authenticated Admin/Branch/Owner Dispatch QA remains pending because no authenticated browser session or credentials were available; Chrome existing-profile validation is also unavailable because the Codex Chrome Extension connection is not available.
 - Read-only aggregate inventory shows active admin `1`, owner `1`, and branch `20` profiles, but no active supervisor/warehouse/accounts role counts.
+- T001 has an active branch profile for preferred branch-scope QA, but an authenticated browser session is still required.
+- Supervisor, warehouse, and accounts QA remains blocked until approved profiles/sessions exist.
+- No users were created automatically; any temporary QA accounts must be created through Supabase Auth UI / secure Admin API without storing passwords in docs or migrations.
 - No lifecycle transition was performed and `delivery_order_events` remains at count `0`; no test records were created or deleted.
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.

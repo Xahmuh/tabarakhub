@@ -19,6 +19,36 @@ Use this checklist to complete the remaining authenticated browser QA for Phase 
 - Use a clearly marked test delivery order only if a lifecycle transition must be validated.
 - Document any test record created, including branch, order identifier, transition, and cleanup status.
 
+## Role Session Inventory - 2026-06-15
+
+Read-only SQL inventory was run against the linked Supabase project. Passwords, tokens, and full email addresses were not printed.
+
+Active profile counts:
+
+- admin: `1`
+- branch: `20`
+- owner: `1`
+- supervisor: `0`
+- warehouse: `0`
+- accounts: `0`
+
+Session readiness:
+
+| Role | Active profile exists | Suggested account | Branch scope | Browser QA ready |
+| --- | --- | --- | --- | --- |
+| Admin | Yes | Existing approved admin account, or `qa.admin@tabarak.local` if temporary QA account creation is approved | All branches | No; operator login/session still required |
+| Branch | Yes | Existing approved T001 branch account, or `qa.branch.t001@tabarak.local` if temporary QA account creation is approved | T001 preferred for own-branch QA; use another branch only for negative cross-branch checks | No; operator login/session still required |
+| Owner | Yes | Existing approved owner account, or `qa.owner@tabarak.local` if temporary QA account creation is approved | Read-only executive view | No; operator login/session still required |
+| Supervisor | No | `qa.supervisor@tabarak.local` only if approved | Scoped by approved role model | No; active profile/session missing |
+| Warehouse | No | `qa.warehouse@tabarak.local` only if approved | Scoped by approved role model | No; active profile/session missing |
+| Accounts | No | `qa.accounts@tabarak.local` only if approved | Scoped by approved role model | No; active profile/session missing |
+
+Required operator action:
+
+- Log in with approved existing admin, T001 branch, and owner sessions, or approve creation of temporary QA accounts through Supabase Auth UI / secure Admin API.
+- Create supervisor, warehouse, and accounts QA profiles only if those roles are still required for Phase 1 browser QA.
+- Do not store passwords in migrations, docs, commits, screenshots, or chat.
+
 ## Admin QA
 
 - Login succeeds.

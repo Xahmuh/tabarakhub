@@ -41,6 +41,9 @@ Post-deploy validation on 2026-06-15:
 - Follow-up production smoke confirms `/` and `/delivery` return HTTP 200 and serve the React app shell; `/delivery` reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
 - Authenticated Dispatch QA remains blocked because the in-app browser has no authenticated session and Chrome automation cannot communicate with the Codex Chrome Extension.
 - Aggregate read-only role inventory shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts profiles were not present in the aggregate role count.
+- T001 has an active branch profile available for preferred branch-scope QA, but no authenticated browser session was available.
+- Supervisor, warehouse, and accounts profiles/sessions are missing for Phase 1 browser QA.
+- Operator must log in with approved admin, T001 branch, and owner sessions, or approve temporary QA accounts through Supabase Auth UI / secure Admin API.
 - `delivery_order_events` count is currently `0`; no lifecycle transition was performed because no safe authenticated admin/branch session was available.
 - No test records were created and no production data was deleted during the authenticated QA attempt.
 

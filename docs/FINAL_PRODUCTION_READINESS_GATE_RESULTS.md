@@ -40,6 +40,7 @@ Authenticated production QA follow-up on 2026-06-15:
 | Route smoke | Pass | `/` and `/delivery` return HTTP 200 and serve the React app shell; browser `/delivery` reaches Sign In, not Vercel `404: NOT_FOUND`, with no captured console errors. |
 | Session availability | Blocked | In-app browser has no authenticated Supabase/session storage. Chrome existing-profile validation is unavailable because Codex cannot communicate with the Codex Chrome Extension. No credentials were entered or exposed. |
 | Role inventory | Partial | Read-only aggregate SQL shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts did not appear in the active role aggregate. |
+| Role-session readiness | Partial | T001 has an active branch profile for preferred branch QA; admin, T001 branch, and owner still require operator login sessions. Supervisor, warehouse, and accounts require approved profiles/sessions before browser QA. |
 | Admin Dispatch QA | Pending | No authenticated admin browser session was available. |
 | Branch Dispatch QA | Pending | No authenticated branch browser session was available. |
 | Owner/Supervisor/Warehouse QA | Pending | Owner profile exists but no owner session was available; supervisor/warehouse/accounts profiles/sessions were unavailable. |

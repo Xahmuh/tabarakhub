@@ -89,6 +89,25 @@ Authenticated QA result:
 - Lifecycle transition/event browser QA: not executed because no authenticated admin/branch session was available and no production data should be mutated without a safe session.
 - Cleanup: not needed; no test records were created and no production data was deleted.
 
+## QA Role-Session Readiness - 2026-06-15
+
+Read-only role/profile inventory:
+
+- Active admin profiles: `1`.
+- Active branch profiles: `20`, including a T001 branch profile.
+- Active owner profiles: `1`.
+- Active supervisor profiles: `0`.
+- Active warehouse profiles: `0`.
+- Active accounts profiles: `0`.
+
+Browser QA readiness:
+
+- Admin Dispatch QA can start only after the operator logs in with an approved admin session.
+- Branch Dispatch QA can start only after the operator logs in with an approved branch session, preferably T001.
+- Owner read-only QA can start only after the operator logs in with an approved owner session.
+- Supervisor, warehouse, and accounts QA cannot start until approved profiles/sessions exist.
+- No users were created and no passwords, tokens, or full email addresses were documented.
+
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
 ## Scope Implemented
