@@ -46,7 +46,7 @@ export const handleCorsPreflight = (req: Request) => {
     });
   }
 
-  return new Response('ok', {
+  return new Response(null, {
     status: 204,
     headers: getCorsHeaders(req),
   });
