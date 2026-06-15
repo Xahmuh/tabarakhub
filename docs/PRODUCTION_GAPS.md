@@ -14,9 +14,10 @@ Validated:
 
 - Default payment types exist: `BP`, `CASH`, `CARD`, `TALABAT`, and `INSURANCE`.
 - `TALABAT.requires_block = false`; `INSURANCE.requires_block = true`.
-- Existing `delivery_orders` payment types remain compatible: `BP=13`, `CARD=5`, `CASH=2`.
+- Existing `delivery_orders` payment types remain compatible: `BP=13`, `CARD=7`, `CASH=2`.
 - RLS simulation passed for anon denial, branch active read-only access, admin management, and owner read-only access.
 - Temporary QA payment rows were cleaned up; no production delivery orders were deleted or rewritten.
+- Combined authenticated production QA was attempted on 2026-06-15, but authenticated UI checks remain pending because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. Public production route smoke still passed for `/` and `/delivery`.
 
 Open blockers:
 
@@ -65,12 +66,12 @@ Post-deploy validation on 2026-06-15:
 - `vercel.json` SPA fallback rewrite is deployed to serve `/index.html` for direct client routes.
 - Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
 - Follow-up production smoke confirms `/` and `/delivery` return HTTP 200 and serve the React app shell; `/delivery` reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
-- Authenticated Dispatch QA remains blocked because the in-app browser has no authenticated session and Chrome automation cannot communicate with the Codex Chrome Extension.
+- Authenticated Dispatch QA remains blocked because no approved authenticated browser session was available through automation; Chrome is running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
 - Aggregate read-only role inventory shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts profiles were not present in the aggregate role count.
 - T001 has an active branch profile available for preferred branch-scope QA, but no authenticated browser session was available.
 - Supervisor, warehouse, and accounts profiles/sessions are missing for Phase 1 browser QA.
 - Operator must log in with approved admin, T001 branch, and owner sessions, or approve temporary QA accounts through Supabase Auth UI / secure Admin API.
-- `delivery_order_events` count is currently `0`; no lifecycle transition was performed because no safe authenticated admin/branch session was available.
+- `delivery_order_events` count is currently `1` by aggregate read-only SQL (`recorded -> cancelled`, actor role `branch`); no lifecycle transition was performed by this QA pass because no safe authenticated admin/branch session was available.
 - No test records were created and no production data was deleted during the authenticated QA attempt.
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.

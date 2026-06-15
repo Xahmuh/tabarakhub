@@ -49,6 +49,29 @@ Required operator action:
 - Create supervisor, warehouse, and accounts QA profiles only if those roles are still required for Phase 1 browser QA.
 - Do not store passwords in migrations, docs, commits, screenshots, or chat.
 
+## Combined QA Attempt - 2026-06-15
+
+Attempted combined authenticated production QA for Delivery Payment Types and Phase 1 Dispatch.
+
+Result:
+
+- Production route smoke passed for `https://www.tabarakpharmacy.com/` and `https://www.tabarakpharmacy.com/delivery`.
+- Both routes returned HTTP 200, served the React app shell, and did not show Vercel `404: NOT_FOUND`.
+- Chrome is installed and running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles, so approved existing Chrome sessions could not be automated.
+- No credentials were requested, entered, printed, or stored.
+- No delivery payment type, delivery order, or lifecycle transition was created by this QA attempt.
+- Read-only SQL confirmed active role inventory remains admin `1`, branch `20`, owner `1`, supervisor `0`, warehouse `0`, accounts `0`.
+- Read-only SQL confirmed `delivery_order_events` currently contains `1` aggregate event: `recorded -> cancelled`, actor role `branch`; this event was not created by this pass.
+
+Still pending:
+
+- Admin Payments browser QA.
+- Branch Recording payment behavior browser QA.
+- Admin Dispatch lifecycle browser QA.
+- Branch T001 lifecycle browser QA.
+- Owner read-only browser QA.
+- Supervisor/warehouse/accounts role QA after approved profiles/sessions exist.
+
 ## Admin QA
 
 - Login succeeds.

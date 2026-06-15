@@ -6,7 +6,7 @@
 B) dedicated-client staging-ready only
 ```
 
-Dynamic delivery payment types are implemented locally and the migration has been applied to the linked Supabase project. The feature is database-validated and SQL/RLS-validated, but authenticated browser QA is still pending until approved role sessions are available.
+Dynamic delivery payment types are implemented, committed, pushed, deployed by Vercel from `6d5b2b3`, and the migration has been applied to the linked Supabase project. The feature is database-validated and SQL/RLS-validated, but authenticated browser QA is still pending until approved role sessions are available.
 
 ## Default Types
 
@@ -66,7 +66,7 @@ Post-apply checks confirmed:
 - Duplicate payment type codes returned zero rows.
 - Existing delivery order payment types remain compatible:
   - `BP`: 13 orders
-  - `CARD`: 5 orders
+  - `CARD`: 7 orders
   - `CASH`: 2 orders
 
 ## RLS Validation
@@ -91,6 +91,14 @@ Temporary QA payment rows were cleaned up after validation. No production delive
 - Delivery analytics, coverage, owner dashboard, and import parsing now use payment type configuration for block-exempt classification where applicable.
 
 ## Browser QA
+
+Combined authenticated production QA attempt on 2026-06-15:
+
+- Public production route smoke passed for `/` and `/delivery`: both returned HTTP 200, served the React app shell, and did not show Vercel `404: NOT_FOUND`.
+- Production shell asset observed: `assets/index-D_9-Xigh.js`, matching the Vercel production build for commit `6d5b2b3`.
+- Chrome is installed and running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles, so existing Chrome authenticated sessions could not be used.
+- No passwords, tokens, cookies, or local storage were inspected.
+- No test payment type or delivery order was created in this pass.
 
 Authenticated browser QA remains pending:
 

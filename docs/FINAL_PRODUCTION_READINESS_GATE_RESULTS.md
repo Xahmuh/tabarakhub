@@ -13,10 +13,10 @@ B) dedicated-client staging-ready only
 | Migration safety | Pass | `20260615110000_delivery_payment_types.sql` creates `delivery_payment_types`, seeds defaults, relaxes `delivery_orders.payment_type` safely, and does not delete or rewrite production delivery orders. |
 | Migration status | Pass | `supabase migration list --linked` is aligned through `20260615110000`. |
 | Default values | Pass | `BP`, `CASH`, `CARD`, `TALABAT`, and `INSURANCE` exist; `TALABAT.requires_block = false`; `INSURANCE.requires_block = true`; duplicate code check returned zero rows. |
-| Existing orders | Pass | Existing payment types remain compatible: `BP=13`, `CARD=5`, `CASH=2`. |
+| Existing orders | Pass | Existing payment types remain compatible: `BP=13`, `CARD=7`, `CASH=2`. |
 | RLS validation | Partial pass | anon read/write denied; branch can read active rows and cannot write; admin can manage a temporary QA payment type; owner can read active rows and cannot write. Supervisor/warehouse/accounts profiles were unavailable for live simulation. |
 | App/UI | Local pass | Delivery Settings adds Payments management; Branch Recording loads dynamic active options; import, analytics, coverage, and owner dashboard use payment-type config for block-required behavior. |
-| Browser QA | Pending | No authenticated admin/branch browser sessions were available; admin add/edit/disable and branch save flows remain pending. |
+| Browser QA | Pending | Combined authenticated production QA was attempted on 2026-06-15. Public `/` and `/delivery` route smoke passed, but authenticated admin/branch sessions could not be automated because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. |
 | Cleanup | Pass | Temporary QA payment rows were deleted; no production delivery data was deleted. |
 
 Detailed record: `docs/DELIVERY_PAYMENT_TYPES.md`.
@@ -59,13 +59,13 @@ Authenticated production QA follow-up on 2026-06-15:
 | Gate | Result | Evidence / blocker |
 | --- | --- | --- |
 | Route smoke | Pass | `/` and `/delivery` return HTTP 200 and serve the React app shell; browser `/delivery` reaches Sign In, not Vercel `404: NOT_FOUND`, with no captured console errors. |
-| Session availability | Blocked | In-app browser has no authenticated Supabase/session storage. Chrome existing-profile validation is unavailable because Codex cannot communicate with the Codex Chrome Extension. No credentials were entered or exposed. |
+| Session availability | Blocked | Chrome is installed and running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles. No credentials were entered or exposed. |
 | Role inventory | Partial | Read-only aggregate SQL shows active profiles for admin `1`, owner `1`, and branch `20`; supervisor/warehouse/accounts did not appear in the active role aggregate. |
 | Role-session readiness | Partial | T001 has an active branch profile for preferred branch QA; admin, T001 branch, and owner still require operator login sessions. Supervisor, warehouse, and accounts require approved profiles/sessions before browser QA. |
 | Admin Dispatch QA | Pending | No authenticated admin browser session was available. |
 | Branch Dispatch QA | Pending | No authenticated branch browser session was available. |
 | Owner/Supervisor/Warehouse QA | Pending | Owner profile exists but no owner session was available; supervisor/warehouse/accounts profiles/sessions were unavailable. |
-| Lifecycle transition/event QA | Pending | No safe authenticated admin/branch session was available, so no production lifecycle transition was performed. `delivery_order_events` count remains `0`. |
+| Lifecycle transition/event QA | Pending | No safe authenticated admin/branch session was available, so no production lifecycle transition was performed by this pass. `delivery_order_events` count is currently `1` by aggregate SQL (`recorded -> cancelled`, actor role `branch`). |
 | Cleanup | Pass | No test delivery records were created and no production data was deleted. |
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.

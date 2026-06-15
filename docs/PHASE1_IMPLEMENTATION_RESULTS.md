@@ -89,6 +89,46 @@ Authenticated QA result:
 - Lifecycle transition/event browser QA: not executed because no authenticated admin/branch session was available and no production data should be mutated without a safe session.
 - Cleanup: not needed; no test records were created and no production data was deleted.
 
+## Combined Delivery Payment Types + Dispatch QA Attempt - 2026-06-15
+
+Preflight:
+
+- `origin/main` includes `6d5b2b3 feat: add dynamic delivery payment types`.
+- `supabase migration list --linked` is aligned through `20260615110000`.
+- Local verification passed: `npm run typecheck`, `npm run build`, `npm ls --depth=0`, and `git diff --check`.
+
+Production route smoke:
+
+- `https://www.tabarakpharmacy.com/` returned HTTP 200, served the React app shell, and did not show Vercel `404: NOT_FOUND`.
+- `https://www.tabarakpharmacy.com/delivery` returned HTTP 200, served the React app shell, and did not show Vercel `404: NOT_FOUND`.
+- Vercel production build logs show commit `6d5b2b3` built successfully and produced `assets/index-D_9-Xigh.js`.
+
+Authenticated session availability:
+
+- Chrome is installed and running.
+- Codex Chrome Extension is not installed/enabled in the selected Chrome profiles, so existing Chrome sessions could not be automated for authenticated QA.
+- No cookies, local storage, passwords, tokens, or credentials were inspected or printed.
+
+Read-only SQL evidence:
+
+- Delivery payment types are present: `BP`, `CASH`, `CARD`, `TALABAT`, `INSURANCE`.
+- `TALABAT.requires_block = false`.
+- `INSURANCE.requires_block = true`.
+- Existing delivery-order payment values remain stable uppercase codes: `BP=13`, `CARD=7`, `CASH=2`.
+- Active role inventory remains admin `1`, branch `20`, owner `1`; supervisor/warehouse/accounts profiles are absent.
+- `delivery_order_events` currently has `1` aggregate event (`recorded -> cancelled`, actor role `branch`), not created by this pass.
+
+Authenticated QA result:
+
+- Admin Payments tab QA: pending because no approved authenticated admin browser session was available through automation.
+- Branch Recording payment QA: pending because no approved authenticated branch browser session was available through automation.
+- Admin Dispatch QA: pending because no approved authenticated admin browser session was available through automation.
+- Branch T001 Dispatch QA: pending because no approved authenticated branch browser session was available through automation.
+- Owner read-only QA: pending because no approved authenticated owner browser session was available through automation.
+- Supervisor/warehouse/accounts QA: pending because no active profiles/sessions exist.
+- Lifecycle transition/event QA: not executed; no production data was mutated.
+- Cleanup: not needed; no test records were created and no production data was deleted.
+
 ## QA Role-Session Readiness - 2026-06-15
 
 Read-only role/profile inventory:

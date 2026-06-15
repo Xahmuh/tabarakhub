@@ -18,7 +18,7 @@ Summary:
 - Migration `20260615110000_delivery_payment_types.sql` was reviewed, applied, and aligned on the linked Supabase project.
 - SQL validation passed for table existence, defaults, duplicates, and existing delivery-order compatibility.
 - RLS validation passed for anon denial, branch read-only active access, admin management, and owner read-only access.
-- Authenticated browser QA remains pending because no approved admin/branch browser sessions were available in this pass.
+- Combined authenticated production QA was attempted on 2026-06-15. Public production route smoke passed for `/` and `/delivery`, but authenticated Admin Payments and Branch Recording checks remain pending because the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
 
 Reference: `docs/DELIVERY_PAYMENT_TYPES.md`.
 
@@ -55,12 +55,12 @@ Post-deploy validation on 2026-06-15:
 - `vercel.json` SPA fallback rewrite is deployed and local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`.
 - Follow-up production route smoke confirms `/` and `/delivery` now return HTTP 200 and serve the React app shell.
 - Browser `/delivery` smoke reaches the Sign In screen with no Vercel `404: NOT_FOUND` and no captured console errors.
-- Authenticated Admin/Branch/Owner Dispatch QA remains pending because no authenticated browser session or credentials were available; Chrome existing-profile validation is also unavailable because the Codex Chrome Extension connection is not available.
+- Authenticated Admin/Branch/Owner Dispatch QA remains pending because no authenticated browser session could be automated; Chrome is running, but the Codex Chrome Extension is not installed/enabled in the selected Chrome profiles.
 - Read-only aggregate inventory shows active admin `1`, owner `1`, and branch `20` profiles, but no active supervisor/warehouse/accounts role counts.
 - T001 has an active branch profile for preferred branch-scope QA, but an authenticated browser session is still required.
 - Supervisor, warehouse, and accounts QA remains blocked until approved profiles/sessions exist.
 - No users were created automatically; any temporary QA accounts must be created through Supabase Auth UI / secure Admin API without storing passwords in docs or migrations.
-- No lifecycle transition was performed and `delivery_order_events` remains at count `0`; no test records were created or deleted.
+- No lifecycle transition was performed by this QA pass. `delivery_order_events` currently has `1` aggregate event (`recorded -> cancelled`, actor role `branch`) from existing activity; no test records were created or deleted by this pass.
 
 Manual authenticated QA checklist: `docs/PHASE1_AUTHENTICATED_QA_CHECKLIST.md`.
 
