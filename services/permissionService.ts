@@ -58,6 +58,15 @@ export const permissionService = {
     if (error) throw error;
     return data;
   },
+  deleteForBranch: async (branchId: string, featureName: string) => {
+    const { error } = await supabaseClient
+      .from('feature_permissions')
+      .delete()
+      .eq('branch_id', branchId)
+      .eq('feature_name', featureName);
+    if (error) throw error;
+    return true;
+  },
 
   // --- Role-level defaults (effective when no branch override exists) ---
   listRoleDefaults: async (role: Role): Promise<RolePermission[]> => {

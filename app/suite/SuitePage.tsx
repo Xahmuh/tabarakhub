@@ -437,7 +437,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'command-center',
-      visible: !isOwner,
+      visible: !isOwner && checkPermission('command_center'),
       title: 'Daily Command Center',
       description: 'Download yesterday branch files, review recovery signals, and follow up daily actions.',
       icon: <Radar className="h-5 w-5" />,

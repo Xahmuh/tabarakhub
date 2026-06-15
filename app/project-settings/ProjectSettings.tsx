@@ -34,7 +34,7 @@ import {
     LayoutGrid
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role } from '../../types';
+import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission } from '../../types';
 import Swal from 'sweetalert2';
 import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
@@ -220,16 +220,23 @@ const BranchInfoItem: React.FC<{
 );
 
 const ACCESS_LEVELS: Array<{
-    level: 'none' | 'read' | 'edit';
+    level: 'default' | 'none' | 'read' | 'edit';
     title: string;
     description: string;
     icon: React.ElementType;
     className: string;
 }> = [
     {
+        level: 'default',
+        title: 'Default',
+        description: 'Inherit the Branch role default from Users & Roles.',
+        icon: RotateCcw,
+        className: 'border-slate-200 bg-slate-50 text-slate-600'
+    },
+    {
         level: 'none',
         title: 'No access',
-        description: 'Hide or block this module for the selected branch override.',
+        description: 'Explicitly hide or block this module for this branch.',
         icon: Lock,
         className: 'border-red-100 bg-red-50 text-red-600'
     },
@@ -250,7 +257,7 @@ const ACCESS_LEVELS: Array<{
 ];
 
 const AccessGuide: React.FC = () => (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         {ACCESS_LEVELS.map(item => {
             const Icon = item.icon;
             return (
@@ -317,6 +324,7 @@ export const ProjectSettings: React.FC<{
     // Permission States
     const [selectedBranchForPerms, setSelectedBranchForPerms] = useState<string | null>(null);
     const [permissions, setPermissions] = useState<FeaturePermission[]>([]);
+    const [branchRoleDefaults, setBranchRoleDefaults] = useState<RolePermission[]>([]);
 
     useEffect(() => {
         loadData();
@@ -337,15 +345,17 @@ export const ProjectSettings: React.FC<{
         setIsLoading(true);
         setMaintenanceSettingsError(null);
         try {
-            const [b, p, c, assignmentResult] = await Promise.all([
+            const [b, p, c, assignmentResult, branchDefaults] = await Promise.all([
                 supabase.branches.list(),
                 supabase.pharmacists.listAll(),
                 supabase.delivery.classifications.list(),
-                supabase.client.from('pharmacist_branches').select('branch_id, pharmacist_id')
+                supabase.client.from('pharmacist_branches').select('branch_id, pharmacist_id'),
+                supabase.permissions.listRoleDefaults('branch')
             ]);
             setBranches(b);
             setPharmacists(p);
             setBranchClassifications(c);
+            setBranchRoleDefaults(branchDefaults);
             if (assignmentResult.error) {
                 setPharmacistAssignmentsByBranch({});
             } else {
@@ -658,6 +668,22 @@ export const ProjectSettings: React.FC<{
         }
     };
 
+    const handleClearPermission = async (featureName: string) => {
+        if (!selectedBranchForPerms) return;
+        try {
+            await supabase.permissions.deleteForBranch(selectedBranchForPerms, featureName);
+            setPermissions(prev => prev.filter(permission => permission.featureName !== featureName));
+        } catch (err) {
+            Swal.fire('Error', 'Failed to clear permission override', 'error');
+        }
+    };
+
+    const getBranchRoleDefaultAccess = (featureName: string): 'read' | 'edit' | 'none' =>
+        branchRoleDefaults.find(permission => permission.featureName === featureName)?.accessLevel || 'none';
+
+    const getEffectiveBranchAccess = (featureName: string): 'read' | 'edit' | 'none' =>
+        permissions.find(permission => permission.featureName === featureName)?.accessLevel || getBranchRoleDefaultAccess(featureName);
+
     const branchClassificationMap = useMemo(() => {
         const map = new Map<string, BranchClassification>();
         branchClassifications.forEach(classification => map.set(classification.branchId, classification));
@@ -729,8 +755,7 @@ export const ProjectSettings: React.FC<{
                 ? branches.length
                 : 0;
     const selectedBranchPermissionCount = FEATURES.filter(feature => {
-        const explicitPermission = permissions.find(permission => permission.featureName === feature.id);
-        return (explicitPermission?.accessLevel || 'none') !== 'none';
+        return getEffectiveBranchAccess(feature.id) !== 'none';
     }).length;
 
     return (
@@ -1165,7 +1190,7 @@ export const ProjectSettings: React.FC<{
                                         <aside className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                                             <div className="mb-3 px-2">
                                                 <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Target branch</h2>
-                                                <p className="mt-1 text-xs font-medium text-slate-500">Pick one branch, then adjust module overrides.</p>
+                                                <p className="mt-1 text-xs font-medium text-slate-500">Pick one branch, then adjust overrides on top of the Branch role defaults.</p>
                                             </div>
                                             <div className="max-h-[540px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                                                 {filteredBranches.length === 0 ? (
@@ -1202,7 +1227,7 @@ export const ProjectSettings: React.FC<{
                                                 <EmptyState
                                                     icon={Lock}
                                                     title="Select a branch"
-                                                    description="Choose an operational branch to manage branch-specific feature overrides."
+                                                    description="Choose an operational branch to review effective module access and manage branch-specific overrides."
                                                 />
                                             ) : (
                                                 <div className="space-y-5">
@@ -1214,7 +1239,7 @@ export const ProjectSettings: React.FC<{
                                                                 <p className="mt-1 text-sm font-medium text-slate-500">BRANCH / {selectedBranch.code}</p>
                                                             </div>
                                                             <div className="rounded-lg border border-brand/10 bg-brand/5 px-4 py-3 text-right">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-brand">Enabled features</p>
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-brand">Effective access</p>
                                                                 <p className="mt-1 text-2xl font-black text-slate-950">{selectedBranchPermissionCount}/{FEATURES.length}</p>
                                                             </div>
                                                         </div>
@@ -1222,7 +1247,10 @@ export const ProjectSettings: React.FC<{
 
                                                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                                                         {FEATURES.map(feature => {
-                                                            const currentPerm = permissions.find(p => p.featureName === feature.id)?.accessLevel || 'none';
+                                                            const explicitPermission = permissions.find(p => p.featureName === feature.id);
+                                                            const defaultPerm = getBranchRoleDefaultAccess(feature.id);
+                                                            const currentPerm = explicitPermission?.accessLevel || defaultPerm;
+                                                            const isExplicitOverride = Boolean(explicitPermission);
                                                             const accessTone = currentPerm === 'none'
                                                                 ? 'text-red-600 bg-red-50 border-red-100'
                                                                 : currentPerm === 'read'
@@ -1243,13 +1271,26 @@ export const ProjectSettings: React.FC<{
                                                                             {feature.description && (
                                                                                 <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{feature.description}</p>
                                                                             )}
-                                                                            <div className="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+                                                                            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                                                                {isExplicitOverride ? 'Branch override active' : `Inherited branch default: ${defaultPerm}`}
+                                                                            </p>
+                                                                            <div className="mt-4 grid grid-cols-4 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+                                                                                <button
+                                                                                    onClick={() => handleClearPermission(feature.id)}
+                                                                                    className={`rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
+                                                                                        !isExplicitOverride
+                                                                                            ? 'bg-slate-900 text-white shadow-sm'
+                                                                                            : 'text-slate-400 hover:bg-white hover:text-slate-700'
+                                                                                    }`}
+                                                                                >
+                                                                                    Default
+                                                                                </button>
                                                                                 {(['none', 'read', 'edit'] as const).map(level => (
                                                                                     <button
                                                                                         key={level}
                                                                                         onClick={() => handleUpdatePermission(feature.id, level)}
                                                                                         className={`rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
-                                                                                            currentPerm === level
+                                                                                            isExplicitOverride && currentPerm === level
                                                                                                 ? 'bg-brand text-white shadow-sm'
                                                                                                 : 'text-slate-400 hover:bg-white hover:text-slate-700'
                                                                                         }`}

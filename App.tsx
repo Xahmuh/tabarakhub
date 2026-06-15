@@ -169,7 +169,7 @@ const App: React.FC = () => {
     if (role === 'owner' && tab !== 'owner-dashboard') return false;
     switch (tab) {
       case 'command-center':
-        return true;
+        return canUseFeature('command_center', 'read', role);
       case 'owner-dashboard':
         return role === 'owner';
       case 'pos':
