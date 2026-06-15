@@ -6,6 +6,7 @@ export type AdminCreateUserInput = {
   password: string;
   role: Role;
   branchId?: string | null;
+  driverId?: string | null;
   supervisorBranchIds?: string[];
   isActive?: boolean;
 };
@@ -172,6 +173,20 @@ export const permissionService = {
       new_branch_id: branchId ?? null,
       new_is_active: isActive
     });
+    if (error) throw error;
+    return true;
+  },
+  adminLinkDriverUser: async (userId: string, driverId: string): Promise<boolean> => {
+    const { error: unlinkError } = await supabaseClient
+      .from('delivery_drivers')
+      .update({ auth_user_id: null, updated_at: new Date().toISOString() })
+      .eq('auth_user_id', userId);
+    if (unlinkError) throw unlinkError;
+
+    const { error } = await supabaseClient
+      .from('delivery_drivers')
+      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
+      .eq('id', driverId);
     if (error) throw error;
     return true;
   },

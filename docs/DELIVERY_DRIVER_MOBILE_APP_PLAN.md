@@ -3,6 +3,8 @@
 
 > **Status:** Planning document only. No application code is included. This document is intended as a specification for an implementation agent (e.g., Codex / Claude Code) to use as the source of truth when building the driver mobile app and the corresponding Supabase + dashboard changes.
 >
+> **Implementation update (2026-06-16):** A web-integrated MVP foundation now exists in this repo. It reuses `delivery_drivers`, links drivers to Auth through `delivery_drivers.auth_user_id`, adds shift/stats/mobile RPCs, and adds an Expo app at `apps/driver-mobile`. See `docs/DELIVERY_DRIVER_MOBILE_MVP_RUNBOOK.md`.
+>
 > **Important caveat:** This plan was produced without direct access to the Tabarak Hub repository. Section 2 documents the assumptions made and provides a discovery checklist that **must be executed first** (Phase 0) so the implementation agent can reconcile this plan with the real codebase before writing any code.
 
 ---

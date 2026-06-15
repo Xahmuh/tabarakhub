@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { Eye, EyeOff, KeyRound, LayoutGrid, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
-import { permissionService, branchService } from '../../services';
-import { AppUser, Branch, MaintenanceSettings, Role, RolePermission } from '../../types';
+import { permissionService, branchService, deliveryService } from '../../services';
+import { AppUser, Branch, DeliveryDriver, MaintenanceSettings, Role, RolePermission } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
 import { isModuleEnabled } from '../../config/clientConfig';
 
-const ASSIGNABLE_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts'];
+const ASSIGNABLE_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver'];
 const MODULE_LAYOUT_ROLES: Role[] = ['admin', 'owner', 'supervisor', 'warehouse', 'accounts', 'branch'];
 
 const FEATURE_LABELS = getEnabledAccessFeatures().map(({ id, label }) => ({ id, label }));
@@ -33,6 +33,8 @@ const roleBadgeClass = (role: Role) =>
                     ? 'border-amber-200 bg-amber-50 text-amber-700'
                     : role === 'accounts'
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : role === 'driver'
+                        ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
                         : 'border-slate-200 bg-slate-50 text-slate-700';
 
 const escapeHtml = (value: string | null | undefined) =>
@@ -57,6 +59,7 @@ export const AccessControlSection: React.FC<{
 }> = ({ currentUserId, settings }) => {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
     const [roleDefaults, setRoleDefaults] = useState<RolePermission[]>([]);
     const [supervisorAssignments, setSupervisorAssignments] = useState<Record<string, string[]>>({});
     const [isLoading, setIsLoading] = useState(true);
@@ -67,18 +70,24 @@ export const AccessControlSection: React.FC<{
         () => branches.filter(b => b.role === 'branch').sort((a, b) => a.name.localeCompare(b.name)),
         [branches]
     );
+    const driverOptions = useMemo(
+        () => drivers.filter(driver => driver.isActive).sort((a, b) => a.name.localeCompare(b.name)),
+        [drivers]
+    );
 
     const load = async () => {
         setIsLoading(true);
         try {
-            const [userList, branchList, defaults] = await Promise.all([
+            const [userList, branchList, defaults, driverList] = await Promise.all([
                 permissionService.adminListUsers(),
                 branchService.list(),
-                permissionService.listAllRoleDefaults()
+                permissionService.listAllRoleDefaults(),
+                deliveryService.drivers.list(true)
             ]);
             setUsers(userList);
             setBranches(branchList);
             setRoleDefaults(defaults);
+            setDrivers(driverList);
 
             const supervisors = userList.filter(u => u.role === 'supervisor');
             const assignments: Record<string, string[]> = {};
@@ -98,6 +107,9 @@ export const AccessControlSection: React.FC<{
     const handleCreateUser = async () => {
         const branchOptionsHtml = branchOptions.map(b =>
             `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`
+        ).join('');
+        const driverOptionsHtml = driverOptions.map(driver =>
+            `<option value="${escapeHtml(driver.id)}">${escapeHtml(driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name)}${driver.authUserId ? ' (linked)' : ''}</option>`
         ).join('');
         const supervisorOptionsHtml = branchOptions.map(b => `
             <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
@@ -132,6 +144,14 @@ export const AccessControlSection: React.FC<{
                             ${branchOptionsHtml}
                         </select>
                     </div>
+                    <div id="swal-new-driver-wrap" class="hidden">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Linked delivery driver</label>
+                        <select id="swal-new-driver" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                            <option value="">Select driver...</option>
+                            ${driverOptionsHtml}
+                        </select>
+                        <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">The mobile app uses this link to show the driver's assigned delivery orders.</p>
+                    </div>
                     <div id="swal-new-supervisor-wrap" class="hidden">
                         <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor branches</label>
                         <div class="max-h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
@@ -151,11 +171,13 @@ export const AccessControlSection: React.FC<{
             didOpen: () => {
                 const roleInput = document.getElementById('swal-new-role') as HTMLSelectElement | null;
                 const branchWrap = document.getElementById('swal-new-branch-wrap');
+                const driverWrap = document.getElementById('swal-new-driver-wrap');
                 const supervisorWrap = document.getElementById('swal-new-supervisor-wrap');
                 const activeInput = document.getElementById('swal-new-active') as HTMLInputElement | null;
                 const syncRoleFields = () => {
                     const role = roleInput?.value;
                     branchWrap?.classList.toggle('hidden', role !== 'branch');
+                    driverWrap?.classList.toggle('hidden', role !== 'driver');
                     supervisorWrap?.classList.toggle('hidden', role !== 'supervisor');
                     if (activeInput) {
                         activeInput.checked = role === 'admin' ? true : activeInput.checked;
@@ -170,6 +192,7 @@ export const AccessControlSection: React.FC<{
                 const password = (document.getElementById('swal-new-password') as HTMLInputElement).value;
                 const role = (document.getElementById('swal-new-role') as HTMLSelectElement).value as Role;
                 const branchId = (document.getElementById('swal-new-branch') as HTMLSelectElement).value || null;
+                const driverId = (document.getElementById('swal-new-driver') as HTMLSelectElement).value || null;
                 const isActive = role === 'admin' ? true : (document.getElementById('swal-new-active') as HTMLInputElement).checked;
                 const supervisorBranchIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-branch:checked')).map(i => i.value);
 
@@ -185,8 +208,12 @@ export const AccessControlSection: React.FC<{
                     Swal.showValidationMessage('Branch users must be linked to a branch.');
                     return false;
                 }
+                if (role === 'driver' && !driverId) {
+                    Swal.showValidationMessage('Driver users must be linked to a delivery driver.');
+                    return false;
+                }
 
-                return { email, password, role, branchId, supervisorBranchIds, isActive };
+                return { email, password, role, branchId, driverId, supervisorBranchIds, isActive };
             }
         });
 
@@ -206,6 +233,7 @@ export const AccessControlSection: React.FC<{
 
     const handleRoleChange = async (user: AppUser, newRole: Role) => {
         let branchId: string | null = newRole === 'branch' ? user.branchId || null : null;
+        let driverId: string | null = null;
 
         if (newRole === 'branch' && !branchId) {
             const { value } = await Swal.fire({
@@ -223,9 +251,28 @@ export const AccessControlSection: React.FC<{
             branchId = value;
         }
 
+        if (newRole === 'driver') {
+            const { value } = await Swal.fire({
+                title: 'Link a delivery driver',
+                html: `
+                  <select id="swal-driver" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+                    <option value="">Select driver...</option>
+                    ${driverOptions.map(driver => `<option value="${escapeHtml(driver.id)}">${escapeHtml(driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name)}${driver.authUserId ? ' (linked)' : ''}</option>`).join('')}
+                  </select>`,
+                showCancelButton: true,
+                confirmButtonColor: '#B91c1c',
+                preConfirm: () => (document.getElementById('swal-driver') as HTMLSelectElement).value
+            });
+            if (!value) return;
+            driverId = value;
+        }
+
         setSavingKey(user.userId);
         try {
             await permissionService.adminSetUserRole(user.userId, newRole, branchId, user.isActive);
+            if (newRole === 'driver' && driverId) {
+                await permissionService.adminLinkDriverUser(user.userId, driverId);
+            }
             const selectedBranch = branchOptions.find(branch => branch.id === branchId);
             setUsers(prev => prev.map(u => u.userId === user.userId ? {
                 ...u,
@@ -649,6 +696,7 @@ export const AccessControlSection: React.FC<{
     const disabledUserCount = users.length - activeUserCount;
     const branchLoginCount = users.filter(user => user.role === 'branch').length;
     const supervisorLoginCount = users.filter(user => user.role === 'supervisor').length;
+    const driverLoginCount = users.filter(user => user.role === 'driver').length;
 
     if (isLoading) {
         return (
@@ -712,7 +760,8 @@ export const AccessControlSection: React.FC<{
                                     { label: 'Users', value: users.length, tone: 'text-slate-900' },
                                     { label: 'Active', value: activeUserCount, tone: 'text-emerald-700' },
                                     { label: 'Branch', value: branchLoginCount, tone: 'text-brand' },
-                                    { label: 'Supervisors', value: supervisorLoginCount, tone: 'text-blue-700' }
+                                    { label: 'Supervisors', value: supervisorLoginCount, tone: 'text-blue-700' },
+                                    { label: 'Drivers', value: driverLoginCount, tone: 'text-cyan-700' }
                                 ].map(stat => (
                                     <div key={stat.label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
@@ -758,12 +807,16 @@ export const AccessControlSection: React.FC<{
                                         ? (user.branchName || 'No branch linked')
                                         : user.role === 'supervisor'
                                             ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
-                                            : 'All branches';
+                                            : user.role === 'driver'
+                                                ? 'Driver mobile'
+                                                : 'All branches';
                                     const scopeDetail = user.role === 'branch'
                                         ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                         : user.role === 'supervisor'
                                             ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 4).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
-                                            : 'Cross-branch visibility follows this role.';
+                                            : user.role === 'driver'
+                                                ? 'Linked to a delivery driver profile.'
+                                                : 'Cross-branch visibility follows this role.';
                                     const roleLocked = isSelf || isSaving || isProtectedAdmin;
 
                                     return (
@@ -929,6 +982,8 @@ export const AccessControlSection: React.FC<{
                                                         <Users className="mr-1 inline h-3.5 w-3.5" />
                                                         {(supervisorAssignments[user.userId] || []).length} branches
                                                     </button>
+                                                ) : user.role === 'driver' ? (
+                                                    <span className="text-xs font-medium text-cyan-600">Driver mobile profile</span>
                                                 ) : (
                                                     <span className="text-xs font-medium text-slate-400">All branches</span>
                                                 )}
@@ -989,12 +1044,16 @@ export const AccessControlSection: React.FC<{
                                 ? (user.branchName || 'No branch linked')
                                 : user.role === 'supervisor'
                                     ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
-                                    : 'All branches';
+                                    : user.role === 'driver'
+                                        ? 'Driver mobile'
+                                        : 'All branches';
                             const scopeDetail = user.role === 'branch'
                                 ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                 : user.role === 'supervisor'
                                     ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 3).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
-                                    : 'Cross-branch visibility follows this role.';
+                                    : user.role === 'driver'
+                                        ? 'Linked to a delivery driver profile.'
+                                        : 'Cross-branch visibility follows this role.';
                             return (
                                 <div key={user.userId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/25 hover:shadow-md hover:shadow-brand/5">
                                     <div className="border-b border-slate-100 bg-slate-50/70 p-4">

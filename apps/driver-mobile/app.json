@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Tabarak Driver",
+    "slug": "tabarak-driver",
+    "scheme": "tabarakdriver",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-notifications"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.tabarakpharmacy.driver"
+    },
+    "android": {
+      "package": "com.tabarakpharmacy.driver"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    }
+  }
+}

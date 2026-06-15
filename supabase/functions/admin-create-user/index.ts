@@ -2,9 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
-type AssignableRole = "admin" | "owner" | "branch" | "supervisor" | "warehouse" | "accounts";
+type AssignableRole = "admin" | "owner" | "branch" | "supervisor" | "warehouse" | "accounts" | "driver";
 
-const assignableRoles: AssignableRole[] = ["admin", "owner", "branch", "supervisor", "warehouse", "accounts"];
+const assignableRoles: AssignableRole[] = ["admin", "owner", "branch", "supervisor", "warehouse", "accounts", "driver"];
 
 const friendlyDatabaseError = (message: string | undefined, role?: string) => {
   const normalized = message || "Database update failed";
@@ -86,6 +86,7 @@ serve(async (req) => {
   const password = String(body.password || "");
   const role = String(body.role || "") as AssignableRole;
   const branchId = body.branchId ? String(body.branchId) : null;
+  const driverId = body.driverId ? String(body.driverId) : null;
   const requestedIsActive = body.isActive !== false;
   const supervisorBranchIds = Array.isArray(body.supervisorBranchIds)
     ? body.supervisorBranchIds.map((id: unknown) => String(id)).filter(Boolean)
@@ -109,6 +110,10 @@ serve(async (req) => {
     return json({ error: "Branch role requires a linked branch" }, 400);
   }
 
+  if (role === "driver" && !driverId) {
+    return json({ error: "Driver role requires a linked delivery driver" }, 400);
+  }
+
   const branchIdsToCheck = role === "branch"
     ? [branchId]
     : role === "supervisor"
@@ -129,6 +134,18 @@ serve(async (req) => {
     if (missing.length > 0) {
       return json({ error: "One or more selected branches are invalid" }, 400);
     }
+  }
+
+  if (role === "driver") {
+    const { data: driverRow, error: driverError } = await supabase
+      .from("delivery_drivers")
+      .select("id, auth_user_id, is_active")
+      .eq("id", driverId)
+      .maybeSingle();
+
+    if (driverError) return json({ error: driverError.message }, 400);
+    if (!driverRow?.is_active) return json({ error: "Selected delivery driver is inactive or unavailable" }, 400);
+    if (driverRow.auth_user_id) return json({ error: "Selected delivery driver is already linked to a login user" }, 400);
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -177,12 +194,29 @@ serve(async (req) => {
     }
   }
 
+  if (role === "driver" && driverId) {
+    const { error: driverLinkError } = await supabase
+      .from("delivery_drivers")
+      .update({
+        auth_user_id: userId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", driverId);
+
+    if (driverLinkError) {
+      await supabase.from("app_user_profiles").delete().eq("user_id", userId);
+      await supabase.auth.admin.deleteUser(userId);
+      return json({ error: driverLinkError.message }, 400);
+    }
+  }
+
   return json({
     user: {
       userId,
       email: created.user.email,
       role,
       branchId: role === "branch" ? branchId : null,
+      driverId: role === "driver" ? driverId : null,
       isActive,
       createdAt: created.user.created_at,
     },

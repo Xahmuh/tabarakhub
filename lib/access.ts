@@ -1,6 +1,6 @@
 import { FeaturePermission, Role, RolePermission } from '../types';
 
-export const ALL_ROLES: Role[] = ['admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager'];
+export const ALL_ROLES: Role[] = ['admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager', 'driver'];
 
 export const ROLE_LABELS: Record<Role, string> = {
   owner: 'Owner / Read-only Executive',
@@ -9,7 +9,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   accounts: 'Accounts',
   supervisor: 'Supervisor',
   warehouse: 'Warehouse',
-  branch: 'Branch'
+  branch: 'Branch',
+  driver: 'Driver'
 };
 
 /** Admin is the full-control project role; manager is kept as a legacy alias during migration. */

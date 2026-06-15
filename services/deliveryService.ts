@@ -252,6 +252,29 @@ export const deliveryService = {
       const pharmacistName = await resolveActivePharmacistForBranch(normalized.branchId, normalized.pharmacistId);
       await assertActiveDriver(normalized.driverId);
       const { data: session } = await supabaseClient.auth.getSession();
+
+      if (normalized.driverId) {
+        const { data: orderId, error: assignError } = await supabaseClient.rpc('app_delivery_record_and_assign_order' as any, {
+          p_branch_id: normalized.branchId,
+          p_order_date: normalized.orderDate,
+          p_value_bhd: normalized.valueBhd,
+          p_payment_type: normalized.paymentType,
+          p_pharmacist_id: normalized.pharmacistId || null,
+          p_driver_id: normalized.driverId,
+          p_block_number: normalized.blockNumber,
+          p_notes: normalized.notes || null
+        });
+        if (assignError) throw assignError;
+
+        const { data, error } = await supabaseClient
+          .from('delivery_orders')
+          .select(ORDER_SELECT)
+          .eq('id', orderId as string)
+          .single();
+        if (error) throw error;
+        return toOrder(data);
+      }
+
       const payload = {
         branch_id: normalized.branchId,
         order_date: normalized.orderDate,
@@ -423,7 +446,11 @@ export const deliveryService = {
         name: d.name,
         phone: d.phone || undefined,
         notes: d.notes || undefined,
-        isActive: d.is_active
+        isActive: d.is_active,
+        authUserId: d.auth_user_id || null,
+        isOnline: !!d.is_online,
+        statusChangedAt: d.status_changed_at || null,
+        lastSeenAt: d.last_seen_at || null
       }));
     },
     upsert: async (driver: Partial<DeliveryDriver>): Promise<DeliveryDriver> => {
@@ -443,7 +470,11 @@ export const deliveryService = {
         name: data.name,
         phone: data.phone || undefined,
         notes: data.notes || undefined,
-        isActive: data.is_active
+        isActive: data.is_active,
+        authUserId: data.auth_user_id || null,
+        isOnline: !!data.is_online,
+        statusChangedAt: data.status_changed_at || null,
+        lastSeenAt: data.last_seen_at || null
       };
     },
     deactivate: async (id: string) => {

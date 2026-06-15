@@ -95,6 +95,16 @@ serve(async (req) => {
   }
 
   await supabase.from("supervisor_branches").delete().eq("supervisor_user_id", userId);
+  await supabase
+    .from("delivery_drivers")
+    .update({
+      auth_user_id: null,
+      is_online: false,
+      status_changed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("auth_user_id", userId);
+
   const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
   if (deleteError) {
     return json({ error: deleteError.message }, 400);

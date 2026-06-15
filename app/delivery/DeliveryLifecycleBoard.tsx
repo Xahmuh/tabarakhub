@@ -201,7 +201,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     let driverId = order.driverId || null;
     let notes: string | null = null;
 
-    if (nextStatus === 'assigned' || nextStatus === 'picked_up' || nextStatus === 'delivered') {
+    if ((nextStatus === 'assigned' || nextStatus === 'picked_up' || nextStatus === 'delivered') && !driverId) {
       const selectedDriverId = await chooseDriver(order);
       if (!selectedDriverId) return;
       driverId = selectedDriverId;

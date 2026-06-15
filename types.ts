@@ -1,6 +1,6 @@
 
 // Define Role type for consistent usage
-export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch';
+export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver';
 
 export interface Branch {
   id: string;
@@ -556,6 +556,10 @@ export interface DeliveryDriver {
   phone?: string;
   notes?: string;
   isActive: boolean;
+  authUserId?: string | null;
+  isOnline?: boolean;
+  statusChangedAt?: string | null;
+  lastSeenAt?: string | null;
 }
 
 export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
