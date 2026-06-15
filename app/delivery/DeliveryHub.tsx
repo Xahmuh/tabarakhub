@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { BarChart3, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2 } from 'lucide-react';
+import { BarChart3, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2, Truck } from 'lucide-react';
 import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
 import { BranchDeliveryDashboard } from './BranchDeliveryDashboard';
 import { AdminDeliveryAnalytics } from './AdminDeliveryAnalytics';
 import { DeliveryCoverage } from './DeliveryCoverage';
+import { DeliveryLifecycleBoard } from './DeliveryLifecycleBoard';
 import { DeliveryProfitability } from './DeliveryProfitability';
 import { DeliverySettings } from './DeliverySettings';
 import { BackToModulesButton } from '../shared';
 
-type HubTab = 'record' | 'dashboard' | 'analytics' | 'coverage' | 'profitability' | 'settings';
+type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'coverage' | 'profitability' | 'settings';
 
 interface DeliveryHubProps {
   user: Branch;
@@ -28,11 +29,13 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
   const canReadDeliveryAnalytics = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor');
   const canReadDeliveryCoverage = canReadDeliveryAnalytics || (canReadDelivery && isBranch);
   const canRecord = isBranch && checkPermission('delivery', 'edit');
+  const canTransitionLifecycle = canManageDelivery || canRecord;
 
   const tabs: Array<{ id: HubTab; label: string; icon: React.ElementType; visible: boolean }> = [
     { id: 'record', label: 'Record', icon: ClipboardList, visible: canRecord },
     { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch && canReadDelivery },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, visible: canReadDeliveryAnalytics },
+    { id: 'dispatch', label: 'Dispatch', icon: Truck, visible: canReadDelivery },
     { id: 'coverage', label: 'Block Coverage', icon: MapPinned, visible: canReadDeliveryCoverage },
     { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) },
     { id: 'settings', label: 'Delivery Settings', icon: Settings2, visible: canManageDelivery }
@@ -81,6 +84,13 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
           setOrderToEdit(order);
           setActiveTab('record');
         } : undefined} />
+      )}
+      {activeTab === 'dispatch' && canReadDelivery && (
+        <DeliveryLifecycleBoard
+          branch={isBranch ? user : null}
+          canTransition={canTransitionLifecycle}
+          canManageAll={canManageDelivery}
+        />
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />

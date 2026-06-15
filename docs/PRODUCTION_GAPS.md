@@ -1,5 +1,44 @@
 # Production Gaps
 
+## Phase 1 Delivery Lifecycle Implementation Gap - 2026-06-15
+
+Phase 1 internal delivery lifecycle tracking is implemented from a clean baseline, with its reviewed migration applied and SQL/RLS-validated on the linked Supabase project. It is still not production-ready.
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Local implementation:
+
+- Dispatch tab added under Delivery for lifecycle overview and internal admin/branch-managed transitions.
+- Existing `delivery_orders` is extended by applied migration `20260615070000_delivery_lifecycle_phase1.sql`.
+- Existing `delivery_drivers` is reused; no replacement table and no driver auth role.
+- New append-only `delivery_order_events` table is introduced by the applied migration for lifecycle traceability.
+- Validation script `supabase/tests/delivery_order_lifecycle_phase1_validation.sql` passed against the linked Supabase project.
+
+Open blockers:
+
+- Authenticated browser QA must verify admin/branch write behavior and owner/supervisor/warehouse read-only behavior.
+- Clean-worktree browser smoke remains pending because no local environment file or live role sessions are available.
+- `driver` role and mobile app remain future product/security decisions.
+
+Detailed record: `docs/PHASE1_IMPLEMENTATION_RESULTS.md`.
+
+Post-deploy validation on 2026-06-15:
+
+- Production domain `https://www.tabarakpharmacy.com` loads the deployed app root at commit `fe16f96`.
+- `origin/main` contains `fe16f96`.
+- Supabase migration history is aligned through `20260615070000`.
+- Phase 1 DB object checks passed: lifecycle event table exists, RLS enabled, lifecycle RPC exists, lifecycle columns exist, anon event grants `0`, authenticated event write grants `0`.
+- Phase 1 lifecycle SQL/RLS validation passed; delivery-order update/delete RLS validation also passed.
+- Browser smoke without credentials reached the Sign In UI with no console errors.
+- Authenticated Delivery/Dispatch browser QA remains pending because no valid role sessions were available.
+- Direct unauthenticated `/delivery` returned Vercel `404: NOT_FOUND` before the SPA fallback fix.
+- `vercel.json` SPA fallback rewrite is prepared to serve `/index.html` for direct client routes.
+- Local preview route smoke passed for `/`, `/delivery`, `/spin-win`, and `/project-settings`; production redeploy is required to verify `https://www.tabarakpharmacy.com/delivery`.
+
 ## Delivery Driver Mobile Phase 1 Readiness Gap - 2026-06-15
 
 Phase 1 Driver Mobile migration readiness is complete. Implementation has not started yet and still needs explicit approval for the driver role and delivery data-model decisions.
@@ -18,7 +57,7 @@ B) dedicated-client staging-ready only
 
 Open items:
 
-- Migration history is aligned through `20260615050000` on the linked project after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, and `20260615050000`.
+- Migration history is aligned through `20260615070000` on the linked project after applying `20260614230000`, rewritten-safe `20260615011000`, `20260615023000`, `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000`.
 - Delivery-order RLS validation passed: anon read/write denied; branch own recent update allowed; cross-branch and historical branch writes blocked; branch hard delete blocked; admin delete allowed; audit traceability preserved.
 - Owner hardening SQL/policy validation passed, but live owner browser/session QA remains pending because no active owner profile exists.
 - QC survey Branch Area RPC validation passed: safe `search_path`, security-definer read-only function, no direct anon source-table reads, and limited anon RPC execution returns only governorate names.
@@ -46,7 +85,7 @@ Detailed record: `docs/OWNER_READONLY_DASHBOARD.md`.
 
 Owner is locally reconciled as an assignable read-only executive role, but production remains blocked:
 
-- Pending migration chain has now been applied and validated through `20260615050000`; owner live-session QA remains pending because the linked database has no active owner profile.
+- Pending migration chain has now been applied and validated through `20260615070000`; owner live-session QA remains pending because the linked database has no active owner profile.
 - `20260615023000_owner_readonly_dashboard_hardening.sql` has been applied; owner profile provisioning still requires explicit approval and live-session QA.
 - The linked database currently has no owner profile to test and still has one legacy `public.branches.role = manager` row.
 - Authenticated owner/admin/branch/supervisor/warehouse/accounts browser QA remains pending.
@@ -80,7 +119,7 @@ Authenticated browser QA for Branch Delivery Zones and Markers was attempted loc
 Delivery Governorate KPIs and Purchase Power Proxy are implemented locally for internal analysis only. They use `delivery_orders.governorate`, `delivery_blocks`, and `value_bhd`; no fake governorate mapping, population data, or income data is used. Before production, validate the Governorate KPIs tab with real manager/owner/supervisor sessions, confirm RLS-scoped branch/governorate results, and confirm the Purchase Power Proxy wording remains clearly internal/non-economic.
 Final production-readiness gate results are documented in docs/FINAL_PRODUCTION_READINESS_GATE_RESULTS.md.
 Quality Feedback question migration has been applied and recorded on the linked Supabase project: `feedback_questions` remains as 28-row locked legacy backup, `quality_feedback_questions` now has 28 app-source rows, duplicate `field_key` groups = 0, anon can read active questions, branch users cannot manage questions, and Admin can manage questions by SQL/RLS validation after the Admin role migration. Browser QA for the public/staff form and Admin question manager remains pending because no authenticated browser session/password was available. See docs/QUALITY_FEEDBACK_QUESTIONS_MIGRATION.md.
-Migration history is currently aligned on the linked Supabase project through `20260615050000_quality_feedback_branch_area_options.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, and QC area RPC `20260615050000` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
+Migration history is currently aligned on the linked Supabase project through `20260615070000_delivery_lifecycle_phase1.sql`. Admin Role Access migration `20260614190000_admin_role_access_model.sql`, grant hardening migration `20260614193000_harden_app_user_feature_permissions_grants.sql`, Module Layout migration `20260614200000_module_display_settings.sql`, Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql`, branch login device/IP trust `20260614230000`, safe delivery-order RLS `20260615011000`, owner hardening `20260615023000`, QC area RPC `20260615050000`, and Phase 1 Delivery Lifecycle `20260615070000` are recorded in local and remote history. Do not run blind `supabase db push`; review future changes intentionally.
 Module Layout settings migration `20260614200000_module_display_settings.sql` has been applied and recorded on the linked Supabase project. The feature is presentation-only: it controls module launcher order and badges from `system_settings.module_display_settings` and does not grant access or bypass Users & Roles/RLS. Authenticated browser QA for Project Settings > Module Layout and branch restrictions remains pending because no valid admin/manager/owner/branch browser session was available. See docs/MODULE_LAYOUT_SETTINGS.md.
 Branding Logo settings migration `20260614203000_branding_logo_system_settings.sql` has been applied and recorded on the linked Supabase project. `system_settings` now includes `pharmacy_logo_url`, `hub_logo_url`, `browser_icon_url`, and `loading_spinner_url` with expected non-null defaults. The migration does not change RLS, grants, role permissions, branch permissions, or app_user_feature_permissions. Authenticated browser QA for Project Settings > Branding & logos remains pending because no valid admin/manager/owner session was available.
 POST_MIGRATION helper/RPC anon EXECUTE blocker is remediated on the linked project: `20260614133000_harden_contributions_storage_and_rpc_grants.sql` was applied with approval and unsafe non-allowlisted anon EXECUTE count is now 0.

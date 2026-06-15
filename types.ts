@@ -548,6 +548,8 @@ export interface DeliveryDriver {
   isActive: boolean;
 }
 
+export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
+
 export interface BranchClassification {
   branchId: string;
   areaId?: string | null;
@@ -585,6 +587,13 @@ export interface DeliveryOrder {
   isOutsideGovernorate: boolean;
   notes?: string;
   createdAt: string;
+  deliveryStatus: DeliveryLifecycleStatus;
+  assignedAt?: string | null;
+  pickedUpAt?: string | null;
+  deliveredAt?: string | null;
+  cancelledAt?: string | null;
+  cancelledReason?: string | null;
+  lifecycleUpdatedAt?: string | null;
 }
 
 export interface DeliveryOrderInput {
@@ -597,6 +606,33 @@ export interface DeliveryOrderInput {
   driverId?: string | null;
   blockNumber?: string | null;
   notes?: string;
+}
+
+export interface DeliveryOrderLifecycleInput {
+  orderId: string;
+  nextStatus: DeliveryLifecycleStatus;
+  driverId?: string | null;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+}
+
+export interface DeliveryOrderEvent {
+  id: string;
+  orderId?: string | null;
+  branchId: string;
+  branchName?: string | null;
+  eventType: DeliveryLifecycleStatus;
+  previousStatus?: DeliveryLifecycleStatus | null;
+  newStatus: DeliveryLifecycleStatus;
+  driverId?: string | null;
+  driverCode?: string | null;
+  driverName?: string | null;
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 // --- Delivery Coverage Analytics (manager Bahrain block coverage) ---
