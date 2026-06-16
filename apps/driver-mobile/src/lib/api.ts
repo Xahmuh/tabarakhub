@@ -75,6 +75,26 @@ export type DriverNearbyStartBranch = DriverBranchOption & {
   isWithinRadius: boolean;
 };
 
+export type DriverDutyRecord = {
+  driverId: string;
+  driverCode?: string | null;
+  driverName: string;
+  statDate: string;
+  firstOnlineAt?: string | null;
+  lastOfflineAt?: string | null;
+  startedBranchName?: string | null;
+  startedLat?: number | null;
+  startedLng?: number | null;
+  startedDistanceMeters?: number | null;
+  totalWorkingMinutes: number;
+  assignedCount: number;
+  pickedUpCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
+  actualDeliveryCount: number;
+  internalTransferCount: number;
+};
+
 export type DriverOrder = {
   id: string;
   branchId: string;
@@ -138,6 +158,26 @@ const mapOrder = (row: any): DriverOrder => ({
   batchDeliverySequence: row.batch_delivery_sequence ?? null
 });
 
+const mapDutyRecord = (row: any): DriverDutyRecord => ({
+  driverId: row.driver_id,
+  driverCode: row.driver_code,
+  driverName: row.driver_name || 'Driver',
+  statDate: row.stat_date,
+  firstOnlineAt: row.first_online_at,
+  lastOfflineAt: row.last_offline_at,
+  startedBranchName: row.started_branch_name ?? null,
+  startedLat: row.started_lat === null || row.started_lat === undefined ? null : Number(row.started_lat),
+  startedLng: row.started_lng === null || row.started_lng === undefined ? null : Number(row.started_lng),
+  startedDistanceMeters: row.started_distance_m === null || row.started_distance_m === undefined ? null : Number(row.started_distance_m),
+  totalWorkingMinutes: Number(row.total_working_minutes || 0),
+  assignedCount: Number(row.assigned_count || 0),
+  pickedUpCount: Number(row.picked_up_count || 0),
+  deliveredCount: Number(row.delivered_count || 0),
+  cancelledCount: Number(row.cancelled_count || 0),
+  actualDeliveryCount: Number(row.actual_delivery_count || 0),
+  internalTransferCount: Number(row.internal_transfer_count || 0)
+});
+
 export const driverApi = {
   signIn: async (identifier: string, password: string) => {
     const rawIdentifier = identifier.trim();
@@ -190,6 +230,16 @@ export const driverApi = {
     });
     const rows = assertRpc(data as any[], error, 'Could not load order history.');
     return rows.map(mapOrder);
+  },
+
+  dutyRecords: async (dateFrom: string, dateTo: string): Promise<DriverDutyRecord[]> => {
+    const { data, error } = await supabase.rpc('app_driver_get_duty_report', {
+      p_date_from: dateFrom,
+      p_date_to: dateTo,
+      p_driver_id: null
+    });
+    const rows = assertRpc(data as any[], error, 'Could not load duty records.');
+    return rows.map(mapDutyRecord);
   },
 
   transferBranches: async (): Promise<DriverBranchOption[]> => {

@@ -24,6 +24,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   driverApi,
   DriverBranchOption,
+  DriverDutyRecord,
   DriverHistoryStatusFilter,
   DriverNearbyStartBranch,
   DriverOrder,
@@ -47,7 +48,7 @@ const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
-type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications';
+type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications' | 'dutyRecord';
 type HistoryStatusFilter = 'all' | DriverHistoryStatusFilter;
 type HistoryOrderTypeFilter = 'delivery' | 'internal_transfer';
 type HistoryPeriodFilter = 'all' | 'today' | 'week' | 'month';
@@ -196,6 +197,32 @@ const toDateInput = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const toMonthInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+const monthRange = (month: string) => {
+  const [yearValue, monthValue] = month.split('-').map(Number);
+  const year = Number.isFinite(yearValue) ? yearValue : new Date().getFullYear();
+  const monthIndex = Number.isFinite(monthValue) ? Math.max(0, Math.min(11, monthValue - 1)) : new Date().getMonth();
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0);
+  return {
+    dateFrom: toDateInput(start),
+    dateTo: toDateInput(end)
+  };
+};
+
+const recentMonthOptions = (count = 6) => {
+  const current = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(current.getFullYear(), current.getMonth() - index, 1);
+    return toMonthInput(date);
+  });
+};
+
 const historyPeriodRange = (period: HistoryPeriodFilter) => {
   if (period === 'all') return { dateFrom: null, dateTo: null };
   const today = new Date();
@@ -255,6 +282,117 @@ const requestPushToken = async () => {
   } catch (error) {
     if (__DEV__) console.info('Push token registration skipped', error);
   }
+};
+
+const dutyLocationLabel = (record: DriverDutyRecord, copy: DriverCopy) => {
+  if (record.startedBranchName) {
+    const distance = record.startedDistanceMeters === null || record.startedDistanceMeters === undefined
+      ? ''
+      : ` · ${formatDistanceMeters(record.startedDistanceMeters)}`;
+    return `${record.startedBranchName}${distance}`;
+  }
+
+  if (record.startedLat !== null && record.startedLat !== undefined && record.startedLng !== null && record.startedLng !== undefined) {
+    return `${record.startedLat.toFixed(6)}, ${record.startedLng.toFixed(6)}`;
+  }
+
+  return copy.common.notRecorded;
+};
+
+const dutyRecordTotalOrders = (record: DriverDutyRecord) =>
+  record.actualDeliveryCount + record.internalTransferCount;
+
+const htmlCell = (value: string | number) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const buildDutyPdfHtml = (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
+  const rows = records.map(record => `
+    <tr>
+      <td>${htmlCell(record.statDate)}</td>
+      <td>${htmlCell(formatDateTime(record.firstOnlineAt, language, copy))}</td>
+      <td>${htmlCell(formatDateTime(record.lastOfflineAt, language, copy))}</td>
+      <td>${htmlCell(dutyLocationLabel(record, copy))}</td>
+      <td>${htmlCell(formatShiftHours(record.totalWorkingMinutes, copy))}</td>
+      <td>${htmlCell(dutyRecordTotalOrders(record))}</td>
+      <td>${htmlCell(record.internalTransferCount)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; padding: 24px; }
+          h1 { margin: 0 0 4px; font-size: 24px; }
+          p { margin: 0 0 18px; color: #64748b; }
+          table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          th { text-align: left; background: #f8fafc; color: #64748b; text-transform: uppercase; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px; vertical-align: top; }
+        </style>
+      </head>
+      <body>
+        <h1>${htmlCell(copy.profile.pdfTitle)}</h1>
+        <p>${htmlCell(month)}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Start</th>
+              <th>Leave</th>
+              <th>Starting location</th>
+              <th>Hours</th>
+              <th>Orders</th>
+              <th>Transfers</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+};
+
+const shareDutyExcel = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
+  const FileSystem = await import('expo-file-system/legacy');
+  const Sharing = await import('expo-sharing');
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error(copy.profile.exportUnavailableText);
+  }
+  if (!FileSystem.cacheDirectory) {
+    throw new Error(copy.profile.exportUnavailableText);
+  }
+  const uri = `${FileSystem.cacheDirectory}driver-duty-${month}.xls`;
+  await FileSystem.writeAsStringAsync(uri, buildDutyPdfHtml(records, month, language, copy), {
+    encoding: FileSystem.EncodingType.UTF8
+  });
+  await Sharing.shareAsync(uri, {
+    mimeType: 'application/vnd.ms-excel',
+    dialogTitle: `${copy.profile.exportExcel} - ${month}`,
+    UTI: 'com.microsoft.excel.xls'
+  });
+};
+
+const shareDutyPdf = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
+  const Print = await import('expo-print');
+  const Sharing = await import('expo-sharing');
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error(copy.profile.exportUnavailableText);
+  }
+  const { uri } = await Print.printToFileAsync({
+    html: buildDutyPdfHtml(records, month, language, copy),
+    base64: false
+  });
+  await Sharing.shareAsync(uri, {
+    mimeType: 'application/pdf',
+    dialogTitle: `${copy.profile.exportPdf} - ${month}`,
+    UTI: 'com.adobe.pdf'
+  });
 };
 
 const Button = ({
@@ -661,19 +799,46 @@ const StatTile = ({
   label,
   value,
   hint,
-  tone = 'neutral'
+  tone = 'neutral',
+  onPress
 }: {
   label: string;
   value: string | number;
   hint?: string;
   tone?: 'neutral' | 'green' | 'amber' | 'red';
-}) => (
-  <View style={[styles.statTile, styles[`statTile_${tone}`]]}>
-    <Text style={styles.statLabel}>{label}</Text>
-    <Text style={styles.statValue}>{value}</Text>
-    {hint ? <Text style={styles.statHint}>{hint}</Text> : null}
-  </View>
-);
+  onPress?: () => void;
+}) => {
+  const content = (
+    <>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+      {hint ? <Text style={styles.statHint}>{hint}</Text> : null}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.statTile,
+          styles[`statTile_${tone}`],
+          styles.statTileClickable,
+          pressed && styles.buttonPressed
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.statTile, styles[`statTile_${tone}`]]}>
+      {content}
+    </View>
+  );
+};
 
 type MonthlyTarget = NonNullable<DriverSessionPayload['monthlyTarget']>;
 
@@ -1289,6 +1454,8 @@ const Dashboard = ({
   const [transferFromBranchId, setTransferFromBranchId] = useState('');
   const [transferToBranchId, setTransferToBranchId] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
+  const [dutyMonthFilter, setDutyMonthFilter] = useState(() => toMonthInput(new Date()));
+  const [isExportingDuty, setIsExportingDuty] = useState(false);
 
   const sessionQuery = useQuery({
     queryKey: ['driver-session'],
@@ -1314,6 +1481,15 @@ const Dashboard = ({
     }
   });
 
+  const dutyMonthRange = useMemo(() => monthRange(dutyMonthFilter), [dutyMonthFilter]);
+  const dutyMonthOptions = useMemo(() => recentMonthOptions(6), []);
+
+  const dutyRecordsQuery = useQuery({
+    queryKey: ['driver-duty-records', dutyMonthFilter],
+    queryFn: () => driverApi.dutyRecords(dutyMonthRange.dateFrom, dutyMonthRange.dateTo),
+    enabled: activeTab === 'dutyRecord' && Boolean(sessionQuery.data)
+  });
+
   const transferBranchesQuery = useQuery({
     queryKey: ['driver-transfer-branches'],
     queryFn: driverApi.transferBranches
@@ -1324,6 +1500,7 @@ const Dashboard = ({
       queryClient.invalidateQueries({ queryKey: ['driver-session'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-active-orders'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-order-history'] }),
+      queryClient.invalidateQueries({ queryKey: ['driver-duty-records'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-transfer-branches'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-nearby-start-branch'] })
     ]);
@@ -1519,6 +1696,19 @@ const Dashboard = ({
       });
     return Array.from(byId.values()).sort((a, b) => historySortTime(b) - historySortTime(a));
   }, [historyPeriodFilter, historyStatusFilter, historyTypeFilter, recentHistoryOrders, serverHistory]);
+  const dutyRecords = dutyRecordsQuery.data || [];
+  const dutySummary = useMemo(
+    () => dutyRecords.reduce(
+      (total, record) => ({
+        days: total.days + 1,
+        minutes: total.minutes + record.totalWorkingMinutes,
+        orders: total.orders + dutyRecordTotalOrders(record),
+        transfers: total.transfers + record.internalTransferCount
+      }),
+      { days: 0, minutes: 0, orders: 0, transfers: 0 }
+    ),
+    [dutyRecords]
+  );
   const transferBranches = transferBranchesQuery.data || [];
   const incomingOrders = useMemo(
     () => orders.filter(order => order.deliveryStatus === 'assigned'),
@@ -1530,7 +1720,7 @@ const Dashboard = ({
   );
   const activeShift = session?.activeShift;
   const monthlyTarget = session?.monthlyTarget;
-  const isBusy = shiftMutation.isPending || orderMutation.isPending || pickupBatchMutation.isPending || transferMutation.isPending || isSyncing;
+  const isBusy = shiftMutation.isPending || orderMutation.isPending || pickupBatchMutation.isPending || transferMutation.isPending || isSyncing || isExportingDuty;
   const isLoading = sessionQuery.isLoading || ordersQuery.isLoading;
   const nearbyStartBranch = nearbyStartBranchQuery.data;
   const shiftBranchInfo = shiftBranchStatus(
@@ -1650,6 +1840,42 @@ const Dashboard = ({
     setActiveTab('notifications');
     if (orders.length > 0) {
       playDriverAlarm();
+    }
+  };
+
+  const openHistoryFromStat = (
+    typeFilter: HistoryOrderTypeFilter,
+    statusFilter: HistoryStatusFilter = 'all',
+    periodFilter: HistoryPeriodFilter = 'today'
+  ) => {
+    setHistoryTypeFilter(typeFilter);
+    setHistoryStatusFilter(statusFilter);
+    setHistoryPeriodFilter(periodFilter);
+    setActiveTab('history');
+  };
+
+  const exportDutyRecords = async (format: 'excel' | 'pdf') => {
+    if (dutyRecords.length === 0) {
+      Alert.alert(copy.profile.noDutyRecords, copy.profile.noDutyRecordsText);
+      return;
+    }
+
+    setIsExportingDuty(true);
+    try {
+      if (format === 'excel') {
+        await shareDutyExcel(dutyRecords, dutyMonthFilter, language, copy);
+      } else {
+        await shareDutyPdf(dutyRecords, dutyMonthFilter, language, copy);
+      }
+    } catch (error) {
+      Alert.alert(
+        error instanceof Error && error.message === copy.profile.exportUnavailableText
+          ? copy.profile.exportUnavailableTitle
+          : copy.profile.exportFailedTitle,
+        error instanceof Error ? error.message : copy.errors.couldNotLoadAccess
+      );
+    } finally {
+      setIsExportingDuty(false);
     }
   };
 
@@ -2022,18 +2248,106 @@ const Dashboard = ({
     </View>
   );
 
+  const renderDutyRecord = () => (
+    <View style={styles.tabPane}>
+      <View style={styles.dutyHero}>
+        <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{copy.profile.monthlyArchive}</Text>
+        <Text style={[styles.commandTitle, isRtl && styles.rtlText]}>{formatMonth(`${dutyMonthFilter}-01`, language, copy)}</Text>
+        <Text style={[styles.commandText, isRtl && styles.rtlText]}>{copy.profile.archiveHint}</Text>
+        <View style={[styles.dutyExportActions, isRtl && styles.rtlRow]}>
+          <Button
+            label={copy.profile.exportExcel}
+            tone="light"
+            disabled={isExportingDuty || dutyRecords.length === 0}
+            onPress={() => exportDutyRecords('excel')}
+          />
+          <Button
+            label={copy.profile.exportPdf}
+            tone="dark"
+            disabled={isExportingDuty || dutyRecords.length === 0}
+            onPress={() => exportDutyRecords('pdf')}
+          />
+        </View>
+        <Text style={[styles.dutyExportHint, isRtl && styles.rtlText]}>{copy.profile.excelHint}</Text>
+      </View>
+
+      <View style={styles.historyFilterCard}>
+        <View style={styles.historyFilterSection}>
+          <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
+            <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.profile.monthlyArchive}</Text>
+            <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.profile.archiveHint}</Text>
+          </View>
+          <View style={styles.filterRail}>
+            {dutyMonthOptions.map(month => (
+              <FilterButton
+                key={month}
+                label={formatMonth(`${month}-01`, language, copy)}
+                active={dutyMonthFilter === month}
+                onPress={() => setDutyMonthFilter(month)}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.statsGrid}>
+        <StatTile label={copy.profile.dutyDays} value={dutySummary.days} hint={copy.profile.monthlyArchive} />
+        <StatTile label={copy.profile.workHours} value={formatShiftHours(dutySummary.minutes, copy)} hint={copy.profile.monthlyArchive} tone="green" />
+        <StatTile label={copy.profile.orderCount} value={dutySummary.orders} hint={copy.common.actualDelivery} />
+        <StatTile label={copy.profile.transferRecord} value={dutySummary.transfers} hint={copy.common.internalTransfer} tone="amber" />
+      </View>
+
+      {dutyRecordsQuery.isLoading ? (
+        <View style={styles.inlineLoader}>
+          <ActivityIndicator color={colors.brand} />
+          <Text style={[styles.loadingText, isRtl && styles.rtlText]}>{copy.common.loading}</Text>
+        </View>
+      ) : dutyRecordsQuery.error ? (
+        <EmptyState title={copy.history.unavailableTitle} text={dutyRecordsQuery.error instanceof Error ? dutyRecordsQuery.error.message : copy.history.unavailableFallback} isRtl={isRtl} />
+      ) : dutyRecords.length === 0 ? (
+        <EmptyState title={copy.profile.noDutyRecords} text={copy.profile.noDutyRecordsText} isRtl={isRtl} />
+      ) : (
+        <View style={[styles.historyList, isWideLayout && styles.historyListWide]}>
+          {dutyRecords.map(record => (
+            <View key={`${record.driverId}-${record.statDate}`} style={[styles.historyListItem, isWideLayout && styles.historyListItemWide]}>
+              <View style={styles.dutyRecordCard}>
+                <View style={[styles.dutyRecordHeader, isRtl && styles.rtlRow]}>
+                  <View>
+                    <Text style={[styles.historyStripTitle, isRtl && styles.rtlText]}>{record.statDate}</Text>
+                    <Text style={[styles.historyStripMeta, isRtl && styles.rtlText]}>
+                      {copy.profile.recordCount.replace('{count}', String(dutyRecordTotalOrders(record)))}
+                    </Text>
+                  </View>
+                  <Pill label={formatShiftHours(record.totalWorkingMinutes, copy)} tone={record.lastOfflineAt ? 'green' : 'amber'} />
+                </View>
+                <View style={styles.dutyRecordGrid}>
+                  <InfoRow label={copy.common.started} value={formatDateTime(record.firstOnlineAt, language, copy)} isRtl={isRtl} />
+                  <InfoRow label={copy.profile.finishTime} value={record.lastOfflineAt ? formatDateTime(record.lastOfflineAt, language, copy) : copy.profile.openShift} isRtl={isRtl} />
+                  <InfoRow label={copy.profile.startLocation} value={dutyLocationLabel(record, copy)} isRtl={isRtl} />
+                  <InfoRow label={copy.profile.orderCount} value={String(dutyRecordTotalOrders(record))} isRtl={isRtl} />
+                  <InfoRow label={copy.common.actualDelivery} value={String(record.actualDeliveryCount)} isRtl={isRtl} />
+                  <InfoRow label={copy.profile.transferRecord} value={String(record.internalTransferCount)} isRtl={isRtl} />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
   const renderStats = () => (
     <View style={styles.tabPane}>
       <MonthlyTargetCard target={monthlyTarget} copy={copy} language={language} isRtl={isRtl} />
       <View style={styles.statsGrid}>
-        <StatTile label={copy.stats.delivered} value={session?.stats.deliveredCount ?? 0} hint={copy.stats.today} tone="green" />
-        <StatTile label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.actualDelivery} />
-        <StatTile label={copy.common.transfers} value={session?.stats.internalTransferCount ?? 0} hint={copy.stats.internal} tone="amber" />
-        <StatTile label={copy.stats.pickedUp} value={session?.stats.pickedUpCount ?? 0} hint={copy.stats.today} />
-        <StatTile label={copy.common.cancelled} value={session?.stats.cancelledCount ?? 0} hint={copy.stats.today} tone="red" />
-        <StatTile label={copy.stats.historyRows} value={history.length} hint={copy.stats.loadedOrders} />
-        <StatTile label={copy.stats.assigned} value={session?.stats.assignedCount ?? 0} hint={copy.stats.today} />
-        <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.stats.today} />
+        <StatTile label={copy.stats.delivered} value={session?.stats.deliveredCount ?? 0} hint={copy.stats.today} tone="green" onPress={() => openHistoryFromStat('delivery', 'delivered')} />
+        <StatTile label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.actualDelivery} onPress={() => openHistoryFromStat('delivery', 'delivered')} />
+        <StatTile label={copy.common.transfers} value={session?.stats.internalTransferCount ?? 0} hint={copy.stats.internal} tone="amber" onPress={() => openHistoryFromStat('internal_transfer', 'delivered')} />
+        <StatTile label={copy.stats.pickedUp} value={session?.stats.pickedUpCount ?? 0} hint={copy.stats.today} onPress={() => openHistoryFromStat('delivery', 'picked_up')} />
+        <StatTile label={copy.common.cancelled} value={session?.stats.cancelledCount ?? 0} hint={copy.stats.today} tone="red" onPress={() => openHistoryFromStat('delivery', 'cancelled')} />
+        <StatTile label={copy.stats.historyRows} value={history.length} hint={copy.stats.loadedOrders} onPress={() => setActiveTab('history')} />
+        <StatTile label={copy.stats.assigned} value={session?.stats.assignedCount ?? 0} hint={copy.stats.today} onPress={() => setActiveTab('orders')} />
+        <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.stats.today} onPress={() => setActiveTab('dutyRecord')} />
       </View>
       <View style={styles.performanceCard}>
         <Text style={[styles.performanceTitle, isRtl && styles.rtlText]}>{copy.stats.performanceTitle}</Text>
@@ -2051,6 +2365,17 @@ const Dashboard = ({
         <Pill label={activeShift ? copy.common.online : copy.common.offline} tone={activeShift ? 'green' : 'neutral'} />
       </View>
       <LanguageSelector language={language} copy={copy} isRtl={isRtl} onChange={onLanguageChange} />
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setActiveTab('dutyRecord')}
+        style={({ pressed }) => [styles.profileActionCard, pressed && styles.buttonPressed]}
+      >
+        <View style={styles.profileActionCopy}>
+          <Text style={[styles.performanceTitle, isRtl && styles.rtlText]}>{copy.profile.dutyRecordTitle}</Text>
+          <Text style={[styles.performanceText, isRtl && styles.rtlText]}>{copy.profile.dutyRecordText}</Text>
+        </View>
+        <Text style={[styles.profileActionChevron, isRtl && styles.rtlText]}>›</Text>
+      </Pressable>
       <View style={styles.detailCard}>
         <InfoRow label={copy.profile.phone} value={session?.driver.phone || copy.target.notSet} isRtl={isRtl} />
         <InfoRow label={copy.profile.lastSeen} value={formatDateTime(session?.driver.lastSeenAt, language, copy)} isRtl={isRtl} />
@@ -2098,6 +2423,8 @@ const Dashboard = ({
     );
   }
 
+  const isUtilityScreen = activeTab === 'notifications' || activeTab === 'dutyRecord';
+
   return (
     <View style={styles.safe}>
       <View style={[styles.appHeader, isRtl && styles.rtlRow, { paddingTop: Math.max(spacing.md, insets.top + spacing.sm) }]}>
@@ -2112,6 +2439,18 @@ const Dashboard = ({
               </Text>
             </View>
             <HeaderAction icon="alert" label={copy.notifications.playAlarm} hasBadge={incomingOrders.length > 0} onPress={playDriverAlarm} />
+          </>
+        ) : activeTab === 'dutyRecord' ? (
+          <>
+            <HeaderBackButton label={copy.header.backToWorkspace} onPress={() => setActiveTab('profile')} />
+            <View style={styles.headerCopy}>
+              <Text style={[styles.eyebrow, isRtl && styles.rtlText]}>{copy.profile.monthlyArchive}</Text>
+              <Text style={[styles.title, isRtl && styles.rtlText]}>{copy.header.dutyRecord}</Text>
+              <Text style={[styles.subTitle, isRtl && styles.rtlText]}>
+                {formatMonth(`${dutyMonthFilter}-01`, language, copy)}
+              </Text>
+            </View>
+            <HeaderAction icon="stats" label={copy.header.stats} onPress={() => setActiveTab('stats')} />
           </>
         ) : (
           <>
@@ -2140,7 +2479,7 @@ const Dashboard = ({
         contentContainerStyle={[
           styles.page,
           isWideLayout && styles.pageWide,
-          activeTab === 'notifications' && { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.xl) }
+          isUtilityScreen && { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.xl) }
         ]}
         refreshControl={<RefreshControl refreshing={isLoading || isSyncing} onRefresh={refreshAll} />}
       >
@@ -2160,6 +2499,7 @@ const Dashboard = ({
           <TabButton label={copy.header.history} active={activeTab === 'history'} onPress={() => setActiveTab('history')} />
           <TabButton label={copy.header.stats} active={activeTab === 'stats'} onPress={() => setActiveTab('stats')} />
           <TabButton label={copy.header.profile} active={activeTab === 'profile'} onPress={() => setActiveTab('profile')} />
+          <TabButton label={copy.header.dutyRecord} active={activeTab === 'dutyRecord'} onPress={() => setActiveTab('dutyRecord')} />
         </View>
 
         {activeTab === 'home' ? renderHome() : null}
@@ -2169,9 +2509,10 @@ const Dashboard = ({
         {activeTab === 'history' ? renderHistory() : null}
         {activeTab === 'stats' ? renderStats() : null}
         {activeTab === 'profile' ? renderProfile() : null}
+        {activeTab === 'dutyRecord' ? renderDutyRecord() : null}
       </ScrollView>
 
-      {activeTab !== 'notifications' ? (
+      {!isUtilityScreen ? (
         <View style={[styles.bottomNavShell, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) }]}>
           <View style={styles.bottomNav}>
             <BottomNavButton label={copy.header.home} icon="home" active={activeTab === 'home'} onPress={() => setActiveTab('home')} />
@@ -2922,6 +3263,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.md,
     ...shadows.card
+  },
+  statTileClickable: {
+    justifyContent: 'space-between'
   },
   statTile_neutral: {
     borderColor: colors.border
@@ -3717,6 +4061,46 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card
   },
+  dutyHero: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.card
+  },
+  dutyExportActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm
+  },
+  dutyExportHint: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  dutyRecordCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.md,
+    ...shadows.card
+  },
+  dutyRecordHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  dutyRecordGrid: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing.md,
+    gap: spacing.sm
+  },
   notificationHero: {
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -3910,6 +4294,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     ...shadows.card
+  },
+  profileActionCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    ...shadows.card
+  },
+  profileActionCopy: {
+    flex: 1,
+    gap: 5
+  },
+  profileActionChevron: {
+    color: colors.brand,
+    fontSize: 34,
+    fontWeight: '900',
+    lineHeight: 36
   },
   profileInitial: {
     width: 74,

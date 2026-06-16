@@ -255,7 +255,28 @@ const en = {
     hoursUnit: 'h',
     languageTitle: 'Language',
     languageText: 'Choose the app language for this device.',
-    selectedLanguage: 'Selected'
+    selectedLanguage: 'Selected',
+    dutyRecordTitle: 'Duty record',
+    dutyRecordText: 'Daily start/finish log, hours, orders, transfers, and monthly archive.',
+    dutyDays: 'Duty days',
+    monthlyArchive: 'Monthly archive',
+    exportExcel: 'Download Excel',
+    exportPdf: 'Download PDF',
+    exportUnavailableTitle: 'Export unavailable',
+    exportUnavailableText: 'Sharing is not available on this device.',
+    exportFailedTitle: 'Export failed',
+    noDutyRecords: 'No duty records for this month',
+    noDutyRecordsText: 'Start and finish duty to build the monthly record.',
+    startLocation: 'Starting location',
+    finishTime: 'Leave time',
+    workHours: 'Work hours',
+    orderCount: 'Orders',
+    transferRecord: 'Internal transfers',
+    openShift: 'Open shift',
+    archiveHint: 'Older months remain available here after month end.',
+    recordCount: '{count} records',
+    pdfTitle: 'Driver Duty Record',
+    excelHint: 'Excel export uses a shareable .xls table file.'
   },
   header: {
     backToWorkspace: 'Back to driver workspace',
@@ -271,7 +292,8 @@ const en = {
     transfer: 'Transfer',
     history: 'History',
     stats: 'Stats',
-    profile: 'Profile'
+    profile: 'Profile',
+    dutyRecord: 'Duty record'
   },
   errors: {
     shiftUpdateFailed: 'Shift update failed',
