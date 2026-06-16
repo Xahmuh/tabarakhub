@@ -7,7 +7,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +19,7 @@ import Constants from 'expo-constants';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Location from 'expo-location';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
 import {
   driverApi,
@@ -78,6 +77,32 @@ const orderRouteLabel = (order: DriverOrder, copy: DriverCopy) => {
 
 const orderTypeLabel = (order: DriverOrder, copy: DriverCopy) =>
   order.orderKind === 'internal_transfer' ? copy.common.internalTransfer : copy.common.actualDelivery;
+
+const historyDetailText = (language: DriverLanguage) => {
+  if (language === 'ar') {
+    return {
+      openDetails: 'افتح تفاصيل الطلب',
+      orderDetails: 'بيانات الطلب',
+      fullPathway: 'مسار الطلب الكامل',
+      status: 'الحالة',
+      orderDate: 'تاريخ الطلب',
+      created: 'تم الإنشاء',
+      governorate: 'المحافظة',
+      notes: 'ملاحظات'
+    };
+  }
+
+  return {
+    openDetails: 'Open order details',
+    orderDetails: 'Order details',
+    fullPathway: 'Full pathway',
+    status: 'Status',
+    orderDate: 'Order date',
+    created: 'Created',
+    governorate: 'Governorate',
+    notes: 'Notes'
+  };
+};
 
 const formatDateTime = (value: string | null | undefined, language: DriverLanguage, copy: DriverCopy) => {
   if (!value) return copy.common.notRecorded;
@@ -255,6 +280,15 @@ const LoginField = ({
   <View style={styles.loginField}>
     <Text style={[styles.loginFieldLabel, isRtl && styles.rtlText]}>{label}</Text>
     {children}
+  </View>
+);
+
+const PasswordEyeIcon = ({ visible }: { visible: boolean }) => (
+  <View style={styles.eyeIcon}>
+    <View style={[styles.eyeOutline, visible && styles.eyeOutlineActive]}>
+      <View style={[styles.eyePupil, visible && styles.eyePupilActive]} />
+    </View>
+    {!visible ? <View style={styles.eyeSlash} /> : null}
   </View>
 );
 
@@ -484,6 +518,7 @@ const LoginScreen = ({
 }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submit = async () => {
@@ -530,14 +565,25 @@ const LoginScreen = ({
             />
           </LoginField>
           <LoginField label={copy.login.password} isRtl={isRtl}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder={copy.login.passwordPlaceholder}
-              placeholderTextColor={colors.slate400}
-              style={[styles.input, isRtl && styles.rtlInput]}
-            />
+            <View style={[styles.passwordField, isRtl && styles.rtlRow]}>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!passwordVisible}
+                placeholder={copy.login.passwordPlaceholder}
+                placeholderTextColor={colors.slate400}
+                style={[styles.passwordInput, isRtl && styles.rtlInput]}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                accessibilityState={{ checked: passwordVisible }}
+                onPress={() => setPasswordVisible(previous => !previous)}
+                style={({ pressed }) => [styles.passwordEyeButton, pressed && styles.buttonPressed]}
+              >
+                <PasswordEyeIcon visible={passwordVisible} />
+              </Pressable>
+            </View>
           </LoginField>
           <Button label={isSubmitting ? copy.login.signingIn : copy.login.signIn} onPress={submit} disabled={isSubmitting} />
           <View style={[styles.loginFootnote, isRtl && styles.rtlRow]}>
@@ -767,6 +813,201 @@ const OrderCard = ({
   );
 };
 
+const HistoryOrderStrip = ({
+  order,
+  copy,
+  language,
+  isRtl,
+  onPress
+}: {
+  order: DriverOrder;
+  copy: DriverCopy;
+  language: DriverLanguage;
+  isRtl: boolean;
+  onPress: (order: DriverOrder) => void;
+}) => {
+  const isTransfer = order.orderKind === 'internal_transfer';
+  const routeLabel = orderRouteLabel(order, copy);
+  const fromBranch = order.transferFromBranchName || order.branchName;
+  const toBranch = order.transferToBranchName || copy.common.destinationPending;
+  const areaValue = order.areaName || order.governorate || copy.common.pending;
+  const blockValue = order.blockNumber || copy.order.notEntered;
+  const terminalLabel = order.deliveryStatus === 'cancelled' ? copy.common.cancelled : copy.common.delivered;
+  const terminalTime = order.deliveryStatus === 'cancelled' ? order.cancelledAt : order.deliveredAt;
+  const detailText = historyDetailText(language);
+  const pickupRunValue = order.pickupBatchId
+    ? ` | ${copy.order.pickupRun} #${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` / ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`
+    : '';
+  const routeDetail = isTransfer
+    ? `${copy.order.fromBranch}: ${fromBranch} | ${copy.order.toBranch}: ${toBranch}`
+    : `${copy.order.pharmacyBlock}: ${blockValue} | ${copy.order.area}: ${areaValue}`;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${detailText.openDetails} #${shortId(order.id)}`}
+      onPress={() => onPress(order)}
+      style={({ pressed }) => [styles.historyStrip, pressed && styles.historyStripPressed]}
+    >
+      <View style={[styles.historyStripTop, isRtl && styles.rtlRow]}>
+        <View style={styles.historyStripTitleWrap}>
+          <Text style={[styles.historyStripTitle, isRtl && styles.rtlText]} numberOfLines={1}>{routeLabel}</Text>
+          <Text style={[styles.historyStripMeta, isRtl && styles.rtlText]} numberOfLines={2}>
+            #{shortId(order.id)} | {orderTypeLabel(order, copy)} | {order.paymentType} | {routeDetail}{pickupRunValue}
+          </Text>
+        </View>
+        <Pill
+          label={statusLabel(order.deliveryStatus, copy)}
+          tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
+        />
+      </View>
+
+      {order.notes ? (
+        <Text style={[styles.historyStripNotes, isRtl && styles.rtlText]} numberOfLines={1}>{order.notes}</Text>
+      ) : null}
+
+      <View style={[styles.historyStripTimeline, isRtl && styles.rtlRow]}>
+        <View style={styles.historyTimeCell}>
+          <Text style={[styles.historyTimeLabel, isRtl && styles.rtlText]}>{copy.common.assigned}</Text>
+          <Text style={[styles.historyTimeValue, isRtl && styles.rtlText]} numberOfLines={1}>
+            {formatDateTime(order.assignedAt || order.createdAt, language, copy)}
+          </Text>
+        </View>
+        <View style={styles.historyTimeCell}>
+          <Text style={[styles.historyTimeLabel, isRtl && styles.rtlText]}>{copy.common.pickedUp}</Text>
+          <Text style={[styles.historyTimeValue, isRtl && styles.rtlText]} numberOfLines={1}>
+            {formatDateTime(order.pickedUpAt, language, copy)}
+          </Text>
+        </View>
+        <View style={styles.historyTimeCell}>
+          <Text style={[styles.historyTimeLabel, isRtl && styles.rtlText]}>{terminalLabel}</Text>
+          <Text style={[styles.historyTimeValue, isRtl && styles.rtlText]} numberOfLines={1}>
+            {formatDateTime(terminalTime, language, copy)}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+};
+
+const HistoryDetailSheet = ({
+  order,
+  copy,
+  language,
+  isRtl,
+  onClose
+}: {
+  order: DriverOrder | null;
+  copy: DriverCopy;
+  language: DriverLanguage;
+  isRtl: boolean;
+  onClose: () => void;
+}) => {
+  const insets = useSafeAreaInsets();
+
+  if (!order) return null;
+
+  const isTransfer = order.orderKind === 'internal_transfer';
+  const routeLabel = orderRouteLabel(order, copy);
+  const terminalLabel = order.deliveryStatus === 'cancelled' ? copy.common.cancelled : copy.common.delivered;
+  const terminalTime = order.deliveryStatus === 'cancelled' ? order.cancelledAt : order.deliveredAt;
+  const detailText = historyDetailText(language);
+  const pathway = [
+    {
+      label: copy.common.assigned,
+      value: formatDateTime(order.assignedAt || order.createdAt, language, copy),
+      done: Boolean(order.assignedAt || order.createdAt)
+    },
+    {
+      label: copy.common.pickedUp,
+      value: formatDateTime(order.pickedUpAt, language, copy),
+      done: Boolean(order.pickedUpAt)
+    },
+    {
+      label: terminalLabel,
+      value: formatDateTime(terminalTime, language, copy),
+      done: Boolean(terminalTime)
+    }
+  ];
+  const pickupRunValue = order.pickupBatchId
+    ? `#${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` / ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`
+    : copy.common.notRecorded;
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={[
+          styles.sheet,
+          styles.historyDetailSheet,
+          { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }
+        ]}>
+          <View style={styles.sheetHandle} />
+          <View style={[styles.historyDetailHeader, isRtl && styles.rtlRow]}>
+            <View style={styles.historyDetailTitleWrap}>
+              <Text style={[styles.sheetEyebrow, isRtl && styles.rtlText]}>{copy.history.title}</Text>
+              <Text style={[styles.sheetTitle, isRtl && styles.rtlText]}>{routeLabel}</Text>
+              <Text style={[styles.sheetSub, isRtl && styles.rtlText]}>
+                #{shortId(order.id)} | {orderTypeLabel(order, copy)}
+              </Text>
+            </View>
+            <Pill
+              label={statusLabel(order.deliveryStatus, copy)}
+              tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
+            />
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.historyDetailScroll}>
+            <View style={styles.blockCompare}>
+              <Text style={[styles.historyDetailSectionTitle, isRtl && styles.rtlText]}>{detailText.orderDetails}</Text>
+              <InfoRow label={copy.sheet.order} value={`#${shortId(order.id)}`} isRtl={isRtl} />
+              <InfoRow label={copy.sheet.type} value={orderTypeLabel(order, copy)} isRtl={isRtl} />
+              <InfoRow label={detailText.status} value={statusLabel(order.deliveryStatus, copy)} isRtl={isRtl} />
+              <InfoRow label={detailText.orderDate} value={order.orderDate || copy.common.notRecorded} isRtl={isRtl} />
+              <InfoRow label={detailText.created} value={formatDateTime(order.createdAt, language, copy)} isRtl={isRtl} />
+              {isTransfer ? (
+                <>
+                  <InfoRow label={copy.sheet.from} value={order.transferFromBranchName || order.branchName} isRtl={isRtl} />
+                  <InfoRow label={copy.sheet.to} value={order.transferToBranchName || copy.common.destinationPending} isRtl={isRtl} />
+                </>
+              ) : (
+                <>
+                  <InfoRow label={copy.sheet.pharmacy} value={order.branchName} isRtl={isRtl} />
+                  <InfoRow label={copy.sheet.payment} value={order.paymentType} isRtl={isRtl} />
+                  <InfoRow label={copy.sheet.block} value={order.blockNumber || copy.order.notEntered} isRtl={isRtl} />
+                  <InfoRow label={copy.order.area} value={order.areaName || copy.common.notRecorded} isRtl={isRtl} />
+                  <InfoRow label={detailText.governorate} value={order.governorate || copy.common.notRecorded} isRtl={isRtl} />
+                </>
+              )}
+              <InfoRow label={copy.order.pickupRun} value={pickupRunValue} isRtl={isRtl} />
+              <InfoRow label={detailText.notes} value={order.notes || copy.common.notRecorded} isRtl={isRtl} />
+            </View>
+
+            <View style={styles.historyPathwayCard}>
+              <Text style={[styles.historyDetailSectionTitle, isRtl && styles.rtlText]}>{detailText.fullPathway}</Text>
+              {pathway.map((step, index) => (
+                <View key={step.label} style={[styles.pathwayStep, isRtl && styles.rtlRow]}>
+                  <View style={styles.pathwayMarker}>
+                    <View style={[styles.pathwayDot, step.done && styles.pathwayDotDone]} />
+                    {index < pathway.length - 1 ? <View style={styles.pathwayLine} /> : null}
+                  </View>
+                  <View style={styles.pathwayContent}>
+                    <Text style={[styles.pathwayLabel, isRtl && styles.rtlText]}>{step.label}</Text>
+                    <Text style={[styles.pathwayTime, isRtl && styles.rtlText]}>{step.value}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+
+          <View style={[styles.sheetActions, isRtl && styles.rtlRow]}>
+            <Button label={copy.common.back} tone="light" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 const DeliveryConfirmSheet = ({
   order,
   copy,
@@ -980,6 +1221,7 @@ const Dashboard = ({
   const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>('all');
   const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('all');
   const [deliveryDraft, setDeliveryDraft] = useState<DriverOrder | null>(null);
+  const [historyDetailOrder, setHistoryDetailOrder] = useState<DriverOrder | null>(null);
   const [recentHistoryOrders, setRecentHistoryOrders] = useState<DriverOrder[]>([]);
   const [selectedPickupOrderIds, setSelectedPickupOrderIds] = useState<Set<string>>(() => new Set());
   const [transferFromBranchId, setTransferFromBranchId] = useState('');
@@ -1388,7 +1630,7 @@ const Dashboard = ({
         <Button
           label={copy.home.newTransfer}
           tone="dark"
-          disabled={!activeShift || isBusy}
+          disabled={isBusy}
           onPress={() => setActiveTab('transfer')}
         />
       </View>
@@ -1644,7 +1886,13 @@ const Dashboard = ({
         <View style={[styles.historyList, isWideLayout && styles.historyListWide]}>
           {history.map(order => (
             <View key={order.id} style={[styles.historyListItem, isWideLayout && styles.historyListItemWide]}>
-              <OrderCard order={order} copy={copy} language={language} isRtl={isRtl} compact />
+              <HistoryOrderStrip
+                order={order}
+                copy={copy}
+                language={language}
+                isRtl={isRtl}
+                onPress={setHistoryDetailOrder}
+              />
             </View>
           ))}
         </View>
@@ -1825,6 +2073,14 @@ const Dashboard = ({
           </View>
         </View>
       ) : null}
+
+      <HistoryDetailSheet
+        order={historyDetailOrder}
+        copy={copy}
+        language={language}
+        isRtl={isRtl}
+        onClose={() => setHistoryDetailOrder(null)}
+      />
 
       <DeliveryConfirmSheet
         order={deliveryDraft}
@@ -2048,6 +2304,70 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: '800'
+  },
+  passwordField: {
+    minHeight: 50,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: 14
+  },
+  passwordInput: {
+    flex: 1,
+    minHeight: 48,
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '800',
+    paddingVertical: 0
+  },
+  passwordEyeButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  eyeIcon: {
+    width: 22,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  eyeOutline: {
+    width: 20,
+    height: 12,
+    borderRadius: 10,
+    borderWidth: 1.7,
+    borderColor: colors.slate400,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  eyeOutlineActive: {
+    borderColor: colors.brand
+  },
+  eyePupil: {
+    width: 5,
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.slate400
+  },
+  eyePupilActive: {
+    backgroundColor: colors.brand
+  },
+  eyeSlash: {
+    position: 'absolute',
+    width: 24,
+    height: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.danger,
+    transform: [{ rotate: '-35deg' }]
   },
   button: {
     minHeight: 46,
@@ -2665,6 +2985,149 @@ const styles = StyleSheet.create({
   historyListItemWide: {
     width: '48.5%',
     flexGrow: 1
+  },
+  historyStrip: {
+    minHeight: 104,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    gap: 8
+  },
+  historyStripPressed: {
+    opacity: 0.78
+  },
+  historyStripTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm
+  },
+  historyStripTitleWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyStripTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900'
+  },
+  historyStripMeta: {
+    marginTop: 3,
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 14,
+    textTransform: 'uppercase'
+  },
+  historyStripNotes: {
+    marginTop: -2,
+    color: colors.slate600,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 15
+  },
+  historyStripTimeline: {
+    flexDirection: 'row',
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: 8
+  },
+  historyTimeCell: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyTimeLabel: {
+    color: colors.slate400,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase'
+  },
+  historyTimeValue: {
+    marginTop: 2,
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  historyDetailSheet: {
+    maxHeight: '86%'
+  },
+  historyDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  historyDetailTitleWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyDetailScroll: {
+    gap: spacing.md,
+    paddingBottom: spacing.xs
+  },
+  historyDetailSectionTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase'
+  },
+  historyPathwayCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.md
+  },
+  pathwayStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm
+  },
+  pathwayMarker: {
+    width: 18,
+    alignItems: 'center'
+  },
+  pathwayDot: {
+    width: 12,
+    height: 12,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.slate300,
+    backgroundColor: colors.surface
+  },
+  pathwayDotDone: {
+    borderColor: colors.success,
+    backgroundColor: colors.success
+  },
+  pathwayLine: {
+    width: 2,
+    height: 34,
+    marginTop: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.border
+  },
+  pathwayContent: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: spacing.sm
+  },
+  pathwayLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  pathwayTime: {
+    marginTop: 3,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800'
   },
   emptyState: {
     minHeight: 140,
