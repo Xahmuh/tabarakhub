@@ -12,6 +12,7 @@ import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
   getDeliveryPaymentLabel,
   isDeliveryPaymentBlockExempt,
+  isTalabatDeliveryPayment,
   sortDeliveryPaymentTypes
 } from '../../lib/deliveryPaymentTypes';
 import {
@@ -25,6 +26,9 @@ const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) 
   isDeliveryPaymentBlockExempt(type, paymentTypes)
     ? 'border-orange-200 bg-orange-50 text-orange-700'
     : 'border-brand/10 bg-brand/5 text-brand';
+
+const driverDisplayName = (order: DeliveryOrder) =>
+  isTalabatDeliveryPayment(order.paymentType) ? 'Talabat fleet' : order.driverName || '-';
 
 const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
@@ -153,6 +157,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const selectedPaymentType = paymentOptions.find(type => type.code === paymentType);
   const requiresBlock = selectedPaymentType?.requiresBlock ?? !isDeliveryPaymentBlockExempt(paymentType, paymentTypes);
   const isBlockExemptPayment = !requiresBlock;
+  const isTalabatPayment = isTalabatDeliveryPayment(paymentType);
   const areaPreview = !requiresBlock
     ? `Not required for ${selectedPaymentType?.label || paymentType}`
     : selectedBlock
@@ -276,6 +281,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     }));
   }, [lockStorageKey, locksHydrated, isPharmacistLocked, pharmacistId, isDriverLocked, driverId]);
 
+  useEffect(() => {
+    if (!isTalabatPayment) return;
+    setDriverId(null);
+    setIsDriverLocked(false);
+  }, [isTalabatPayment]);
+
   // Resolve block -> area as the user types.
   useEffect(() => {
     let cancelled = false;
@@ -395,7 +406,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     setValue(order.valueBhd.toFixed(3));
     setPaymentType(order.paymentType);
     setPharmacistId(order.pharmacistId || null);
-    setDriverId(order.driverId || null);
+    setDriverId(isTalabatDeliveryPayment(order.paymentType) ? null : order.driverId || null);
     setBlockInput(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? '' : order.blockNumber || '');
     setResolvedBlock(null);
     setBlockMatches([]);
@@ -428,7 +439,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       Swal.fire('Pharmacist required', 'Select the pharmacist before saving this delivery order.', 'warning');
       return;
     }
-    if (!driverId) {
+    if (!isTalabatPayment && !driverId) {
       Swal.fire('Driver required', 'Select the driver before saving this delivery order.', 'warning');
       return;
     }
@@ -463,7 +474,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       paymentType,
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
-      driverId,
+      driverId: isTalabatPayment ? null : driverId,
       blockNumber: requiresBlock ? selectedBlock?.blockNumber || null : null
     };
 
@@ -547,12 +558,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
     if (pharmacists.length === 0) {
       Swal.fire('No pharmacists assigned', 'Assign pharmacists to this branch before using bulk delivery upload.', 'warning');
-      event.target.value = '';
-      return;
-    }
-
-    if (drivers.length === 0) {
-      Swal.fire('No drivers found', 'Add active delivery drivers before using bulk delivery upload.', 'warning');
       event.target.value = '';
       return;
     }
@@ -818,6 +823,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   {selectedPaymentType.label} orders do not require block/area mapping.
                 </p>
               )}
+              {isTalabatPayment && (
+                <p className="mt-1 text-[10px] font-bold text-orange-600">
+                  Talabat orders are handled by Talabat drivers, so internal driver assignment is disabled.
+                </p>
+              )}
             </div>
 
             <div className="order-2 space-y-1 lg:col-start-1 lg:row-start-2">
@@ -853,7 +863,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
             <div className="order-3 space-y-1 lg:col-start-1 lg:row-start-3">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Driver <RequiredMark />
+                Driver {!isTalabatPayment && <RequiredMark />} {isTalabatPayment ? '(disabled for Talabat)' : ''}
               </label>
               <SearchableSelect
                 options={drivers.map(d => ({
@@ -861,20 +871,26 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name,
                   hint: d.driverCode
                 }))}
-                value={driverId}
+                value={isTalabatPayment ? null : driverId}
                 onChange={setDriverId}
-                disabled={isDriverLocked}
-                allowClear={!isDriverLocked}
-                placeholder="Select driver…"
+                disabled={isTalabatPayment || isDriverLocked}
+                allowClear={!isTalabatPayment && !isDriverLocked}
+                placeholder={isTalabatPayment ? 'Talabat fleet handles this order' : 'Select driver'}
               />
-              <button
-                type="button"
-                onClick={toggleDriverLock}
-                className={lockButtonClass(isDriverLocked)}
-              >
-                {isDriverLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                {isDriverLocked ? 'Unlock driver' : 'Lock driver'}
-              </button>
+              {isTalabatPayment ? (
+                <p className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
+                  Internal driver off
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={toggleDriverLock}
+                  className={lockButtonClass(isDriverLocked)}
+                >
+                  {isDriverLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  {isDriverLocked ? 'Unlock driver' : 'Lock driver'}
+                </button>
+              )}
             </div>
 
             <div className="order-6 space-y-1 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
@@ -1087,7 +1103,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                         </span>
                       </td>
                       <td className="py-2.5 pr-3 font-bold text-slate-600">{order.pharmacistName || '—'}</td>
-                      <td className="py-2.5 pr-3 font-bold text-slate-600">{order.driverName || '—'}</td>
+                      <td className="py-2.5 pr-3 font-bold text-slate-600">{driverDisplayName(order)}</td>
                       <td className="py-2.5 pr-3 text-xs font-bold text-slate-500">
                         {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
                           ? '—'
@@ -1139,6 +1155,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
                     {order.driverName && <span>🛵 {order.driverName}</span>}
+                    {isTalabatDeliveryPayment(order.paymentType) && <span>Talabat fleet</span>}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span>Block {order.blockNumber}{order.areaName ? ` · ${order.areaName}` : ''}</span>
                     )}

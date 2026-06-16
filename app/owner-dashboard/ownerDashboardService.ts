@@ -151,13 +151,14 @@ const buildTodayKpis = (
   shortages: Shortage[],
   paymentTypes: DeliveryPaymentTypeConfig[]
 ): OwnerTodayKpis => {
-  const direct = orders.filter(order => isDirectOrder(order, paymentTypes));
+  const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
+  const direct = customerOrders.filter(order => isDirectOrder(order, paymentTypes));
   return {
-    orders: orders.length,
-    valueBhd: sumValue(orders),
+    orders: customerOrders.length,
+    valueBhd: sumValue(customerOrders),
     directOrders: direct.length,
-    talabatOrders: orders.length - direct.length,
-    activeBranches: new Set(orders.map(order => order.branchId)).size,
+    talabatOrders: customerOrders.length - direct.length,
+    activeBranches: new Set(customerOrders.map(order => order.branchId)).size,
     lostSalesValueBhd: sales.reduce((sum, sale) => sum + Number(sale.totalValue || 0), 0),
     lostCustomers: countLostCustomers(sales),
     criticalShortages: shortages.filter(shortage => shortage.status === 'Critical' || shortage.status === 'Out of Stock').length
@@ -170,18 +171,19 @@ const buildOverview = (
   shortages: Shortage[],
   paymentTypes: DeliveryPaymentTypeConfig[]
 ): OwnerOverviewKpis => {
-  const direct = orders.filter(order => isDirectOrder(order, paymentTypes));
+  const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
+  const direct = customerOrders.filter(order => isDirectOrder(order, paymentTypes));
   const knownBlockOrders = direct.filter(order => !!order.blockNumber).length;
   const unknownBlockOrders = direct.length - knownBlockOrders;
   const outsideGovernorateOrders = direct.filter(order => order.isOutsideGovernorate).length;
-  const totalValue = sumValue(orders);
+  const totalValue = sumValue(customerOrders);
   return {
-    totalOrders: orders.length,
+    totalOrders: customerOrders.length,
     totalValueBhd: totalValue,
     directOrders: direct.length,
-    talabatOrders: orders.length - direct.length,
-    averageOrderValueBhd: orders.length ? totalValue / orders.length : 0,
-    activeBranches: new Set(orders.map(order => order.branchId)).size,
+    talabatOrders: customerOrders.length - direct.length,
+    averageOrderValueBhd: customerOrders.length ? totalValue / customerOrders.length : 0,
+    activeBranches: new Set(customerOrders.map(order => order.branchId)).size,
     knownBlockRate: pct(knownBlockOrders, direct.length),
     unknownBlockRate: pct(unknownBlockOrders, direct.length),
     outsideGovernorateRate: pct(outsideGovernorateOrders, direct.length),
@@ -293,7 +295,7 @@ const buildBranchKpis = (
   paymentTypes: DeliveryPaymentTypeConfig[]
 ): OwnerBranchKpi[] => {
   return branches.map(branch => {
-    const branchOrders = orders.filter(order => order.branchId === branch.id);
+    const branchOrders = orders.filter(order => order.branchId === branch.id && order.orderKind !== 'internal_transfer');
     const direct = branchOrders.filter(order => isDirectOrder(order, paymentTypes));
     const knownBlockOrders = direct.filter(order => !!order.blockNumber).length;
     const unknownBlockRate = pct(direct.length - knownBlockOrders, direct.length);
@@ -425,6 +427,7 @@ export const ownerDashboardService = {
     const orders = rawOrders
       .map(order => ({ ...order, branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch' }))
       .filter(order => matchesSearch(order, filters.search));
+    const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
 
     return {
       generatedAt: new Date().toISOString(),
@@ -433,14 +436,14 @@ export const ownerDashboardService = {
       drivers,
       branchProfiles,
       paymentTypes,
-      orders,
+      orders: customerOrders,
       sales,
       shortages,
       coverage,
       today: buildTodayKpis(todayOrders, todaySales, todayShortages, paymentTypes),
-      overview: buildOverview(orders, sales, shortages, paymentTypes),
-      branchKpis: buildBranchKpis(branches, orders, sales, shortages, paymentTypes),
-      driverKpis: buildDriverKpis(orders, drivers, costSettings, range.days)
+      overview: buildOverview(customerOrders, sales, shortages, paymentTypes),
+      branchKpis: buildBranchKpis(branches, customerOrders, sales, shortages, paymentTypes),
+      driverKpis: buildDriverKpis(customerOrders, drivers, costSettings, range.days)
     };
   }
 };

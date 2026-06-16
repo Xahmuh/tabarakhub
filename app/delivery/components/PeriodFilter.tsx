@@ -13,6 +13,7 @@ interface PeriodFilterProps {
 const PRESETS: Array<{ id: PeriodPreset; label: string }> = [
   { id: 'today', label: 'Today' },
   { id: 'yesterday', label: 'Yesterday' },
+  { id: 'week', label: 'This week' },
   { id: 'month', label: 'This month' },
   { id: 'custom', label: 'Custom' }
 ];

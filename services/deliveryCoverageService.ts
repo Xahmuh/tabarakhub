@@ -359,9 +359,10 @@ const buildSummary = (
   range: { from: string; to: string },
   paymentTypes: DeliveryPaymentTypeConfig[] = []
 ): DeliveryCoverageSummary => {
-  const totalOrders = orders.length;
-  const talabat = orders.filter(o => isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
-  const mappable = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
+  const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
+  const totalOrders = customerOrders.length;
+  const talabat = customerOrders.filter(o => isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
+  const mappable = customerOrders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
   const withBlock = mappable.filter(o => blockKey(o).length > 0);
   const withoutBlock = mappable.filter(o => blockKey(o).length === 0);
   const unresolved = withBlock.filter(o => !o.areaName);
@@ -465,9 +466,9 @@ const buildSummary = (
     .sort((a, b) => b.orderCount - a.orderCount);
 
   const { rows: governoratePerformanceKpis, quality: governorateKpiQuality } =
-    buildGovernoratePerformanceKpis(orders, directoryBlocks);
+    buildGovernoratePerformanceKpis(customerOrders, directoryBlocks);
   const branchGovernoratePerformanceKpis =
-    buildBranchGovernoratePerformanceKpis(orders, branches, directoryBlocks);
+    buildBranchGovernoratePerformanceKpis(customerOrders, branches, directoryBlocks);
 
   return {
     dateFrom: range.from,
@@ -514,7 +515,8 @@ const buildAdvanced = (
   range: { from: string; to: string },
   paymentTypes: DeliveryPaymentTypeConfig[] = []
 ): DeliveryAdvancedCoverage => {
-  const mappable = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
+  const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
+  const mappable = customerOrders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes));
   const withBlock = mappable.filter(o => blockKey(o).length > 0);
 
   // value_bhd is the only optional analytic field present; the rest are absent.

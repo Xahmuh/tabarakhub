@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
   isDeliveryPaymentBlockExempt,
+  isTalabatDeliveryPayment,
   normalizeDeliveryPaymentCode
 } from '../lib/deliveryPaymentTypes';
 
@@ -447,7 +448,10 @@ export const parseDeliveryOrderUpload = async (
       return;
     }
 
-    const driver = resolveDriver(getFieldValue(row, 'driver'), context.drivers);
+    const isTalabatOrder = isTalabatDeliveryPayment(paymentType);
+    const driver = isTalabatOrder
+      ? { id: null, error: null }
+      : resolveDriver(getFieldValue(row, 'driver'), context.drivers);
     if (driver.error) {
       errors.push({ row: row.rowNumber, message: driver.error });
       return;
@@ -474,7 +478,7 @@ export const parseDeliveryOrderUpload = async (
         paymentType,
         pharmacistId: pharmacist.id,
         pharmacistName: pharmacist.name,
-        driverId: driver.id,
+        driverId: isTalabatOrder ? null : driver.id,
         blockNumber: block.blockNumber,
         notes: toText(getFieldValue(row, 'notes')) || undefined
       }

@@ -16,6 +16,9 @@ export interface Branch {
   nhraLicenseNo?: string;
   crNumber?: string;
   branchManagerName?: string;
+  lat?: number | null;
+  lng?: number | null;
+  dutyRadiusM?: number | null;
 }
 
 export type DeliveryZoneClass = 'core' | 'standard' | 'extended' | 'outside_range' | 'unavailable';
@@ -563,6 +566,7 @@ export interface DeliveryDriver {
 }
 
 export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
+export type DeliveryOrderKind = 'actual_delivery' | 'internal_transfer';
 
 export interface BranchClassification {
   branchId: string;
@@ -583,6 +587,19 @@ export interface DeliveryCostSetting {
   assumedMarginPct?: number | null;
 }
 
+export interface DeliveryDriverMonthlyTarget {
+  id?: string;
+  driverId: string;
+  targetMonth: string;
+  targetActualDeliveries: number;
+  targetIncentiveBhd: number;
+  overTargetIncentivePerOrderBhd: number;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface DeliveryOrder {
   id: string;
   branchId: string;
@@ -590,11 +607,18 @@ export interface DeliveryOrder {
   orderDate: string; // yyyy-mm-dd
   valueBhd: number;
   paymentType: DeliveryPaymentType;
+  orderKind: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;
   driverId?: string | null;
   driverCode?: string | null;
   driverName?: string | null;
+  transferFromBranchId?: string | null;
+  transferFromBranchCode?: string | null;
+  transferFromBranchName?: string | null;
+  transferToBranchId?: string | null;
+  transferToBranchCode?: string | null;
+  transferToBranchName?: string | null;
   blockNumber?: string | null;
   areaName?: string | null;
   governorate?: Governorate | null;
@@ -607,6 +631,8 @@ export interface DeliveryOrder {
   deliveredAt?: string | null;
   cancelledAt?: string | null;
   cancelledReason?: string | null;
+  pickupBatchId?: string | null;
+  batchDeliverySequence?: number | null;
   lifecycleUpdatedAt?: string | null;
 }
 
@@ -615,9 +641,12 @@ export interface DeliveryOrderInput {
   orderDate: string;
   valueBhd: number;
   paymentType: DeliveryPaymentType;
+  orderKind?: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;
   driverId?: string | null;
+  transferFromBranchId?: string | null;
+  transferToBranchId?: string | null;
   blockNumber?: string | null;
   notes?: string;
 }
@@ -647,6 +676,22 @@ export interface DeliveryOrderEvent {
   idempotencyKey?: string | null;
   metadata?: Record<string, unknown>;
   createdAt: string;
+}
+
+export interface DeliveryDriverDutyReportRow {
+  driverId: string;
+  driverCode?: string | null;
+  driverName: string;
+  statDate: string;
+  firstOnlineAt?: string | null;
+  lastOfflineAt?: string | null;
+  totalWorkingMinutes: number;
+  assignedCount: number;
+  pickedUpCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
+  actualDeliveryCount: number;
+  internalTransferCount: number;
 }
 
 // --- Delivery Coverage Analytics (manager Bahrain block coverage) ---

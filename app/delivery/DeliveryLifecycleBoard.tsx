@@ -13,6 +13,7 @@ import {
 import Swal from 'sweetalert2';
 import { deliveryService } from '../../services/deliveryService';
 import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent } from '../../types';
+import { isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey, yesterdayKey } from './utils';
 
@@ -49,12 +50,36 @@ const STATUS_ORDER: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked
 const lifecycleTimeFor = (order: DeliveryOrder) =>
   order.deliveredAt || order.pickedUpAt || order.assignedAt || order.cancelledAt || order.lifecycleUpdatedAt || order.createdAt;
 
+const minutesBetween = (start?: string | null, end?: string | null) => {
+  if (!start || !end) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+  return Math.round((endMs - startMs) / 60000);
+};
+
+const averageMinutes = (values: Array<number | null>) => {
+  const valid = values.filter((value): value is number => typeof value === 'number');
+  if (valid.length === 0) return null;
+  return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
+};
+
+const formatDuration = (minutes: number | null) => {
+  if (minutes === null) return '-';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+};
+
+const shortRunId = (value?: string | null) => value ? value.slice(0, 8) : null;
+
 const isInsideBranchTransitionWindow = (order: DeliveryOrder) =>
   order.orderDate >= yesterdayKey() && order.orderDate <= todayKey();
 
 const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStatus[] => {
   if (status === 'recorded') return ['assigned', 'cancelled'];
-  if (status === 'assigned') return ['picked_up', 'delivered', 'cancelled'];
+  if (status === 'assigned') return ['picked_up', 'cancelled'];
   if (status === 'picked_up') return ['delivered', 'cancelled'];
   return [];
 };
@@ -101,8 +126,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setIsLoading(true);
     setErrorMessage(null);
     setEventErrorMessage(null);
     try {
@@ -136,27 +161,78 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
       setEvents([]);
       setErrorMessage(loadError?.message || 'Could not load delivery lifecycle data.');
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) setIsLoading(false);
     }
   }, [branch?.id, range.from, range.to]);
 
   useEffect(() => {
     load();
+    const intervalId = window.setInterval(() => {
+      load({ silent: true }).catch(refreshError => console.warn('Delivery lifecycle auto-refresh failed', refreshError));
+    }, 10000);
+    return () => window.clearInterval(intervalId);
   }, [load]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<DeliveryLifecycleStatus, number>();
     STATUS_ORDER.forEach(status => counts.set(status, 0));
-    orders.forEach(order => counts.set(order.deliveryStatus, (counts.get(order.deliveryStatus) || 0) + 1));
+    orders
+      .filter(order => !isTalabatDeliveryPayment(order.paymentType))
+      .forEach(order => counts.set(order.deliveryStatus, (counts.get(order.deliveryStatus) || 0) + 1));
     return counts;
   }, [orders]);
 
-  const valueInMotion = useMemo(
-    () => orders
-      .filter(order => order.deliveryStatus === 'assigned' || order.deliveryStatus === 'picked_up')
-      .reduce((total, order) => total + order.valueBhd, 0),
+  const internalDispatchOrders = useMemo(
+    () => orders.filter(order => !isTalabatDeliveryPayment(order.paymentType)),
     [orders]
   );
+  const actualDispatchOrders = useMemo(
+    () => internalDispatchOrders.filter(order => order.orderKind !== 'internal_transfer'),
+    [internalDispatchOrders]
+  );
+  const transferDispatchOrders = useMemo(
+    () => internalDispatchOrders.filter(order => order.orderKind === 'internal_transfer'),
+    [internalDispatchOrders]
+  );
+  const talabatExternalCount = orders.length - internalDispatchOrders.length;
+
+  const valueInMotion = useMemo(
+    () => internalDispatchOrders
+      .filter(order => order.deliveryStatus === 'assigned' || order.deliveryStatus === 'picked_up')
+      .reduce((total, order) => total + order.valueBhd, 0),
+    [internalDispatchOrders]
+  );
+
+  const pickupBatchSizes = useMemo(() => {
+    const sizes = new Map<string, number>();
+    internalDispatchOrders.forEach(order => {
+      if (!order.pickupBatchId) return;
+      sizes.set(order.pickupBatchId, (sizes.get(order.pickupBatchId) || 0) + 1);
+    });
+    return sizes;
+  }, [internalDispatchOrders]);
+
+  const timingSummary = useMemo(() => {
+    const pickupWaits = internalDispatchOrders.map(order =>
+      minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt)
+    );
+    const driverDeliveryTimes = internalDispatchOrders.map(order =>
+      minutesBetween(order.pickedUpAt, order.deliveredAt)
+    );
+    const totalFulfillmentTimes = internalDispatchOrders.map(order =>
+      minutesBetween(order.assignedAt || order.createdAt, order.deliveredAt)
+    );
+    const batchCount = pickupBatchSizes.size;
+    const batchOrderCount = [...pickupBatchSizes.values()].reduce((sum, size) => sum + size, 0);
+
+    return {
+      avgPickupWait: averageMinutes(pickupWaits),
+      avgDriverDelivery: averageMinutes(driverDeliveryTimes),
+      avgTotalFulfillment: averageMinutes(totalFulfillmentTimes),
+      batchCount,
+      avgBatchSize: batchCount ? Math.round((batchOrderCount / batchCount) * 10) / 10 : null
+    };
+  }, [internalDispatchOrders, pickupBatchSizes]);
 
   const recentEvents = useMemo(() => events.slice(0, 8), [events]);
   const lifecycleUnavailable = !!eventErrorMessage;
@@ -257,6 +333,12 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
             <p className="mt-1 text-xs font-bold text-blue-800/80">
               This board uses existing delivery orders and drivers. Orders assigned to a linked driver account appear in the driver mobile app, while admin/branch lifecycle changes continue through strict audited RPCs.
             </p>
+            <p className="mt-1 text-xs font-bold text-blue-800/80">
+              Pickup batches group orders collected together so delivery timing stays fair when one driver picks up multiple orders in a single pharmacy visit.
+            </p>
+            <p className="mt-1 text-xs font-bold text-blue-800/80">
+              Talabat orders stay in recording/analytics only and are excluded from internal driver dispatch.
+            </p>
           </div>
         </div>
       </div>
@@ -279,12 +361,16 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <KpiCard label="Total orders" value={String(orders.length)} sub={label} icon={<PackageCheck className="h-4 w-4" />} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 2xl:grid-cols-9">
+        <KpiCard label="Driver dispatch" value={String(internalDispatchOrders.length)} sub={label} icon={<PackageCheck className="h-4 w-4" />} />
+        <KpiCard label="Actual delivery" value={String(actualDispatchOrders.length)} icon={<PackageCheck className="h-4 w-4" />} />
+        <KpiCard label="Internal transfer" value={String(transferDispatchOrders.length)} icon={<Route className="h-4 w-4" />} />
         <KpiCard label="Assigned" value={String(statusCounts.get('assigned') || 0)} icon={<Truck className="h-4 w-4" />} />
         <KpiCard label="Picked up" value={String(statusCounts.get('picked_up') || 0)} icon={<Route className="h-4 w-4" />} />
         <KpiCard label="Delivered" value={String(statusCounts.get('delivered') || 0)} icon={<CheckCircle2 className="h-4 w-4" />} />
         <KpiCard label="In motion value" value={formatBhd(valueInMotion)} icon={<Clock3 className="h-4 w-4" />} />
+        <KpiCard label="Avg delivery" value={formatDuration(timingSummary.avgDriverDelivery)} sub="pickup to delivered" icon={<Route className="h-4 w-4" />} />
+        <KpiCard label="Pickup runs" value={String(timingSummary.batchCount)} sub={timingSummary.avgBatchSize ? `${timingSummary.avgBatchSize} orders/run avg` : 'awaiting batches'} icon={<Truck className="h-4 w-4" />} />
       </div>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -295,6 +381,11 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
               <p className="mt-1 text-xs font-bold text-slate-400">
                 {branch ? branch.name : 'All operational branches'} - {label}
               </p>
+              {talabatExternalCount > 0 && (
+                <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-orange-600">
+                  {talabatExternalCount} Talabat external order{talabatExternalCount === 1 ? '' : 's'} hidden from dispatch
+                </p>
+              )}
             </div>
             {!canTransition && (
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -307,39 +398,75 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
             <div className="flex h-44 items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-100 border-t-brand"></div>
             </div>
-          ) : orders.length === 0 ? (
-            <p className="py-12 text-center text-xs font-bold text-slate-400">No delivery orders in this period.</p>
+          ) : internalDispatchOrders.length === 0 ? (
+            <p className="py-12 text-center text-xs font-bold text-slate-400">No internal driver dispatch orders in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
                     <th className="py-2 pr-3">Order</th>
+                    <th className="py-2 pr-3">Type</th>
                     {!branch && <th className="py-2 pr-3">Branch</th>}
                     <th className="py-2 pr-3">Driver</th>
                     <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Timing</th>
+                    <th className="py-2 pr-3">Pickup run</th>
                     <th className="py-2 pr-3">Last lifecycle time</th>
                     {canTransition && <th className="py-2 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {orders.map(order => {
+                  {internalDispatchOrders.map(order => {
                     const canActOnOrder = canTransition
                       && !lifecycleUnavailable
                       && (canManageAll || isInsideBranchTransitionWindow(order))
                       && !['delivered', 'cancelled'].includes(order.deliveryStatus);
                     const nextStatuses = nextStatusesFor(order.deliveryStatus);
+                    const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
+                    const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
+                    const totalFulfillment = minutesBetween(order.assignedAt || order.createdAt, order.deliveredAt);
+                    const batchSize = order.pickupBatchId ? pickupBatchSizes.get(order.pickupBatchId) || 1 : null;
                     return (
                       <tr key={order.id} className="hover:bg-slate-50/50">
                         <td className="py-3 pr-3">
-                          <p className="text-xs font-black text-slate-900">{order.orderDate} - {formatBhd(order.valueBhd)}</p>
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                            {order.paymentType} {order.blockNumber ? `- Block ${order.blockNumber}` : ''}
+                          <p className="text-xs font-black text-slate-900">
+                            {order.orderDate} - {order.orderKind === 'internal_transfer' ? 'Internal transfer' : formatBhd(order.valueBhd)}
                           </p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            {order.orderKind === 'internal_transfer'
+                              ? `${order.transferFromBranchName || order.branchName || 'Source'} -> ${order.transferToBranchName || 'Destination'}`
+                              : `${order.paymentType} ${order.blockNumber ? `- Block ${order.blockNumber}` : ''}`}
+                          </p>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${
+                            order.orderKind === 'internal_transfer'
+                              ? 'border-amber-200 bg-amber-50 text-amber-700'
+                              : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }`}>
+                            {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
+                          </span>
                         </td>
                         {!branch && <td className="py-3 pr-3 text-xs font-bold text-slate-500">{order.branchName || 'Unknown branch'}</td>}
                         <td className="py-3 pr-3 text-xs font-bold text-slate-500">{order.driverName || 'Unassigned'}</td>
                         <td className="py-3 pr-3"><StatusBadge status={order.deliveryStatus} /></td>
+                        <td className="py-3 pr-3 text-[10px] font-bold leading-5 text-slate-500">
+                          <p>Pickup wait: <span className="text-slate-800">{formatDuration(pickupWait)}</span></p>
+                          <p>Driver time: <span className="text-slate-800">{formatDuration(driverDelivery)}</span></p>
+                          <p>Total: <span className="text-slate-800">{formatDuration(totalFulfillment)}</span></p>
+                        </td>
+                        <td className="py-3 pr-3 text-[10px] font-bold leading-5 text-slate-500">
+                          {order.pickupBatchId ? (
+                            <>
+                              <p className="font-black text-slate-700">Run #{shortRunId(order.pickupBatchId)}</p>
+                              <p>{batchSize} order{batchSize === 1 ? '' : 's'} picked up together</p>
+                              {order.batchDeliverySequence ? <p>Stop {order.batchDeliverySequence}</p> : null}
+                            </>
+                          ) : (
+                            <span className="text-slate-300">Not picked up</span>
+                          )}
+                        </td>
                         <td className="py-3 pr-3 text-xs font-bold text-slate-500">{lifecycleTimeFor(order) || '-'}</td>
                         {canTransition && (
                           <td className="py-3 text-right">

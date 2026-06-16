@@ -11,6 +11,9 @@ const BRANCH_SELECT = `
   nhra_license_no,
   cr_number,
   branch_manager_name,
+  lat,
+  lng,
+  duty_radius_m,
   is_spin_enabled,
   is_items_entry_enabled,
   is_kpi_dashboard_enabled
@@ -26,6 +29,9 @@ const toBranch = (row: any): Branch => ({
   nhraLicenseNo: row.nhra_license_no,
   crNumber: row.cr_number,
   branchManagerName: row.branch_manager_name,
+  lat: row.lat === null || row.lat === undefined ? null : Number(row.lat),
+  lng: row.lng === null || row.lng === undefined ? null : Number(row.lng),
+  dutyRadiusM: row.duty_radius_m === null || row.duty_radius_m === undefined ? null : Number(row.duty_radius_m),
   isSpinEnabled: row.is_spin_enabled,
   isItemsEntryEnabled: row.is_items_entry_enabled,
   isKPIDashboardEnabled: row.is_kpi_dashboard_enabled

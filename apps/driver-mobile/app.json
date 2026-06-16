@@ -6,17 +6,33 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./src/assets/sounds/driver.mp3"
+          ]
+        }
+      ],
+      "expo-font",
+      "expo-audio",
+      "expo-asset"
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.tabarakpharmacy.driver"
+      "bundleIdentifier": "com.tabarakpharmacy.driver",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Tabarak Driver uses your location to confirm you start duty from inside a branch."
+      }
     },
     "android": {
-      "package": "com.tabarakpharmacy.driver"
+      "package": "com.tabarakpharmacy.driver",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro"

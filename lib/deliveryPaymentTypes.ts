@@ -67,7 +67,16 @@ export const isDeliveryPaymentBlockExempt = (
   return config ? !config.requiresBlock : normalizeDeliveryPaymentCode(code) === 'TALABAT';
 };
 
+export const isTalabatDeliveryPayment = (code?: string | null) =>
+  normalizeDeliveryPaymentCode(code) === 'TALABAT';
+
+export const isInternalTransferPayment = (code?: string | null) =>
+  normalizeDeliveryPaymentCode(code) === 'INTERNAL_TRANSFER';
+
 export const isDirectDeliveryOrder = (
   order: DeliveryOrder,
   types?: DeliveryPaymentTypeConfig[] | null
-) => !isDeliveryPaymentBlockExempt(order.paymentType, types);
+) => order.orderKind !== 'internal_transfer'
+  && !isInternalTransferPayment(order.paymentType)
+  && !isDeliveryPaymentBlockExempt(order.paymentType, types)
+  && !isTalabatDeliveryPayment(order.paymentType);

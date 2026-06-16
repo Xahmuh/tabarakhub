@@ -2,7 +2,7 @@ import { DeliveryOrder } from '../../types';
 import { DeliveryPaymentTypeConfig } from '../../types';
 import { isDirectDeliveryOrder } from '../../lib/deliveryPaymentTypes';
 
-export type PeriodPreset = 'today' | 'yesterday' | 'month' | 'custom';
+export type PeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 export const toDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -26,6 +26,11 @@ export const getPresetRange = (preset: PeriodPreset, customFrom?: string, custom
       return { from: todayKey(), to: todayKey() };
     case 'yesterday':
       return { from: yesterdayKey(), to: yesterdayKey() };
+    case 'week': {
+      const first = new Date(now);
+      first.setDate(now.getDate() - 6);
+      return { from: toDateKey(first), to: todayKey() };
+    }
     case 'month': {
       const first = new Date(now.getFullYear(), now.getMonth(), 1);
       return { from: toDateKey(first), to: todayKey() };
@@ -40,6 +45,7 @@ export const formatBhd = (value: number) => `${Number(value || 0).toFixed(3)} BH
 export const periodLabel = (preset: PeriodPreset, from: string, to: string) => {
   if (preset === 'today') return `Today (${from})`;
   if (preset === 'yesterday') return `Yesterday (${from})`;
+  if (preset === 'week') return `This week (${from} â†’ ${to})`;
   if (preset === 'month') return `This month (${from} → ${to})`;
   return from === to ? from : `${from} → ${to}`;
 };

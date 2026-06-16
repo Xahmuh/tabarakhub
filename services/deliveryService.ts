@@ -5,6 +5,8 @@ import {
   DeliveryBlock,
   DeliveryCostSetting,
   DeliveryDriver,
+  DeliveryDriverMonthlyTarget,
+  DeliveryDriverDutyReportRow,
   DeliveryLifecycleStatus,
   DeliveryOrder,
   DeliveryOrderEvent,
@@ -15,6 +17,7 @@ import {
 } from '../types';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
+  isTalabatDeliveryPayment,
   normalizeDeliveryPaymentCode,
   normalizeDeliveryPaymentLabel
 } from '../lib/deliveryPaymentTypes';
@@ -54,7 +57,7 @@ const listPaymentTypes = async (includeInactive = false): Promise<DeliveryPaymen
     return DEFAULT_DELIVERY_PAYMENT_TYPES.filter(type => includeInactive || type.isActive);
   }
   const types = data.map(toPaymentTypeConfig);
-  return types.filter(type => includeInactive || type.isActive);
+  return types.filter(type => (includeInactive || type.isActive) && (includeInactive || type.code !== 'INTERNAL_TRANSFER'));
 };
 
 const resolvePaymentType = async (paymentType: string | null | undefined) => {
@@ -71,6 +74,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
   const orderDate = input.orderDate?.trim();
   const paymentTypeConfig = await resolvePaymentType(input.paymentType);
   const paymentType = paymentTypeConfig.code;
+  const isTalabatOrder = isTalabatDeliveryPayment(paymentType);
   const valueBhd = Number(input.valueBhd);
   const blockNumber = input.blockNumber?.trim() || null;
 
@@ -89,7 +93,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
     paymentType,
     pharmacistId: input.pharmacistId || null,
     pharmacistName: input.pharmacistName?.trim() || null,
-    driverId: input.driverId || null,
+    driverId: isTalabatOrder ? null : input.driverId || null,
     blockNumber: paymentTypeConfig.requiresBlock ? blockNumber : null,
     notes: input.notes?.trim() || undefined
   };
@@ -133,6 +137,9 @@ const toLifecycleStatus = (value: string | null | undefined): DeliveryLifecycleS
     ? value as DeliveryLifecycleStatus
     : 'recorded';
 
+const toOrderKind = (value: string | null | undefined) =>
+  value === 'internal_transfer' ? 'internal_transfer' : 'actual_delivery';
+
 const toOrder = (row: any): DeliveryOrder => ({
   id: row.id,
   branchId: row.branch_id,
@@ -140,11 +147,18 @@ const toOrder = (row: any): DeliveryOrder => ({
   orderDate: row.order_date,
   valueBhd: Number(row.value_bhd || 0),
   paymentType: row.payment_type,
+  orderKind: toOrderKind(row.order_kind),
   pharmacistId: row.pharmacist_id,
   pharmacistName: row.pharmacist_name || row.pharmacist?.name || null,
   driverId: row.driver_id,
   driverCode: row.driver?.driver_code || null,
   driverName: row.driver?.name || null,
+  transferFromBranchId: row.transfer_from_branch_id || null,
+  transferFromBranchCode: row.transfer_from_branch?.code || null,
+  transferFromBranchName: row.transfer_from_branch?.name || null,
+  transferToBranchId: row.transfer_to_branch_id || null,
+  transferToBranchCode: row.transfer_to_branch?.code || null,
+  transferToBranchName: row.transfer_to_branch?.name || null,
   blockNumber: row.block_number,
   areaName: row.area_name,
   governorate: row.governorate,
@@ -157,6 +171,8 @@ const toOrder = (row: any): DeliveryOrder => ({
   deliveredAt: row.delivered_at || null,
   cancelledAt: row.cancelled_at || null,
   cancelledReason: row.cancelled_reason || null,
+  pickupBatchId: row.pickup_batch_id || null,
+  batchDeliverySequence: row.batch_delivery_sequence ?? null,
   lifecycleUpdatedAt: row.lifecycle_updated_at || null
 });
 
@@ -187,12 +203,27 @@ const toBlock = (row: any): DeliveryBlock => ({
   isActive: row.is_active
 });
 
+const toDriverMonthlyTarget = (row: any): DeliveryDriverMonthlyTarget => ({
+  id: row.id,
+  driverId: row.driver_id,
+  targetMonth: row.target_month,
+  targetActualDeliveries: Number(row.target_actual_deliveries || 0),
+  targetIncentiveBhd: Number(row.target_incentive_bhd || 0),
+  overTargetIncentivePerOrderBhd: Number(row.over_target_incentive_per_order_bhd || 0),
+  notes: row.notes || null,
+  isActive: row.is_active !== false,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
 const cleanBlockSearchTerm = (value: string) => value.trim().replace(/[,%()]/g, ' ').replace(/\s+/g, ' ');
 
 const ORDER_SELECT = `
   *,
   driver:delivery_drivers(name, driver_code),
-  pharmacist:pharmacists(name)
+  pharmacist:pharmacists(name),
+  transfer_from_branch:branches!delivery_orders_transfer_from_branch_id_fkey(code, name),
+  transfer_to_branch:branches!delivery_orders_transfer_to_branch_id_fkey(code, name)
 `;
 
 export interface DeliveryOrderFilters {
@@ -200,6 +231,7 @@ export interface DeliveryOrderFilters {
   dateFrom?: string;
   dateTo?: string;
   paymentType?: string;
+  orderKind?: string;
   driverId?: string;
   pharmacistId?: string;
   governorate?: string;
@@ -213,6 +245,12 @@ export interface DeliveryOrderEventFilters {
   limit?: number;
 }
 
+export interface DeliveryDriverDutyFilters {
+  driverId?: string;
+  dateFrom: string;
+  dateTo: string;
+}
+
 export const deliveryService = {
   orders: {
     list: async (filters: DeliveryOrderFilters = {}): Promise<DeliveryOrder[]> => {
@@ -223,6 +261,7 @@ export const deliveryService = {
         if (filters.dateFrom) query = query.gte('order_date', filters.dateFrom);
         if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
         if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
+        if (filters.orderKind && filters.orderKind !== 'all') query = query.eq('order_kind', filters.orderKind);
         if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
         if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
         if (filters.governorate && filters.governorate !== 'all') query = query.eq('governorate', filters.governorate);
@@ -280,6 +319,7 @@ export const deliveryService = {
         order_date: normalized.orderDate,
         value_bhd: normalized.valueBhd,
         payment_type: normalized.paymentType,
+        order_kind: normalized.orderKind || 'actual_delivery',
         pharmacist_id: normalized.pharmacistId || null,
         pharmacist_name: pharmacistName || null,
         driver_id: normalized.driverId || null,
@@ -313,6 +353,7 @@ export const deliveryService = {
         const paymentTypeConfig = await resolvePaymentType(input.paymentType);
         payload.payment_type = paymentTypeConfig.code;
         if (!paymentTypeConfig.requiresBlock) payload.block_number = null;
+        if (isTalabatDeliveryPayment(paymentTypeConfig.code)) payload.driver_id = null;
       }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
       if (input.pharmacistName !== undefined) payload.pharmacist_name = input.pharmacistName;
@@ -481,6 +522,71 @@ export const deliveryService = {
       const { error } = await supabaseClient.from('delivery_drivers').update({ is_active: false }).eq('id', id);
       if (error) throw error;
       return true;
+    }
+  },
+
+  driverTargets: {
+    list: async (targetMonth: string, driverId?: string | null): Promise<DeliveryDriverMonthlyTarget[]> => {
+      if (!isValidDateKey(targetMonth)) throw new Error('A valid target month is required.');
+      let query = supabaseClient
+        .from('delivery_driver_monthly_targets')
+        .select('*')
+        .eq('target_month', targetMonth)
+        .order('target_month', { ascending: false });
+      if (driverId) query = query.eq('driver_id', driverId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(toDriverMonthlyTarget);
+    },
+    upsert: async (target: DeliveryDriverMonthlyTarget): Promise<DeliveryDriverMonthlyTarget> => {
+      if (!target.driverId) throw new Error('Driver is required for monthly target.');
+      if (!isValidDateKey(target.targetMonth)) throw new Error('A valid target month is required.');
+      const targetActualDeliveries = Math.max(0, Math.floor(Number(target.targetActualDeliveries || 0)));
+      const targetIncentiveBhd = Math.max(0, Number(target.targetIncentiveBhd || 0));
+      const overTargetIncentivePerOrderBhd = Math.max(0, Number(target.overTargetIncentivePerOrderBhd || 0));
+      const payload = {
+        driver_id: target.driverId,
+        target_month: target.targetMonth,
+        target_actual_deliveries: targetActualDeliveries,
+        target_incentive_bhd: targetIncentiveBhd,
+        over_target_incentive_per_order_bhd: overTargetIncentivePerOrderBhd,
+        notes: target.notes?.trim() || null,
+        is_active: target.isActive,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabaseClient
+        .from('delivery_driver_monthly_targets')
+        .upsert(payload, { onConflict: 'driver_id,target_month' })
+        .select()
+        .single();
+      if (error) throw error;
+      return toDriverMonthlyTarget(data);
+    }
+  },
+
+  driverDuty: {
+    list: async (filters: DeliveryDriverDutyFilters): Promise<DeliveryDriverDutyReportRow[]> => {
+      const { data, error } = await supabaseClient.rpc('app_driver_get_duty_report' as any, {
+        p_date_from: filters.dateFrom,
+        p_date_to: filters.dateTo,
+        p_driver_id: filters.driverId && filters.driverId !== 'all' ? filters.driverId : null
+      });
+      if (error) throw error;
+      return (data || []).map((row: any) => ({
+        driverId: row.driver_id,
+        driverCode: row.driver_code || null,
+        driverName: row.driver_name || 'Unknown driver',
+        statDate: row.stat_date,
+        firstOnlineAt: row.first_online_at || null,
+        lastOfflineAt: row.last_offline_at || null,
+        totalWorkingMinutes: Number(row.total_working_minutes || 0),
+        assignedCount: Number(row.assigned_count || 0),
+        pickedUpCount: Number(row.picked_up_count || 0),
+        deliveredCount: Number(row.delivered_count || 0),
+        cancelledCount: Number(row.cancelled_count || 0),
+        actualDeliveryCount: Number(row.actual_delivery_count || 0),
+        internalTransferCount: Number(row.internal_transfer_count || 0)
+      }));
     }
   },
 

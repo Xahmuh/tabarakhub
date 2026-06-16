@@ -1,5 +1,49 @@
 # Release Readiness Status
 
+## Driver History Delivered Fix - 2026-06-16
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Driver History now keeps a recent local closed-order buffer so delivered/picked-up/cancelled orders can appear immediately after a successful online status mutation.
+- Server history and recent local history are merged without duplicates by stable order id and sorted by lifecycle timestamp.
+- Filters remain Time first, then `All`, `Picked up`, `Delivered`, `Cancelled`, and `Internal transfer`.
+- Responsive History layout is implemented: mobile one-column, tablet/web responsive card grid with a capped wide-page width.
+- Expo web smoke passed at `http://localhost:8083`; app shell opened, Login rendered, mobile/tablet/web viewport checks had no horizontal overflow, and no console errors were captured.
+- Authenticated Delivered -> History and delivered-after-refresh server-history validation remain pending until an approved driver session and clearly marked QA order are available.
+
+Reference: `docs/DRIVER_APP_QA_RESULTS.md`.
+
+## Driver Mobile Notifications - 2026-06-16
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Notifications screen is implemented for active/incoming driver route orders and is opened from the top bell action.
+- Notifications screen has a dedicated top-header back button and hides bottom navigation while preserving safe-area spacing.
+- `driver.mp3` is bundled at `apps/driver-mobile/src/assets/sounds/driver.mp3`, used for one-shot in-app alarm playback, and registered for native notification sounds in `apps/driver-mobile/app.json`.
+- Driver mobile now follows a status-only route flow: branch-created driver orders are `assigned`, Notifications show the pharmacy name, drivers tap `Picked up` before `Delivered`, and no delivered-block double-check is shown in the driver app.
+- Driver active orders and pharmacy Dispatch now auto-refresh every 10 seconds while open to surface assignment and lifecycle changes.
+- Pickup batches/delivery runs are implemented locally: multiple same-pharmacy assigned orders can be picked up together with one shared pickup timestamp, while each order keeps its own delivered timestamp and stop sequence for fair timing metrics.
+- Expo validation passed after adding required direct peer dependencies (`expo-asset`, `react-native-worklets`) and removing unsupported `newArchEnabled` app config.
+- Driver app validation passed for `npm ls --depth=0`, `npx expo-doctor` 21/21, `npx expo config --type public`, driver typecheck, and Expo web app-shell smoke.
+- Authenticated driver notification behavior with a live assigned order remains pending; Expo Go custom push notification sound behavior remains a native/dev-build validation item.
+- Pending migration `20260616033000_driver_mobile_history_status_flow.sql` remains local-only until intentionally reviewed/applied.
+- Pending migration `20260616060000_delivery_pickup_batches.sql` remains local-only until intentionally reviewed/applied.
+- Driver app audit still reports the known Expo transitive `uuid` moderate advisory; no `npm audit fix --force` was used.
+
+Reference: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Driver Mobile MVP QA - 2026-06-16
 
 Status:
@@ -16,7 +60,12 @@ Summary:
 - Supabase migration history is aligned through `20260616020000`.
 - Local driver app runs in Expo web mode at `http://localhost:8091`; HTML and bundle returned HTTP 200.
 - Verification passed for root typecheck/build, `npm ls --depth=0`, `git diff --check`, driver mobile typecheck, and Expo dependency check.
-- Real driver E2E remains pending because a Driver login must be created from the Admin dashboard with an operator-entered password and linked to an active delivery driver. No password was requested, printed, stored, or committed.
+- Credential cleanup audit passed for current tracked files and Git history; removed driver credential key names were not committed or pushed.
+- Operator-created Driver login is linked to an active delivery driver.
+- Controlled T001 QA order `5066ffca` was assigned to the linked driver and completed through the driver-scoped mobile RPC lifecycle: `assigned -> picked_up -> delivered`.
+- Audit validation passed with `3` events, `2` driver actor events, `2` `driver_mobile_mvp` source events, zero visible other-driver orders, and zero visible branch mismatches.
+- Driver shift was ended after QA; linked driver is offline.
+- Password reset remains recommended because the original temporary password briefly touched a tracked working-tree env example before cleanup. No password was printed or stored in docs.
 
 Reference: `docs/DRIVER_APP_QA_RESULTS.md`.
 

@@ -8,7 +8,7 @@ Final status:
 B) dedicated-client staging-ready only
 ```
 
-## Driver Mobile MVP QA Attempt - 2026-06-16
+## Driver Mobile MVP QA - 2026-06-16
 
 Status:
 
@@ -22,8 +22,13 @@ B) dedicated-client staging-ready only
 - Linked Supabase migration history is aligned through `20260616020000`.
 - Driver mobile local browser mode is available at `http://localhost:8091`; the Expo HTML and JS bundle returned HTTP 200.
 - Verification passed for root `npm run typecheck`, root `npm run build`, `npm ls --depth=0`, `git diff --check`, driver-mobile typecheck, and `npx expo install --check`.
-- Real Driver login E2E was not executed because no Admin-dashboard session/operator-entered password was available to create and link a Driver login. No credentials were requested, printed, stored, or committed.
-- Read-only SQL that completed reported `linked_delivery_drivers = 0`; the next QA pass must create a Driver login from Settings & Permissions > Users & Roles and link it to an active delivery driver before creating the marked test order.
+- Credential cleanup audit passed for current files and Git history: removed driver credential key names are absent from tracked history and were not pushed to `origin/main`. `.env.example.production` now contains comments/placeholders only.
+- Driver login and linked-driver checks passed against the linked Supabase project before cleanup.
+- One controlled T001 `TALABAT` QA order was created with note `QA DRIVER APP TEST - SAFE TO IGNORE`, short id `5066ffca`, and initial status `assigned`.
+- Driver-scoped mobile RPC lifecycle passed: `picked_up` then `delivered`.
+- Read-only audit validation passed: event count `3`, event sequence `assigned,picked_up,delivered`, driver actor events `2`, `driver_mobile_mvp` source events `2`, visible other-driver orders `0`, and visible branch mismatches `0`.
+- Driver shift was ended after QA; linked driver online count `0`, offline count `1`.
+- Password reset remains recommended because the temporary test driver password briefly touched a tracked working-tree env example before cleanup, even though it was not committed or pushed.
 
 Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
 

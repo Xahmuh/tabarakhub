@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, Bike, Building2, CreditCard, Map, MapPin, Plus, Search, UsersRound } from 'lucide-react';
+import { AlertTriangle, Bike, Building2, CreditCard, Map, MapPin, Plus, Search, Trophy, UsersRound } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import {
-  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
+  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryDriverMonthlyTarget, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
 import { isDeliveryPaymentBlockExempt, normalizeDeliveryPaymentCode } from '../../lib/deliveryPaymentTypes';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 
-type SettingsTab = 'drivers' | 'payments' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
+type SettingsTab = 'drivers' | 'targets' | 'payments' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
 
 const escapeHtml = (value?: string | null) =>
   String(value || '')
@@ -21,9 +21,24 @@ const escapeHtml = (value?: string | null) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
+const monthStartFromKey = (monthKey: string) => `${monthKey}-01`;
+const monthEndFromKey = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  const end = new Date(Date.UTC(year, month, 0));
+  return end.toISOString().slice(0, 10);
+};
+const formatMonthLabel = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(Date.UTC(year, month - 1, 1)));
+};
+
 export const DeliverySettings: React.FC = () => {
   const [tab, setTab] = useState<SettingsTab>('drivers');
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [driverTargets, setDriverTargets] = useState<DeliveryDriverMonthlyTarget[]>([]);
+  const [driverMonthlyActuals, setDriverMonthlyActuals] = useState<Record<string, number>>({});
+  const [targetMonth, setTargetMonth] = useState(currentMonthKey());
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
   const [supervisors, setSupervisors] = useState<DeliverySupervisor[]>([]);
@@ -36,8 +51,12 @@ export const DeliverySettings: React.FC = () => {
   const load = async () => {
     setIsLoading(true);
     try {
-      const [driverResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
+      const targetMonthStart = monthStartFromKey(targetMonth);
+      const targetMonthEnd = monthEndFromKey(targetMonth);
+      const [driverResult, targetResult, dutyResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
         deliveryService.drivers.list(true),
+        deliveryService.driverTargets.list(targetMonthStart),
+        deliveryService.driverDuty.list({ dateFrom: targetMonthStart, dateTo: targetMonthEnd }),
         deliveryService.paymentTypes.list(true),
         deliveryService.areas.list(true),
         deliveryService.supervisors.list(true),
@@ -46,6 +65,15 @@ export const DeliverySettings: React.FC = () => {
         deliveryService.classifications.list()
       ]);
       setDrivers(driverResult.status === 'fulfilled' ? driverResult.value : []);
+      setDriverTargets(targetResult.status === 'fulfilled' ? targetResult.value : []);
+      if (dutyResult.status === 'fulfilled') {
+        setDriverMonthlyActuals(dutyResult.value.reduce<Record<string, number>>((totals, row) => {
+          totals[row.driverId] = (totals[row.driverId] || 0) + row.actualDeliveryCount;
+          return totals;
+        }, {}));
+      } else {
+        setDriverMonthlyActuals({});
+      }
       setPaymentTypes(paymentResult.status === 'fulfilled' ? paymentResult.value : []);
       setAreas(areaResult.status === 'fulfilled' ? areaResult.value : []);
       setSupervisors(supervisorResult.status === 'fulfilled' ? supervisorResult.value : []);
@@ -59,7 +87,7 @@ export const DeliverySettings: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [targetMonth]);
 
   // ----- Areas -----
   const editArea = async (area?: DeliveryArea) => {
@@ -221,6 +249,78 @@ export const DeliverySettings: React.FC = () => {
       await load();
     } catch (e: any) {
       Swal.fire('Update failed', e?.message || 'Could not update driver.', 'error');
+    }
+  };
+
+  const editDriverTarget = async (driver: DeliveryDriver, target?: DeliveryDriverMonthlyTarget) => {
+    const { value } = await Swal.fire({
+      title: `<span class="text-xl font-black tracking-tight">Monthly target - ${escapeHtml(driver.name)}</span>`,
+      html: `
+        <div class="space-y-3 text-left p-2">
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Target month</p>
+            <p class="mt-1 text-sm font-black text-slate-800">${escapeHtml(formatMonthLabel(targetMonth))}</p>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Actual delivery target</label>
+            <input id="swal-target-orders" type="number" min="0" step="1" value="${target?.targetActualDeliveries ?? 0}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black">
+            <p class="mt-1 text-[10px] font-bold text-slate-400">Counts delivered actual delivery orders only. Internal transfers and order values are excluded.</p>
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Target incentive (BHD)</label>
+              <input id="swal-target-incentive" type="number" min="0" step="0.001" value="${target?.targetIncentiveBhd ?? 0}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Over-target / extra order (BHD)</label>
+              <input id="swal-over-incentive" type="number" min="0" step="0.001" value="${target?.overTargetIncentivePerOrderBhd ?? 0}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notes (optional)</label>
+            <textarea id="swal-target-notes" class="min-h-[72px] w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">${escapeHtml(target?.notes)}</textarea>
+          </div>
+          <label class="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs font-bold text-slate-600">
+            <input id="swal-target-active" type="checkbox" class="mt-0.5" ${target?.isActive === false ? '' : 'checked'}>
+            <span>Active target for this month</span>
+          </label>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Save target',
+      confirmButtonColor: '#B91c1c',
+      width: 640,
+      preConfirm: () => {
+        const orders = Number((document.getElementById('swal-target-orders') as HTMLInputElement).value);
+        const targetIncentive = Number((document.getElementById('swal-target-incentive') as HTMLInputElement).value);
+        const overIncentive = Number((document.getElementById('swal-over-incentive') as HTMLInputElement).value);
+        const notes = (document.getElementById('swal-target-notes') as HTMLTextAreaElement).value.trim();
+        const isActive = (document.getElementById('swal-target-active') as HTMLInputElement).checked;
+        if (!Number.isFinite(orders) || orders < 0 || !Number.isInteger(orders)) {
+          Swal.showValidationMessage('Actual delivery target must be a whole number.');
+          return false;
+        }
+        if (!Number.isFinite(targetIncentive) || targetIncentive < 0 || !Number.isFinite(overIncentive) || overIncentive < 0) {
+          Swal.showValidationMessage('Incentive values must be zero or greater.');
+          return false;
+        }
+        return { orders, targetIncentive, overIncentive, notes, isActive };
+      }
+    });
+    if (!value) return;
+    try {
+      await deliveryService.driverTargets.upsert({
+        id: target?.id,
+        driverId: driver.id,
+        targetMonth: monthStartFromKey(targetMonth),
+        targetActualDeliveries: value.orders,
+        targetIncentiveBhd: value.targetIncentive,
+        overTargetIncentivePerOrderBhd: value.overIncentive,
+        notes: value.notes || null,
+        isActive: value.isActive
+      });
+      await load();
+    } catch (e: any) {
+      Swal.fire('Save failed', e?.message || 'Could not save driver monthly target.', 'error');
     }
   };
 
@@ -449,6 +549,7 @@ export const DeliverySettings: React.FC = () => {
       <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50 w-fit max-w-full overflow-x-auto">
         {([
           { id: 'drivers', label: 'Drivers', icon: Bike },
+          { id: 'targets', label: 'Driver Targets', icon: Trophy },
           { id: 'payments', label: 'Payments', icon: CreditCard },
           { id: 'areas', label: 'Areas', icon: Map },
           { id: 'supervisors', label: 'Supervisors', icon: UsersRound },
@@ -504,6 +605,102 @@ export const DeliverySettings: React.FC = () => {
               </div>
             ))}
             {drivers.length === 0 && <p className="text-xs font-bold text-slate-400">No drivers yet — add the first one.</p>}
+          </div>
+        </section>
+      ) : tab === 'targets' ? (
+        <section className="operational-panel p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Driver monthly targets</h3>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">
+                Set actual delivery count targets and incentives. Internal transfers and order values are excluded.
+              </p>
+            </div>
+            <input
+              type="month"
+              value={targetMonth}
+              onChange={e => setTargetMonth(e.target.value || currentMonthKey())}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand/40"
+            />
+          </div>
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Month</p>
+              <p className="mt-1 text-sm font-black text-slate-900">{formatMonthLabel(targetMonth)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Configured</p>
+              <p className="mt-1 text-2xl font-black text-slate-900 tabular-nums">{driverTargets.filter(target => target.isActive).length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actual deliveries</p>
+              <p className="mt-1 text-2xl font-black text-slate-900 tabular-nums">
+                {(Object.values(driverMonthlyActuals) as number[]).reduce((sum, value) => sum + value, 0)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Target orders</p>
+              <p className="mt-1 text-2xl font-black text-slate-900 tabular-nums">
+                {driverTargets.filter(target => target.isActive).reduce((sum, target) => sum + target.targetActualDeliveries, 0)}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {drivers.map(driver => {
+              const target = driverTargets.find(item => item.driverId === driver.id);
+              const actual = driverMonthlyActuals[driver.id] || 0;
+              const targetCount = target?.isActive ? target.targetActualDeliveries : 0;
+              const progress = targetCount > 0 ? Math.min(100, Math.round((actual / targetCount) * 100)) : 0;
+              const overTarget = Math.max(0, actual - targetCount);
+              const earned = targetCount > 0 && actual >= targetCount
+                ? (target?.targetIncentiveBhd || 0) + (overTarget * (target?.overTargetIncentivePerOrderBhd || 0))
+                : 0;
+              return (
+                <div key={driver.id} className={`rounded-xl border p-4 ${driver.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-slate-900">{driver.name}</p>
+                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand">{driver.driverCode || 'Pending Driver ID'}</p>
+                    </div>
+                    <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${
+                      target?.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+                    }`}>
+                      {target?.isActive ? 'Configured' : 'No target'}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg bg-slate-50 p-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Actual</p>
+                      <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{actual}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Target</p>
+                      <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{targetCount}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Over</p>
+                      <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{overTarget}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-500">
+                    <span>{progress}% achieved</span>
+                    <span>Earned {formatBhd(earned)}</span>
+                  </div>
+                  {target?.isActive && (
+                    <p className="mt-2 text-[11px] font-bold leading-5 text-slate-400">
+                      Target bonus {formatBhd(target.targetIncentiveBhd)} | over-target {formatBhd(target.overTargetIncentivePerOrderBhd)} / extra delivery
+                    </p>
+                  )}
+                  <button onClick={() => editDriverTarget(driver, target)} className="mt-4 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand">
+                    Configure target
+                  </button>
+                </div>
+              );
+            })}
+            {drivers.length === 0 && <p className="text-xs font-bold text-slate-400">No drivers yet - add drivers first.</p>}
           </div>
         </section>
       ) : tab === 'payments' ? (

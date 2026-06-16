@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2, Truck } from 'lucide-react';
+import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2, Truck } from 'lucide-react';
 import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
@@ -9,9 +9,10 @@ import { DeliveryCoverage } from './DeliveryCoverage';
 import { DeliveryLifecycleBoard } from './DeliveryLifecycleBoard';
 import { DeliveryProfitability } from './DeliveryProfitability';
 import { DeliverySettings } from './DeliverySettings';
+import { DriverDutyReport } from './DriverDutyReport';
 import { BackToModulesButton } from '../shared';
 
-type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'coverage' | 'profitability' | 'settings';
+type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'coverage' | 'profitability' | 'settings';
 
 interface DeliveryHubProps {
   user: Branch;
@@ -24,10 +25,12 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
   const isManager = isManagerRole(role);
   const isOwner = role === 'owner';
   const isBranch = role === 'branch';
+  const isDriver = role === 'driver';
   const canManageDelivery = isManager;
   const canReadDelivery = checkPermission('delivery', 'read');
   const canReadDeliveryAnalytics = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor');
   const canReadDeliveryCoverage = canReadDeliveryAnalytics || (canReadDelivery && isBranch);
+  const canReadDriverDuty = canReadDelivery && (canReadDeliveryAnalytics || isDriver);
   const canRecord = isBranch && checkPermission('delivery', 'edit');
   const canTransitionLifecycle = canManageDelivery || canRecord;
 
@@ -35,7 +38,8 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
     { id: 'record', label: 'Record', icon: ClipboardList, visible: canRecord },
     { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch && canReadDelivery },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, visible: canReadDeliveryAnalytics },
-    { id: 'dispatch', label: 'Dispatch', icon: Truck, visible: canReadDelivery },
+    { id: 'dispatch', label: 'Dispatch', icon: Truck, visible: canReadDelivery && !isDriver },
+    { id: 'driver-duty', label: 'Driver Duties', icon: CalendarClock, visible: canReadDriverDuty },
     { id: 'coverage', label: 'Block Coverage', icon: MapPinned, visible: canReadDeliveryCoverage },
     { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) },
     { id: 'settings', label: 'Delivery Settings', icon: Settings2, visible: canManageDelivery }
@@ -52,9 +56,11 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
           <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Operations module</p>
           <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Delivery Recording &amp; Traceability</h2>
           <p className="mt-1 text-sm font-medium text-slate-500">
-            {isBranch
-              ? 'Record delivery orders and track your branch delivery activity.'
-              : 'Delivery activity, driver performance, geography, and cost efficiency across branches.'}
+            {isDriver
+              ? 'Review your duty sessions, working hours, and delivery activity.'
+              : isBranch
+                ? 'Record delivery orders and track your branch delivery activity.'
+                : 'Delivery activity, driver performance, geography, and cost efficiency across branches.'}
           </p>
         </div>
         <BackToModulesButton onClick={onBack} />
@@ -94,6 +100,9 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />
+      )}
+      {activeTab === 'driver-duty' && canReadDriverDuty && (
+        <DriverDutyReport selfOnly={isDriver} />
       )}
       {activeTab === 'coverage' && canReadDeliveryCoverage && (
         <DeliveryCoverage lockedBranchId={isBranch ? user.id : null} canCreateTask={!isBranch && canManageDelivery} branchView={isBranch} />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, FileDown, Globe2, Package, Printer, Store, Wallet } from 'lucide-react';
+import { ArrowRightLeft, ChevronRight, FileDown, Globe2, Package, Printer, Store, Wallet } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import { pharmacistService } from '../../services/pharmacistService';
@@ -16,6 +16,7 @@ const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Souther
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 interface LeaderRow { key: string; name: string; orders: number; value: number }
+interface TransferRouteRow { key: string; from: string; to: string; orders: number }
 
 const buildLeaderboard = (orders: DeliveryOrder[], keyFn: (o: DeliveryOrder) => string | null, nameFn: (o: DeliveryOrder) => string): LeaderRow[] => {
   const map = new Map<string, LeaderRow>();
@@ -149,7 +150,18 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   }, [orders, supervisorFilter, classifications]);
 
   const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
-  const talabat = useMemo(() => filteredOrders.filter(order => !isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
+  const talabat = useMemo(
+    () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer' && !isDirectOrder(order, paymentTypes)),
+    [filteredOrders, paymentTypes]
+  );
+  const internalTransfers = useMemo(
+    () => filteredOrders.filter(order => order.orderKind === 'internal_transfer'),
+    [filteredOrders]
+  );
+  const actualDeliveries = useMemo(
+    () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer'),
+    [filteredOrders]
+  );
   const totalValue = sumValue(filteredOrders);
   const avgValue = filteredOrders.length ? totalValue / filteredOrders.length : 0;
 
@@ -167,6 +179,18 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     () => buildLeaderboard(filteredOrders, o => o.branchId, o => o.branchName || 'Unknown branch'),
     [filteredOrders]
   );
+  const transferRoutes = useMemo(() => {
+    const map = new Map<string, TransferRouteRow>();
+    for (const order of internalTransfers) {
+      const from = order.transferFromBranchName || order.branchName || 'Unknown source';
+      const to = order.transferToBranchName || 'Unknown destination';
+      const key = `${order.transferFromBranchId || from}->${order.transferToBranchId || to}`;
+      const row = map.get(key) || { key, from, to, orders: 0 };
+      row.orders += 1;
+      map.set(key, row);
+    }
+    return [...map.values()].sort((a, b) => b.orders - a.orders || a.from.localeCompare(b.from));
+  }, [internalTransfers]);
 
   // Geography — WhatsApp/direct orders only.
   const govBoard = useMemo(
@@ -300,9 +324,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       ) : (
         <>
           {/* KPI row */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
             <KpiCard label="Total orders" value={String(filteredOrders.length)} sub={label} />
             <KpiCard label="Total value" value={formatBhd(totalValue)} />
+            <KpiCard label="Actual delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
+            <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
             <KpiCard label="WhatsApp / Direct" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
             <KpiCard label="Talabat" value={String(talabat.length)} sub={formatBhd(sumValue(talabat))} />
             <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
@@ -315,6 +341,31 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             <Leaderboard title="Pharmacist performance" rows={pharmacistBoard} emptyLabel="No pharmacist-linked orders." />
             <Leaderboard title="Driver performance" rows={driverBoard} emptyLabel="No driver-linked orders." />
           </div>
+
+          <section className="operational-panel p-4 md:p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-brand" />
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Internal transfer routes</h3>
+            </div>
+            {transferRoutes.length === 0 ? (
+              <p className="py-6 text-center text-xs font-bold text-slate-400">No internal transfer orders in this period.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {transferRoutes.slice(0, 12).map(route => (
+                  <div key={route.key} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-black text-slate-900">{route.from}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">to</p>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <p className="truncate text-xs font-bold text-slate-700">{route.to}</p>
+                      <span className="rounded-full bg-brand/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                        {route.orders} orders
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* Geography — direct orders only */}
           <section className="operational-panel p-4 md:p-5">

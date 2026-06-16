@@ -24,6 +24,7 @@ const throwUnlessDemoMode = (error: unknown) => {
 export const hrService = {
   create: async (request: Partial<HRRequest>) => {
     try {
+      const submittedAt = new Date().toISOString();
       const payload = {
         ref_num: request.refNum,
         employee_name: request.employeeName,
@@ -53,11 +54,17 @@ export const hrService = {
         location: request.location,
         mobile: request.mobile,
         notes: request.notes,
-        last_vacation_date: request.lastVacationDate
+        last_vacation_date: request.lastVacationDate,
+        timestamp: submittedAt
       };
-      const { data, error } = await supabaseClient.from('hr_requests').insert([payload]).select().single();
+      const { error } = await supabaseClient.from('hr_requests').insert([payload]);
       if (error) throw error;
-      return data;
+      return {
+        ...request,
+        id: request.refNum || generateUUID(),
+        timestamp: submittedAt,
+        status: 'Pending'
+      } as HRRequest;
     } catch (e) {
       throwUnlessDemoMode(e);
       const offline = readDemoRequests();

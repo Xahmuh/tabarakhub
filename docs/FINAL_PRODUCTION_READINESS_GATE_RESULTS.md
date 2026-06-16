@@ -1,5 +1,49 @@
 # Final Production Readiness Gate Results
 
+## Driver History Delivered Gate - 2026-06-16
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Immediate delivered History | Local pass | Successful online `Delivered` transitions add the closed order to recent local History immediately; no fake production rows are used. |
+| Server/local merge | Local pass | Server History rows and recent local closed rows are deduplicated by stable order id and sorted by delivered/cancelled/picked-up/assigned/created timestamp. |
+| Filters | Local pass | History keeps Time first, then `All`, `Picked up`, `Delivered`, `Cancelled`, and `Internal transfer`; local fallback rows use the same filter path. |
+| Responsive layout | Local pass | Mobile uses one column; tablet/web use a responsive card grid and capped wide-page content. Expo web viewport smoke passed without horizontal overflow. |
+| App shell smoke | Pass | Expo web at `http://localhost:8083` opened, Login rendered, `#root` mounted, and no console error logs were captured. |
+| Authenticated delivered refresh | Pending | No approved authenticated driver session/test order was available in this pass, so delivered-after-refresh server-history behavior remains pending. |
+| Backend/RPC | Pending runtime proof | Runtime evidence did not trigger migration review. If delivered rows appear immediately but disappear after refresh, review the pending driver history RPC migration before applying any migration. |
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
+## Driver Mobile Notifications Gate - 2026-06-16
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Notifications UI | Pass | Bell icon opens a real Notifications screen for active/incoming driver orders; the screen includes a top-header back button and clean empty state. |
+| Driver status flow | Local pass | Driver app is status-only: assigned orders show pharmacy names, `Picked up` is required before `Delivered`, and delivered-block double-check prompts were removed. Pending SQL hardening remains local-only until approved. |
+| Dispatch freshness | Local pass | Driver active orders and pharmacy Dispatch auto-refresh every 10 seconds while open so assignment/status changes surface without manual refresh. |
+| Pickup batches | Local pass | Driver app supports selected same-pharmacy batch pickup; Dispatch calculates pickup wait, driver delivery time, total fulfillment time, run ID, run size, and stop sequence. Migration `20260616060000_delivery_pickup_batches.sql` remains local-only until approved. |
+| Driver data scoping | Pass | Notifications render from the driver-scoped active-order RPC path; no fake data or admin/branch controls are introduced in the driver app. |
+| Safe area | Pass | Header and bottom navigation use safe-area-aware spacing; bottom nav is hidden on Notifications to avoid system navigation overlap. |
+| Alarm sound asset | Pass | `apps/driver-mobile/src/assets/sounds/driver.mp3` exists, is 113,899 bytes, and is bundled for in-app playback. |
+| Native sound config | Partial pass | `apps/driver-mobile/app.json` registers `driver.mp3` through `expo-notifications`; custom push notification sounds still require native/dev-build validation because Expo Go may not fully honor them. |
+| Expo validation | Pass | Driver `npm ls --depth=0`, `npx expo-doctor` 21/21, `npx expo config --type public`, driver typecheck, and Expo web HTTP 200 smoke passed. |
+| Audit | Blocker remains | Driver app audit reports the known Expo transitive `uuid` moderate advisory; available npm remediation requires `--force` and a breaking Expo downgrade, so no force fix was used. |
+| Authenticated smoke | Pending | App shell opened in Expo web; authenticated Notifications QA with an approved driver session and live assigned test order remains pending. |
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Driver Mobile MVP QA Gate - 2026-06-16
 
 Decision:
@@ -16,11 +60,12 @@ B) dedicated-client staging-ready only
 | Deployment content | Pass | Production JS contains Driver role UI, `Linked delivery driver` UI, and `app_delivery_record_and_assign_order` integration. |
 | Driver feature objects | Pass | Driver role model, Admin create-user function support, mobile RPCs, driver-scoped policy/RPC logic, and Expo app are present. |
 | Local driver app | Pass | `http://localhost:8091` returned HTTP 200 and the Expo bundle returned HTTP 200. |
-| Real Driver login setup | Blocked | No Admin-dashboard session/operator-entered password was available; no password was requested or stored. Read-only aggregate SQL that completed reported `linked_delivery_drivers = 0`. |
-| Test order lifecycle | Blocked | No Driver login was created, so no marked QA delivery order was created or transitioned. |
-| RLS/audit runtime validation | Partial | SQL implementation is present and scoped by `current_delivery_driver_id()`, but runtime RLS/audit validation requires the pending real Driver login and marked test order. |
+| Credential cleanup | Pass with recommendation | Removed driver credential key names are absent from current tracked content and `git log --all -S` history for `.env.example.production`; reset the test driver password as a precaution because the original password briefly touched a tracked working-tree file before cleanup. |
+| Real Driver login setup | Pass | Operator-created Driver login exists and is linked to an active delivery driver. No credentials are stored in docs, code, migrations, commits, or env examples. |
+| Test order lifecycle | Pass | Controlled T001 `TALABAT` QA order `5066ffca` was assigned to the linked driver and completed `assigned -> picked_up -> delivered`. |
+| RLS/audit runtime validation | Pass | QA order has `3` events (`assigned,picked_up,delivered`), `2` driver actor events, `2` `driver_mobile_mvp` source events, zero visible other-driver orders, and zero visible branch mismatches. |
 | Verification | Pass | Root typecheck/build, `npm ls --depth=0`, `git diff --check`, driver mobile typecheck, and Expo dependency check passed. |
-| Cleanup | Pass | No test driver user or order was created; no production data was deleted. |
+| Cleanup | Pass | QA order remains `delivered` for audit traceability, linked driver shift was ended/offline, and no production data was deleted. |
 
 Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
 

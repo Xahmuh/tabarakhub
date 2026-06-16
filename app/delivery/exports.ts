@@ -106,14 +106,17 @@ export const exportOrdersToExcel = async (
   sheet.addRow([]);
 
   const header = sheet.addRow([
-    'Date', 'Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
+    'Date', 'Type', 'Branch', 'From Branch', 'To Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
   ]);
   styleHeader(header);
 
   orders.forEach(order => {
     sheet.addRow([
       order.orderDate,
+      order.orderKind === 'internal_transfer' ? 'Internal transfer' : 'Actual delivery',
       order.branchName || '',
+      order.transferFromBranchName || '',
+      order.transferToBranchName || '',
       Number(order.valueBhd.toFixed(3)),
       order.paymentType,
       order.pharmacistName || '',
@@ -128,10 +131,10 @@ export const exportOrdersToExcel = async (
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
-  sheet.getColumn(3).numFmt = '0.000';
+  sheet.getColumn(6).numFmt = '0.000';
 
   const totalRow = sheet.addRow([
-    'TOTAL', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
+    'TOTAL', '', '', '', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
   ]);
   totalRow.font = { bold: true };
 

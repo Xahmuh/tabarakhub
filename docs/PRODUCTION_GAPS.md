@@ -1,6 +1,60 @@
 # Production Gaps
 
-## Driver Mobile MVP Real E2E QA Gap - 2026-06-16
+## Driver History Delivered Follow-up - 2026-06-16
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Driver History frontend fix is present: delivered/picked-up/cancelled orders are added to recent local history immediately after successful online status mutation.
+- Recent local history is merged with server history results and deduplicated by stable order id before sorting.
+- History filters remain Time first, then `All`, `Picked up`, `Delivered`, `Cancelled`, and `Internal transfer`.
+- History loading, error, and empty states remain visible; backend/RPC errors are not silently hidden.
+- Responsive layout is implemented for mobile one-column and tablet/web grid display.
+- Expo web smoke at `http://localhost:8083` passed for app-shell load, Login render, mobile/tablet/web viewport checks, no horizontal overflow, and no captured console errors.
+
+Open blockers:
+
+- Authenticated Delivered -> History browser QA remains pending because no approved driver session/test order was available during this validation.
+- Delivered-after-refresh server-history behavior is still pending; if a delivered order appears immediately but disappears after refresh, review the pending driver history RPC migration before any migration apply.
+- Do not claim backend/RPC history behavior fully passed until an authenticated driver session confirms delivered orders persist in History after reload.
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
+## Driver Mobile Notifications Follow-up - 2026-06-16
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Driver mobile Notifications screen is implemented for active/incoming assigned route orders.
+- Bell icon opens Notifications; Notifications header includes a back button to return to the driver workspace.
+- Header and bottom navigation now use safe-area-aware spacing; bottom nav is hidden on the Notifications screen to avoid system navigation overlap.
+- Alarm sound is bundled at `apps/driver-mobile/src/assets/sounds/driver.mp3`, registered in `apps/driver-mobile/app.json`, and used for one-shot in-app playback through `expo-audio`.
+- Driver mobile status flow is now status-only: assigned orders show pharmacy names, drivers must tap `Picked up` before `Delivered`, and driver-side block-number double-check/audit prompts were removed.
+- Driver active orders and pharmacy Dispatch auto-refresh every 10 seconds while open so driver lifecycle changes are reflected in the branch Dispatch board.
+- Pickup batches/delivery runs are implemented locally so multiple same-pharmacy orders can share one pickup timestamp while retaining per-order delivery times and stop sequence.
+- Expo validation passed: driver typecheck, `npm ls --depth=0`, `npx expo-doctor` 21/21, `npx expo config --type public`, root typecheck/build, root `npm ls`, `git diff --check`, and Expo web HTTP 200 smoke.
+
+Open blockers:
+
+- Authenticated driver Notifications QA with a live assigned order remains pending.
+- Pending migration `20260616033000_driver_mobile_history_status_flow.sql` must be reviewed/applied before claiming the History/status-flow hardening is live on the linked database.
+- Pending migration `20260616060000_delivery_pickup_batches.sql` must be reviewed/applied before claiming pickup-run metrics are live on the linked database.
+- Custom push notification sound behavior still needs native/dev-build or APK validation; Expo Go may not fully honor custom notification sounds.
+- Driver app audit still reports the known Expo transitive `uuid` moderate advisory; the available npm remediation requires `--force` and a breaking Expo downgrade, so formal risk acceptance or upstream Expo remediation is still needed.
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
+## Driver Mobile MVP QA Follow-up - 2026-06-16
 
 Current status:
 
@@ -16,13 +70,17 @@ Validated:
 - Production JS includes the Driver role UI, `Linked delivery driver` UI, and `app_delivery_record_and_assign_order` integration.
 - Driver mobile local browser mode runs at `http://localhost:8091`; Expo HTML and bundle returned HTTP 200.
 - Driver mobile dependencies are aligned with Expo, and driver-mobile typecheck passes.
+- Credential cleanup audit passed: the removed driver test credential key names do not appear in current tracked content or `git log --all -S` history for `.env.example.production`.
+- Operator-created Driver login exists and is linked to an active delivery driver.
+- One controlled T001 `TALABAT` QA order short id `5066ffca` was created with note `QA DRIVER APP TEST - SAFE TO IGNORE`.
+- Driver-scoped lifecycle passed from `assigned` to `picked_up` to `delivered`.
+- Audit validation passed: events `assigned,picked_up,delivered`, driver actor events `2`, `driver_mobile_mvp` source events `2`, visible other-driver orders `0`, and visible branch mismatches `0`.
+- Driver shift was ended; linked driver is offline.
 
 Open blockers:
 
-- A real Driver login was not created because the required Admin-dashboard session/operator-entered password was not available in this pass.
-- Read-only aggregate SQL that completed reported `linked_delivery_drivers = 0`, so no existing linked driver login was available for login QA.
-- Some later read-only Supabase CLI queries were blocked by temporary pooler authentication/circuit-breaker errors; do not repeat blind query loops until the temporary condition clears or `SUPABASE_DB_PASSWORD` is intentionally configured by the operator.
-- Real E2E remains pending: create Driver login, link existing active driver, create one clearly marked test delivery order, login in driver app, start shift, verify assigned-only visibility, mark picked up, mark delivered, and verify event/audit rows.
+- Reset the test driver password as a precaution because the original password briefly touched a tracked working-tree env example before cleanup, even though it was not committed or pushed.
+- Repeat a browser-clicked Driver App pass after password reset if an operator can enter the replacement password interactively.
 
 Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
 

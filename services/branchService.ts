@@ -1,7 +1,7 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { Branch } from '../types';
 
-const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, branch_manager_name, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled';
+const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, branch_manager_name, lat, lng, duty_radius_m, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled';
 
 const toBranch = (b: any): Branch => ({
   id: b.id,
@@ -13,6 +13,9 @@ const toBranch = (b: any): Branch => ({
   nhraLicenseNo: b.nhra_license_no,
   crNumber: b.cr_number,
   branchManagerName: b.branch_manager_name,
+  lat: b.lat === null || b.lat === undefined ? null : Number(b.lat),
+  lng: b.lng === null || b.lng === undefined ? null : Number(b.lng),
+  dutyRadiusM: b.duty_radius_m === null || b.duty_radius_m === undefined ? null : Number(b.duty_radius_m),
   isSpinEnabled: b.is_spin_enabled,
   isItemsEntryEnabled: b.is_items_entry_enabled,
   isKPIDashboardEnabled: b.is_kpi_dashboard_enabled
@@ -79,6 +82,10 @@ export const branchService = {
       is_items_entry_enabled: branch.isItemsEntryEnabled,
       is_kpi_dashboard_enabled: branch.isKPIDashboardEnabled
     };
+
+    if (branch.lat !== undefined) payload.lat = branch.lat;
+    if (branch.lng !== undefined) payload.lng = branch.lng;
+    if (branch.dutyRadiusM !== undefined) payload.duty_radius_m = branch.dutyRadiusM;
 
     if (branch.id && branch.id.length > 5) {
       payload.id = branch.id;
