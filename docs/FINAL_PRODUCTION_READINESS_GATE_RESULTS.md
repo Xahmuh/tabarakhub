@@ -1,5 +1,24 @@
 # Final Production Readiness Gate Results
 
+## Driver Mobile Preview Promotion Gate - 2026-06-16
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Commit state | Pass | `origin/main` includes `152a429 feat: improve driver mobile transfer and history UX`. |
+| Migration state | Pass | Local/remote Supabase migration history is aligned through `20260616100000`; no migration was applied in this QA pass. |
+| Protected preview shell | Pass | Public preview returns Vercel Authentication `401`; `vercel curl` returns the root React shell with `#root` and no Vercel 404. |
+| Driver app preview route | Blocked | Candidate paths return the same root SPA shell, and the root bundle scan did not find the new Driver Mobile history strings. Use `cd apps/driver-mobile && npm run web` locally or provide a dedicated driver-app preview. |
+| Authenticated History / Transfer QA | Pending | No approved authenticated driver session was available on a reachable driver runtime, so delivered-after-refresh, filters, transfer branch selection, and access-isolation runtime QA remain pending. |
+| Production promotion | Not recommended | Do not promote from this preview QA alone; rerun with a reachable driver app runtime and approved driver session. |
+
+Detailed record: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Driver History Delivered Gate - 2026-06-16
 
 Decision:

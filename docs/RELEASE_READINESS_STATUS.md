@@ -1,5 +1,23 @@
 # Release Readiness Status
 
+## Driver Mobile Preview QA - 2026-06-16
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Commit `152a429 feat: improve driver mobile transfer and history UX` is present on `origin/main`.
+- Vercel preview `https://tabarakhub-8zesyh2lw-ames-projects-7ab0c189.vercel.app` is deployment-protected; public smoke returns Vercel Authentication `401`.
+- `vercel curl` confirms the protected root React app shell loads and candidate routes do not return Vercel 404.
+- Driver Mobile runtime was not independently validated on that root preview because candidate driver paths return the same SPA shell; local driver web command remains `cd apps/driver-mobile && npm run web`.
+- Production promotion remains blocked until authenticated Driver History and Internal Transfer QA runs on a reachable driver app runtime.
+
+Reference: `docs/DRIVER_APP_QA_RESULTS.md`.
+
 ## Driver History Delivered Fix - 2026-06-16
 
 Status:

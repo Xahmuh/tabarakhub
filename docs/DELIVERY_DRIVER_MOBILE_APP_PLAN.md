@@ -15,6 +15,8 @@
 >
 > **History update (2026-06-16):** Driver History was refined so `Delivered` orders are placed into local closed-history state immediately after successful completion, merged with server history by stable order id, and displayed through Time-first filters (`All`, `Picked up`, `Delivered`, `Cancelled`, `Internal transfer`). Expo web shell and responsive viewport smoke passed; authenticated delivered-after-refresh QA remains pending until an approved driver session and clearly marked QA order are available.
 >
+> **Preview QA update (2026-06-16):** Preview `https://tabarakhub-8zesyh2lw-ames-projects-7ab0c189.vercel.app` for commit `152a429` returns the protected root React shell through `vercel curl`, but the Expo driver app route was not independently proven on that root preview. Use `cd apps/driver-mobile && npm run web` for local driver-web QA or provide a dedicated driver-app preview/session before production promotion.
+>
 > **Important caveat:** This plan was produced without direct access to the Tabarak Hub repository. Section 2 documents the assumptions made and provides a discovery checklist that **must be executed first** (Phase 0) so the implementation agent can reconcile this plan with the real codebase before writing any code.
 
 ---

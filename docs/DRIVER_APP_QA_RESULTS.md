@@ -8,6 +8,27 @@ Final status:
 B) dedicated-client staging-ready only
 ```
 
+## Driver Mobile Preview QA - 2026-06-16
+
+Preview:
+
+```text
+https://tabarakhub-8zesyh2lw-ames-projects-7ab0c189.vercel.app
+```
+
+Commit:
+
+```text
+152a429 feat: improve driver mobile transfer and history UX
+```
+
+- protected preview access: public `curl` returns Vercel Authentication `401`; authenticated `vercel curl` returns the React app shell with `#root` and asset bundle `index-B3hZgrbj.js`.
+- app shell: pass through `vercel curl`; no Vercel 404 observed for `/`, `/delivery`, `/driver`, `/driver-mobile`, `/delivery-driver`, `/mobile`, or `/apps/driver-mobile`.
+- driver app route: not independently proven on this root Vercel preview; candidate paths return the same root SPA shell, and the deployed root asset scan did not find the new `Open order details` / `tabarak-driver-mobile` strings. The Expo driver app remains runnable locally with `cd apps/driver-mobile && npm run web`.
+- history UX: code/validation pass for tappable compact history rows and read-only order detail sheet with assigned/picked-up/delivered pathway timestamps; authenticated driver browser QA on the preview remains pending.
+- transfer UX: code/validation pass for opening Internal Transfer setup while preserving the active-duty create guard and branch-list RPC path; authenticated driver browser QA on the preview remains pending.
+- production promotion recommendation: not safe to promote from this preview QA alone until an approved authenticated driver session validates History and Transfer behavior on a reachable driver app runtime.
+
 ## Driver History Delivered Validation - 2026-06-16
 
 Status:

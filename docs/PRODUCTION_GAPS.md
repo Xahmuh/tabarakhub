@@ -1,5 +1,19 @@
 # Production Gaps
 
+## Driver Mobile Preview Promotion Blocker - 2026-06-16
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+- Vercel preview `https://tabarakhub-8zesyh2lw-ames-projects-7ab0c189.vercel.app` is protected; public access returns Vercel Authentication `401`.
+- `vercel curl` confirms the root React shell loads for commit `152a429`, but candidate driver paths return the same root SPA shell and do not independently prove the Expo driver app runtime.
+- Driver History detail sheet, password-eye login toggle, and Internal Transfer setup access pass code/typecheck/build validation.
+- Authenticated preview QA remains pending for driver History after refresh, Transfer branch selection, access isolation, and lifecycle behavior.
+- Production promotion is not recommended from this preview QA alone; provide a reachable driver-app preview or approved authenticated driver session before promoting.
+
 ## Driver History Delivered Follow-up - 2026-06-16
 
 Current status:
