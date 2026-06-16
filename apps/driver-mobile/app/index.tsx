@@ -25,6 +25,7 @@ import {
   driverApi,
   DriverBranchOption,
   DriverHistoryStatusFilter,
+  DriverNearbyStartBranch,
   DriverOrder,
   DriverOrderStatus,
   DriverSessionPayload
@@ -47,7 +48,8 @@ const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
 type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications';
-type HistoryStatusFilter = 'all' | DriverHistoryStatusFilter | 'internal_transfer';
+type HistoryStatusFilter = 'all' | DriverHistoryStatusFilter;
+type HistoryOrderTypeFilter = 'delivery' | 'internal_transfer';
 type HistoryPeriodFilter = 'all' | 'today' | 'week' | 'month';
 type DriverCopy = ReturnType<typeof getDriverCopy>;
 
@@ -130,6 +132,63 @@ const formatMonth = (value: string | null | undefined, language: DriverLanguage,
 const activeRouteTitle = (count: number, copy: DriverCopy) =>
   count ? `${count} ${copy.home.activeDeliveries}` : copy.home.noActiveRoute;
 
+const formatShiftHours = (minutes: number | null | undefined, copy: DriverCopy) =>
+  `${(Math.max(0, Number(minutes || 0)) / 60).toFixed(1)}${copy.profile.hoursUnit}`;
+
+const formatDistanceMeters = (meters: number) =>
+  meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${Math.round(meters)}m`;
+
+const shiftLocationCopy = (language: DriverLanguage) => {
+  if (language === 'ar') {
+    return {
+      label: 'فرع الدوام',
+      checking: 'جارٍ تحديد أقرب فرع...',
+      inside: 'داخل النطاق',
+      outside: 'خارج النطاق',
+      unavailable: 'لا يوجد فرع داخل النطاق',
+      recheck: 'إعادة الفحص'
+    };
+  }
+
+  return {
+    label: 'Shift branch',
+    checking: 'Checking nearest branch...',
+    inside: 'Inside range',
+    outside: 'Outside range',
+    unavailable: 'No branch in range',
+    recheck: 'Recheck'
+  };
+};
+
+const shiftBranchStatus = (
+  branch: DriverNearbyStartBranch | null | undefined,
+  isFetching: boolean,
+  error: unknown,
+  language: DriverLanguage
+) => {
+  const text = shiftLocationCopy(language);
+  if (isFetching) {
+    return {
+      tone: 'neutral' as const,
+      title: text.checking,
+      detail: text.recheck
+    };
+  }
+  if (branch) {
+    const status = branch.isWithinRadius ? text.inside : text.outside;
+    return {
+      tone: branch.isWithinRadius ? 'ready' as const : 'blocked' as const,
+      title: `${branchLabel(branch, getDriverCopy(language))} · ${status}`,
+      detail: `${formatDistanceMeters(branch.distanceMeters)} / ${formatDistanceMeters(branch.radiusMeters)}`
+    };
+  }
+  return {
+    tone: 'blocked' as const,
+    title: error instanceof Error ? error.message : text.unavailable,
+    detail: text.recheck
+  };
+};
+
 const toDateInput = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -159,12 +218,14 @@ const isHistoryStatus = (status: DriverOrderStatus) =>
 
 const orderMatchesHistoryFilters = (
   order: DriverOrder,
+  typeFilter: HistoryOrderTypeFilter,
   statusFilter: HistoryStatusFilter,
   periodFilter: HistoryPeriodFilter
 ) => {
   if (!isHistoryStatus(order.deliveryStatus)) return false;
-  if (statusFilter === 'internal_transfer' && order.orderKind !== 'internal_transfer') return false;
-  if (statusFilter !== 'all' && statusFilter !== 'internal_transfer' && order.deliveryStatus !== statusFilter) return false;
+  if (typeFilter === 'delivery' && order.orderKind !== 'actual_delivery') return false;
+  if (typeFilter === 'internal_transfer' && order.orderKind !== 'internal_transfer') return false;
+  if (statusFilter !== 'all' && order.deliveryStatus !== statusFilter) return false;
 
   const range = historyPeriodRange(periodFilter);
   if (range.dateFrom && order.orderDate < range.dateFrom) return false;
@@ -1218,6 +1279,7 @@ const Dashboard = ({
   const previousIncomingOrderIdsRef = useRef<Set<string> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>('home');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<HistoryOrderTypeFilter>('delivery');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>('all');
   const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('all');
   const [deliveryDraft, setDeliveryDraft] = useState<DriverOrder | null>(null);
@@ -1240,13 +1302,12 @@ const Dashboard = ({
   });
 
   const historyQuery = useQuery({
-    queryKey: ['driver-order-history', historyStatusFilter, historyPeriodFilter],
+    queryKey: ['driver-order-history', historyTypeFilter, historyStatusFilter, historyPeriodFilter],
     queryFn: () => {
       const range = historyPeriodRange(historyPeriodFilter);
-      const isInternalTransfer = historyStatusFilter === 'internal_transfer';
       return driverApi.orderHistory({
-        status: historyStatusFilter === 'all' || isInternalTransfer ? null : historyStatusFilter,
-        orderKind: isInternalTransfer ? 'internal_transfer' : null,
+        status: historyStatusFilter === 'all' ? null : historyStatusFilter,
+        orderKind: historyTypeFilter === 'internal_transfer' ? 'internal_transfer' : 'actual_delivery',
         dateFrom: range.dateFrom,
         dateTo: range.dateTo
       });
@@ -1263,7 +1324,8 @@ const Dashboard = ({
       queryClient.invalidateQueries({ queryKey: ['driver-session'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-active-orders'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-order-history'] }),
-      queryClient.invalidateQueries({ queryKey: ['driver-transfer-branches'] })
+      queryClient.invalidateQueries({ queryKey: ['driver-transfer-branches'] }),
+      queryClient.invalidateQueries({ queryKey: ['driver-nearby-start-branch'] })
     ]);
   }, [queryClient]);
 
@@ -1328,6 +1390,17 @@ const Dashboard = ({
       throw new Error(error instanceof Error ? error.message : copy.errors.locationUnavailable);
     }
   }, [copy]);
+
+  const nearbyStartBranchQuery = useQuery({
+    queryKey: ['driver-nearby-start-branch'],
+    queryFn: async () => {
+      const location = await readDutyStartLocation();
+      return driverApi.nearbyStartBranch(location);
+    },
+    enabled: activeTab === 'home' && Boolean(sessionQuery.data) && !sessionQuery.data?.activeShift,
+    refetchInterval: 30000,
+    retry: false
+  });
 
   const shiftMutation = useMutation({
     mutationFn: async (next: 'start' | 'end') => {
@@ -1440,12 +1513,12 @@ const Dashboard = ({
     const byId = new Map<string, DriverOrder>();
     serverHistory.forEach(order => byId.set(order.id, order));
     recentHistoryOrders
-      .filter(order => orderMatchesHistoryFilters(order, historyStatusFilter, historyPeriodFilter))
+      .filter(order => orderMatchesHistoryFilters(order, historyTypeFilter, historyStatusFilter, historyPeriodFilter))
       .forEach(order => {
         if (!byId.has(order.id)) byId.set(order.id, order);
       });
     return Array.from(byId.values()).sort((a, b) => historySortTime(b) - historySortTime(a));
-  }, [historyPeriodFilter, historyStatusFilter, recentHistoryOrders, serverHistory]);
+  }, [historyPeriodFilter, historyStatusFilter, historyTypeFilter, recentHistoryOrders, serverHistory]);
   const transferBranches = transferBranchesQuery.data || [];
   const incomingOrders = useMemo(
     () => orders.filter(order => order.deliveryStatus === 'assigned'),
@@ -1459,6 +1532,14 @@ const Dashboard = ({
   const monthlyTarget = session?.monthlyTarget;
   const isBusy = shiftMutation.isPending || orderMutation.isPending || pickupBatchMutation.isPending || transferMutation.isPending || isSyncing;
   const isLoading = sessionQuery.isLoading || ordersQuery.isLoading;
+  const nearbyStartBranch = nearbyStartBranchQuery.data;
+  const shiftBranchInfo = shiftBranchStatus(
+    nearbyStartBranch,
+    nearbyStartBranchQuery.isFetching,
+    nearbyStartBranchQuery.error,
+    language
+  );
+  const shiftButtonDisabled = isBusy || (!activeShift && !nearbyStartBranch?.isWithinRadius);
 
   useEffect(() => {
     const assignedIds = new Set(incomingOrders.map(order => order.id));
@@ -1574,7 +1655,7 @@ const Dashboard = ({
 
   const renderHome = () => (
     <View style={styles.tabPane}>
-      <View style={styles.commandCard}>
+      <View style={styles.shiftCard}>
         <View style={styles.commandCopy}>
           <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{activeShift ? copy.home.onlineLabel : copy.home.offlineLabel}</Text>
           <Text style={[styles.commandTitle, isRtl && styles.rtlText]}>{activeRouteTitle(orders.length, copy)}</Text>
@@ -1582,10 +1663,25 @@ const Dashboard = ({
             {activeShift ? copy.home.onlineText : copy.home.offlineText}
           </Text>
         </View>
+        {!activeShift ? (
+          <Pressable
+            onPress={() => {
+              void nearbyStartBranchQuery.refetch();
+            }}
+            style={[styles.shiftBranchPanel, styles[`shiftBranchPanel_${shiftBranchInfo.tone}`]]}
+          >
+            <View style={styles.shiftBranchCopy}>
+              <Text style={[styles.shiftBranchLabel, isRtl && styles.rtlText]}>{shiftLocationCopy(language).label}</Text>
+              <Text style={[styles.shiftBranchTitle, isRtl && styles.rtlText]}>{shiftBranchInfo.title}</Text>
+              <Text style={[styles.shiftBranchMeta, isRtl && styles.rtlText]}>{shiftBranchInfo.detail}</Text>
+            </View>
+            <Text style={[styles.shiftBranchAction, isRtl && styles.rtlText]}>{shiftLocationCopy(language).recheck}</Text>
+          </Pressable>
+        ) : null}
         <Button
           label={activeShift ? copy.common.endShift : copy.common.startShift}
           tone={activeShift ? 'light' : 'brand'}
-          disabled={isBusy}
+          disabled={shiftButtonDisabled}
           onPress={() => shiftMutation.mutate(activeShift ? 'end' : 'start')}
         />
       </View>
@@ -1595,7 +1691,7 @@ const Dashboard = ({
         <StatTile label={copy.common.incoming} value={incomingOrders.length} hint={copy.home.readyToPickUp} tone={incomingOrders.length ? 'amber' : 'neutral'} />
         <StatTile label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.deliveredToday} tone="green" />
         <StatTile label={copy.common.transfers} value={session?.stats.internalTransferCount ?? 0} hint={copy.common.completedToday} tone="amber" />
-        <StatTile label={copy.common.minutes} value={session?.stats.totalWorkingMinutes ?? 0} hint={copy.home.shiftTime} />
+        <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.home.shiftTime} />
       </View>
 
       <View style={styles.sectionHeader}>
@@ -1845,6 +1941,33 @@ const Dashboard = ({
       <View style={styles.historyFilterCard}>
         <View style={styles.historyFilterSection}>
           <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
+            <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.typeFilter}</Text>
+            <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.history.typeHint}</Text>
+          </View>
+          <View style={[styles.historyTypeSwitch, isRtl && styles.rtlRow]}>
+            <Pressable
+              onPress={() => setHistoryTypeFilter('delivery')}
+              style={[styles.historyTypeButton, historyTypeFilter === 'delivery' && styles.historyTypeButtonActive]}
+            >
+              <Text style={[styles.historyTypeLabel, historyTypeFilter === 'delivery' && styles.historyTypeLabelActive, isRtl && styles.rtlText]}>
+                {copy.history.deliveryOrders}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setHistoryTypeFilter('internal_transfer')}
+              style={[styles.historyTypeButton, historyTypeFilter === 'internal_transfer' && styles.historyTypeButtonActive]}
+            >
+              <Text style={[styles.historyTypeLabel, historyTypeFilter === 'internal_transfer' && styles.historyTypeLabelActive, isRtl && styles.rtlText]}>
+                {copy.history.internalTransfers}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.historyFilterDivider} />
+
+        <View style={styles.historyFilterSection}>
+          <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
             <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.periodFilter}</Text>
             <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.history.timeFirstHint}</Text>
           </View>
@@ -1868,7 +1991,6 @@ const Dashboard = ({
             <FilterButton label={copy.history.pickedUp} active={historyStatusFilter === 'picked_up'} onPress={() => setHistoryStatusFilter('picked_up')} />
             <FilterButton label={copy.history.delivered} active={historyStatusFilter === 'delivered'} onPress={() => setHistoryStatusFilter('delivered')} />
             <FilterButton label={copy.history.cancelled} active={historyStatusFilter === 'cancelled'} onPress={() => setHistoryStatusFilter('cancelled')} />
-            <FilterButton label={copy.history.internalOnly} active={historyStatusFilter === 'internal_transfer'} onPress={() => setHistoryStatusFilter('internal_transfer')} />
           </View>
         </View>
       </View>
@@ -1911,7 +2033,7 @@ const Dashboard = ({
         <StatTile label={copy.common.cancelled} value={session?.stats.cancelledCount ?? 0} hint={copy.stats.today} tone="red" />
         <StatTile label={copy.stats.historyRows} value={history.length} hint={copy.stats.loadedOrders} />
         <StatTile label={copy.stats.assigned} value={session?.stats.assignedCount ?? 0} hint={copy.stats.today} />
-        <StatTile label={copy.stats.workingMin} value={session?.stats.totalWorkingMinutes ?? 0} hint={copy.stats.today} />
+        <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.stats.today} />
       </View>
       <View style={styles.performanceCard}>
         <Text style={[styles.performanceTitle, isRtl && styles.rtlText]}>{copy.stats.performanceTitle}</Text>
@@ -2714,6 +2836,15 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     ...shadows.card
   },
+  shiftCard: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.card
+  },
   commandCopy: {
     gap: 6
   },
@@ -2731,6 +2862,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 20
+  },
+  shiftBranchPanel: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  shiftBranchPanel_neutral: {
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted
+  },
+  shiftBranchPanel_ready: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  shiftBranchPanel_blocked: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft
+  },
+  shiftBranchCopy: {
+    flex: 1,
+    gap: 4
+  },
+  shiftBranchLabel: {
+    color: colors.muted,
+    ...typography.micro
+  },
+  shiftBranchTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  shiftBranchMeta: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  shiftBranchAction: {
+    color: colors.brand,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase'
   },
   statsGrid: {
     flexDirection: 'row',
@@ -2946,6 +3122,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm
+  },
+  historyTypeSwitch: {
+    flexDirection: 'row',
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    padding: 4,
+    gap: 4
+  },
+  historyTypeButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  historyTypeButtonActive: {
+    backgroundColor: colors.brand,
+    ...shadows.brand
+  },
+  historyTypeLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'center',
+    textTransform: 'uppercase'
+  },
+  historyTypeLabelActive: {
+    color: colors.white
   },
   filterGroupLabel: {
     color: colors.muted,

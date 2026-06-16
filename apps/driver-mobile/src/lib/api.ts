@@ -69,6 +69,12 @@ export type DriverBranchOption = {
   name: string;
 };
 
+export type DriverNearbyStartBranch = DriverBranchOption & {
+  distanceMeters: number;
+  radiusMeters: number;
+  isWithinRadius: boolean;
+};
+
 export type DriverOrder = {
   id: string;
   branchId: string;
@@ -194,6 +200,25 @@ export const driverApi = {
       code: row.code || null,
       name: row.name || 'Branch'
     }));
+  },
+
+  nearbyStartBranch: async (location: DriverDutyStartLocation): Promise<DriverNearbyStartBranch | null> => {
+    const { data, error } = await supabase.rpc('app_driver_get_nearby_start_branch', {
+      p_lat: location.latitude,
+      p_lng: location.longitude,
+      p_accuracy_m: location.accuracyMeters ?? null
+    });
+    const rows = assertRpc(data as any[], error, 'Could not check nearby branch.');
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      code: row.code || null,
+      name: row.name || 'Branch',
+      distanceMeters: Number(row.distance_m ?? 0),
+      radiusMeters: Number(row.radius_m ?? 0),
+      isWithinRadius: Boolean(row.is_within_radius)
+    };
   },
 
   startShift: async (location: DriverDutyStartLocation): Promise<DriverSessionPayload> => {
