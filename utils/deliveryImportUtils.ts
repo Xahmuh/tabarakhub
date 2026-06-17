@@ -6,15 +6,27 @@ import {
   DeliveryPaymentTypeConfig,
   Pharmacist
 } from '../types';
+import { isModuleEnabled } from '../config/clientConfig';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
   isDeliveryPaymentBlockExempt,
   isTalabatDeliveryPayment,
   normalizeDeliveryPaymentCode
 } from '../lib/deliveryPaymentTypes';
+import { saveAs } from 'file-saver';
 
 export const DELIVERY_ORDER_IMPORT_ACCEPT = '.xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const MAX_DELIVERY_ORDER_IMPORT_BYTES = 5 * 1024 * 1024;
+export const DELIVERY_ORDER_IMPORT_TEMPLATE_HEADERS = [
+  'order_date',
+  'value_bhd',
+  'payment_type',
+  'block_number',
+  'area_name',
+  'pharmacist',
+  'driver',
+  'notes'
+] as const;
 
 type DeliveryImportField =
   | 'orderDate'
@@ -59,6 +71,11 @@ export interface DeliveryOrderImportResult {
   validRows: DeliveryOrderImportRow[];
   errors: DeliveryOrderImportError[];
   totalRows: number;
+}
+
+export interface DeliveryOrderTemplateContext extends DeliveryOrderImportContext {
+  branchName?: string;
+  branchCode?: string;
 }
 
 const FIELD_ALIASES: Record<DeliveryImportField, string[]> = {
@@ -109,6 +126,261 @@ const reportProgress = (
   detail?: string
 ) => {
   onProgress?.({ percent, label, detail });
+};
+
+const createTemplateWorkbook = async () => {
+  if (!isModuleEnabled('excelExport')) {
+    throw new Error('Excel import/export is disabled for this client deployment');
+  }
+  const ExcelJS = await import('exceljs');
+  return new ExcelJS.Workbook();
+};
+
+const safeSheetName = (value: string) => value.replace(/[*?:/\\[\]]/g, ' ').slice(0, 31);
+
+const styleTemplateHeader = (row: any) => {
+  row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  row.height = 22;
+  row.eachCell((cell: any) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FF7F1D1D' } } };
+  });
+};
+
+const styleReferenceHeader = (row: any) => {
+  row.font = { bold: true, color: { argb: 'FF0F172A' } };
+  row.eachCell((cell: any) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
+  });
+};
+
+const addReferenceSheet = (
+  workbook: any,
+  name: string,
+  columns: Array<{ header: string; key: string; width: number }>,
+  rows: Array<Record<string, string | number | boolean | null | undefined>>
+) => {
+  const sheet = workbook.addWorksheet(safeSheetName(name));
+  sheet.columns = columns;
+  styleReferenceHeader(sheet.getRow(1));
+  rows.forEach(row => sheet.addRow(row));
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  return sheet;
+};
+
+const buildDisplayValue = (...parts: Array<string | undefined | null>) =>
+  parts.filter(Boolean).join(' - ');
+
+export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTemplateContext) => {
+  const workbook = await createTemplateWorkbook();
+  workbook.creator = 'Tabarak Hub';
+  workbook.created = new Date();
+
+  const activePaymentTypes = (context.paymentTypes && context.paymentTypes.length > 0
+    ? context.paymentTypes
+    : DEFAULT_DELIVERY_PAYMENT_TYPES
+  ).filter(type => type.isActive);
+  const defaultPayment = activePaymentTypes.find(type => type.code === 'CASH') || activePaymentTypes[0];
+  const samplePharmacist = context.pharmacists[0];
+  const sampleDriver = context.drivers[0];
+  const sampleBlock = context.blocks[0];
+  const templateDate = new Date();
+  const templateDateKey = `${templateDate.getFullYear()}-${String(templateDate.getMonth() + 1).padStart(2, '0')}-${String(templateDate.getDate()).padStart(2, '0')}`;
+
+  const ordersSheet = workbook.addWorksheet('Delivery Orders Template');
+  ordersSheet.columns = [
+    { header: 'order_date', key: 'order_date', width: 16 },
+    { header: 'value_bhd', key: 'value_bhd', width: 14 },
+    { header: 'payment_type', key: 'payment_type', width: 18 },
+    { header: 'block_number', key: 'block_number', width: 18 },
+    { header: 'area_name', key: 'area_name', width: 24 },
+    { header: 'pharmacist', key: 'pharmacist', width: 32 },
+    { header: 'driver', key: 'driver', width: 32 },
+    { header: 'notes', key: 'notes', width: 40 }
+  ];
+  styleTemplateHeader(ordersSheet.getRow(1));
+
+  ordersSheet.addRow({
+    order_date: templateDateKey,
+    value_bhd: 2.950,
+    payment_type: defaultPayment?.code || 'CASH',
+    block_number: sampleBlock?.blockNumber || '332',
+    area_name: sampleBlock?.areaName || '',
+    pharmacist: samplePharmacist ? buildDisplayValue(samplePharmacist.code, samplePharmacist.name) : 'Use pharmacist code or exact name',
+    driver: sampleDriver ? buildDisplayValue(sampleDriver.driverCode, sampleDriver.name) : 'Use driver code or exact name',
+    notes: 'Example row - replace or delete'
+  });
+
+  if (activePaymentTypes.some(type => isTalabatDeliveryPayment(type.code))) {
+    ordersSheet.addRow({
+      order_date: templateDateKey,
+      value_bhd: 1.500,
+      payment_type: 'TALABAT',
+      block_number: '',
+      area_name: '',
+      pharmacist: samplePharmacist ? buildDisplayValue(samplePharmacist.code, samplePharmacist.name) : 'Use pharmacist code or exact name',
+      driver: '',
+      notes: 'Talabat example - driver and block are not required if Talabat is configured as block-exempt'
+    });
+  }
+
+  for (let row = ordersSheet.rowCount + 1; row <= 250; row++) {
+    ordersSheet.addRow({});
+  }
+
+  ordersSheet.views = [{ state: 'frozen', ySplit: 1 }];
+  ordersSheet.getColumn('value_bhd').numFmt = '0.000';
+  ordersSheet.getColumn('order_date').numFmt = 'yyyy-mm-dd';
+  ordersSheet.eachRow((row: any, rowNumber: number) => {
+    if (rowNumber === 1) return;
+    row.eachCell((cell: any) => {
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } };
+    });
+  });
+
+  const rulesSheet = workbook.addWorksheet('Import Rules');
+  rulesSheet.columns = [
+    { header: 'Field', key: 'field', width: 20 },
+    { header: 'Required', key: 'required', width: 14 },
+    { header: 'How to fill', key: 'details', width: 82 }
+  ];
+  styleReferenceHeader(rulesSheet.getRow(1));
+  rulesSheet.addRows([
+    { field: 'order_date', required: 'Yes', details: 'Use yyyy-mm-dd, or an Excel date. Example: 2026-06-17.' },
+    { field: 'value_bhd', required: 'Yes', details: 'Numeric BHD amount. Use decimals only, without currency text. Example: 2.950.' },
+    { field: 'payment_type', required: 'Yes', details: `Use payment code or label from Payment Types sheet. Active now: ${activePaymentTypes.map(type => type.code).join(', ') || 'No active payment types loaded'}.` },
+    { field: 'block_number', required: 'Usually', details: 'Required for payment types that need block coverage. You can use area_name only if it uniquely matches one block.' },
+    { field: 'area_name', required: 'Optional', details: 'Optional helper. If block_number is blank and area matches exactly one block, the system can resolve it.' },
+    { field: 'pharmacist', required: 'Yes', details: 'Use pharmacist code, exact name, or ID from Pharmacists sheet. Must be assigned to this branch.' },
+    { field: 'driver', required: 'Yes except Talabat', details: 'Use driver code, exact name, or ID from Drivers sheet. Leave blank for Talabat orders.' },
+    { field: 'notes', required: 'No', details: 'Optional remark for audit or operations.' },
+    { field: 'file size', required: 'Limit', details: 'Upload file must be .xlsx or .csv and 5MB or smaller.' },
+    { field: 'do not edit headers', required: 'Important', details: `Keep the first row headers exactly as: ${DELIVERY_ORDER_IMPORT_TEMPLATE_HEADERS.join(', ')}.` }
+  ]);
+
+  addReferenceSheet(
+    workbook,
+    'Payment Types',
+    [
+      { header: 'code', key: 'code', width: 18 },
+      { header: 'label', key: 'label', width: 24 },
+      { header: 'requires_block', key: 'requires_block', width: 18 },
+      { header: 'active', key: 'active', width: 12 }
+    ],
+    activePaymentTypes.map(type => ({
+      code: type.code,
+      label: type.label,
+      requires_block: type.requiresBlock ? 'YES' : 'NO',
+      active: type.isActive ? 'YES' : 'NO'
+    }))
+  );
+
+  addReferenceSheet(
+    workbook,
+    'Pharmacists',
+    [
+      { header: 'code', key: 'code', width: 18 },
+      { header: 'name', key: 'name', width: 32 },
+      { header: 'value_to_use', key: 'value', width: 42 }
+    ],
+    context.pharmacists.map(pharmacist => ({
+      code: pharmacist.code || '',
+      name: pharmacist.name,
+      value: buildDisplayValue(pharmacist.code, pharmacist.name) || pharmacist.name
+    }))
+  );
+
+  addReferenceSheet(
+    workbook,
+    'Drivers',
+    [
+      { header: 'code', key: 'code', width: 18 },
+      { header: 'name', key: 'name', width: 32 },
+      { header: 'value_to_use', key: 'value', width: 42 },
+      { header: 'active', key: 'active', width: 12 }
+    ],
+    context.drivers.map(driver => ({
+      code: driver.driverCode || '',
+      name: driver.name,
+      value: buildDisplayValue(driver.driverCode, driver.name) || driver.name,
+      active: driver.isActive ? 'YES' : 'NO'
+    }))
+  );
+
+  addReferenceSheet(
+    workbook,
+    'Blocks',
+    [
+      { header: 'block_number', key: 'block_number', width: 18 },
+      { header: 'area_name', key: 'area_name', width: 32 },
+      { header: 'governorate', key: 'governorate', width: 18 }
+    ],
+    context.blocks.map(block => ({
+      block_number: block.blockNumber,
+      area_name: block.areaName,
+      governorate: block.governorate
+    }))
+  );
+
+  const paymentListFormula = `'Payment Types'!$A$2:$A$${Math.max(activePaymentTypes.length + 1, 2)}`;
+  const pharmacistListFormula = `'Pharmacists'!$C$2:$C$${Math.max(context.pharmacists.length + 1, 2)}`;
+  const driverListFormula = `'Drivers'!$C$2:$C$${Math.max(context.drivers.length + 1, 2)}`;
+  const blockListFormula = `'Blocks'!$A$2:$A$${Math.max(context.blocks.length + 1, 2)}`;
+
+  for (let rowNumber = 2; rowNumber <= 250; rowNumber++) {
+    ordersSheet.getCell(`A${rowNumber}`).dataValidation = {
+      type: 'date',
+      operator: 'greaterThanOrEqual',
+      formulae: [new Date(2020, 0, 1)],
+      allowBlank: false,
+      showErrorMessage: true,
+      errorTitle: 'Invalid date',
+      error: 'Use a valid delivery date.'
+    };
+    ordersSheet.getCell(`B${rowNumber}`).dataValidation = {
+      type: 'decimal',
+      operator: 'greaterThan',
+      formulae: [0],
+      allowBlank: false,
+      showErrorMessage: true,
+      errorTitle: 'Invalid value',
+      error: 'Order value must be greater than zero.'
+    };
+    ordersSheet.getCell(`C${rowNumber}`).dataValidation = {
+      type: 'list',
+      formulae: [paymentListFormula],
+      allowBlank: false
+    };
+    ordersSheet.getCell(`D${rowNumber}`).dataValidation = {
+      type: 'list',
+      formulae: [blockListFormula],
+      allowBlank: true
+    };
+    ordersSheet.getCell(`F${rowNumber}`).dataValidation = {
+      type: 'list',
+      formulae: [pharmacistListFormula],
+      allowBlank: false
+    };
+    ordersSheet.getCell(`G${rowNumber}`).dataValidation = {
+      type: 'list',
+      formulae: [driverListFormula],
+      allowBlank: true
+    };
+  }
+
+  const branchSegment = [context.branchCode, context.branchName]
+    .filter(Boolean)
+    .join('_')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    || 'branch';
+  const buffer = await workbook.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `delivery_bulk_upload_template_${branchSegment}.xlsx`
+  );
 };
 
 export const isSupportedDeliveryOrderImportFile = (file: File) => {
@@ -341,7 +613,9 @@ const resolvePharmacist = (value: unknown, pharmacists: Pharmacist[]) => {
   const matches = pharmacists.filter(pharmacist => [
     pharmacist.id,
     pharmacist.code,
-    pharmacist.name
+    pharmacist.name,
+    buildDisplayValue(pharmacist.code, pharmacist.name),
+    buildDisplayValue(pharmacist.name, pharmacist.code)
   ].some(candidate => normalizeLookup(candidate) === normalized));
   if (matches.length === 1) return { id: matches[0].id, name: matches[0].name, error: null };
   if (matches.length > 1) return { id: null, name: null, error: `Pharmacist "${text}" matches more than one record.` };
@@ -355,7 +629,9 @@ const resolveDriver = (value: unknown, drivers: DeliveryDriver[]) => {
   const matches = drivers.filter(driver => [
     driver.id,
     driver.driverCode,
-    driver.name
+    driver.name,
+    buildDisplayValue(driver.driverCode, driver.name),
+    buildDisplayValue(driver.name, driver.driverCode)
   ].some(candidate => normalizeLookup(candidate) === normalized));
   if (matches.length === 1) return { id: matches[0].id, error: null };
   if (matches.length > 1) return { id: null, error: `Driver "${text}" matches more than one record.` };

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, CheckCircle2, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, X } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
@@ -18,6 +18,7 @@ import {
 import {
   DELIVERY_ORDER_IMPORT_ACCEPT,
   MAX_DELIVERY_ORDER_IMPORT_BYTES,
+  generateDeliveryOrderTemplate,
   isSupportedDeliveryOrderImportFile,
   parseDeliveryOrderUpload
 } from '../../utils/deliveryImportUtils';
@@ -109,6 +110,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [isTemplateDownloading, setIsTemplateDownloading] = useState(false);
   const [isHistoryBulkCancelling, setIsHistoryBulkCancelling] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
@@ -629,6 +631,27 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     }
   };
 
+  const handleDownloadBulkTemplate = async () => {
+    if (isTemplateDownloading) return;
+    setIsTemplateDownloading(true);
+    try {
+      await generateDeliveryOrderTemplate({
+        branchId: branch.id,
+        branchCode: branch.code,
+        branchName: branch.name,
+        pharmacists,
+        drivers,
+        blocks,
+        paymentTypes
+      });
+    } catch (error: any) {
+      console.error('Delivery template download failed', error);
+      Swal.fire('Template failed', error?.message || 'Could not generate the delivery upload template.', 'error');
+    } finally {
+      setIsTemplateDownloading(false);
+    }
+  };
+
   const toggleHistorySelection = (orderId: string) => {
     setSelectedHistoryIds(prev => {
       const next = new Set(prev);
@@ -738,6 +761,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                 onChange={handleBulkFileUpload}
                 className="hidden"
               />
+              <button
+                type="button"
+                onClick={handleDownloadBulkTemplate}
+                disabled={isTemplateDownloading || isBulkUploading || isSubmitting}
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-50"
+                title="Download delivery bulk upload template"
+              >
+                <FileDown className="h-4 w-4" />
+                {isTemplateDownloading ? 'Preparing...' : 'Template'}
+              </button>
               <button
                 type="button"
                 onClick={() => bulkFileInputRef.current?.click()}
