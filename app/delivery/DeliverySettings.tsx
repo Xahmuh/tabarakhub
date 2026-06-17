@@ -3,8 +3,9 @@ import Swal from 'sweetalert2';
 import { AlertTriangle, Bike, Building2, CheckSquare, CreditCard, Download, ImageIcon, Map, MapPin, Plus, Save, Search, Smartphone, Trash2, Trophy, UploadCloud, UsersRound } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
+import { permissionService } from '../../services/permissionService';
 import {
-  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryDriverMonthlyTarget, DeliveryMobileAppSettings, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
+  AppUser, Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryDriverMonthlyTarget, DeliveryMobileAppSettings, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
 import { isDeliveryPaymentBlockExempt, normalizeDeliveryPaymentCode } from '../../lib/deliveryPaymentTypes';
@@ -52,6 +53,7 @@ export const DeliverySettings: React.FC = () => {
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
   const [supervisors, setSupervisors] = useState<DeliverySupervisor[]>([]);
+  const [supervisorUsers, setSupervisorUsers] = useState<AppUser[]>([]);
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [classifications, setClassifications] = useState<BranchClassification[]>([]);
@@ -70,13 +72,14 @@ export const DeliverySettings: React.FC = () => {
     try {
       const targetMonthStart = monthStartFromKey(targetMonth);
       const targetMonthEnd = monthEndFromKey(targetMonth);
-      const [driverResult, targetResult, dutyResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult, mobileResult] = await Promise.allSettled([
+      const [driverResult, targetResult, dutyResult, paymentResult, areaResult, supervisorResult, supervisorUserResult, blockResult, branchResult, classResult, mobileResult] = await Promise.allSettled([
         deliveryService.drivers.list(true),
         deliveryService.driverTargets.list(targetMonthStart),
         deliveryService.driverDuty.list({ dateFrom: targetMonthStart, dateTo: targetMonthEnd }),
         deliveryService.paymentTypes.list(true),
         deliveryService.areas.list(true),
         deliveryService.supervisors.list(true),
+        permissionService.adminListUsers(),
         deliveryService.blocks.list(true),
         branchService.list(),
         deliveryService.classifications.list(),
@@ -95,6 +98,9 @@ export const DeliverySettings: React.FC = () => {
       setPaymentTypes(paymentResult.status === 'fulfilled' ? paymentResult.value : []);
       setAreas(areaResult.status === 'fulfilled' ? areaResult.value : []);
       setSupervisors(supervisorResult.status === 'fulfilled' ? supervisorResult.value : []);
+      setSupervisorUsers(supervisorUserResult.status === 'fulfilled'
+        ? supervisorUserResult.value.filter(user => user.role === 'supervisor' && user.isActive)
+        : []);
       setBlocks(blockResult.status === 'fulfilled' ? blockResult.value : []);
       setBranches(branchResult.status === 'fulfilled' ? branchResult.value.filter(b => b.role === 'branch') : []);
       setClassifications(classResult.status === 'fulfilled' ? classResult.value : []);
@@ -177,6 +183,14 @@ export const DeliverySettings: React.FC = () => {
 
   // ----- Supervisors -----
   const editSupervisor = async (supervisor?: DeliverySupervisor) => {
+    const selectedUserId = supervisor?.userId || supervisorUsers.find(user =>
+      user.email.toLowerCase() === supervisor?.email?.toLowerCase()
+    )?.userId || '';
+    const supervisorUserOptions = supervisorUsers.map(user => `
+      <option value="${escapeHtml(user.userId)}" ${selectedUserId === user.userId ? 'selected' : ''}>
+        ${escapeHtml(user.email)}
+      </option>
+    `).join('');
     const { value } = await Swal.fire({
       title: `<span class="text-xl font-black tracking-tight">${supervisor ? 'Edit' : 'Add'} supervisor</span>`,
       html: `
@@ -193,6 +207,16 @@ export const DeliverySettings: React.FC = () => {
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email (optional)</label>
             <input id="swal-supervisor-email" value="${escapeHtml(supervisor?.email)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Linked supervisor login</label>
+            <select id="swal-supervisor-user-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              <option value="">Not linked to app access</option>
+              ${supervisorUserOptions}
+            </select>
+            <p class="mt-1 text-[10px] font-bold leading-5 text-slate-400">
+              Link the supervisor email here so assigned branches become visible in supervisor modules.
+            </p>
+          </div>
         </div>`,
       showCancelButton: true,
       confirmButtonText: 'Save supervisor',
@@ -201,11 +225,13 @@ export const DeliverySettings: React.FC = () => {
         const name = (document.getElementById('swal-supervisor-name') as HTMLInputElement).value.trim();
         const phone = (document.getElementById('swal-supervisor-phone') as HTMLInputElement).value.trim();
         const email = (document.getElementById('swal-supervisor-email') as HTMLInputElement).value.trim();
+        const userId = (document.getElementById('swal-supervisor-user-id') as HTMLSelectElement).value || null;
+        const linkedUser = supervisorUsers.find(user => user.userId === userId);
         if (!name) {
           Swal.showValidationMessage('Supervisor name is required.');
           return false;
         }
-        return { name, phone, email };
+        return { name, phone, email: email || linkedUser?.email || '', userId };
       }
     });
     if (!value) return;
@@ -215,6 +241,7 @@ export const DeliverySettings: React.FC = () => {
         name: value.name,
         phone: value.phone || undefined,
         email: value.email || undefined,
+        userId: value.userId,
         isActive: supervisor?.isActive ?? true
       });
       await load();
@@ -633,7 +660,7 @@ export const DeliverySettings: React.FC = () => {
     `).join('');
     const supervisorOptions = supervisors.map(supervisor => `
       <option value="${supervisor.id}" ${selectedSupervisorId === supervisor.id ? 'selected' : ''}>
-        ${escapeHtml(supervisor.name)}${supervisor.isActive ? '' : ' (inactive)'}
+        ${escapeHtml(supervisor.name)}${supervisor.userId ? ' - access linked' : ' - no login link'}${supervisor.isActive ? '' : ' (inactive)'}
       </option>
     `).join('');
     const { value } = await Swal.fire({
@@ -675,7 +702,8 @@ export const DeliverySettings: React.FC = () => {
           area: area?.name || undefined,
           governorate: area?.governorate || null,
           supervisorId: supervisor?.id || null,
-          supervisorName: supervisor?.name || undefined
+          supervisorName: supervisor?.name || undefined,
+          supervisorUserId: supervisor?.userId || null
         };
       }
     });
@@ -687,6 +715,7 @@ export const DeliverySettings: React.FC = () => {
         area: value.area,
         supervisorId: value.supervisorId,
         supervisorName: value.supervisorName,
+        supervisorUserId: value.supervisorUserId,
         governorate: (value.governorate || null) as Governorate | null
       });
       await load();
@@ -1042,29 +1071,39 @@ export const DeliverySettings: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {supervisors.map(supervisor => (
-              <div key={supervisor.id} className={`rounded-lg border p-3 ${supervisor.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-black text-slate-800">{supervisor.name}</p>
-                    {(supervisor.phone || supervisor.email) && (
-                      <p className="mt-1 text-[11px] font-bold text-slate-400">
-                        {[supervisor.phone, supervisor.email].filter(Boolean).join(' | ')}
+            {supervisors.map(supervisor => {
+              const linkedUser = supervisor.userId
+                ? supervisorUsers.find(user => user.userId === supervisor.userId)
+                : null;
+              return (
+                <div key={supervisor.id} className={`rounded-lg border p-3 ${supervisor.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-800">{supervisor.name}</p>
+                      {(supervisor.phone || supervisor.email) && (
+                        <p className="mt-1 text-[11px] font-bold text-slate-400">
+                          {[supervisor.phone, supervisor.email].filter(Boolean).join(' | ')}
+                        </p>
+                      )}
+                      <p className={`mt-1 text-[10px] font-black uppercase tracking-widest ${supervisor.userId ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {supervisor.userId
+                          ? `Linked login: ${linkedUser?.email || 'Supervisor user'}`
+                          : 'No linked login access'}
                       </p>
-                    )}
+                    </div>
+                    <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${supervisor.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                      {supervisor.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${supervisor.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
-                    {supervisor.isActive ? 'Active' : 'Inactive'}
-                  </span>
+                  <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                    <button onClick={() => editSupervisor(supervisor)} className="text-slate-500 hover:text-brand">Edit</button>
+                    <button onClick={() => toggleSupervisor(supervisor)} className="text-slate-400 hover:text-brand">
+                      {supervisor.isActive ? 'Deactivate' : 'Reactivate'}
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-2 flex gap-3 text-[11px] font-bold">
-                  <button onClick={() => editSupervisor(supervisor)} className="text-slate-500 hover:text-brand">Edit</button>
-                  <button onClick={() => toggleSupervisor(supervisor)} className="text-slate-400 hover:text-brand">
-                    {supervisor.isActive ? 'Deactivate' : 'Reactivate'}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {supervisors.length === 0 && <p className="text-xs font-bold text-slate-400">No supervisors yet - add the first one.</p>}
           </div>
         </section>
@@ -1129,6 +1168,7 @@ export const DeliverySettings: React.FC = () => {
               const areaName = c?.area || area?.name;
               const supervisorName = c?.supervisorName || supervisor?.name;
               const governorate = c?.governorate || area?.governorate;
+              const supervisorAccessLinked = Boolean(c?.supervisorUserId || supervisor?.userId);
               return (
                 <button
                   key={branch.id}
@@ -1144,6 +1184,11 @@ export const DeliverySettings: React.FC = () => {
                   <p className="mt-1 text-[11px] font-bold text-slate-400">
                     {c?.area ? `${c.area}` : 'No area'}{c?.supervisorName ? ` · ${c.supervisorName}` : ' · No supervisor'}
                   </p>
+                  {supervisorName && (
+                    <p className={`mt-1 text-[10px] font-black uppercase tracking-widest ${supervisorAccessLinked ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {supervisorAccessLinked ? 'Supervisor access linked' : 'Supervisor login not linked'}
+                    </p>
+                  )}
                 </button>
               );
             })}

@@ -57,6 +57,77 @@ const toPaymentTypeConfig = (row: any): DeliveryPaymentTypeConfig => ({
   updatedAt: row.updated_at
 });
 
+const syncSupervisorBranchAccess = async (
+  branchId: string,
+  previousSupervisorUserId?: string | null,
+  nextSupervisorUserId?: string | null
+) => {
+  if (previousSupervisorUserId && previousSupervisorUserId !== nextSupervisorUserId) {
+    const { error } = await supabaseClient
+      .from('supervisor_branches')
+      .delete()
+      .eq('supervisor_user_id', previousSupervisorUserId)
+      .eq('branch_id', branchId);
+    if (error) throw error;
+  }
+
+  if (nextSupervisorUserId) {
+    const { error } = await supabaseClient
+      .from('supervisor_branches')
+      .upsert(
+        { supervisor_user_id: nextSupervisorUserId, branch_id: branchId },
+        { onConflict: 'supervisor_user_id,branch_id' }
+      );
+    if (error) throw error;
+  }
+};
+
+const syncDeliverySupervisorAccess = async (
+  supervisorId: string,
+  nextSupervisorUserId?: string | null
+) => {
+  const { data, error } = await supabaseClient
+    .from('branch_classifications')
+    .select('branch_id, supervisor_user_id')
+    .eq('supervisor_id', supervisorId);
+  if (error) throw error;
+
+  const rows = data || [];
+  if (rows.length === 0) return;
+
+  const branchIds = rows.map(row => row.branch_id).filter(Boolean);
+  const previousUserIds = Array.from(new Set(
+    rows
+      .map(row => row.supervisor_user_id)
+      .filter((userId): userId is string => Boolean(userId) && userId !== nextSupervisorUserId)
+  ));
+
+  if (previousUserIds.length > 0 && branchIds.length > 0) {
+    const { error: deleteError } = await supabaseClient
+      .from('supervisor_branches')
+      .delete()
+      .in('supervisor_user_id', previousUserIds)
+      .in('branch_id', branchIds);
+    if (deleteError) throw deleteError;
+  }
+
+  const { error: updateError } = await supabaseClient
+    .from('branch_classifications')
+    .update({ supervisor_user_id: nextSupervisorUserId || null, updated_at: new Date().toISOString() })
+    .eq('supervisor_id', supervisorId);
+  if (updateError) throw updateError;
+
+  if (nextSupervisorUserId && branchIds.length > 0) {
+    const { error: upsertError } = await supabaseClient
+      .from('supervisor_branches')
+      .upsert(
+        branchIds.map(branchId => ({ supervisor_user_id: nextSupervisorUserId, branch_id: branchId })),
+        { onConflict: 'supervisor_user_id,branch_id' }
+      );
+    if (upsertError) throw upsertError;
+  }
+};
+
 const listPaymentTypes = async (includeInactive = false): Promise<DeliveryPaymentTypeConfig[]> => {
   const { data, error } = await supabaseClient
     .from('delivery_payment_types')
@@ -700,6 +771,7 @@ export const deliveryService = {
       if (supervisor.id) payload.id = supervisor.id;
       const { data, error } = await supabaseClient.from('delivery_supervisors').upsert(payload).select().single();
       if (error) throw error;
+      await syncDeliverySupervisorAccess(data.id, data.user_id);
       return {
         id: data.id,
         name: data.name,
@@ -782,17 +854,40 @@ export const deliveryService = {
       }));
     },
     upsert: async (classification: BranchClassification) => {
+      const { data: existing, error: existingError } = await supabaseClient
+        .from('branch_classifications')
+        .select('supervisor_user_id')
+        .eq('branch_id', classification.branchId)
+        .maybeSingle();
+      if (existingError) throw existingError;
+
+      let nextSupervisorUserId = classification.supervisorUserId || null;
+      if (!nextSupervisorUserId && classification.supervisorId) {
+        const { data: supervisor, error: supervisorError } = await supabaseClient
+          .from('delivery_supervisors')
+          .select('user_id')
+          .eq('id', classification.supervisorId)
+          .maybeSingle();
+        if (supervisorError) throw supervisorError;
+        nextSupervisorUserId = supervisor?.user_id || null;
+      }
+
       const { error } = await supabaseClient.from('branch_classifications').upsert({
         branch_id: classification.branchId,
         area_id: classification.areaId || null,
         area: classification.area || null,
         supervisor_id: classification.supervisorId || null,
         supervisor_name: classification.supervisorName || null,
-        supervisor_user_id: classification.supervisorUserId || null,
+        supervisor_user_id: nextSupervisorUserId,
         governorate: classification.governorate || null,
         updated_at: new Date().toISOString()
       });
       if (error) throw error;
+      await syncSupervisorBranchAccess(
+        classification.branchId,
+        existing?.supervisor_user_id || null,
+        nextSupervisorUserId
+      );
       return true;
     }
   },
