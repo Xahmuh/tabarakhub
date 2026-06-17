@@ -155,6 +155,33 @@ Checks:
 - internal transfer rows tolerate null block/area/governorate;
 - no sensitive customer/auth/token data is exposed.
 
+## Clean Export Adapter Validation
+
+The admin delivery order Excel export now has a narrow clean-view adapter:
+
+```text
+services/deliveryCleanExportService.ts
+```
+
+The adapter reads `delivery_orders_clean`, exports clean operational columns, and does not expose the legacy fields listed above. It runs parity checks against the existing operational rows before generating the workbook.
+
+Latest linked-project QA:
+
+- raw rows: 48;
+- clean rows: 48;
+- latest 20 IDs: match;
+- payment totals: match;
+- order kind counts: match;
+- delivery status counts: match;
+- driver display rows: match;
+- authenticated writes to the view: blocked by grants.
+
+Details:
+
+```text
+docs/CLEAN_EXPORT_ADAPTER_QA.md
+```
+
 ## Final Status
 
 ```text

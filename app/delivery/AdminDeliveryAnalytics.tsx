@@ -9,8 +9,13 @@ import {
 import { PeriodFilter } from './components/PeriodFilter';
 import { SearchableSelect } from './components/SearchableSelect';
 import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
-import { exportBreakdownToExcel, exportOrdersToExcel, printReport } from './exports';
+import { exportBreakdownToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
+import {
+  buildDeliveryOrderCleanExportParity,
+  deliveryCleanExportService,
+  exportDeliveryOrderCleanRowsToExcel
+} from '../../services/deliveryCleanExportService';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -89,6 +94,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
   const [classifications, setClassifications] = useState<BranchClassification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExportingCleanOrders, setIsExportingCleanOrders] = useState(false);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
   const [drilldownGov, setDrilldownGov] = useState<Governorate | null>(null);
 
   const range = getPresetRange(preset, customFrom, customTo);
@@ -140,14 +147,18 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     return [...names].sort().map(n => ({ value: n, label: n }));
   }, [classifications]);
 
-  // Supervisor filter is applied client-side via branch classification.
-  const filteredOrders = useMemo(() => {
-    if (!supervisorFilter) return orders;
-    const supervisedBranchIds = new Set(
+  const supervisedBranchIds = useMemo(() => {
+    if (!supervisorFilter) return null;
+    return new Set(
       classifications.filter(c => c.supervisorName === supervisorFilter).map(c => c.branchId)
     );
+  }, [supervisorFilter, classifications]);
+
+  // Supervisor filter is applied client-side via branch classification.
+  const filteredOrders = useMemo(() => {
+    if (!supervisedBranchIds) return orders;
     return orders.filter(o => supervisedBranchIds.has(o.branchId));
-  }, [orders, supervisorFilter, classifications]);
+  }, [orders, supervisedBranchIds]);
 
   const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
   const talabat = useMemo(
@@ -272,9 +283,36 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     ).catch(e => console.error(e));
   };
 
-  const downloadOrders = () => {
-    exportOrdersToExcel(filteredOrders, `Delivery Orders — ${label}`, `Delivery_All_${range.from}_${range.to}`)
-      .catch(e => console.error(e));
+  const downloadOrders = async () => {
+    setExportErrorMessage(null);
+    setIsExportingCleanOrders(true);
+    try {
+      const cleanRows = await deliveryCleanExportService.orders.list({
+        branchId: branchFilter || undefined,
+        branchIds: supervisedBranchIds ? [...supervisedBranchIds] : undefined,
+        dateFrom: range.from,
+        dateTo: range.to,
+        paymentType: paymentFilter || undefined,
+        driverId: driverFilter || undefined,
+        pharmacistId: pharmacistFilter || undefined,
+        governorate: governorateFilter || undefined
+      });
+      const parity = buildDeliveryOrderCleanExportParity(filteredOrders, cleanRows);
+      if (!parity.matches) {
+        throw new Error(`Clean export parity failed: ${parity.differences.join('; ')}`);
+      }
+      await exportDeliveryOrderCleanRowsToExcel(
+        cleanRows,
+        `Delivery Orders - Clean Export - ${label}`,
+        `Delivery_Clean_All_${range.from}_${range.to}`,
+        parity
+      );
+    } catch (error: any) {
+      console.error('Clean delivery order export failed', error);
+      setExportErrorMessage(error?.message || 'Could not export clean delivery orders.');
+    } finally {
+      setIsExportingCleanOrders(false);
+    }
   };
 
   return (
@@ -285,8 +323,12 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onChange={handlePeriodChange} />
           <div className="flex items-center gap-2">
             {isModuleEnabled('excelExport') && (
-              <button onClick={downloadOrders} className="btn-secondary text-[10px] uppercase tracking-widest">
-                <FileDown className="h-3.5 w-3.5" /> Excel
+              <button
+                onClick={downloadOrders}
+                disabled={isLoading || isExportingCleanOrders}
+                className="btn-secondary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileDown className="h-3.5 w-3.5" /> {isExportingCleanOrders ? 'Exporting' : 'Excel'}
               </button>
             )}
             <button onClick={printReport} className="btn-secondary text-[10px] uppercase tracking-widest">
@@ -311,6 +353,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           />
           <SearchableSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} value={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" />
         </div>
+        {exportErrorMessage && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+            {exportErrorMessage}
+          </div>
+        )}
       </section>
 
       <div className="hidden print:block">

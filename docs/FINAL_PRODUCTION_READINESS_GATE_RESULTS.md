@@ -647,6 +647,30 @@ RLS/grant changes: none in the migration
 browser QA: pending because no authenticated admin/manager session or usable credentials were available
 ```
 
+Phase B Clean Export Adapter verification:
+
+```text
+Scope: admin delivery order Excel export only.
+Source: public.delivery_orders_clean.
+Adapter: services/deliveryCleanExportService.ts.
+UI integration: app/delivery/AdminDeliveryAnalytics.tsx.
+Raw rows: 48.
+Clean rows: 48.
+Latest 20 IDs: match.
+Payment totals: match.
+Order kind counts: actual_delivery=46, internal_transfer=2.
+Delivery status counts: assigned=11, delivered=12, recorded=25.
+Driver display rows: raw=48, clean=48.
+Anon select: false by grants.
+Authenticated select: true.
+Authenticated insert/update/delete: false.
+Admin simulation: 48 rows across 4 branches.
+Owner simulation: 48 rows across 4 branches.
+T001 branch simulation: 0 rows, no cross-branch rows; T001 has 0 raw delivery rows in current linked data.
+Operational writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, Phase C, and Phase D: unchanged.
+Documentation: docs/CLEAN_EXPORT_ADAPTER_QA.md.
+```
+
 ## Final Decision
 
 Production-ready cannot be claimed. The release remains:

@@ -420,6 +420,17 @@ Do not claim the Delivery module production-ready until docs/DELIVERY_RLS_MANUAL
 Do not claim the full app production-ready from Delivery module local hardening alone.
 ```
 
+## Clean Data Layer Export Boundary
+
+```text
+Phase B clean views are applied and the admin delivery order Excel export now uses a narrow read-only adapter backed by public.delivery_orders_clean.
+Remote raw-vs-clean parity passed for 48 delivery rows, payment totals, order kind counts, status counts, latest 20 IDs, and driver display availability.
+The adapter does not change Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, raw-table writes, or Phase C views.
+This is still a staging-ready clean reporting boundary only. It does not make the delivery module or broader app production-ready.
+See docs/CLEAN_EXPORT_ADAPTER_QA.md.
+Final status remains B) dedicated-client staging-ready only.
+```
+
 ## Admin Role Access Model Boundary
 
 ```text

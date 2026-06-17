@@ -124,6 +124,22 @@ Phase C is not ready to start immediately. First migrate one or two Phase B cons
 
 After those checks pass, Phase C reporting views can be prioritized with better evidence about the app's clean-view consumption pattern.
 
+## Phase B Clean Export Adapter
+
+Implemented after the recommendation:
+
+- `services/deliveryCleanExportService.ts` reads `delivery_orders_clean` for admin delivery order exports only.
+- `app/delivery/AdminDeliveryAnalytics.tsx` now uses the clean export adapter for the order Excel export.
+- The adapter compares existing operational rows with clean-view rows before exporting and stops on parity differences.
+- The generated workbook includes clean operational columns and a `Clean Export QA` sheet.
+- Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, and shared `deliveryService` reads/writes remain unchanged.
+
+Validation is documented in:
+
+```text
+docs/CLEAN_EXPORT_ADAPTER_QA.md
+```
+
 ## Current Decision
 
-No app logic change should be made now. The next approval should be for a narrow implementation that adds a dedicated read-only clean report/export adapter while preserving raw-table writes and the current operational services.
+No broad app logic change should be made now. The next approval should be for owner traceability export only, or for additional parity-tested clean report/export adapters. Raw-table writes and operational services remain preserved.

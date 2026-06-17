@@ -343,6 +343,30 @@ Role checks:
 -- insert/update/delete on clean views should be denied.
 ```
 
+## Phase B App Adoption
+
+First approved app consumer:
+
+```text
+services/deliveryCleanExportService.ts
+app/delivery/AdminDeliveryAnalytics.tsx
+```
+
+Scope:
+
+- admin delivery order Excel export only;
+- read-only `delivery_orders_clean` query;
+- runtime parity check against existing operational rows before export;
+- clean workbook columns only;
+- no raw-table writes changed;
+- no Delivery Recording, Dispatch, lifecycle RPC, import, owner dashboard, or Delivery Coverage change.
+
+QA reference:
+
+```text
+docs/CLEAN_EXPORT_ADAPTER_QA.md
+```
+
 ## Phase C Backlog
 
 | View | Condition before implementation |
