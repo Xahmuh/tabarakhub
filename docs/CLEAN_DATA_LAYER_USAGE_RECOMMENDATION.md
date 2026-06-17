@@ -33,8 +33,8 @@ Use the clean views first for admin/reporting SQL and selected read-only export/
 | Area | Use Clean View? | Reason |
 |---|---:|---|
 | Admin/reporting SQL | Yes | This is the primary Phase B target. The view hides legacy duplicate fields and sensitive/technical columns while preserving RLS through `security_invoker`. |
-| Admin Delivery Analytics page | Later, selected read paths only | `app/delivery/AdminDeliveryAnalytics.tsx` currently loads `DeliveryOrder[]` through `deliveryService.orders.list` and exports that same in-memory shape. A clean-report adapter can be added after parity tests. |
-| Delivery order Excel exports | Yes, good first app consumer | Exports benefit from avoiding legacy columns. Add a dedicated clean export query/DTO before changing `exportOrdersToExcel`, because the helper currently accepts `DeliveryOrder[]`. |
+| Admin Delivery Analytics page | Yes, export path only | The page still loads operational analytics rows through `deliveryService.orders.list`, but its order Excel export now uses the dedicated clean export adapter backed by `delivery_orders_clean`. |
+| Delivery order Excel exports | Yes, first app consumer is live | Admin delivery order Excel export now uses a dedicated clean DTO/query, runtime parity checks, and clean workbook columns. Keep other export paths unchanged until separately validated. |
 | Owner Dashboard traceability/export | Later, narrow slice first | `ownerDashboardService.loadBundle` combines orders, coverage, branches, drivers, sales, shortages, and today's KPIs. Switch only traceability/export order rows after parity testing, not the whole dashboard. |
 | Owner Dashboard KPIs | No, not yet | KPI calculations currently share `DeliveryOrder` and coverage bundle data. A broad switch risks subtle KPI drift. |
 | Delivery Recording | No | `BranchRecordingPage` inserts, updates, deletes, bulk imports, and checks duplicates through raw table/RPC paths. It needs source-of-truth behavior. |
@@ -58,10 +58,10 @@ Use the clean views first for admin/reporting SQL and selected read-only export/
 
 ## Candidate App Adoption Order
 
-1. Add a read-only `deliveryCleanReportService` or equivalent adapter that queries `delivery_orders_clean` without changing `deliveryService.orders.list`.
-2. Add parity checks for admin/date/branch/payment filters against the current analytics/export output.
-3. Switch admin order export or owner traceability export to the clean DTO.
-4. Measure remote performance for typical owner/admin date ranges.
+1. Keep the Admin Delivery Analytics order Excel export on the approved clean export adapter.
+2. Use the Admin export as the Phase B adoption proof point and monitor parity/export behavior.
+3. Consider owner traceability export as the next narrow clean DTO candidate.
+4. Measure remote performance for typical owner/admin date ranges before broader report adoption.
 5. Only after that, decide whether any dashboard read path should move from raw service to clean views.
 
 ## Raw Access That Should Stay
@@ -139,6 +139,8 @@ Validation is documented in:
 ```text
 docs/CLEAN_EXPORT_ADAPTER_QA.md
 ```
+
+Authenticated Admin browser QA on 2026-06-17 confirmed the export downloads and opens as `Delivery_Clean_All_2026-06-01_2026-06-17.xlsx`, with 48 clean data rows, the expected clean operational headers, hidden legacy/raw fields, hidden sensitive fields, and a `Clean Export QA` worksheet where parity checks report `YES`.
 
 ## Current Decision
 

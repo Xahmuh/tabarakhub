@@ -425,6 +425,8 @@ Do not claim the full app production-ready from Delivery module local hardening 
 ```text
 Phase B clean views are applied and the admin delivery order Excel export now uses a narrow read-only adapter backed by public.delivery_orders_clean.
 Remote raw-vs-clean parity passed for 48 delivery rows, payment totals, order kind counts, status counts, latest 20 IDs, and driver display availability.
+Authenticated Admin browser QA passed functional export validation on 2026-06-17: the Admin session opened Delivery Analytics, the clean Excel export downloaded, the workbook opened, 48 rows were exported, clean operational headers were present, legacy/raw headers were absent, sensitive auth/device fields were absent, internal transfer rows had blank geography by design, and the workbook QA sheet reported parity checks as YES.
+The authenticated Chrome session was controlled through visible UI automation rather than CDP, so no visible app error/crash/export failure was observed, but direct console/network capture was not available in that session.
 The adapter does not change Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, raw-table writes, or Phase C views.
 This is still a staging-ready clean reporting boundary only. It does not make the delivery module or broader app production-ready.
 See docs/CLEAN_EXPORT_ADAPTER_QA.md.

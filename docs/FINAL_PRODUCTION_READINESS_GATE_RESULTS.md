@@ -1,5 +1,28 @@
 # Final Production Readiness Gate Results
 
+## Clean Delivery Order Export Adapter Browser QA Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Admin session | Pass | Production `/delivery` was opened in an authenticated browser session showing role `ADMIN`. |
+| Export action | Pass | Admin Delivery Analytics `EXCEL` action completed without visible app crash, parity error, or export failure. |
+| File download | Pass | `Delivery_Clean_All_2026-06-01_2026-06-17.xlsx` downloaded. |
+| Workbook open | Pass | Workbook opened with ExcelJS and contained `Clean Delivery Orders` plus `Clean Export QA`. |
+| Row count | Pass | 48 clean data rows exported; total row shows `48 orders`. |
+| Clean columns | Pass | Clean operational headers present: order id/date/type/status, branch, value/payment, block/area/governorate, driver code/name, and lifecycle timestamps. |
+| Legacy/raw columns | Pass | `order_value`, `payment_method`, `order_type`, raw legacy `driver_name`, `transfer_time`, `business_date`, `deleted_at`, `created_by_branch_id`, and `updated_by_branch_id` were absent. |
+| Sensitive fields | Pass | No auth, token, cookie, session, password, or device fields were exported. |
+| Data sanity | Pass | `actual_delivery=46`, `internal_transfer=2`, transfer geography blank by design, payment totals sane, and driver display populated for 48 rows. |
+| Workbook parity sheet | Pass | `Clean Export QA` sheet reported `YES` for row count, latest 20 IDs, payment totals, order kind counts, status counts, and driver display availability. |
+| Console/network capture | Partial | No visible app error or failed export state appeared. Direct CDP console/network capture was unavailable because the approved authenticated Chrome session was controlled through visible UI automation. |
+| Production readiness | Not promoted | Phase C, Phase D, owner traceability clean export, and broader production readiness remain pending. |
+
 ## Phase B Clean Data Layer Apply Gate - 2026-06-17
 
 Decision:
@@ -667,6 +690,18 @@ Authenticated insert/update/delete: false.
 Admin simulation: 48 rows across 4 branches.
 Owner simulation: 48 rows across 4 branches.
 T001 branch simulation: 0 rows, no cross-branch rows; T001 has 0 raw delivery rows in current linked data.
+Authenticated Admin browser QA: functional export/browser workbook validation passed on 2026-06-17.
+Downloaded workbook: Delivery_Clean_All_2026-06-01_2026-06-17.xlsx.
+Workbook sheets: Clean Delivery Orders, Clean Export QA.
+Exported data rows: 48.
+Workbook total row: 48 orders, 1417.798 BHD.
+Clean headers present: Order ID, Date, Type, Status, Branch Code, Branch, Value (BHD), Payment, Block, Area, Governorate, Driver Code, Driver, Assigned At, Picked Up At, Delivered At, Cancelled At, Cancel Reason.
+Legacy/raw headers absent: order_value, payment_method, order_type, raw legacy driver_name, transfer_time, business_date, deleted_at, created_by_branch_id, updated_by_branch_id.
+Sensitive auth/token/session/device fields: absent.
+actual_delivery rows: 46 with value/payment/geography where available.
+internal_transfer rows: 2 with blank block/area/governorate by design.
+Payment totals: CARD=175.396, BP=1068.702, CASH=173.700, INTERNAL_TRANSFER=0.000.
+Driver display rows: 48.
 Operational writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, Phase C, and Phase D: unchanged.
 Documentation: docs/CLEAN_EXPORT_ADAPTER_QA.md.
 ```

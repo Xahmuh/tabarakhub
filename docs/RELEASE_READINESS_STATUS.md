@@ -1,5 +1,28 @@
 # Release Readiness Status
 
+## Clean Delivery Order Export Adapter Admin Browser QA - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Authenticated Admin browser session opened `https://www.tabarakpharmacy.com/delivery` and showed the active role as `ADMIN`.
+- Admin Delivery Analytics order Excel export completed and downloaded `Delivery_Clean_All_2026-06-01_2026-06-17.xlsx`.
+- Workbook opened successfully with `Clean Delivery Orders` and `Clean Export QA` sheets.
+- Exported workbook contained 48 data rows plus a total row of `48 orders` and total value `1417.798`.
+- Clean operational headers were present, including order id/date/type/status, branch, value/payment, geography, driver, and lifecycle timestamps.
+- Legacy/raw headers such as `order_value`, `payment_method`, `order_type`, raw legacy `driver_name`, `transfer_time`, `business_date`, `deleted_at`, `created_by_branch_id`, and `updated_by_branch_id` were absent.
+- Sensitive auth, token, cookie, session, password, and device fields were absent.
+- Data sanity passed for 46 `actual_delivery` rows, 2 `internal_transfer` rows with intentionally blank geography, payment totals, and driver display availability.
+- No visible app crash, parity error, or export failure appeared. Direct CDP console/network capture was not available for the manually authenticated Chrome session.
+- Phase C remains pending; raw operational write paths remain unchanged.
+
+Reference: `docs/CLEAN_EXPORT_ADAPTER_QA.md`.
+
 ## Phase B Clean Data Layer Apply - 2026-06-17
 
 Status:

@@ -90,6 +90,82 @@ The export stops and shows an error if any of these checks differ:
 
 The generated workbook includes a `Clean Export QA` worksheet with the parity result.
 
+## Authenticated Admin Browser QA
+
+Authenticated Admin browser QA was run on 2026-06-17 against:
+
+```text
+https://www.tabarakpharmacy.com/delivery
+```
+
+Result:
+
+- Active browser session showed `Tabarak` with role `ADMIN`.
+- Delivery module opened from the Operations Modules launcher.
+- Admin Delivery Analytics loaded with the `EXCEL` export action enabled.
+- Export action completed without an app crash or visible export/parity error.
+- Downloaded workbook: `Delivery_Clean_All_2026-06-01_2026-06-17.xlsx`.
+- Workbook opened successfully with ExcelJS.
+- Workbook sheets: `Clean Delivery Orders`, `Clean Export QA`.
+- Exported data rows: 48.
+- Total row: `48 orders`, total value `1417.798`.
+- `Clean Export QA` worksheet reported `YES` for row count, latest 20 IDs, payment totals, order kind counts, status counts, and driver display availability.
+
+Console/network note:
+
+- The authenticated Chrome Default session was controlled through visible UI automation, not a Chrome DevTools Protocol session.
+- No visible app error, crash, parity warning, or failed export state appeared after export.
+- Direct console and network request capture was not available from this non-CDP session.
+
+## Browser Export Column Validation
+
+The downloaded workbook contained these clean operational headers:
+
+- Order ID
+- Date
+- Type
+- Status
+- Branch Code
+- Branch
+- Value (BHD)
+- Payment
+- Block
+- Area
+- Governorate
+- Driver Code
+- Driver
+- Assigned At
+- Picked Up At
+- Delivered At
+- Cancelled At
+- Cancel Reason
+
+The downloaded workbook did not contain these raw or legacy headers:
+
+- `order_value`
+- `payment_method`
+- `order_type`
+- raw legacy `driver_name`
+- `transfer_time`
+- `business_date`
+- `deleted_at`
+- `created_by_branch_id`
+- `updated_by_branch_id`
+
+No auth, token, cookie, session, password, or device fields were exported.
+
+## Browser Export Data Sanity
+
+Downloaded workbook data sanity:
+
+- `actual_delivery`: 46 rows.
+- `actual_delivery` rows have value/payment data.
+- `actual_delivery` rows have block, area, or governorate data where available.
+- `internal_transfer`: 2 rows.
+- `internal_transfer` rows correctly have blank block/area/governorate by design.
+- Payment totals: `CARD=175.396`, `BP=1068.702`, `CASH=173.700`, `INTERNAL_TRANSFER=0.000`.
+- Driver display availability: 48 rows had `Driver Code` or `Driver` populated.
+
 ## Remote SQL Parity Result
 
 Read-only SQL validation on the linked Supabase project returned:
@@ -164,3 +240,4 @@ These paths remain on raw operational tables or existing RPCs:
 - Delivery Coverage remains on existing raw/domain services.
 - Phase C views remain pending.
 - Phase D cleanup/drop-column work remains blocked pending separate approval.
+- Direct CDP console/network export tracing remains optional follow-up if the browser can be opened with a debugging endpoint.
