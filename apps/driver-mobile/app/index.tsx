@@ -56,6 +56,7 @@ import {
 } from '../src/theme';
 
 const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
+const hubFooterLogo = require('../src/assets/logo/hublogo.png');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
@@ -750,56 +751,64 @@ const LoginScreen = ({
   return (
     <View style={styles.safe}>
       <View style={styles.loginWrap}>
-        <View style={styles.loginBrandStage}>
-          <Image source={tabarakLogo} style={styles.loginLogo} resizeMode="cover" />
-          <Text style={[styles.loginAppBadgeText, isRtl && styles.rtlText]}>{copy.login.appBadge}</Text>
-          <Text style={[styles.loginTitle, isRtl && styles.rtlText]}>{copy.login.title}</Text>
-          <Text style={[styles.loginSub, isRtl && styles.rtlText]}>{copy.login.sub}</Text>
+        <View style={styles.loginPanel}>
+          <View style={styles.loginBrandStack}>
+            <View style={styles.loginLogoFrame}>
+              <Image source={tabarakLogo} style={styles.loginLogo} resizeMode="cover" />
+            </View>
+            <Text style={[styles.loginAppBadgeText, isRtl && styles.rtlText]}>{copy.login.appBadge}</Text>
+          </View>
+
+          <View style={styles.loginPanelHeader}>
+            <Text style={[styles.loginTitle, isRtl && styles.rtlText]}>{copy.login.title}</Text>
+            <Text style={[styles.loginPanelTitle, isRtl && styles.rtlText]}>{copy.login.welcome}</Text>
+            {copy.login.panelSub ? (
+              <Text style={[styles.loginPanelSub, isRtl && styles.rtlText]}>{copy.login.panelSub}</Text>
+            ) : null}
+          </View>
+
+          <View style={styles.loginForm}>
+            <LoginField label={copy.login.identifier} isRtl={isRtl}>
+              <TextInput
+                value={identifier}
+                onChangeText={setIdentifier}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                placeholder={copy.login.identifierPlaceholder}
+                placeholderTextColor={colors.slate400}
+                style={[styles.input, isRtl && styles.rtlInput]}
+              />
+            </LoginField>
+            <LoginField label={copy.login.password} isRtl={isRtl}>
+              <View style={[styles.passwordField, isRtl && styles.rtlRow]}>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!passwordVisible}
+                  placeholder={copy.login.passwordPlaceholder}
+                  placeholderTextColor={colors.slate400}
+                  style={[styles.passwordInput, isRtl && styles.rtlInput]}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                  accessibilityState={{ checked: passwordVisible }}
+                  onPress={() => setPasswordVisible(previous => !previous)}
+                  style={({ pressed }) => [styles.passwordEyeButton, pressed && styles.buttonPressed]}
+                >
+                  <PasswordEyeIcon visible={passwordVisible} />
+                </Pressable>
+              </View>
+            </LoginField>
+            <Button label={isSubmitting ? copy.login.signingIn : copy.login.signIn} onPress={submit} disabled={isSubmitting} />
+          </View>
+
         </View>
 
-        <View style={styles.loginPanel}>
-          <View style={styles.loginPanelHeader}>
-            <Text style={[styles.loginPanelTitle, isRtl && styles.rtlText]}>{copy.login.welcome}</Text>
-            <Text style={[styles.loginPanelSub, isRtl && styles.rtlText]}>{copy.login.panelSub}</Text>
-          </View>
-          <LoginField label={copy.login.identifier} isRtl={isRtl}>
-            <TextInput
-              value={identifier}
-              onChangeText={setIdentifier}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              placeholder={copy.login.identifierPlaceholder}
-              placeholderTextColor={colors.slate400}
-              style={[styles.input, isRtl && styles.rtlInput]}
-            />
-          </LoginField>
-          <LoginField label={copy.login.password} isRtl={isRtl}>
-            <View style={[styles.passwordField, isRtl && styles.rtlRow]}>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!passwordVisible}
-                placeholder={copy.login.passwordPlaceholder}
-                placeholderTextColor={colors.slate400}
-                style={[styles.passwordInput, isRtl && styles.rtlInput]}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
-                accessibilityState={{ checked: passwordVisible }}
-                onPress={() => setPasswordVisible(previous => !previous)}
-                style={({ pressed }) => [styles.passwordEyeButton, pressed && styles.buttonPressed]}
-              >
-                <PasswordEyeIcon visible={passwordVisible} />
-              </Pressable>
-            </View>
-          </LoginField>
-          <Button label={isSubmitting ? copy.login.signingIn : copy.login.signIn} onPress={submit} disabled={isSubmitting} />
-          <View style={[styles.loginFootnote, isRtl && styles.rtlRow]}>
-            <View style={styles.loginFootnoteDot} />
-            <Text style={[styles.loginFootnoteText, isRtl && styles.rtlText]}>{copy.login.footnote}</Text>
-          </View>
+        <View style={styles.loginFooterBrand}>
+          <Image source={hubFooterLogo} style={styles.loginFooterLogo} resizeMode="contain" />
+          <Text style={[styles.loginFooterCredit, isRtl && styles.rtlText]}>Developed by Ahmed Elsherbini</Text>
         </View>
       </View>
     </View>
@@ -2740,9 +2749,9 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   loginWrap: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    gap: spacing.xl,
     backgroundColor: colors.page
   },
   loginHero: {
@@ -2754,43 +2763,67 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card
   },
-  loginBrandStage: {
+  loginBrandStack: {
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    gap: spacing.xs
+    gap: spacing.sm
+  },
+  loginLogoFrame: {
+    width: 82,
+    height: 82,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card
   },
   loginLogo: {
-    width: 96,
-    height: 96,
+    width: 68,
+    height: 68,
     borderRadius: 22,
     backgroundColor: colors.brand
   },
   loginAppBadgeText: {
     color: colors.brand,
-    fontSize: 12,
+    fontSize: 10,
+    fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 1.2
   },
   loginPanel: {
-    borderRadius: 20,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 28,
+    gap: spacing.lg,
     ...shadows.card
   },
   loginPanelHeader: {
-    gap: 5
+    alignItems: 'center',
+    gap: spacing.xs
   },
   loginPanelTitle: {
     color: colors.ink,
-    fontSize: 22
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 31,
+    textAlign: 'center'
   },
   loginPanelSub: {
     color: colors.muted,
     fontSize: 13,
-    lineHeight: 19
+    lineHeight: 20,
+    textAlign: 'center'
+  },
+  loginForm: {
+    gap: spacing.md,
+    paddingTop: spacing.xs
   },
   loginField: {
     gap: 7
@@ -2801,25 +2834,23 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.7
   },
-  loginFootnote: {
-    flexDirection: 'row',
+  loginFooterBrand: {
     alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceMuted,
-    padding: spacing.md
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: spacing.xl
   },
-  loginFootnoteDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.success
+  loginFooterLogo: {
+    width: 132,
+    height: 54,
+    opacity: 0.88
   },
-  loginFootnoteText: {
-    flex: 1,
+  loginFooterCredit: {
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    textAlign: 'center'
   },
   eyebrow: {
     color: colors.brand,
@@ -2827,9 +2858,12 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   loginTitle: {
     color: colors.ink,
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center'
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8
   },
   loginSub: {
     color: colors.muted,
@@ -2838,18 +2872,18 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     textAlign: 'center'
   },
   input: {
-    minHeight: 50,
+    minHeight: 54,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.md,
     color: colors.ink,
     fontSize: 15,
     fontWeight: '800'
   },
   passwordField: {
-    minHeight: 50,
+    minHeight: 54,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -2857,11 +2891,11 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: 14
+    paddingHorizontal: spacing.md
   },
   passwordInput: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     color: colors.ink,
     fontSize: 15,
     fontWeight: '800',
