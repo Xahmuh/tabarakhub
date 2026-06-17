@@ -1,5 +1,48 @@
 # Final Production Readiness Gate Results
 
+<!-- project-wide-db-cleanup-audit-20260617:start -->
+
+## Project-Wide DB Cleanup Audit Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Scope | Pass | All 62 public base tables inventoried. |
+| Row and column counts | Pass | Exact table row counts and 644 column non-null counts collected with aggregate-only SQL. |
+| Code references | Pass | Exact-name scan completed across requested code, migration, function, driver, and doc paths. |
+| Sensitive data handling | Pass | No raw sensitive values, free text, tokens, voucher codes, passwords, cookies, or secrets were selected or printed. |
+| Clean views | Recommendation only | Future Phase C candidates documented; no new views created. Existing Phase B views were not duplicated. |
+| Drop readiness | Not approved | No object is safe to drop now; all candidates require documented gates and explicit approval. |
+| Comments migration | Applied | `supabase/migrations/20260617184241_mark_legacy_schema_deprecated.sql` contains comments only, applied successfully, and metadata validation found 21 deprecated/legacy column descriptions. |
+| Production readiness | Not promoted | Status remains staging-ready only. |
+
+<!-- project-wide-db-cleanup-audit-20260617:end -->
+
+## Owner Traceability Clean View Adoption Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Scope | Pass | Only Owner traceability table rows and traceability Excel export were switched to `delivery_orders_clean`. |
+| Raw source of truth | Pass | `deliveryService.orders.list`, raw writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, and Delivery Coverage remain unchanged. |
+| KPI boundary | Pass | Owner overview, branch, and driver KPIs remain on the existing raw-derived customer-order slice. |
+| Parity | Pass | Owner traceability customer-order scope matched raw vs clean: 46 rows, latest 20 IDs, payment totals, delivery status counts, and driver display rows. |
+| Internal transfers | Pass | Current Owner traceability scope still excludes `internal_transfer`; linked data has 2 raw and 2 clean internal-transfer rows outside that scope. |
+| RLS/access | Pass | `anon` denied, Admin read 48 rows/4 branches, Owner read 48 rows/4 branches, T001 branch saw 0 rows and 0 cross-branch rows, authenticated write grants were absent, and owner write attempt was blocked by the view. |
+| Sensitive/legacy fields | Pass | Owner traceability export uses clean operational columns and does not export notes, raw legacy columns, created/updated-by fields, auth/session/token/device fields, or delete markers. |
+| Browser QA | Pending | Authenticated Owner browser QA for the new traceability table/export remains pending. |
+| Production readiness | Not promoted | Phase C, Phase D/drop-column cleanup, broader production readiness, and Owner browser QA remain pending. |
+
 ## Clean Delivery Order Export Adapter Browser QA Gate - 2026-06-17
 
 Decision:
@@ -21,7 +64,7 @@ B) dedicated-client staging-ready only
 | Data sanity | Pass | `actual_delivery=46`, `internal_transfer=2`, transfer geography blank by design, payment totals sane, and driver display populated for 48 rows. |
 | Workbook parity sheet | Pass | `Clean Export QA` sheet reported `YES` for row count, latest 20 IDs, payment totals, order kind counts, status counts, and driver display availability. |
 | Console/network capture | Partial | No visible app error or failed export state appeared. Direct CDP console/network capture was unavailable because the approved authenticated Chrome session was controlled through visible UI automation. |
-| Production readiness | Not promoted | Phase C, Phase D, owner traceability clean export, and broader production readiness remain pending. |
+| Production readiness | Not promoted | Phase C, Phase D, Owner traceability browser QA, and broader production readiness remain pending. |
 
 ## Phase B Clean Data Layer Apply Gate - 2026-06-17
 
@@ -702,8 +745,33 @@ actual_delivery rows: 46 with value/payment/geography where available.
 internal_transfer rows: 2 with blank block/area/governorate by design.
 Payment totals: CARD=175.396, BP=1068.702, CASH=173.700, INTERNAL_TRANSFER=0.000.
 Driver display rows: 48.
-Operational writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, Phase C, and Phase D: unchanged.
+Operational writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, Delivery Coverage, Phase C, and Phase D: unchanged.
 Documentation: docs/CLEAN_EXPORT_ADAPTER_QA.md.
+```
+
+Owner Traceability Clean View verification:
+
+```text
+Scope: Owner traceability rows and traceability Excel export only.
+Source: public.delivery_orders_clean.
+Adapter: services/ownerTraceabilityCleanService.ts.
+UI integration: app/owner-dashboard/OwnerDashboardPage.tsx.
+Owner bundle integration: app/owner-dashboard/ownerDashboardService.ts.
+Raw customer-order rows: 46.
+Clean traceability rows: 46.
+Latest 20 IDs: match.
+Payment totals: BP=1068.702, CARD=175.396, CASH=173.700.
+Delivery status counts: assigned=11, delivered=10, recorded=25.
+Driver display rows: raw=46, clean=46.
+Internal transfers: excluded from Owner traceability scope; linked data has 2 raw and 2 clean internal_transfer rows.
+Anon read: denied.
+Admin simulation: 48 rows across 4 branches.
+Owner simulation: 48 rows across 4 branches.
+T001 branch simulation: 0 rows, no cross-branch rows.
+Authenticated insert/update/delete grants: false.
+Owner write attempt: blocked by view.
+Owner KPIs, branch KPIs, driver KPIs, map/coverage, raw writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, Phase C, and Phase D: unchanged.
+Documentation: docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md.
 ```
 
 ## Final Decision

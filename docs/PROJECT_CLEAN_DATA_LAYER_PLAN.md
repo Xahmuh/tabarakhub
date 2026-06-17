@@ -1,5 +1,40 @@
 # Project Clean Data Layer Plan
 
+<!-- project-wide-clean-data-layer-audit-20260617:start -->
+
+## Project-Wide Clean Data Layer Audit - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Project-wide audit now covers all 62 public base tables. Phase B views already exist and must not be duplicated: `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean`.
+
+Future clean-view candidates are recommendations only:
+
+| Candidate | Sources | Recommendation |
+| --- | --- | --- |
+| `operations_tasks_clean` | operations_tasks, branches, optional profile display fields | Future Phase C only; hide event comments by default; role-scoped authenticated reporting. |
+| `quality_feedback_clean` | feedback_responses | Future Phase C only after RLS/free-text review; anonymize and omit raw comments from broad views. |
+| `lost_sales_clean` | lost_sales, branches, products, pharmacists | Future Phase C reporting view; keep raw table as write source. |
+| `shortages_clean` | shortages, branches, products, pharmacists | Future Phase C reporting view; hide JSON history unless a scoped detail view is approved. |
+| `cash_differences_clean` | cash_differences, branches | Future Phase C with finance/security signoff; hide invoice references and manager comments from broad reporting. |
+| `spin_activity_aggregate` | spins, spin_prizes, branches | Aggregate only; never expose token, voucher, customer, IP, or contact fields. |
+
+Spin/customer/voucher tables remain aggregate-only candidates. Raw `customers`, `spin_sessions`, `spins`, `voucher_shares`, `branch_reviews`, `feedback_responses`, `cash_differences`, and legacy backup tables must not be exposed through broad raw views.
+
+Reference docs:
+
+- `docs/PROJECT_WIDE_DB_TABLE_INVENTORY.md`
+- `docs/PROJECT_WIDE_DB_CLEANUP_AUDIT.md`
+- `docs/PROJECT_WIDE_DROP_READINESS_PLAN.md`
+
+No Phase C/D view was created in this pass. No destructive cleanup was performed.
+
+<!-- project-wide-clean-data-layer-audit-20260617:end -->
+
 Status:
 
 ```text
@@ -29,7 +64,7 @@ Validation summary:
 - `authenticated` can select clean views and cannot insert/update/delete them.
 - T001 branch simulation is scoped to `T001`.
 - Owner/admin read according to the existing read-all role model.
-- No app logic was changed.
+- No app logic was changed during migration apply; later narrow app adoption is documented below.
 - No Phase C/D views were implemented.
 
 ## Phase B Prepared
@@ -359,12 +394,35 @@ Scope:
 - runtime parity check against existing operational rows before export;
 - clean workbook columns only;
 - no raw-table writes changed;
-- no Delivery Recording, Dispatch, lifecycle RPC, import, owner dashboard, or Delivery Coverage change.
+- no Delivery Recording, Dispatch, lifecycle RPC, import, Owner KPI, Owner coverage, or Delivery Coverage change.
 
 QA reference:
 
 ```text
 docs/CLEAN_EXPORT_ADAPTER_QA.md
+```
+
+Second approved app consumer:
+
+```text
+services/ownerTraceabilityCleanService.ts
+app/owner-dashboard/ownerDashboardService.ts
+app/owner-dashboard/OwnerDashboardPage.tsx
+```
+
+Scope:
+
+- Owner traceability table rows and traceability Excel export only;
+- read-only `delivery_orders_clean` query;
+- runtime parity check against the existing Owner customer-order scope before returning clean traceability rows;
+- previous Owner traceability behavior is preserved by excluding `internal_transfer` rows;
+- Owner overview KPIs, branch KPIs, driver KPIs, map/coverage analytics, Delivery Recording, Dispatch, lifecycle RPCs, imports, and raw writes remain unchanged;
+- no Phase C/D views were implemented.
+
+QA reference:
+
+```text
+docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md
 ```
 
 ## Phase C Backlog

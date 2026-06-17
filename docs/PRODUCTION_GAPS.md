@@ -1,5 +1,32 @@
 # Production Gaps
 
+<!-- project-wide-db-cleanup-audit-20260617:start -->
+
+## Project-Wide DB Cleanup Audit - 2026-06-17
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated non-destructively:
+
+- All 62 public base tables were inventoried from the linked Supabase catalog.
+- Exact row counts and per-column non-null counts were collected without selecting raw sensitive values.
+- Code/reference search was run across app, services, lib, utils, root types, Supabase migrations/functions, driver mobile, docs, and historical db migrations.
+- New cleanup control docs were created for table inventory, cleanup audit, and drop readiness.
+- Comments-only migration `supabase/migrations/20260617184241_mark_legacy_schema_deprecated.sql` was applied to the linked Supabase project and validated through metadata-only checks.
+
+Open blockers:
+
+- No table or column is safe to drop now.
+- Phase C clean views need explicit approval plus RLS/free-text/security review.
+- Sensitive tables and backup/archive tables require PII/security/retention signoff before any cleanup.
+- Exact-name search misses do not prove a table is unused; exports, RPCs, reports, and operator workflows must still be checked before drop approval.
+
+<!-- project-wide-db-cleanup-audit-20260617:end -->
+
 ## Phase B Clean Data Layer Applied - 2026-06-17
 
 Current status:
@@ -427,9 +454,23 @@ Phase B clean views are applied and the admin delivery order Excel export now us
 Remote raw-vs-clean parity passed for 48 delivery rows, payment totals, order kind counts, status counts, latest 20 IDs, and driver display availability.
 Authenticated Admin browser QA passed functional export validation on 2026-06-17: the Admin session opened Delivery Analytics, the clean Excel export downloaded, the workbook opened, 48 rows were exported, clean operational headers were present, legacy/raw headers were absent, sensitive auth/device fields were absent, internal transfer rows had blank geography by design, and the workbook QA sheet reported parity checks as YES.
 The authenticated Chrome session was controlled through visible UI automation rather than CDP, so no visible app error/crash/export failure was observed, but direct console/network capture was not available in that session.
-The adapter does not change Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, raw-table writes, or Phase C views.
+The admin adapter does not change Delivery Recording, Dispatch, lifecycle RPCs, imports, Delivery Coverage, raw-table writes, or Phase C views.
 This is still a staging-ready clean reporting boundary only. It does not make the delivery module or broader app production-ready.
 See docs/CLEAN_EXPORT_ADAPTER_QA.md.
+Final status remains B) dedicated-client staging-ready only.
+```
+
+## Owner Traceability Clean View Boundary
+
+```text
+Owner traceability rows and traceability Excel export now use a narrow read-only adapter backed by public.delivery_orders_clean.
+Remote owner traceability parity passed for the preserved customer-order scope: raw rows=46, clean rows=46, latest 20 IDs matched, status counts matched, payment totals matched, and driver display rows matched.
+The current Owner traceability scope still excludes internal_transfer rows to preserve existing dashboard behavior; linked data contains 2 raw and 2 clean internal_transfer rows outside that scope.
+RLS/access validation passed: anon denied, admin read 48 rows/4 branches, owner read 48 rows/4 branches, T001 branch saw 0 rows and 0 cross-branch rows, authenticated insert/update/delete grants are absent, and an owner write attempt was blocked by the view.
+Owner overview KPIs, branch KPIs, driver KPIs, map/coverage analytics, Delivery Recording, Dispatch, lifecycle RPCs, imports, shared raw services, and raw-table writes remain unchanged.
+Authenticated Owner browser QA for the new traceability table/export remains pending.
+Phase C views, Phase D cleanup/drop columns, and broader production readiness remain pending.
+See docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md.
 Final status remains B) dedicated-client staging-ready only.
 ```
 

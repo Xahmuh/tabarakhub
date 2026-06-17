@@ -1,5 +1,27 @@
 # Release Readiness Status
 
+<!-- project-wide-db-cleanup-audit-20260617:start -->
+
+## Project-Wide DB Cleanup Audit - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Completed a project-wide, non-destructive cleanup readiness audit for 62 public base tables and 644 columns.
+- Created `docs/PROJECT_WIDE_DB_TABLE_INVENTORY.md`, `docs/PROJECT_WIDE_DB_CLEANUP_AUDIT.md`, and `docs/PROJECT_WIDE_DROP_READINESS_PLAN.md`.
+- Updated the clean data layer plan with Phase C recommendations.
+- Applied comments-only migration `supabase/migrations/20260617184241_mark_legacy_schema_deprecated.sql`; metadata validation confirmed the deprecation comments without selecting table data.
+- No destructive cleanup or deploy was performed.
+
+Production readiness is not promoted. Future drops require all documented gates plus explicit operator approval.
+
+<!-- project-wide-db-cleanup-audit-20260617:end -->
+
 ## Clean Delivery Order Export Adapter Admin Browser QA - 2026-06-17
 
 Status:
@@ -388,7 +410,8 @@ Spin Static QR browser/manual checks, including Google Maps return and sessionSt
 Authenticated Customer Engagement Generator browser QA must pass for manager/admin/owner access, desktop/tablet/mobile layout, Static/Single/Multi mode behavior, copy feedback, JPG/PDF download behavior, Talabat and WhatsApp sharing panels, and no unexpected console/network errors.
 Storage bucket policies are hardened so no bucket allows unauthenticated writes unless formally accepted for a non-sensitive public workflow. `contributions` is hardened; manager write smoke remains pending with valid manager credentials.
 No frontend secrets are exposed.
-Phase B Clean Export Adapter is implemented for admin delivery order Excel export only. It reads `public.delivery_orders_clean`, runs runtime parity against existing operational rows before export, and leaves raw-table writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, Delivery Coverage, and Phase C untouched. Linked-project QA passed for 48 raw/clean rows, latest 20 IDs, payment totals, order kind counts, delivery status counts, driver display rows, anon denial, authenticated select-only grants, admin read, owner read, and T001 no-cross-branch scope. See docs/CLEAN_EXPORT_ADAPTER_QA.md.
+Phase B Clean Export Adapter is implemented for admin delivery order Excel export only. It reads `public.delivery_orders_clean`, runs runtime parity against existing operational rows before export, and leaves raw-table writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, Delivery Coverage, and Phase C untouched. Linked-project QA passed for 48 raw/clean rows, latest 20 IDs, payment totals, order kind counts, delivery status counts, driver display rows, anon denial, authenticated select-only grants, admin read, owner read, and T001 no-cross-branch scope. See docs/CLEAN_EXPORT_ADAPTER_QA.md.
+Owner traceability clean-view adoption is implemented for Owner traceability rows/export only. It reads `public.delivery_orders_clean`, preserves the existing customer-order scope by excluding `internal_transfer`, passed linked-project parity for 46 raw/clean rows plus payment/status/latest-ID/driver-display checks, and leaves Owner KPIs, coverage, raw writes, Delivery Recording, Dispatch, lifecycle RPCs, imports, Phase C, and Phase D untouched. Authenticated Owner browser QA for the new traceability table/export remains pending. See docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md.
 Previously known approved local migration gaps were resolved on the linked Supabase project: the seven schema-present/manual-applied migrations have been repaired as applied, and 20260613103000, 20260613131500, 20260613134500, 20260614150000, 20260614173000, 20260614190000, 20260614193000, 20260614200000, and 20260614203000 have been applied and recorded. Re-check migration history for each future target Supabase project before deployment.
 Legacy `public.branches` placeholder row `code/name/role = manager` must be archived or removed only after explicit backup-retention approval because it is referenced by `legacy_branch_password_backups`.
 npm audit remains clean, or any future dependency risk is formally remediated or accepted.
