@@ -82,24 +82,97 @@ const syncSupervisorBranchAccess = async (
   }
 };
 
-const syncDeliverySupervisorAccess = async (
-  supervisorId: string,
-  nextSupervisorUserId?: string | null
+const getSupervisorAssignment = async (
+  supervisorId?: string | null,
+  supervisorUserId?: string | null
 ) => {
+  if (!supervisorId) {
+    return { supervisorId: null, supervisorName: null, supervisorUserId: null };
+  }
+
+  const { data, error } = await supabaseClient
+    .from('delivery_supervisors')
+    .select('id, name, user_id')
+    .eq('id', supervisorId)
+    .maybeSingle();
+  if (error) throw error;
+
+  return {
+    supervisorId: data?.id || supervisorId,
+    supervisorName: data?.name || null,
+    supervisorUserId: supervisorUserId || data?.user_id || null
+  };
+};
+
+const toArea = (row: any): DeliveryArea => {
+  const supervisor = Array.isArray(row.delivery_supervisors)
+    ? row.delivery_supervisors[0]
+    : row.delivery_supervisors;
+  return {
+    id: row.id,
+    name: row.name,
+    governorate: row.governorate,
+    supervisorId: row.supervisor_id,
+    supervisorName: supervisor?.name || undefined,
+    supervisorUserId: row.supervisor_user_id,
+    notes: row.notes || undefined,
+    isActive: row.is_active
+  };
+};
+
+const getAreaAssignment = async (areaId?: string | null) => {
+  if (!areaId) {
+    return {
+      areaId: null,
+      areaName: null,
+      governorate: null,
+      supervisorId: null,
+      supervisorName: null,
+      supervisorUserId: null
+    };
+  }
+
+  const { data, error } = await supabaseClient
+    .from('delivery_areas')
+    .select('id, name, governorate, supervisor_id, supervisor_user_id, delivery_supervisors(name, user_id)')
+    .eq('id', areaId)
+    .maybeSingle();
+  if (error) throw error;
+
+  const supervisor = Array.isArray(data?.delivery_supervisors)
+    ? data?.delivery_supervisors[0]
+    : data?.delivery_supervisors;
+
+  return {
+    areaId: data?.id || null,
+    areaName: data?.name || null,
+    governorate: data?.governorate || null,
+    supervisorId: data?.supervisor_id || null,
+    supervisorName: supervisor?.name || null,
+    supervisorUserId: data?.supervisor_user_id || supervisor?.user_id || null
+  };
+};
+
+const syncAreaSupervisorAccess = async (
+  areaId: string,
+  supervisorId?: string | null,
+  supervisorUserId?: string | null
+) => {
+  const supervisorAssignment = await getSupervisorAssignment(supervisorId, supervisorUserId);
   const { data, error } = await supabaseClient
     .from('branch_classifications')
     .select('branch_id, supervisor_user_id')
-    .eq('supervisor_id', supervisorId);
+    .eq('area_id', areaId);
   if (error) throw error;
 
   const rows = data || [];
   if (rows.length === 0) return;
 
-  const branchIds = rows.map(row => row.branch_id).filter(Boolean);
+  const branchIds = Array.from(new Set(rows.map(row => row.branch_id).filter(Boolean)));
   const previousUserIds = Array.from(new Set(
     rows
       .map(row => row.supervisor_user_id)
-      .filter((userId): userId is string => Boolean(userId) && userId !== nextSupervisorUserId)
+      .filter((userId): userId is string => Boolean(userId) && userId !== supervisorAssignment.supervisorUserId)
   ));
 
   if (previousUserIds.length > 0 && branchIds.length > 0) {
@@ -113,18 +186,50 @@ const syncDeliverySupervisorAccess = async (
 
   const { error: updateError } = await supabaseClient
     .from('branch_classifications')
+    .update({
+      supervisor_id: supervisorAssignment.supervisorId,
+      supervisor_name: supervisorAssignment.supervisorName,
+      supervisor_user_id: supervisorAssignment.supervisorUserId,
+      updated_at: new Date().toISOString()
+    })
+    .eq('area_id', areaId);
+  if (updateError) throw updateError;
+
+  if (supervisorAssignment.supervisorUserId && branchIds.length > 0) {
+    const { error: upsertError } = await supabaseClient
+      .from('supervisor_branches')
+      .upsert(
+        branchIds.map(branchId => ({
+          supervisor_user_id: supervisorAssignment.supervisorUserId,
+          branch_id: branchId
+        })),
+        { onConflict: 'supervisor_user_id,branch_id' }
+      );
+    if (upsertError) throw upsertError;
+  }
+};
+
+const syncDeliverySupervisorAccess = async (
+  supervisorId: string,
+  nextSupervisorUserId?: string | null
+) => {
+  const { data: areaRows, error } = await supabaseClient
+    .from('delivery_areas')
+    .select('id')
+    .eq('supervisor_id', supervisorId);
+  if (error) throw error;
+
+  const areas = areaRows || [];
+  if (areas.length === 0) return;
+
+  const { error: updateError } = await supabaseClient
+    .from('delivery_areas')
     .update({ supervisor_user_id: nextSupervisorUserId || null, updated_at: new Date().toISOString() })
     .eq('supervisor_id', supervisorId);
   if (updateError) throw updateError;
 
-  if (nextSupervisorUserId && branchIds.length > 0) {
-    const { error: upsertError } = await supabaseClient
-      .from('supervisor_branches')
-      .upsert(
-        branchIds.map(branchId => ({ supervisor_user_id: nextSupervisorUserId, branch_id: branchId })),
-        { onConflict: 'supervisor_user_id,branch_id' }
-      );
-    if (upsertError) throw upsertError;
+  for (const area of areas) {
+    await syncAreaSupervisorAccess(area.id, supervisorId, nextSupervisorUserId || null);
   }
 };
 
@@ -709,36 +814,32 @@ export const deliveryService = {
 
   areas: {
     list: async (includeInactive = false): Promise<DeliveryArea[]> => {
-      let query = supabaseClient.from('delivery_areas').select('*').order('name');
+      let query = supabaseClient.from('delivery_areas').select('*, delivery_supervisors(name)').order('name');
       if (!includeInactive) query = query.eq('is_active', true);
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []).map(a => ({
-        id: a.id,
-        name: a.name,
-        governorate: a.governorate,
-        notes: a.notes || undefined,
-        isActive: a.is_active
-      }));
+      return (data || []).map(toArea);
     },
     upsert: async (area: Partial<DeliveryArea>): Promise<DeliveryArea> => {
+      const supervisorAssignment = await getSupervisorAssignment(area.supervisorId, area.supervisorUserId);
       const payload: any = {
         name: area.name?.trim(),
         governorate: area.governorate,
+        supervisor_id: supervisorAssignment.supervisorId,
+        supervisor_user_id: supervisorAssignment.supervisorUserId,
         notes: area.notes || null,
         is_active: area.isActive ?? true,
         updated_at: new Date().toISOString()
       };
       if (area.id) payload.id = area.id;
-      const { data, error } = await supabaseClient.from('delivery_areas').upsert(payload).select().single();
+      const { data, error } = await supabaseClient
+        .from('delivery_areas')
+        .upsert(payload)
+        .select('*, delivery_supervisors(name)')
+        .single();
       if (error) throw error;
-      return {
-        id: data.id,
-        name: data.name,
-        governorate: data.governorate,
-        notes: data.notes || undefined,
-        isActive: data.is_active
-      };
+      await syncAreaSupervisorAccess(data.id, data.supervisor_id, data.supervisor_user_id);
+      return toArea(data);
     }
   },
 
@@ -861,32 +962,23 @@ export const deliveryService = {
         .maybeSingle();
       if (existingError) throw existingError;
 
-      let nextSupervisorUserId = classification.supervisorUserId || null;
-      if (!nextSupervisorUserId && classification.supervisorId) {
-        const { data: supervisor, error: supervisorError } = await supabaseClient
-          .from('delivery_supervisors')
-          .select('user_id')
-          .eq('id', classification.supervisorId)
-          .maybeSingle();
-        if (supervisorError) throw supervisorError;
-        nextSupervisorUserId = supervisor?.user_id || null;
-      }
+      const areaAssignment = await getAreaAssignment(classification.areaId);
 
       const { error } = await supabaseClient.from('branch_classifications').upsert({
         branch_id: classification.branchId,
-        area_id: classification.areaId || null,
-        area: classification.area || null,
-        supervisor_id: classification.supervisorId || null,
-        supervisor_name: classification.supervisorName || null,
-        supervisor_user_id: nextSupervisorUserId,
-        governorate: classification.governorate || null,
+        area_id: areaAssignment.areaId,
+        area: areaAssignment.areaName,
+        supervisor_id: areaAssignment.supervisorId,
+        supervisor_name: areaAssignment.supervisorName,
+        supervisor_user_id: areaAssignment.supervisorUserId,
+        governorate: areaAssignment.governorate,
         updated_at: new Date().toISOString()
       });
       if (error) throw error;
       await syncSupervisorBranchAccess(
         classification.branchId,
         existing?.supervisor_user_id || null,
-        nextSupervisorUserId
+        areaAssignment.supervisorUserId
       );
       return true;
     }

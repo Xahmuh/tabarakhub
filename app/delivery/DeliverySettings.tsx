@@ -124,6 +124,12 @@ export const DeliverySettings: React.FC = () => {
 
   // ----- Areas -----
   const editArea = async (area?: DeliveryArea) => {
+    const selectedSupervisorId = area?.supervisorId || '';
+    const supervisorOptions = supervisors.map(supervisor => `
+      <option value="${escapeHtml(supervisor.id)}" ${selectedSupervisorId === supervisor.id ? 'selected' : ''}>
+        ${escapeHtml(supervisor.name)}${supervisor.userId ? ' - access linked' : ' - no login link'}${supervisor.isActive ? '' : ' (inactive)'}
+      </option>
+    `).join('');
     const { value } = await Swal.fire({
       title: `<span class="text-xl font-black tracking-tight">${area ? 'Edit' : 'Add'} area</span>`,
       html: `
@@ -139,6 +145,16 @@ export const DeliverySettings: React.FC = () => {
             </select>
           </div>
           <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area supervisor</label>
+            <select id="swal-area-supervisor-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
+              <option value="">No supervisor assigned</option>
+              ${supervisorOptions}
+            </select>
+            <p class="mt-1 text-[10px] font-bold leading-5 text-slate-400">
+              Branches inherit supervisor access from their assigned area.
+            </p>
+          </div>
+          <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Notes (optional)</label>
             <textarea id="swal-area-notes" class="min-h-[80px] w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">${escapeHtml(area?.notes)}</textarea>
           </div>
@@ -149,12 +165,20 @@ export const DeliverySettings: React.FC = () => {
       preConfirm: () => {
         const name = (document.getElementById('swal-area-name') as HTMLInputElement).value.trim();
         const governorate = (document.getElementById('swal-area-gov') as HTMLSelectElement).value as Governorate;
+        const supervisorId = (document.getElementById('swal-area-supervisor-id') as HTMLSelectElement).value;
         const notes = (document.getElementById('swal-area-notes') as HTMLTextAreaElement).value.trim();
         if (!name) {
           Swal.showValidationMessage('Area name is required.');
           return false;
         }
-        return { name, governorate, notes };
+        const supervisor = supervisors.find(item => item.id === supervisorId);
+        return {
+          name,
+          governorate,
+          supervisorId: supervisor?.id || null,
+          supervisorUserId: supervisor?.userId || null,
+          notes
+        };
       }
     });
     if (!value) return;
@@ -163,6 +187,8 @@ export const DeliverySettings: React.FC = () => {
         id: area?.id,
         name: value.name,
         governorate: value.governorate,
+        supervisorId: value.supervisorId,
+        supervisorUserId: value.supervisorUserId,
         notes: value.notes || undefined,
         isActive: area?.isActive ?? true
       });
@@ -650,17 +676,14 @@ export const DeliverySettings: React.FC = () => {
       area.name.toLowerCase() === current?.area?.toLowerCase()
       && (!current?.governorate || area.governorate === current.governorate)
     )?.id || '';
-    const selectedSupervisorId = current?.supervisorId || supervisors.find(supervisor =>
-      supervisor.name.toLowerCase() === current?.supervisorName?.toLowerCase()
-    )?.id || '';
     const areaOptions = areas.map(area => `
-      <option value="${area.id}" ${selectedAreaId === area.id ? 'selected' : ''}>
+      <option
+        value="${escapeHtml(area.id)}"
+        data-supervisor="${escapeHtml(area.supervisorName || supervisors.find(supervisor => supervisor.id === area.supervisorId)?.name || 'No supervisor')}"
+        data-access="${area.supervisorUserId || supervisors.find(supervisor => supervisor.id === area.supervisorId)?.userId ? 'access linked' : 'login not linked'}"
+        ${selectedAreaId === area.id ? 'selected' : ''}
+      >
         ${escapeHtml(area.name)} - ${area.governorate}${area.isActive ? '' : ' (inactive)'}
-      </option>
-    `).join('');
-    const supervisorOptions = supervisors.map(supervisor => `
-      <option value="${supervisor.id}" ${selectedSupervisorId === supervisor.id ? 'selected' : ''}>
-        ${escapeHtml(supervisor.name)}${supervisor.userId ? ' - access linked' : ' - no login link'}${supervisor.isActive ? '' : ' (inactive)'}
       </option>
     `).join('');
     const { value } = await Swal.fire({
@@ -675,11 +698,11 @@ export const DeliverySettings: React.FC = () => {
             </select>
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Supervisor</label>
-            <select id="swal-branch-supervisor-id" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
-              <option value="">Not assigned</option>
-              ${supervisorOptions}
-            </select>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Inherited supervisor</label>
+            <p id="swal-branch-supervisor-preview" class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600"></p>
+            <p class="mt-1 text-[10px] font-bold leading-5 text-slate-400">
+              Change supervisor access from the Area editor, not per branch.
+            </p>
           </div>
           <div class="hidden">
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Governorate</label>
@@ -692,18 +715,29 @@ export const DeliverySettings: React.FC = () => {
       showCancelButton: true,
       confirmButtonText: 'Save',
       confirmButtonColor: '#B91c1c',
+      didOpen: () => {
+        const areaSelect = document.getElementById('swal-branch-area-id') as HTMLSelectElement | null;
+        const preview = document.getElementById('swal-branch-supervisor-preview');
+        const updatePreview = () => {
+          if (!areaSelect || !preview || !areaSelect.value) {
+            if (preview) preview.textContent = 'No area selected';
+            return;
+          }
+          const option = areaSelect.selectedOptions[0];
+          const supervisorName = option?.getAttribute('data-supervisor') || 'No supervisor';
+          const access = option?.getAttribute('data-access') || 'login not linked';
+          preview.textContent = `Supervisor from area: ${supervisorName} (${access})`;
+        };
+        areaSelect?.addEventListener('change', updatePreview);
+        updatePreview();
+      },
       preConfirm: () => {
         const areaId = (document.getElementById('swal-branch-area-id') as HTMLSelectElement).value;
-        const supervisorId = (document.getElementById('swal-branch-supervisor-id') as HTMLSelectElement).value;
         const area = areas.find(item => item.id === areaId);
-        const supervisor = supervisors.find(item => item.id === supervisorId);
         return {
           areaId: area?.id || null,
           area: area?.name || undefined,
-          governorate: area?.governorate || null,
-          supervisorId: supervisor?.id || null,
-          supervisorName: supervisor?.name || undefined,
-          supervisorUserId: supervisor?.userId || null
+          governorate: area?.governorate || null
         };
       }
     });
@@ -713,9 +747,6 @@ export const DeliverySettings: React.FC = () => {
         branchId: branch.id,
         areaId: value.areaId,
         area: value.area,
-        supervisorId: value.supervisorId,
-        supervisorName: value.supervisorName,
-        supervisorUserId: value.supervisorUserId,
         governorate: (value.governorate || null) as Governorate | null
       });
       await load();
@@ -1036,26 +1067,36 @@ export const DeliverySettings: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {areas.map(area => (
-              <div key={area.id} className={`rounded-lg border p-3 ${area.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-black text-slate-800">{area.name}</p>
-                    <p className="mt-1 text-[11px] font-bold text-slate-400">{area.governorate}</p>
+            {areas.map(area => {
+              const supervisor = area.supervisorId ? supervisors.find(item => item.id === area.supervisorId) : undefined;
+              const supervisorName = area.supervisorName || supervisor?.name;
+              const supervisorAccessLinked = Boolean(area.supervisorUserId || supervisor?.userId);
+              return (
+                <div key={area.id} className={`rounded-lg border p-3 ${area.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-800">{area.name}</p>
+                      <p className="mt-1 text-[11px] font-bold text-slate-400">{area.governorate}</p>
+                      <p className={`mt-1 text-[10px] font-black uppercase tracking-widest ${supervisorName ? (supervisorAccessLinked ? 'text-emerald-600' : 'text-amber-600') : 'text-slate-400'}`}>
+                        {supervisorName
+                          ? `Supervisor: ${supervisorName}${supervisorAccessLinked ? '' : ' (login not linked)'}`
+                          : 'No supervisor assigned'}
+                      </p>
+                    </div>
+                    <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${area.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                      {area.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${area.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
-                    {area.isActive ? 'Active' : 'Inactive'}
-                  </span>
+                  {area.notes && <p className="mt-2 text-[11px] font-bold text-slate-400">{area.notes}</p>}
+                  <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                    <button onClick={() => editArea(area)} className="text-slate-500 hover:text-brand">Edit</button>
+                    <button onClick={() => toggleArea(area)} className="text-slate-400 hover:text-brand">
+                      {area.isActive ? 'Deactivate' : 'Reactivate'}
+                    </button>
+                  </div>
                 </div>
-                {area.notes && <p className="mt-2 text-[11px] font-bold text-slate-400">{area.notes}</p>}
-                <div className="mt-2 flex gap-3 text-[11px] font-bold">
-                  <button onClick={() => editArea(area)} className="text-slate-500 hover:text-brand">Edit</button>
-                  <button onClick={() => toggleArea(area)} className="text-slate-400 hover:text-brand">
-                    {area.isActive ? 'Deactivate' : 'Reactivate'}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {areas.length === 0 && <p className="text-xs font-bold text-slate-400">No areas yet - add the first one.</p>}
           </div>
         </section>
@@ -1064,7 +1105,7 @@ export const DeliverySettings: React.FC = () => {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery supervisors</h3>
-              <p className="mt-1 text-[11px] font-medium text-slate-500">Create supervisors first, then assign branches to them.</p>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">Create supervisors first, then assign them to delivery areas.</p>
             </div>
             <button onClick={() => editSupervisor()} className="btn-primary text-[10px] uppercase tracking-widest">
               <Plus className="h-3.5 w-3.5" /> Add supervisor
@@ -1158,17 +1199,19 @@ export const DeliverySettings: React.FC = () => {
         <section className="operational-panel p-4 md:p-5">
           <h3 className="mb-1 text-sm font-black uppercase tracking-widest text-slate-700">Branch assignment</h3>
           <p className="mb-4 text-[11px] font-medium text-slate-500">
-            Branch → area, supervisor, governorate. The governorate drives the outside-governorate analysis; unclassified branches are excluded from it.
+            Branch -&gt; area. Supervisor access is inherited from the assigned area; unclassified branches are excluded from outside-governorate analysis.
           </p>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {branches.map(branch => {
               const c = classifications.find(x => x.branchId === branch.id);
               const area = c?.areaId ? areas.find(item => item.id === c.areaId) : undefined;
-              const supervisor = c?.supervisorId ? supervisors.find(item => item.id === c.supervisorId) : undefined;
-              const areaName = c?.area || area?.name;
-              const supervisorName = c?.supervisorName || supervisor?.name;
+              const supervisor = area?.supervisorId
+                ? supervisors.find(item => item.id === area.supervisorId)
+                : c?.supervisorId ? supervisors.find(item => item.id === c.supervisorId) : undefined;
+              const areaName = area?.name || c?.area;
+              const supervisorName = area?.supervisorName || supervisor?.name || c?.supervisorName;
               const governorate = c?.governorate || area?.governorate;
-              const supervisorAccessLinked = Boolean(c?.supervisorUserId || supervisor?.userId);
+              const supervisorAccessLinked = Boolean(area?.supervisorUserId || supervisor?.userId || c?.supervisorUserId);
               return (
                 <button
                   key={branch.id}

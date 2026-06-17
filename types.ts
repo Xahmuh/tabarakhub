@@ -538,6 +538,9 @@ export interface DeliveryArea {
   id: string;
   name: string;
   governorate: Governorate;
+  supervisorId?: string | null;
+  supervisorName?: string;
+  supervisorUserId?: string | null;
   notes?: string;
   isActive: boolean;
 }
