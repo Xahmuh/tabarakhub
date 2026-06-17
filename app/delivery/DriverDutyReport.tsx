@@ -31,6 +31,12 @@ const formatHours = (minutes: number) => {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
 
+const formatCoordinate = (value?: number | null) =>
+  value === null || value === undefined || !Number.isFinite(value) ? '-' : value.toFixed(6);
+
+const formatDistance = (value?: number | null) =>
+  value === null || value === undefined || !Number.isFinite(value) ? '-' : `${Math.round(value)} m`;
+
 const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
   <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-center justify-between gap-3">
@@ -43,7 +49,7 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: Reac
 );
 
 export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = false }) => {
-  const [preset, setPreset] = useState<PeriodPreset>('week');
+  const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
@@ -91,6 +97,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
 
   const totals = useMemo(() => rows.reduce((acc, row) => {
     acc.minutes += row.totalWorkingMinutes;
+    acc.shifts += row.shiftCount;
     acc.actual += row.actualDeliveryCount;
     acc.transfers += row.internalTransferCount;
     acc.delivered += row.deliveredCount;
@@ -100,6 +107,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
     return acc;
   }, {
     minutes: 0,
+    shifts: 0,
     actual: 0,
     transfers: 0,
     delivered: 0,
@@ -156,9 +164,10 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-7">
         <KpiCard label="Duty days" value={String(totals.days.size)} sub={label} icon={<CalendarClock className="h-4 w-4" />} />
         <KpiCard label="Drivers" value={String(totals.drivers.size)} sub={selfOnly ? 'my report' : 'with activity'} icon={<Truck className="h-4 w-4" />} />
+        <KpiCard label="Duty sessions" value={String(totals.shifts)} sub="in / out logs" icon={<CalendarClock className="h-4 w-4" />} />
         <KpiCard label="Work hours" value={formatHours(totals.minutes)} icon={<Clock3 className="h-4 w-4" />} />
         <KpiCard label="Actual delivery" value={String(totals.actual)} sub="completed" icon={<Route className="h-4 w-4" />} />
         <KpiCard label="Internal transfer" value={String(totals.transfers)} sub="completed" icon={<ArrowRightLeft className="h-4 w-4" />} />
@@ -190,7 +199,13 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
                     {!selfOnly && <th className="px-4 py-3">Driver</th>}
                     <th className="px-4 py-3">Started duty</th>
                     <th className="px-4 py-3">Finished duty</th>
+                    <th className="px-4 py-3">Sessions</th>
                     <th className="px-4 py-3">Hours</th>
+                    <th className="px-4 py-3">Start branch</th>
+                    <th className="px-4 py-3">Start location</th>
+                    <th className="px-4 py-3">Branch distance</th>
+                    <th className="px-4 py-3">Assigned</th>
+                    <th className="px-4 py-3">Picked up</th>
                     <th className="px-4 py-3">Actual</th>
                     <th className="px-4 py-3">Internal</th>
                     <th className="px-4 py-3">Delivered</th>
@@ -208,7 +223,15 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
                       )}
                       <td className="px-4 py-3 text-xs font-bold text-slate-500">{formatDateTime(row.firstOnlineAt)}</td>
                       <td className="px-4 py-3 text-xs font-bold text-slate-500">{formatDateTime(row.lastOfflineAt)}</td>
+                      <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-700">{row.shiftCount}</td>
                       <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-900">{formatHours(row.totalWorkingMinutes)}</td>
+                      <td className="px-4 py-3 text-xs font-bold text-slate-600">{row.startedBranchName || '-'}</td>
+                      <td className="px-4 py-3 text-xs font-bold tabular-nums text-slate-500">
+                        {formatCoordinate(row.startedLat)}, {formatCoordinate(row.startedLng)}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold tabular-nums text-slate-500">{formatDistance(row.startedDistanceM)}</td>
+                      <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-700">{row.assignedCount}</td>
+                      <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-700">{row.pickedUpCount}</td>
                       <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-700">{row.actualDeliveryCount}</td>
                       <td className="px-4 py-3 text-xs font-black tabular-nums text-slate-700">{row.internalTransferCount}</td>
                       <td className="px-4 py-3 text-xs font-black tabular-nums text-emerald-700">{row.deliveredCount}</td>
@@ -234,6 +257,12 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                     <p className="font-bold text-slate-500">Started <span className="block font-black text-slate-900">{formatDateTime(row.firstOnlineAt)}</span></p>
                     <p className="font-bold text-slate-500">Finished <span className="block font-black text-slate-900">{formatDateTime(row.lastOfflineAt)}</span></p>
+                    <p className="font-bold text-slate-500">Sessions <span className="block font-black text-slate-900">{row.shiftCount}</span></p>
+                    <p className="font-bold text-slate-500">Start branch <span className="block font-black text-slate-900">{row.startedBranchName || '-'}</span></p>
+                    <p className="font-bold text-slate-500">Start location <span className="block font-black text-slate-900">{formatCoordinate(row.startedLat)}, {formatCoordinate(row.startedLng)}</span></p>
+                    <p className="font-bold text-slate-500">Distance <span className="block font-black text-slate-900">{formatDistance(row.startedDistanceM)}</span></p>
+                    <p className="font-bold text-slate-500">Assigned <span className="block font-black text-slate-900">{row.assignedCount}</span></p>
+                    <p className="font-bold text-slate-500">Picked up <span className="block font-black text-slate-900">{row.pickedUpCount}</span></p>
                     <p className="font-bold text-slate-500">Actual <span className="block font-black text-slate-900">{row.actualDeliveryCount}</span></p>
                     <p className="font-bold text-slate-500">Internal <span className="block font-black text-slate-900">{row.internalTransferCount}</span></p>
                   </div>

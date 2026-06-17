@@ -86,6 +86,7 @@ export type DriverDutyRecord = {
   startedLat?: number | null;
   startedLng?: number | null;
   startedDistanceMeters?: number | null;
+  shiftCount: number;
   totalWorkingMinutes: number;
   assignedCount: number;
   pickedUpCount: number;
@@ -93,6 +94,13 @@ export type DriverDutyRecord = {
   cancelledCount: number;
   actualDeliveryCount: number;
   internalTransferCount: number;
+};
+
+export type DriverMobileAppSettings = {
+  loginLogoUrl?: string | null;
+  footerLogoUrl?: string | null;
+  footerCredit?: string | null;
+  updatedAt?: string | null;
 };
 
 export type DriverOrder = {
@@ -169,6 +177,7 @@ const mapDutyRecord = (row: any): DriverDutyRecord => ({
   startedLat: row.started_lat === null || row.started_lat === undefined ? null : Number(row.started_lat),
   startedLng: row.started_lng === null || row.started_lng === undefined ? null : Number(row.started_lng),
   startedDistanceMeters: row.started_distance_m === null || row.started_distance_m === undefined ? null : Number(row.started_distance_m),
+  shiftCount: Number(row.shift_count || 0),
   totalWorkingMinutes: Number(row.total_working_minutes || 0),
   assignedCount: Number(row.assigned_count || 0),
   pickedUpCount: Number(row.picked_up_count || 0),
@@ -176,6 +185,13 @@ const mapDutyRecord = (row: any): DriverDutyRecord => ({
   cancelledCount: Number(row.cancelled_count || 0),
   actualDeliveryCount: Number(row.actual_delivery_count || 0),
   internalTransferCount: Number(row.internal_transfer_count || 0)
+});
+
+const mapMobileAppSettings = (row: any): DriverMobileAppSettings => ({
+  loginLogoUrl: row?.login_logo_url || null,
+  footerLogoUrl: row?.footer_logo_url || null,
+  footerCredit: row?.footer_credit || 'Developed by Ahmed Elsherbini',
+  updatedAt: row?.updated_at || null
 });
 
 export const driverApi = {
@@ -207,6 +223,19 @@ export const driverApi = {
   signOut: async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+  },
+
+  mobileAppSettings: async (): Promise<DriverMobileAppSettings> => {
+    const { data, error } = await supabase
+      .from('delivery_mobile_app_settings')
+      .select('login_logo_url, footer_logo_url, footer_credit, updated_at')
+      .eq('id', 'global')
+      .maybeSingle();
+    if (error) {
+      console.info('Driver mobile settings unavailable; using bundled branding.', error.message);
+      return mapMobileAppSettings(null);
+    }
+    return mapMobileAppSettings(data);
   },
 
   session: async (): Promise<DriverSessionPayload> => {

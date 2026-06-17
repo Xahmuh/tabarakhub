@@ -26,6 +26,7 @@ import {
   DriverBranchOption,
   DriverDutyRecord,
   DriverHistoryStatusFilter,
+  DriverMobileAppSettings,
   DriverNearbyStartBranch,
   DriverOrder,
   DriverOrderStatus,
@@ -58,6 +59,7 @@ import {
 const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
 const hubFooterLogo = require('../src/assets/logo/hublogo.png');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
+const DEFAULT_FOOTER_CREDIT = 'Developed by Ahmed Elsherbini';
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
 type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications' | 'dutyRecord';
@@ -83,6 +85,11 @@ const statusLabel = (status: DriverOrderStatus, copy: DriverCopy) =>
 const branchLabel = (branch: Pick<DriverBranchOption, 'code' | 'name'> | null | undefined, copy: DriverCopy) =>
   branch ? `${branch.code ? `${branch.code} - ` : ''}${branch.name}` : copy.common.branch;
 
+const imageSource = (url: string | null | undefined, fallback: any) => {
+  const trimmed = url?.trim();
+  return trimmed ? { uri: trimmed } : fallback;
+};
+
 const orderRouteLabel = (order: DriverOrder, copy: DriverCopy) => {
   if (order.orderKind !== 'internal_transfer') return order.branchName;
   const from = order.transferFromBranchName || order.branchName;
@@ -104,6 +111,30 @@ const historyDetailText = (language: DriverLanguage) => {
       created: 'تم الإنشاء',
       governorate: 'المحافظة',
       notes: 'ملاحظات'
+    };
+  }
+  if (language === 'ur') {
+    return {
+      openDetails: 'آرڈر تفصیلات کھولیں',
+      orderDetails: 'آرڈر تفصیلات',
+      fullPathway: 'مکمل راستہ',
+      status: 'اسٹیٹس',
+      orderDate: 'آرڈر تاریخ',
+      created: 'بنایا گیا',
+      governorate: 'گورنریٹ',
+      notes: 'نوٹس'
+    };
+  }
+  if (language === 'bn') {
+    return {
+      openDetails: 'অর্ডার বিস্তারিত খুলুন',
+      orderDetails: 'অর্ডার বিস্তারিত',
+      fullPathway: 'সম্পূর্ণ পথ',
+      status: 'স্ট্যাটাস',
+      orderDate: 'অর্ডারের তারিখ',
+      created: 'তৈরি হয়েছে',
+      governorate: 'গভর্নরেট',
+      notes: 'নোট'
     };
   }
 
@@ -162,6 +193,26 @@ const shiftLocationCopy = (language: DriverLanguage) => {
       recheck: 'إعادة الفحص'
     };
   }
+  if (language === 'ur') {
+    return {
+      label: 'ڈیوٹی برانچ',
+      checking: 'قریبی برانچ چیک ہو رہی ہے...',
+      inside: 'حد کے اندر',
+      outside: 'حد سے باہر',
+      unavailable: 'حد میں کوئی برانچ نہیں',
+      recheck: 'دوبارہ چیک'
+    };
+  }
+  if (language === 'bn') {
+    return {
+      label: 'ডিউটি ব্রাঞ্চ',
+      checking: 'নিকটতম ব্রাঞ্চ চেক হচ্ছে...',
+      inside: 'রেঞ্জের ভিতরে',
+      outside: 'রেঞ্জের বাইরে',
+      unavailable: 'রেঞ্জে কোনো ব্রাঞ্চ নেই',
+      recheck: 'আবার চেক করুন'
+    };
+  }
 
   return {
     label: 'Shift branch',
@@ -173,6 +224,25 @@ const shiftLocationCopy = (language: DriverLanguage) => {
   };
 };
 
+const localizedDriverError = (error: unknown, copy: DriverCopy, fallback: string) => {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const knownMessages: Record<string, string> = {
+    'Could not find this driver code.': copy.login.driverCodeNotFound,
+    'Email ID or driver code is required.': copy.login.identifierRequired,
+    'Could not load driver session.': copy.errors.couldNotLoadAccess,
+    'Could not load assigned orders.': copy.errors.couldNotLoadAssignedOrders,
+    'Could not load order history.': copy.errors.couldNotLoadOrderHistory,
+    'Could not load duty records.': copy.profile.dutyRecordsUnavailable,
+    'Could not load transfer branches.': copy.errors.couldNotLoadTransferBranches,
+    'Could not check nearby branch.': copy.errors.couldNotCheckNearbyBranch,
+    'Could not start shift.': copy.errors.couldNotStartShift,
+    'Could not end shift.': copy.errors.couldNotEndShift,
+    'Could not create internal transfer.': copy.errors.couldNotCreateInternalTransfer
+  };
+
+  return knownMessages[message] || fallback;
+};
+
 const shiftBranchStatus = (
   branch: DriverNearbyStartBranch | null | undefined,
   isFetching: boolean,
@@ -180,6 +250,7 @@ const shiftBranchStatus = (
   language: DriverLanguage
 ) => {
   const text = shiftLocationCopy(language);
+  const copy = getDriverCopy(language);
   if (isFetching) {
     return {
       tone: 'neutral' as const,
@@ -191,13 +262,13 @@ const shiftBranchStatus = (
     const status = branch.isWithinRadius ? text.inside : text.outside;
     return {
       tone: branch.isWithinRadius ? 'ready' as const : 'blocked' as const,
-      title: `${branchLabel(branch, getDriverCopy(language))} · ${status}`,
+      title: `${branchLabel(branch, copy)} · ${status}`,
       detail: `${formatDistanceMeters(branch.distanceMeters)} / ${formatDistanceMeters(branch.radiusMeters)}`
     };
   }
   return {
     tone: 'blocked' as const,
-    title: error instanceof Error ? error.message : text.unavailable,
+    title: localizedDriverError(error, copy, text.unavailable),
     detail: text.recheck
   };
 };
@@ -721,16 +792,21 @@ const BottomNavButton = ({
 const LoginScreen = ({
   onSignedIn,
   copy,
-  isRtl
+  isRtl,
+  mobileSettings
 }: {
   onSignedIn: () => void;
   copy: DriverCopy;
   isRtl: boolean;
+  mobileSettings: DriverMobileAppSettings;
 }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loginLogoSource = imageSource(mobileSettings.loginLogoUrl, tabarakLogo);
+  const footerLogoSource = imageSource(mobileSettings.footerLogoUrl, hubFooterLogo);
+  const footerCredit = mobileSettings.footerCredit?.trim() || DEFAULT_FOOTER_CREDIT;
 
   const submit = async () => {
     if (!identifier.trim() || !password) {
@@ -742,7 +818,7 @@ const LoginScreen = ({
       await driverApi.signIn(identifier, password);
       onSignedIn();
     } catch (error: any) {
-      Alert.alert(copy.login.failedTitle, error?.message || copy.login.failedFallback);
+      Alert.alert(copy.login.failedTitle, localizedDriverError(error, copy, copy.login.failedFallback));
     } finally {
       setIsSubmitting(false);
     }
@@ -754,7 +830,7 @@ const LoginScreen = ({
         <View style={styles.loginPanel}>
           <View style={styles.loginBrandStack}>
             <View style={styles.loginLogoFrame}>
-              <Image source={tabarakLogo} style={styles.loginLogo} resizeMode="cover" />
+              <Image source={loginLogoSource} style={styles.loginLogo} resizeMode="contain" />
             </View>
             <Text style={[styles.loginAppBadgeText, isRtl && styles.rtlText]}>{copy.login.appBadge}</Text>
           </View>
@@ -792,7 +868,7 @@ const LoginScreen = ({
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                  accessibilityLabel={passwordVisible ? copy.login.hidePassword : copy.login.showPassword}
                   accessibilityState={{ checked: passwordVisible }}
                   onPress={() => setPasswordVisible(previous => !previous)}
                   style={({ pressed }) => [styles.passwordEyeButton, pressed && styles.buttonPressed]}
@@ -807,8 +883,8 @@ const LoginScreen = ({
         </View>
 
         <View style={styles.loginFooterBrand}>
-          <Image source={hubFooterLogo} style={styles.loginFooterLogo} resizeMode="contain" />
-          <Text style={[styles.loginFooterCredit, isRtl && styles.rtlText]}>Developed by Ahmed Elsherbini</Text>
+          <Image source={footerLogoSource} style={styles.loginFooterLogo} resizeMode="contain" />
+          <Text style={[styles.loginFooterCredit, isRtl && styles.rtlText]}>{footerCredit}</Text>
         </View>
       </View>
     </View>
@@ -1349,40 +1425,74 @@ const EmptyState = ({
   </View>
 );
 
-const BranchRail = ({
+const BranchDropdown = ({
   label,
   branches,
   value,
   onChange,
+  open,
+  onToggle,
   isRtl = false
 }: {
   label: string;
   branches: DriverBranchOption[];
   value: string;
   onChange: (branchId: string) => void;
+  open: boolean;
+  onToggle: () => void;
   isRtl?: boolean;
-}) => (
-  <View style={styles.branchRailWrap}>
-    <Text style={[styles.branchRailLabel, isRtl && styles.rtlText]}>{label}</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.branchRail, isRtl && styles.rtlRow]}>
-      {branches.map(branch => {
-        const active = branch.id === value;
-        return (
-          <Pressable
-            key={branch.id}
-            onPress={() => onChange(branch.id)}
-            style={[styles.branchChip, active && styles.branchChipActive]}
-          >
-            <Text style={[styles.branchChipCode, active && styles.branchChipCodeActive, isRtl && styles.rtlText]}>{branch.code || 'BR'}</Text>
-            <Text style={[styles.branchChipName, active && styles.branchChipNameActive, isRtl && styles.rtlText]} numberOfLines={1}>
-              {branch.name}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  </View>
-);
+}) => {
+  const selected = branches.find(branch => branch.id === value);
+
+  const chooseBranch = (branchId: string) => {
+    onChange(branchId);
+  };
+
+  return (
+    <View style={styles.branchDropdownWrap}>
+      <Text style={[styles.branchDropdownLabel, isRtl && styles.rtlText]}>{label}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={[styles.branchDropdownTrigger, isRtl && styles.rtlRow]}
+      >
+        <View style={styles.branchDropdownValue}>
+          <Text style={[styles.branchDropdownCode, isRtl && styles.rtlText]}>{selected?.code || 'BR'}</Text>
+          <Text style={[styles.branchDropdownName, isRtl && styles.rtlText]}>
+            {selected?.name || label}
+          </Text>
+        </View>
+        <Text style={styles.branchDropdownChevron}>{open ? '^' : 'v'}</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.branchDropdownMenu}>
+          {branches.map(branch => {
+            const active = branch.id === value;
+            return (
+              <Pressable
+                key={branch.id}
+                accessibilityRole="menuitem"
+                accessibilityState={{ selected: active }}
+                onPress={() => chooseBranch(branch.id)}
+                style={[styles.branchDropdownItem, active && styles.branchDropdownItemActive, isRtl && styles.rtlRow]}
+              >
+                <View style={styles.branchDropdownValue}>
+                  <Text style={[styles.branchDropdownCode, active && styles.branchDropdownTextActive, isRtl && styles.rtlText]}>
+                    {branch.code || 'BR'}
+                  </Text>
+                  <Text style={[styles.branchDropdownName, active && styles.branchDropdownTextActive, isRtl && styles.rtlText]}>
+                    {branch.name}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+};
 
 const LanguageSelector = ({
   language,
@@ -1457,8 +1567,8 @@ const ThemeSelector = ({
   onChange: (themeMode: DriverThemeMode) => void;
 }) => {
   const options: Array<{ mode: DriverThemeMode; label: string; hint: string }> = [
-    { mode: 'light', label: copy.profile.lightTheme, hint: 'Day' },
-    { mode: 'dark', label: copy.profile.darkTheme, hint: 'Night' }
+    { mode: 'light', label: copy.profile.lightTheme, hint: copy.profile.lightThemeHint },
+    { mode: 'dark', label: copy.profile.darkTheme, hint: copy.profile.darkThemeHint }
   ];
 
   return (
@@ -1523,6 +1633,7 @@ const Dashboard = ({
   const [transferFromBranchId, setTransferFromBranchId] = useState('');
   const [transferToBranchId, setTransferToBranchId] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
+  const [openTransferBranchDropdown, setOpenTransferBranchDropdown] = useState<'from' | 'to' | null>(null);
   const [dutyMonthFilter, setDutyMonthFilter] = useState(() => toMonthInput(new Date()));
   const [isExportingDuty, setIsExportingDuty] = useState(false);
 
@@ -1632,8 +1743,8 @@ const Dashboard = ({
         longitude: position.coords.longitude,
         accuracyMeters: position.coords.accuracy ?? null
       };
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : copy.errors.locationUnavailable);
+    } catch {
+      throw new Error(copy.errors.locationUnavailable);
     }
   }, [copy]);
 
@@ -1655,7 +1766,7 @@ const Dashboard = ({
       return driverApi.startShift(location);
     },
     onSuccess: refreshAll,
-    onError: (error: any) => Alert.alert(copy.errors.shiftUpdateFailed, error?.message || copy.errors.couldNotUpdateShift)
+    onError: (error: any) => Alert.alert(copy.errors.shiftUpdateFailed, localizedDriverError(error, copy, copy.errors.couldNotUpdateShift))
   });
 
   const orderMutation = useMutation({
@@ -1700,7 +1811,7 @@ const Dashboard = ({
       await refreshAll();
       if (result === 'queued') Alert.alert(copy.errors.queuedOffline, copy.errors.syncWhenConnected);
     },
-    onError: (error: any) => Alert.alert(copy.errors.orderUpdateFailed, error?.message || copy.errors.couldNotUpdateOrder)
+    onError: (error: any) => Alert.alert(copy.errors.orderUpdateFailed, localizedDriverError(error, copy, copy.errors.couldNotUpdateOrder))
   });
 
   const pickupBatchMutation = useMutation({
@@ -1727,7 +1838,7 @@ const Dashboard = ({
         Alert.alert(copy.errors.pickupStartedTitle, formatCopy(copy.errors.pickupStartedText, { count }));
       }
     },
-    onError: (error: any) => Alert.alert(copy.errors.pickupFailed, error?.message || copy.errors.couldNotStartPickup)
+    onError: (error: any) => Alert.alert(copy.errors.pickupFailed, localizedDriverError(error, copy, copy.errors.couldNotStartPickup))
   });
 
   const transferMutation = useMutation({
@@ -1749,7 +1860,7 @@ const Dashboard = ({
       setActiveTab('orders');
       Alert.alert(copy.transfer.createdTitle, copy.transfer.createdText);
     },
-    onError: (error: any) => Alert.alert(copy.transfer.failedTitle, error?.message || copy.transfer.failedFallback)
+    onError: (error: any) => Alert.alert(copy.transfer.failedTitle, localizedDriverError(error, copy, copy.transfer.failedFallback))
   });
 
   const session = sessionQuery.data;
@@ -2098,23 +2209,33 @@ const Dashboard = ({
             <Text style={[styles.loadingText, isRtl && styles.rtlText]}>{copy.transfer.loadingBranches}</Text>
           </View>
         ) : transferBranchesQuery.error ? (
-          <EmptyState title={copy.transfer.unavailableTitle} text={transferBranchesQuery.error instanceof Error ? transferBranchesQuery.error.message : copy.transfer.unavailableFallback} isRtl={isRtl} />
+        <EmptyState title={copy.transfer.unavailableTitle} text={localizedDriverError(transferBranchesQuery.error, copy, copy.transfer.unavailableFallback)} isRtl={isRtl} />
         ) : transferBranches.length < 2 ? (
           <EmptyState title={copy.transfer.notEnoughTitle} text={copy.transfer.notEnoughText} isRtl={isRtl} />
         ) : (
           <View style={styles.transferForm}>
-            <BranchRail
+            <BranchDropdown
               label={copy.transfer.fromBranch}
               branches={transferBranches}
               value={transferFromBranchId}
-              onChange={setTransferFromBranchId}
+              onChange={branchId => {
+                setTransferFromBranchId(branchId);
+                setOpenTransferBranchDropdown(null);
+              }}
+              open={openTransferBranchDropdown === 'from'}
+              onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'from' ? null : 'from')}
               isRtl={isRtl}
             />
-            <BranchRail
+            <BranchDropdown
               label={copy.transfer.toBranch}
               branches={transferBranches.filter(branch => branch.id !== transferFromBranchId)}
               value={transferToBranchId}
-              onChange={setTransferToBranchId}
+              onChange={branchId => {
+                setTransferToBranchId(branchId);
+                setOpenTransferBranchDropdown(null);
+              }}
+              open={openTransferBranchDropdown === 'to'}
+              onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'to' ? null : 'to')}
               isRtl={isRtl}
             />
             <View style={styles.loginField}>
@@ -2296,7 +2417,7 @@ const Dashboard = ({
           <Text style={[styles.loadingText, isRtl && styles.rtlText]}>{copy.history.loading}</Text>
         </View>
       ) : historyQuery.error ? (
-        <EmptyState title={copy.history.unavailableTitle} text={historyQuery.error instanceof Error ? historyQuery.error.message : copy.history.unavailableFallback} isRtl={isRtl} />
+        <EmptyState title={copy.history.unavailableTitle} text={localizedDriverError(historyQuery.error, copy, copy.history.unavailableFallback)} isRtl={isRtl} />
       ) : history.length === 0 ? (
         <EmptyState title={copy.history.emptyTitle} text={copy.history.emptyText} isRtl={isRtl} />
       ) : (
@@ -2372,7 +2493,7 @@ const Dashboard = ({
           <Text style={[styles.loadingText, isRtl && styles.rtlText]}>{copy.common.loading}</Text>
         </View>
       ) : dutyRecordsQuery.error ? (
-        <EmptyState title={copy.history.unavailableTitle} text={dutyRecordsQuery.error instanceof Error ? dutyRecordsQuery.error.message : copy.history.unavailableFallback} isRtl={isRtl} />
+        <EmptyState title={copy.history.unavailableTitle} text={localizedDriverError(dutyRecordsQuery.error, copy, copy.profile.dutyRecordsUnavailable)} isRtl={isRtl} />
       ) : dutyRecords.length === 0 ? (
         <EmptyState title={copy.profile.noDutyRecords} text={copy.profile.noDutyRecordsText} isRtl={isRtl} />
       ) : (
@@ -2486,7 +2607,7 @@ const Dashboard = ({
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Text style={[styles.errorTitle, isRtl && styles.rtlText]}>{copy.errors.accessBlocked}</Text>
-          <Text style={[styles.errorText, isRtl && styles.rtlText]}>{sessionQuery.error instanceof Error ? sessionQuery.error.message : copy.errors.couldNotLoadAccess}</Text>
+          <Text style={[styles.errorText, isRtl && styles.rtlText]}>{localizedDriverError(sessionQuery.error, copy, copy.errors.couldNotLoadAccess)}</Text>
           <Button label={copy.common.signOut} tone="light" onPress={signOut} />
         </View>
       </SafeAreaView>
@@ -2632,6 +2753,9 @@ export default function DriverApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [language, setLanguage] = useState<DriverLanguage>('en');
   const [themeMode, setThemeMode] = useState<DriverThemeMode>('dark');
+  const [mobileSettings, setMobileSettings] = useState<DriverMobileAppSettings>({
+    footerCredit: DEFAULT_FOOTER_CREDIT
+  });
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const copy = useMemo(() => getDriverCopy(language), [language]);
   const isRtl = isRtlLanguage(language);
@@ -2642,6 +2766,12 @@ export default function DriverApp() {
       setSession(nextSession);
     });
     return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    driverApi.mobileAppSettings()
+      .then(setMobileSettings)
+      .catch(error => console.info('Driver mobile settings unavailable; using bundled branding.', error?.message || error));
   }, []);
 
   useEffect(() => {
@@ -2706,7 +2836,14 @@ export default function DriverApp() {
         onThemeChange={changeTheme}
       />
     )
-    : <LoginScreen onSignedIn={() => supabase.auth.getSession().then(({ data }) => setSession(data.session))} copy={copy} isRtl={isRtl} />;
+    : (
+      <LoginScreen
+        onSignedIn={() => supabase.auth.getSession().then(({ data }) => setSession(data.session))}
+        copy={copy}
+        isRtl={isRtl}
+        mobileSettings={mobileSettings}
+      />
+    );
 }
 
 const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
@@ -4124,47 +4261,67 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.lg,
     ...shadows.card
   },
-  branchRailWrap: {
+  branchDropdownWrap: {
     gap: spacing.sm
   },
-  branchRailLabel: {
+  branchDropdownLabel: {
     color: colors.muted,
     ...typography.micro
   },
-  branchRail: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg
-  },
-  branchChip: {
-    width: 148,
-    minHeight: 72,
+  branchDropdownTrigger: {
+    minHeight: 76,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
     padding: spacing.md,
-    justifyContent: 'space-between'
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md
   },
-  branchChipActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft
+  branchDropdownValue: {
+    flex: 1,
+    gap: 5
   },
-  branchChipCode: {
+  branchDropdownCode: {
     color: colors.muted,
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase'
   },
-  branchChipCodeActive: {
-    color: colors.brand
-  },
-  branchChipName: {
+  branchDropdownName: {
     color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 20
+  },
+  branchDropdownChevron: {
+    color: colors.muted,
     fontSize: 13,
     fontWeight: '900'
   },
-  branchChipNameActive: {
-    color: colors.brandDark
+  branchDropdownMenu: {
+    overflow: 'hidden',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface
+  },
+  branchDropdownItem: {
+    minHeight: 68,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  branchDropdownItemActive: {
+    backgroundColor: colors.brandSoft
+  },
+  branchDropdownTextActive: {
+    color: colors.brand
   },
   performanceCard: {
     borderRadius: radius.lg,

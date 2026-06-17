@@ -563,6 +563,8 @@ export interface DeliveryDriver {
   isOnline?: boolean;
   statusChangedAt?: string | null;
   lastSeenAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
@@ -585,6 +587,15 @@ export interface DeliveryCostSetting {
   workingDaysPerMonth: number;
   targetOrdersPerDay: number;
   assumedMarginPct?: number | null;
+}
+
+export interface DeliveryMobileAppSettings {
+  id: 'global';
+  loginLogoUrl: string;
+  footerLogoUrl: string;
+  footerCredit: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
 }
 
 export interface DeliveryDriverMonthlyTarget {
@@ -685,6 +696,11 @@ export interface DeliveryDriverDutyReportRow {
   statDate: string;
   firstOnlineAt?: string | null;
   lastOfflineAt?: string | null;
+  startedBranchName?: string | null;
+  startedLat?: number | null;
+  startedLng?: number | null;
+  startedDistanceM?: number | null;
+  shiftCount: number;
   totalWorkingMinutes: number;
   assignedCount: number;
   pickedUpCount: number;

@@ -8,6 +8,7 @@ import {
   DeliveryDriverMonthlyTarget,
   DeliveryDriverDutyReportRow,
   DeliveryLifecycleStatus,
+  DeliveryMobileAppSettings,
   DeliveryOrder,
   DeliveryOrderEvent,
   DeliveryOrderLifecycleInput,
@@ -21,8 +22,18 @@ import {
   normalizeDeliveryPaymentCode,
   normalizeDeliveryPaymentLabel
 } from '../lib/deliveryPaymentTypes';
+import { generateUUID } from '../utils/uuid';
 
 const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
+const DRIVER_MOBILE_ASSETS_BUCKET = 'driver-mobile-assets';
+const DEFAULT_DELIVERY_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
+  id: 'global',
+  loginLogoUrl: '',
+  footerLogoUrl: '',
+  footerCredit: 'Developed by Ahmed Elsherbini',
+  updatedAt: null,
+  updatedBy: null
+};
 
 const isValidDateKey = (value: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -215,6 +226,17 @@ const toDriverMonthlyTarget = (row: any): DeliveryDriverMonthlyTarget => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at
 });
+
+const toMobileAppSettings = (row: any): DeliveryMobileAppSettings => ({
+  id: 'global',
+  loginLogoUrl: row?.login_logo_url || '',
+  footerLogoUrl: row?.footer_logo_url || '',
+  footerCredit: row?.footer_credit || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.footerCredit,
+  updatedAt: row?.updated_at || null,
+  updatedBy: row?.updated_by || null
+});
+
+const normalizeImageUrl = (value?: string | null) => value?.trim() || '';
 
 const cleanBlockSearchTerm = (value: string) => value.trim().replace(/[,%()]/g, ' ').replace(/\s+/g, ' ');
 
@@ -491,7 +513,9 @@ export const deliveryService = {
         authUserId: d.auth_user_id || null,
         isOnline: !!d.is_online,
         statusChangedAt: d.status_changed_at || null,
-        lastSeenAt: d.last_seen_at || null
+        lastSeenAt: d.last_seen_at || null,
+        createdAt: d.created_at || null,
+        updatedAt: d.updated_at || null
       }));
     },
     upsert: async (driver: Partial<DeliveryDriver>): Promise<DeliveryDriver> => {
@@ -515,8 +539,25 @@ export const deliveryService = {
         authUserId: data.auth_user_id || null,
         isOnline: !!data.is_online,
         statusChangedAt: data.status_changed_at || null,
-        lastSeenAt: data.last_seen_at || null
+        lastSeenAt: data.last_seen_at || null,
+        createdAt: data.created_at || null,
+        updatedAt: data.updated_at || null
       };
+    },
+    delete: async (id: string) => {
+      const { error } = await supabaseClient.from('delivery_drivers').delete().eq('id', id);
+      if (error) {
+        const message = String(error.message || '');
+        if (
+          message.toLowerCase().includes('foreign key')
+          || message.toLowerCase().includes('violates')
+          || error.code === '23503'
+        ) {
+          throw new Error('This driver has delivery history or pickup batches. Deactivate the driver instead to preserve audit records.');
+        }
+        throw error;
+      }
+      return true;
     },
     deactivate: async (id: string) => {
       const { error } = await supabaseClient.from('delivery_drivers').update({ is_active: false }).eq('id', id);
@@ -579,6 +620,11 @@ export const deliveryService = {
         statDate: row.stat_date,
         firstOnlineAt: row.first_online_at || null,
         lastOfflineAt: row.last_offline_at || null,
+        startedBranchName: row.started_branch_name || null,
+        startedLat: row.started_lat === null || row.started_lat === undefined ? null : Number(row.started_lat),
+        startedLng: row.started_lng === null || row.started_lng === undefined ? null : Number(row.started_lng),
+        startedDistanceM: row.started_distance_m === null || row.started_distance_m === undefined ? null : Number(row.started_distance_m),
+        shiftCount: Number(row.shift_count || 0),
         totalWorkingMinutes: Number(row.total_working_minutes || 0),
         assignedCount: Number(row.assigned_count || 0),
         pickedUpCount: Number(row.picked_up_count || 0),
@@ -778,6 +824,60 @@ export const deliveryService = {
         .upsert(payload, { onConflict: 'driver_id' });
       if (error) throw error;
       return true;
+    }
+  },
+
+  mobileAppSettings: {
+    get: async (): Promise<DeliveryMobileAppSettings> => {
+      const { data, error } = await supabaseClient
+        .from('delivery_mobile_app_settings')
+        .select('id, login_logo_url, footer_logo_url, footer_credit, updated_at, updated_by')
+        .eq('id', 'global')
+        .maybeSingle();
+      if (error) {
+        console.warn('Delivery mobile app settings load failed; using local defaults.', error);
+        return DEFAULT_DELIVERY_MOBILE_APP_SETTINGS;
+      }
+      return toMobileAppSettings(data);
+    },
+    upsert: async (settings: Partial<DeliveryMobileAppSettings>): Promise<DeliveryMobileAppSettings> => {
+      const { data: session } = await supabaseClient.auth.getSession();
+      const payload = {
+        id: 'global',
+        login_logo_url: normalizeImageUrl(settings.loginLogoUrl),
+        footer_logo_url: normalizeImageUrl(settings.footerLogoUrl),
+        footer_credit: settings.footerCredit?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.footerCredit,
+        updated_by: session.session?.user?.id || null,
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await supabaseClient
+        .from('delivery_mobile_app_settings')
+        .upsert(payload, { onConflict: 'id' })
+        .select('id, login_logo_url, footer_logo_url, footer_credit, updated_at, updated_by')
+        .single();
+      if (error) throw error;
+      return toMobileAppSettings(data);
+    },
+    uploadLogo: async (file: File, slot: 'login' | 'footer'): Promise<string> => {
+      if (!file.type.startsWith('image/')) throw new Error('Please upload an image file.');
+      if (file.size > 5 * 1024 * 1024) throw new Error('Logo image must be 5MB or smaller.');
+
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `logos/${slot}/${generateUUID()}_${safeName || `logo.${extension}`}`;
+      const { error } = await supabaseClient.storage
+        .from(DRIVER_MOBILE_ASSETS_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          contentType: file.type,
+          upsert: true
+        });
+      if (error) throw error;
+
+      const { data } = supabaseClient.storage
+        .from(DRIVER_MOBILE_ASSETS_BUCKET)
+        .getPublicUrl(filePath);
+      return data.publicUrl;
     }
   },
 

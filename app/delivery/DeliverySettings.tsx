@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, Bike, Building2, CreditCard, Map, MapPin, Plus, Search, Trophy, UsersRound } from 'lucide-react';
+import { AlertTriangle, Bike, Building2, CheckSquare, CreditCard, Download, ImageIcon, Map, MapPin, Plus, Save, Search, Smartphone, Trash2, Trophy, UploadCloud, UsersRound } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import {
-  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryDriverMonthlyTarget, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
+  Branch, BranchClassification, DeliveryArea, DeliveryBlock, DeliveryDriver, DeliveryDriverMonthlyTarget, DeliveryMobileAppSettings, DeliveryOrder, DeliveryPaymentTypeConfig, DeliverySupervisor, Governorate
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
 import { isDeliveryPaymentBlockExempt, normalizeDeliveryPaymentCode } from '../../lib/deliveryPaymentTypes';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 
-type SettingsTab = 'drivers' | 'targets' | 'payments' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality';
+type SettingsTab = 'drivers' | 'targets' | 'payments' | 'areas' | 'supervisors' | 'blocks' | 'classification' | 'quality' | 'mobile';
 
 const escapeHtml = (value?: string | null) =>
   String(value || '')
@@ -33,9 +33,19 @@ const formatMonthLabel = (monthKey: string) => {
   return new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' }).format(new Date(Date.UTC(year, month - 1, 1)));
 };
 
+const DEFAULT_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
+  id: 'global',
+  loginLogoUrl: '',
+  footerLogoUrl: '',
+  footerCredit: 'Developed by Ahmed Elsherbini',
+  updatedAt: null,
+  updatedBy: null
+};
+
 export const DeliverySettings: React.FC = () => {
   const [tab, setTab] = useState<SettingsTab>('drivers');
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
   const [driverTargets, setDriverTargets] = useState<DeliveryDriverMonthlyTarget[]>([]);
   const [driverMonthlyActuals, setDriverMonthlyActuals] = useState<Record<string, number>>({});
   const [targetMonth, setTargetMonth] = useState(currentMonthKey());
@@ -45,15 +55,22 @@ export const DeliverySettings: React.FC = () => {
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [classifications, setClassifications] = useState<BranchClassification[]>([]);
+  const [mobileSettings, setMobileSettings] = useState<DeliveryMobileAppSettings>(DEFAULT_MOBILE_APP_SETTINGS);
+  const [isSavingMobileSettings, setIsSavingMobileSettings] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState<'login' | 'footer' | null>(null);
   const [blockSearch, setBlockSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const activeDriverCount = useMemo(() => drivers.filter(driver => driver.isActive).length, [drivers]);
+  const inactiveDriverCount = drivers.length - activeDriverCount;
+  const selectedDrivers = useMemo(() => drivers.filter(driver => selectedDriverIds.has(driver.id)), [drivers, selectedDriverIds]);
+  const allDriversSelected = drivers.length > 0 && selectedDriverIds.size === drivers.length;
 
   const load = async () => {
     setIsLoading(true);
     try {
       const targetMonthStart = monthStartFromKey(targetMonth);
       const targetMonthEnd = monthEndFromKey(targetMonth);
-      const [driverResult, targetResult, dutyResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult] = await Promise.allSettled([
+      const [driverResult, targetResult, dutyResult, paymentResult, areaResult, supervisorResult, blockResult, branchResult, classResult, mobileResult] = await Promise.allSettled([
         deliveryService.drivers.list(true),
         deliveryService.driverTargets.list(targetMonthStart),
         deliveryService.driverDuty.list({ dateFrom: targetMonthStart, dateTo: targetMonthEnd }),
@@ -62,7 +79,8 @@ export const DeliverySettings: React.FC = () => {
         deliveryService.supervisors.list(true),
         deliveryService.blocks.list(true),
         branchService.list(),
-        deliveryService.classifications.list()
+        deliveryService.classifications.list(),
+        deliveryService.mobileAppSettings.get()
       ]);
       setDrivers(driverResult.status === 'fulfilled' ? driverResult.value : []);
       setDriverTargets(targetResult.status === 'fulfilled' ? targetResult.value : []);
@@ -80,6 +98,7 @@ export const DeliverySettings: React.FC = () => {
       setBlocks(blockResult.status === 'fulfilled' ? blockResult.value : []);
       setBranches(branchResult.status === 'fulfilled' ? branchResult.value.filter(b => b.role === 'branch') : []);
       setClassifications(classResult.status === 'fulfilled' ? classResult.value : []);
+      setMobileSettings(mobileResult.status === 'fulfilled' ? mobileResult.value : DEFAULT_MOBILE_APP_SETTINGS);
     } catch (e) {
       console.error('Delivery settings load failed', e);
     } finally {
@@ -88,6 +107,14 @@ export const DeliverySettings: React.FC = () => {
   };
 
   useEffect(() => { load(); }, [targetMonth]);
+  useEffect(() => {
+    setSelectedDriverIds(previous => {
+      if (previous.size === 0) return previous;
+      const validIds = new Set(drivers.map(driver => driver.id));
+      const next = new Set([...previous].filter(id => validIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [drivers]);
 
   // ----- Areas -----
   const editArea = async (area?: DeliveryArea) => {
@@ -249,6 +276,130 @@ export const DeliverySettings: React.FC = () => {
       await load();
     } catch (e: any) {
       Swal.fire('Update failed', e?.message || 'Could not update driver.', 'error');
+    }
+  };
+
+  const toggleDriverSelection = (driverId: string) => {
+    setSelectedDriverIds(previous => {
+      const next = new Set(previous);
+      if (next.has(driverId)) next.delete(driverId);
+      else next.add(driverId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllDrivers = () => {
+    setSelectedDriverIds(previous => previous.size === drivers.length ? new Set() : new Set(drivers.map(driver => driver.id)));
+  };
+
+  const deleteDrivers = async (driversToDelete: DeliveryDriver[]) => {
+    if (driversToDelete.length === 0) return;
+    const { isConfirmed } = await Swal.fire({
+      icon: 'warning',
+      title: driversToDelete.length === 1 ? 'Delete driver?' : `Delete ${driversToDelete.length} drivers?`,
+      html: `
+        <div class="text-left text-sm font-semibold leading-6 text-slate-600">
+          <p>This removes the driver profile from Delivery Settings.</p>
+          <p class="mt-2">If a driver has delivery history, Supabase may block deletion to protect audit records. Use deactivate for historical drivers.</p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      confirmButtonColor: '#B91c1c'
+    });
+    if (!isConfirmed) return;
+
+    const deleted: DeliveryDriver[] = [];
+    const failed: Array<{ driver: DeliveryDriver; message: string }> = [];
+    for (const driver of driversToDelete) {
+      try {
+        await deliveryService.drivers.delete(driver.id);
+        deleted.push(driver);
+      } catch (e: any) {
+        failed.push({ driver, message: e?.message || 'Could not delete driver.' });
+      }
+    }
+
+    setSelectedDriverIds(previous => {
+      const next = new Set(previous);
+      deleted.forEach(driver => next.delete(driver.id));
+      return next;
+    });
+    await load();
+
+    if (failed.length > 0) {
+      await Swal.fire({
+        icon: deleted.length > 0 ? 'warning' : 'error',
+        title: deleted.length > 0 ? 'Some drivers were not deleted' : 'Delete failed',
+        html: `
+          <div class="text-left text-xs font-bold leading-5 text-slate-600">
+            ${deleted.length > 0 ? `<p class="mb-2 text-emerald-700">${deleted.length} deleted successfully.</p>` : ''}
+            ${failed.map(item => `<p><span class="text-slate-900">${escapeHtml(item.driver.driverCode || item.driver.name)}</span>: ${escapeHtml(item.message)}</p>`).join('')}
+          </div>
+        `
+      });
+    } else {
+      await Swal.fire({
+        icon: 'success',
+        title: 'Drivers deleted',
+        text: `${deleted.length} driver${deleted.length === 1 ? '' : 's'} deleted successfully.`,
+        timer: 1400,
+        showConfirmButton: false
+      });
+    }
+  };
+
+  const exportDriversExcel = async () => {
+    const rows = selectedDrivers.length > 0 ? selectedDrivers : drivers;
+    if (rows.length === 0) {
+      Swal.fire('No drivers', 'There are no driver records to export.', 'info');
+      return;
+    }
+    try {
+      const ExcelJS = await import('exceljs');
+      const { saveAs } = await import('file-saver');
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Tabarak Hub';
+      workbook.created = new Date();
+      const sheet = workbook.addWorksheet('Drivers');
+      sheet.columns = [
+        { header: 'Driver ID', key: 'driverCode', width: 14 },
+        { header: 'Name', key: 'name', width: 28 },
+        { header: 'Phone', key: 'phone', width: 18 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Auth linked', key: 'authLinked', width: 14 },
+        { header: 'Online', key: 'online', width: 10 },
+        { header: 'Status changed at', key: 'statusChangedAt', width: 24 },
+        { header: 'Last seen at', key: 'lastSeenAt', width: 24 },
+        { header: 'Created at', key: 'createdAt', width: 24 },
+        { header: 'Updated at', key: 'updatedAt', width: 24 },
+        { header: 'Notes', key: 'notes', width: 32 }
+      ];
+      rows.forEach(driver => {
+        sheet.addRow({
+          driverCode: driver.driverCode || '',
+          name: driver.name,
+          phone: driver.phone || '',
+          status: driver.isActive ? 'Active' : 'Inactive',
+          authLinked: driver.authUserId ? 'Yes' : 'No',
+          online: driver.isOnline ? 'Yes' : 'No',
+          statusChangedAt: driver.statusChangedAt || '',
+          lastSeenAt: driver.lastSeenAt || '',
+          createdAt: driver.createdAt || '',
+          updatedAt: driver.updatedAt || '',
+          notes: driver.notes || ''
+        });
+      });
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+      sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+      sheet.autoFilter = 'A1:K1';
+      const buffer = await workbook.xlsx.writeBuffer();
+      const suffix = selectedDrivers.length > 0 ? 'Selected' : 'All';
+      saveAs(new Blob([buffer]), `Delivery_Drivers_${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e: any) {
+      Swal.fire('Export failed', e?.message || 'Could not export drivers.', 'error');
     }
   };
 
@@ -544,6 +695,50 @@ export const DeliverySettings: React.FC = () => {
     }
   };
 
+  const saveMobileSettings = async (nextSettings = mobileSettings) => {
+    setIsSavingMobileSettings(true);
+    try {
+      const saved = await deliveryService.mobileAppSettings.upsert(nextSettings);
+      setMobileSettings(saved);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Mobile app updated',
+        text: 'Driver app branding settings were saved.',
+        timer: 1400,
+        showConfirmButton: false
+      });
+    } catch (e: any) {
+      Swal.fire('Save failed', e?.message || 'Could not save mobile app settings.', 'error');
+    } finally {
+      setIsSavingMobileSettings(false);
+    }
+  };
+
+  const uploadMobileLogo = async (slot: 'login' | 'footer', file?: File | null) => {
+    if (!file) return;
+    setUploadingLogo(slot);
+    try {
+      const uploadedUrl = await deliveryService.mobileAppSettings.uploadLogo(file, slot);
+      const nextSettings = {
+        ...mobileSettings,
+        [slot === 'login' ? 'loginLogoUrl' : 'footerLogoUrl']: uploadedUrl
+      };
+      const saved = await deliveryService.mobileAppSettings.upsert(nextSettings);
+      setMobileSettings(saved);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Logo uploaded',
+        text: `${slot === 'login' ? 'Login' : 'Footer'} logo is now live for the driver app.`,
+        timer: 1400,
+        showConfirmButton: false
+      });
+    } catch (e: any) {
+      Swal.fire('Upload failed', e?.message || 'Could not upload logo.', 'error');
+    } finally {
+      setUploadingLogo(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50 w-fit max-w-full overflow-x-auto">
@@ -555,6 +750,7 @@ export const DeliverySettings: React.FC = () => {
           { id: 'supervisors', label: 'Supervisors', icon: UsersRound },
           { id: 'blocks', label: 'Blocks', icon: MapPin },
           { id: 'classification', label: 'Branch Assignment', icon: Building2 },
+          { id: 'mobile', label: 'Mobile App', icon: Smartphone },
           { id: 'quality', label: 'Data Quality', icon: AlertTriangle }
         ] as Array<{ id: SettingsTab; label: string; icon: React.ElementType }>).map(t => (
           <button
@@ -575,32 +771,89 @@ export const DeliverySettings: React.FC = () => {
         </div>
       ) : tab === 'drivers' ? (
         <section className="operational-panel p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery drivers</h3>
-            <button onClick={() => editDriver()} className="btn-primary text-[10px] uppercase tracking-widest">
-              <Plus className="h-3.5 w-3.5" /> Add driver
-            </button>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery drivers</h3>
+              <p className="mt-1 text-[11px] font-medium text-slate-500">
+                {drivers.length} total drivers - {activeDriverCount} active - {inactiveDriverCount} inactive - {selectedDriverIds.size} selected
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={toggleSelectAllDrivers}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand"
+                disabled={drivers.length === 0}
+              >
+                <CheckSquare className="h-3.5 w-3.5" /> {allDriversSelected ? 'Clear all' : 'Select all'}
+              </button>
+              <button
+                onClick={exportDriversExcel}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand"
+                disabled={drivers.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" /> Download Excel
+              </button>
+              <button
+                onClick={() => deleteDrivers(selectedDrivers)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={selectedDrivers.length === 0}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete selected
+              </button>
+              <button onClick={() => editDriver()} className="btn-primary text-[10px] uppercase tracking-widest">
+                <Plus className="h-3.5 w-3.5" /> Add driver
+              </button>
+            </div>
+          </div>
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total drivers</p>
+              <p className="mt-1 text-2xl font-black text-slate-900 tabular-nums">{drivers.length}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Active</p>
+              <p className="mt-1 text-2xl font-black text-emerald-800 tabular-nums">{activeDriverCount}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inactive</p>
+              <p className="mt-1 text-2xl font-black text-slate-700 tabular-nums">{inactiveDriverCount}</p>
+            </div>
+            <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand/70">Selected</p>
+              <p className="mt-1 text-2xl font-black text-brand tabular-nums">{selectedDriverIds.size}</p>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {drivers.map(driver => (
-              <div key={driver.id} className={`rounded-lg border p-3 ${driver.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
-                <div className="flex items-center justify-between">
-                  <div>
+              <div key={driver.id} className={`rounded-lg border p-3 ${selectedDriverIds.has(driver.id) ? 'border-brand/40 bg-brand/5' : driver.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedDriverIds.has(driver.id)}
+                      onChange={() => toggleDriverSelection(driver.id)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                      aria-label={`Select ${driver.name}`}
+                    />
+                    <div className="min-w-0">
                     <p className="text-sm font-black text-slate-800">{driver.name}</p>
                     <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand">
                       {driver.driverCode || 'Pending Driver ID'}
                     </p>
+                      {driver.authUserId && <p className="mt-1 text-[10px] font-bold text-slate-400">Linked login account</p>}
+                    </div>
                   </div>
                   <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${driver.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
                     {driver.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </div>
                 {driver.phone && <p className="mt-1 text-[11px] font-bold text-slate-400">{driver.phone}</p>}
-                <div className="mt-2 flex gap-3 text-[11px] font-bold">
+                <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold">
                   <button onClick={() => editDriver(driver)} className="text-slate-500 hover:text-brand">Edit</button>
                   <button onClick={() => toggleDriver(driver)} className="text-slate-400 hover:text-brand">
                     {driver.isActive ? 'Deactivate' : 'Reactivate'}
                   </button>
+                  <button onClick={() => deleteDrivers([driver])} className="text-red-500 hover:text-red-700">Delete</button>
                 </div>
               </div>
             ))}
@@ -894,6 +1147,120 @@ export const DeliverySettings: React.FC = () => {
                 </button>
               );
             })}
+          </div>
+        </section>
+      ) : tab === 'mobile' ? (
+        <section className="operational-panel p-4 md:p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Driver mobile app</h3>
+              <p className="mt-1 max-w-2xl text-[11px] font-medium leading-5 text-slate-500">
+                Control the logos shown in the driver app login screen. Uploaded images are saved to Supabase Storage and become available to the app without rebuilding.
+              </p>
+            </div>
+            <button
+              onClick={() => saveMobileSettings()}
+              disabled={isSavingMobileSettings || !!uploadingLogo}
+              className="btn-primary text-[10px] uppercase tracking-widest disabled:opacity-50"
+            >
+              <Save className="h-3.5 w-3.5" /> {isSavingMobileSettings ? 'Saving...' : 'Save settings'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_0.9fr]">
+            {([
+              {
+                slot: 'login' as const,
+                title: 'Login logo',
+                helper: 'Main logo at the top of the driver login screen.',
+                value: mobileSettings.loginLogoUrl,
+                keyName: 'loginLogoUrl' as const
+              },
+              {
+                slot: 'footer' as const,
+                title: 'Footer logo',
+                helper: 'Small HUB/developer footer logo under the login form.',
+                value: mobileSettings.footerLogoUrl,
+                keyName: 'footerLogoUrl' as const
+              }
+            ]).map(item => (
+              <div key={item.slot} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-700">{item.title}</p>
+                    <p className="mt-1 text-[11px] font-bold leading-5 text-slate-400">{item.helper}</p>
+                  </div>
+                  <ImageIcon className="h-4 w-4 shrink-0 text-brand" />
+                </div>
+                <div className="mb-3 flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                  {item.value ? (
+                    <img src={item.value} alt={item.title} className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <div className="text-center">
+                      <ImageIcon className="mx-auto h-6 w-6 text-slate-300" />
+                      <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Local fallback</p>
+                    </div>
+                  )}
+                </div>
+                <label className="mb-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand/15 bg-brand/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand transition hover:bg-brand/10">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  {uploadingLogo === item.slot ? 'Uploading...' : 'Upload image'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    disabled={!!uploadingLogo}
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      event.currentTarget.value = '';
+                      uploadMobileLogo(item.slot, file);
+                    }}
+                  />
+                </label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Image URL</label>
+                <input
+                  value={item.value}
+                  onChange={event => setMobileSettings(previous => ({ ...previous, [item.keyName]: event.target.value }))}
+                  placeholder="https://..."
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                />
+                <button
+                  onClick={() => setMobileSettings(previous => ({ ...previous, [item.keyName]: '' }))}
+                  className="mt-2 text-[11px] font-bold text-slate-400 hover:text-brand"
+                >
+                  Use app fallback logo
+                </button>
+              </div>
+            ))}
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-3">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-700">Footer credit</p>
+                <p className="mt-1 text-[11px] font-bold leading-5 text-slate-400">
+                  Text displayed directly under the footer logo on the driver login screen.
+                </p>
+              </div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Credit text</label>
+              <input
+                value={mobileSettings.footerCredit}
+                onChange={event => setMobileSettings(previous => ({ ...previous, footerCredit: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+              />
+              <div className="mt-4 rounded-xl bg-slate-950 p-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Login footer preview</p>
+                <div className="mt-3 flex h-20 items-center justify-center">
+                  {mobileSettings.footerLogoUrl ? (
+                    <img src={mobileSettings.footerLogoUrl} alt="Driver app footer logo preview" className="max-h-full max-w-[140px] object-contain" />
+                  ) : (
+                    <div className="rounded-lg border border-white/10 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white/40">Local logo</div>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] font-bold text-white/70">{mobileSettings.footerCredit || DEFAULT_MOBILE_APP_SETTINGS.footerCredit}</p>
+              </div>
+              <p className="mt-3 text-[10px] font-bold leading-5 text-slate-400">
+                Tip: leave a logo URL empty to keep using the bundled app fallback.
+              </p>
+            </div>
           </div>
         </section>
       ) : (
