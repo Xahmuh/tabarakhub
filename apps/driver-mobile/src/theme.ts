@@ -1,4 +1,47 @@
-export const colors = {
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export type DriverThemeMode = 'light' | 'dark';
+
+export const DRIVER_THEME_STORAGE_KEY = 'tabarak-driver-mobile-theme';
+
+const lightColorPalette = {
+  brand: '#B91c1c',
+  brandHover: '#991b1b',
+  brandDark: '#7f1d1d',
+  brandMuted: 'rgba(185, 28, 28, 0.05)',
+  brandSoft: '#fef2f2',
+  ink: '#0f172a',
+  navy: '#0f172a',
+  slate900: '#0f172a',
+  slate800: '#1e293b',
+  slate700: '#334155',
+  slate600: '#475569',
+  muted: '#64748b',
+  slate400: '#94a3b8',
+  slate300: '#cbd5e1',
+  border: '#e2e8f0',
+  borderSoft: '#f1f5f9',
+  rail: 'rgba(241, 245, 249, 0.7)',
+  overlay: 'rgba(15, 23, 42, 0.58)',
+  surface: '#ffffff',
+  surfaceMuted: '#f8fafc',
+  page: '#f8fafc',
+  success: '#047857',
+  successSoft: '#f0fdf4',
+  successBorder: '#bbf7d0',
+  warning: '#b45309',
+  warningSoft: '#fffbeb',
+  warningBorder: '#fde68a',
+  info: '#1d4ed8',
+  infoSoft: '#eff6ff',
+  infoBorder: '#bfdbfe',
+  danger: '#B91c1c',
+  dangerSoft: '#fef2f2',
+  dangerBorder: '#fecaca',
+  white: '#ffffff'
+};
+
+const darkColorPalette = {
   brand: '#ef4444',
   brandHover: '#dc2626',
   brandDark: '#991b1b',
@@ -35,6 +78,12 @@ export const colors = {
   white: '#ffffff'
 };
 
+export type DriverColors = typeof lightColorPalette;
+
+export const lightColors: DriverColors = lightColorPalette;
+export const darkColors: DriverColors = darkColorPalette;
+export const colors: DriverColors = { ...darkColors };
+
 export const radius = {
   xs: 6,
   sm: 8,
@@ -70,7 +119,24 @@ export const typography = {
   }
 };
 
-export const shadows = {
+const lightShadowPalette = {
+  card: {
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2
+  },
+  brand: {
+    shadowColor: '#B91c1c',
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  }
+};
+
+const darkShadowPalette = {
   card: {
     shadowColor: '#000000',
     shadowOpacity: 0.28,
@@ -85,4 +151,35 @@ export const shadows = {
     shadowOffset: { width: 0, height: 10 },
     elevation: 5
   }
+};
+
+export type DriverShadows = typeof lightShadowPalette;
+
+export const shadows: DriverShadows = {
+  card: { ...darkShadowPalette.card },
+  brand: { ...darkShadowPalette.brand }
+};
+
+export const getDriverThemeColors = (themeMode: DriverThemeMode) =>
+  themeMode === 'light' ? lightColors : darkColors;
+
+export const applyDriverTheme = (themeMode: DriverThemeMode) => {
+  const nextColors = getDriverThemeColors(themeMode);
+  const nextShadows = themeMode === 'light' ? lightShadowPalette : darkShadowPalette;
+  Object.assign(colors, nextColors);
+  shadows.card = { ...nextShadows.card };
+  shadows.brand = { ...nextShadows.brand };
+  return colors;
+};
+
+export const normalizeDriverTheme = (value?: string | null): DriverThemeMode =>
+  value === 'light' || value === 'dark' ? value : 'dark';
+
+export const loadSavedDriverTheme = async (): Promise<DriverThemeMode> => {
+  const stored = await AsyncStorage.getItem(DRIVER_THEME_STORAGE_KEY);
+  return normalizeDriverTheme(stored);
+};
+
+export const saveDriverTheme = async (themeMode: DriverThemeMode) => {
+  await AsyncStorage.setItem(DRIVER_THEME_STORAGE_KEY, themeMode);
 };

@@ -42,7 +42,18 @@ import {
 } from '../src/i18n';
 import { enqueueOrderAction, flushQueuedActions } from '../src/lib/offlineQueue';
 import { hasSupabaseConfig, supabase } from '../src/lib/supabase';
-import { colors, radius, shadows, spacing, typography } from '../src/theme';
+import {
+  applyDriverTheme,
+  colors,
+  loadSavedDriverTheme,
+  radius,
+  saveDriverTheme,
+  shadows,
+  spacing,
+  typography,
+  type DriverColors,
+  type DriverThemeMode
+} from '../src/theme';
 
 const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
@@ -1425,14 +1436,63 @@ const LanguageSelector = ({
   );
 };
 
+const ThemeSelector = ({
+  themeMode,
+  copy,
+  isRtl,
+  onChange
+}: {
+  themeMode: DriverThemeMode;
+  copy: DriverCopy;
+  isRtl: boolean;
+  onChange: (themeMode: DriverThemeMode) => void;
+}) => {
+  const options: Array<{ mode: DriverThemeMode; label: string; hint: string }> = [
+    { mode: 'light', label: copy.profile.lightTheme, hint: 'Day' },
+    { mode: 'dark', label: copy.profile.darkTheme, hint: 'Night' }
+  ];
+
+  return (
+    <View style={styles.languageDropdownSection}>
+      <Text style={[styles.loginFieldLabel, isRtl && styles.rtlText]}>{copy.profile.themeTitle}</Text>
+      <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.profile.themeText}</Text>
+      <View style={[styles.themeSwitchRow, isRtl && styles.rtlRow]}>
+        {options.map(option => {
+          const active = option.mode === themeMode;
+          return (
+            <Pressable
+              key={option.mode}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => onChange(option.mode)}
+              style={[styles.themeChoice, active && styles.themeChoiceActive]}
+            >
+              <Text style={[styles.themeChoiceText, active && styles.themeChoiceTextActive, isRtl && styles.rtlText]}>
+                {option.label}
+              </Text>
+              <Text style={[styles.themeChoiceHint, active && styles.themeChoiceTextActive, isRtl && styles.rtlText]}>
+                {active ? copy.profile.themeSelected : option.hint}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
 const Dashboard = ({
   onSignedOut,
   language,
-  onLanguageChange
+  onLanguageChange,
+  themeMode,
+  onThemeChange
 }: {
   onSignedOut: () => void;
   language: DriverLanguage;
   onLanguageChange: (language: DriverLanguage) => void;
+  themeMode: DriverThemeMode;
+  onThemeChange: (themeMode: DriverThemeMode) => void;
 }) => {
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -2365,6 +2425,7 @@ const Dashboard = ({
         <Pill label={activeShift ? copy.common.online : copy.common.offline} tone={activeShift ? 'green' : 'neutral'} />
       </View>
       <LanguageSelector language={language} copy={copy} isRtl={isRtl} onChange={onLanguageChange} />
+      <ThemeSelector themeMode={themeMode} copy={copy} isRtl={isRtl} onChange={onThemeChange} />
       <Pressable
         accessibilityRole="button"
         onPress={() => setActiveTab('dutyRecord')}
@@ -2561,6 +2622,7 @@ const Dashboard = ({
 export default function DriverApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [language, setLanguage] = useState<DriverLanguage>('en');
+  const [themeMode, setThemeMode] = useState<DriverThemeMode>('dark');
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const copy = useMemo(() => getDriverCopy(language), [language]);
   const isRtl = isRtlLanguage(language);
@@ -2574,14 +2636,24 @@ export default function DriverApp() {
   }, []);
 
   useEffect(() => {
-    loadSavedDriverLanguage()
-      .then(savedLanguage => setLanguage(savedLanguage))
+    Promise.all([loadSavedDriverLanguage(), loadSavedDriverTheme()])
+      .then(([savedLanguage, savedTheme]) => {
+        setLanguage(savedLanguage);
+        refreshDriverTheme(savedTheme);
+        setThemeMode(savedTheme);
+      })
       .finally(() => setLanguageLoaded(true));
   }, []);
 
   const changeLanguage = useCallback((nextLanguage: DriverLanguage) => {
     setLanguage(nextLanguage);
     saveDriverLanguage(nextLanguage).catch(error => console.warn('Driver language save failed', error));
+  }, []);
+
+  const changeTheme = useCallback((nextThemeMode: DriverThemeMode) => {
+    refreshDriverTheme(nextThemeMode);
+    setThemeMode(nextThemeMode);
+    saveDriverTheme(nextThemeMode).catch(error => console.warn('Driver theme save failed', error));
   }, []);
 
   if (!languageLoaded) {
@@ -2616,11 +2688,19 @@ export default function DriverApp() {
   }
 
   return session
-    ? <Dashboard onSignedOut={() => setSession(null)} language={language} onLanguageChange={changeLanguage} />
+    ? (
+      <Dashboard
+        onSignedOut={() => setSession(null)}
+        language={language}
+        onLanguageChange={changeLanguage}
+        themeMode={themeMode}
+        onThemeChange={changeTheme}
+      />
+    )
     : <LoginScreen onSignedIn={() => supabase.auth.getSession().then(({ data }) => setSession(data.session))} copy={copy} isRtl={isRtl} />;
 }
 
-const styles = StyleSheet.create({
+const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.page
@@ -4231,6 +4311,37 @@ const styles = StyleSheet.create({
   languageDropdownItemActive: {
     backgroundColor: colors.brandSoft
   },
+  themeSwitchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm
+  },
+  themeChoice: {
+    flex: 1,
+    minHeight: 72,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.md,
+    justifyContent: 'space-between'
+  },
+  themeChoiceActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft
+  },
+  themeChoiceText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  themeChoiceTextActive: {
+    color: colors.brand
+  },
+  themeChoiceHint: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800'
+  },
   languageCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -4349,3 +4460,10 @@ const styles = StyleSheet.create({
     ...shadows.card
   }
 });
+
+let styles = createDriverStyles(colors);
+
+const refreshDriverTheme = (themeMode: DriverThemeMode) => {
+  applyDriverTheme(themeMode);
+  styles = createDriverStyles(colors);
+};

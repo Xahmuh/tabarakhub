@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
-  History,
   PackageCheck,
   RefreshCw,
   Route,
@@ -323,24 +322,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
         <button onClick={load} className="btn-secondary text-[10px] uppercase tracking-widest" disabled={isLoading}>
           <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
         </button>
-      </div>
-
-      <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-sm font-semibold leading-6 text-blue-900">
-        <div className="flex items-start gap-3">
-          <History className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
-          <div>
-            <p className="font-black">Phase 1 internal lifecycle tracking</p>
-            <p className="mt-1 text-xs font-bold text-blue-800/80">
-              This board uses existing delivery orders and drivers. Orders assigned to a linked driver account appear in the driver mobile app, while admin/branch lifecycle changes continue through strict audited RPCs.
-            </p>
-            <p className="mt-1 text-xs font-bold text-blue-800/80">
-              Pickup batches group orders collected together so delivery timing stays fair when one driver picks up multiple orders in a single pharmacy visit.
-            </p>
-            <p className="mt-1 text-xs font-bold text-blue-800/80">
-              Talabat orders stay in recording/analytics only and are excluded from internal driver dispatch.
-            </p>
-          </div>
-        </div>
       </div>
 
       {eventErrorMessage && (
