@@ -1224,8 +1224,11 @@ export const DeliverySettings: React.FC = () => {
                       ? <span className="rounded-md border border-brand/10 bg-brand/5 px-2 py-0.5 text-[9px] font-black text-brand">{governorate}</span>
                       : <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">UNCLASSIFIED</span>}
                   </div>
-                  <p className="mt-1 text-[11px] font-bold text-slate-400">
+                  <p className="hidden">
                     {c?.area ? `${c.area}` : 'No area'}{c?.supervisorName ? ` · ${c.supervisorName}` : ' · No supervisor'}
+                  </p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-400">
+                    {areaName || 'No area'}{supervisorName ? ` - ${supervisorName}` : ' - No area supervisor'}
                   </p>
                   {supervisorName && (
                     <p className={`mt-1 text-[10px] font-black uppercase tracking-widest ${supervisorAccessLinked ? 'text-emerald-600' : 'text-amber-600'}`}>
