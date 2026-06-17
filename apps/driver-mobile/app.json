@@ -5,6 +5,7 @@
     "scheme": "tabarakdriver",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./src/assets/tabarak-logo.jpg",
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-router",
@@ -36,7 +37,8 @@
       ]
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./src/assets/tabarak-logo.jpg"
     },
     "extra": {
       "router": {
