@@ -1,5 +1,73 @@
 # Production Gaps
 
+## Phase B Clean Data Layer Applied - 2026-06-17
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Migration `20260617151416_create_phase_b_clean_views.sql` was applied to the linked Supabase project.
+- Local and remote migration history are aligned through `20260617151416`.
+- `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean` exist.
+- `anon` read is blocked.
+- Authenticated writes are blocked.
+- T001 branch simulation is scoped to `T001`.
+- Owner/admin role simulations can read the expected clean rows.
+
+Open blockers:
+
+- No app code has been switched to read from clean views yet.
+- Phase C/D views remain pending.
+- Commit/push/deploy remain pending approval.
+
+## Phase B Clean Data Layer Follow-up - 2026-06-17
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Phase B local migration was created at `supabase/migrations/20260617151416_create_phase_b_clean_views.sql`.
+- It prepares only `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean`.
+- All three views use `security_invoker=true`.
+- `anon` is not granted access; `authenticated` receives `select` only.
+- No destructive cleanup was performed.
+
+Open blockers:
+
+- Migration is not applied remotely.
+- Role-level SQL validation is pending until apply approval.
+- Phase C/D views remain pending and were not implemented.
+
+## Clean Data Layer Follow-up - 2026-06-17
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Validated:
+
+- Project-wide clean data layer audit is documented in `docs/PROJECT_CLEAN_DATA_LAYER_AUDIT.md`.
+- Implementation plan is documented in `docs/PROJECT_CLEAN_DATA_LAYER_PLAN.md`.
+- Linked Supabase project is on Postgres `17.6`, so `security_invoker=true` views are supported.
+- No columns were dropped, no data was deleted, no production data was rewritten, no migration was created/applied, and no deployment was performed.
+
+Open blockers:
+
+- Phase B clean views are not implemented yet; approval is required before creating a local migration.
+- `feedback_responses` currently has an `anon` select policy and must be hardened before any `quality_feedback_clean` view is exposed.
+- Spin/customer/voucher tables must not be exposed as row-level clean views; use aggregate-only reporting after policy review.
+- Existing broad legacy/public-era RLS findings must be fixed separately; clean views must not normalize unsafe access.
+
 ## Driver Mobile Preview Promotion Blocker - 2026-06-16
 
 Current status:

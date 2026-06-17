@@ -1,5 +1,65 @@
 # Final Production Readiness Gate Results
 
+## Phase B Clean Data Layer Apply Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Migration apply | Pass | `20260617151416_create_phase_b_clean_views.sql` applied. |
+| Migration history | Pass | Local/remote aligned through `20260617151416`. |
+| View creation | Pass | `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean` exist. |
+| Security invoker | Pass | Views use `with (security_invoker = true)`. |
+| Grants | Pass | `anon` has no privileges; `authenticated` has select only. |
+| Anon denial | Pass | Direct anon read attempt failed with `42501 permission denied`. |
+| Write denial | Pass | Direct authenticated update attempt failed with `42501 permission denied`. |
+| Branch scope | Pass | T001 role simulation saw only `T001` branch data and zero cross-branch order rows. |
+| Owner/admin reads | Pass | Owner/admin simulations saw 46 orders, 41 drivers, and 22 branches. |
+| Sample shape | Pass | Actual delivery rows are clean; 2 internal transfers intentionally have null block/area/governorate; driver-name mismatch count is 0. |
+| Destructive changes | Pass | No columns dropped, no rows deleted, no production data rewritten. |
+| Production readiness | Not promoted | Commit/push/deploy and app adoption remain pending approval. |
+
+## Phase B Clean Data Layer Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Scope | Pass | Only `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean` were prepared. |
+| Migration | Local prepared | `supabase/migrations/20260617151416_create_phase_b_clean_views.sql` created. |
+| Security invoker | Pass | All three views use `with (security_invoker = true)`. |
+| Grants | Pass | `anon` receives no grant; `authenticated` receives `select` only. |
+| Sensitive fields | Pass | Auth internals, push tokens, phone/contact fields, regulatory fields, backup data, customer data, voucher data, and raw spin tables are not exposed. |
+| Remote apply | Pending approval | No remote migration was applied. |
+| Role validation | Pending apply | SQL role checks can run after apply approval. |
+| Production readiness | Not promoted | Phase B is staging-ready local migration only. |
+
+## Clean Data Layer Gate - 2026-06-17
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Audit docs | Pass | `docs/PROJECT_CLEAN_DATA_LAYER_AUDIT.md` created. |
+| Implementation plan | Pass | `docs/PROJECT_CLEAN_DATA_LAYER_PLAN.md` created. |
+| Supabase view support | Pass | Linked project reports Postgres `17.6`; `security_invoker=true` is supported. |
+| Phase B migration | Pending approval | No migration was created in this Phase A pass. |
+| Remote DB changes | Pass | No remote migration or deploy was performed. |
+| Security model | Partial pass | Proposed views use `security_invoker=true`, authenticated select-only grants, no anon, and no sensitive fields. `feedback_responses` RLS must be hardened before `quality_feedback_clean`. |
+| Production readiness | Not promoted | Clean data layer is staging-ready documentation only until Phase B migration approval and validation. |
+
 ## Driver Mobile Preview Promotion Gate - 2026-06-16
 
 Decision:

@@ -1,5 +1,60 @@
 # Release Readiness Status
 
+## Phase B Clean Data Layer Apply - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Applied migration `20260617151416_create_phase_b_clean_views.sql` to the linked Supabase project.
+- Created read-only clean views: `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean`.
+- Views use `security_invoker=true`, grant `select` only to `authenticated`, and grant nothing to `anon`.
+- Validation passed for counts, safe sample rows, hidden legacy/sensitive fields, T001 branch scoping, owner/admin reads, anon denial, and write denial.
+- No app logic, deploy, commit, push, data rewrite, delete, or column drop was performed.
+- Phase C/D remain pending.
+
+Reference: `docs/PROJECT_CLEAN_DATA_LAYER_AUDIT.md`, `docs/PROJECT_CLEAN_DATA_LAYER_PLAN.md`, and `docs/DELIVERY_ORDERS_SCHEMA_AUDIT.md`.
+
+## Phase B Clean Data Layer - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Local migration `supabase/migrations/20260617151416_create_phase_b_clean_views.sql` prepares the Phase B clean views.
+- Prepared views are `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean`.
+- Views are read-only by grants, use `security_invoker=true`, and hide the Phase A legacy/sensitive fields.
+- No remote migration, deployment, commit, push, column drop, data deletion, or production rewrite was performed.
+- Apply approval and role validation remain pending.
+
+Reference: `docs/PROJECT_CLEAN_DATA_LAYER_AUDIT.md`, `docs/PROJECT_CLEAN_DATA_LAYER_PLAN.md`, and `docs/DELIVERY_ORDERS_SCHEMA_AUDIT.md`.
+
+## Clean Data Layer Audit - 2026-06-17
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Phase A documentation-only clean data layer audit is complete.
+- Recommended Phase B starters are `delivery_orders_clean`, `delivery_drivers_clean`, and `branches_clean`.
+- Linked Supabase runs Postgres `17.6`; `security_invoker=true` views are supported.
+- No clean-view migration was created or applied. No remote schema changes, deploy, commit, or push were performed.
+- Phase B requires explicit approval before creating a local-only migration.
+
+Reference: `docs/PROJECT_CLEAN_DATA_LAYER_AUDIT.md` and `docs/PROJECT_CLEAN_DATA_LAYER_PLAN.md`.
+
 ## Driver Mobile Preview QA - 2026-06-16
 
 Status:
