@@ -35,7 +35,7 @@ Use the clean views first for admin/reporting SQL and selected read-only export/
 | Admin/reporting SQL | Yes | This is the primary Phase B target. The view hides legacy duplicate fields and sensitive/technical columns while preserving RLS through `security_invoker`. |
 | Admin Delivery Analytics page | Yes, export path only | The page still loads operational analytics rows through `deliveryService.orders.list`, but its order Excel export now uses the dedicated clean export adapter backed by `delivery_orders_clean`. |
 | Delivery order Excel exports | Yes, first app consumer is live | Admin delivery order Excel export now uses a dedicated clean DTO/query, runtime parity checks, and clean workbook columns. Keep other export paths unchanged until separately validated. |
-| Owner Dashboard traceability/export | Later, narrow slice first | `ownerDashboardService.loadBundle` combines orders, coverage, branches, drivers, sales, shortages, and today's KPIs. Switch only traceability/export order rows after parity testing, not the whole dashboard. |
+| Owner Dashboard traceability/export | Yes, narrow slice live | Traceability rows and traceability Excel export now use a dedicated clean DTO backed by `delivery_orders_clean`, with runtime parity against the existing customer-order scope. |
 | Owner Dashboard KPIs | No, not yet | KPI calculations currently share `DeliveryOrder` and coverage bundle data. A broad switch risks subtle KPI drift. |
 | Delivery Recording | No | `BranchRecordingPage` inserts, updates, deletes, bulk imports, and checks duplicates through raw table/RPC paths. It needs source-of-truth behavior. |
 | Delivery Dispatch / Lifecycle | No | `DeliveryLifecycleBoard` reads lifecycle fields, writes transitions through lifecycle RPCs, and refreshes operational queues. Keep raw reads and RPC writes together. |
@@ -50,19 +50,19 @@ Use the clean views first for admin/reporting SQL and selected read-only export/
 2. Frontend reports may use `delivery_orders_clean` after a dedicated clean-report service and parity tests are added. Do not swap shared delivery service reads globally.
 3. Delivery Recording and Dispatch should continue reading raw `delivery_orders` through existing services because they need full operational fields and sit next to writes/lifecycle transitions.
 4. Exports are the best first frontend candidate for clean views, especially admin traceability/order exports.
-5. Owner Dashboard should not switch wholesale. Consider only traceability/export order rows first.
+5. Owner Dashboard should not switch wholesale. Traceability/export order rows are now the only approved clean-view slice.
 6. Delivery Coverage analytics should stay on raw services for now because its bundle depends on multiple domain sources and existing computed logic.
 7. Performance should be acceptable for the current small dataset, but clean views are not materialized. Large date ranges should be tested with `EXPLAIN ANALYZE` before UI-wide adoption.
 8. Clean views cannot be indexed directly. Performance depends on indexes on source tables such as `delivery_orders`, `delivery_drivers`, `branches`, `pharmacists`, and `delivery_payment_types`.
-9. Phase C should wait until at least one or two Phase B report/export consumers are migrated and validated.
+9. Phase C should wait until the migrated Phase B report/export consumers have browser QA and realistic-range performance confidence.
 
 ## Candidate App Adoption Order
 
 1. Keep the Admin Delivery Analytics order Excel export on the approved clean export adapter.
 2. Use the Admin export as the Phase B adoption proof point and monitor parity/export behavior.
-3. Consider owner traceability export as the next narrow clean DTO candidate.
-4. Measure remote performance for typical owner/admin date ranges before broader report adoption.
-5. Only after that, decide whether any dashboard read path should move from raw service to clean views.
+3. Keep Owner traceability rows/export on the approved clean traceability adapter.
+4. Measure remote performance for larger owner/admin date ranges before broader report adoption.
+5. Only after that, decide whether any additional dashboard read path should move from raw service to clean views.
 
 ## Raw Access That Should Stay
 
@@ -97,7 +97,7 @@ Do not switch `ownerDashboardService.loadBundle` wholesale. It currently combine
 - sales and shortages;
 - today-specific KPIs.
 
-The safe first Owner Dashboard candidate is traceability/export order rows. Overview KPIs, driver KPIs, branch KPIs, and coverage analytics should remain on current domain services until parity tests prove the clean view produces identical business results.
+Owner traceability/export order rows are now the approved narrow Owner Dashboard clean-view adoption. Overview KPIs, driver KPIs, branch KPIs, and coverage analytics remain on current domain services. Do not switch the full Owner Dashboard bundle to clean views without a separate parity plan.
 
 ## Performance Guidance
 
@@ -114,7 +114,7 @@ Indexes should be added only after `EXPLAIN ANALYZE` shows a real need. View ado
 
 ## Phase C Recommendation
 
-Phase C is not ready to start immediately. First migrate one or two Phase B consumers, preferably admin order export and owner traceability export, then validate:
+Phase C is not ready to start immediately. Two Phase B consumers now exist: admin order export and Owner traceability/export. Before Phase C, validate:
 
 - role/RLS behavior;
 - output parity;
@@ -122,7 +122,7 @@ Phase C is not ready to start immediately. First migrate one or two Phase B cons
 - Excel/PDF export shape;
 - performance on realistic ranges.
 
-After those checks pass, Phase C reporting views can be prioritized with better evidence about the app's clean-view consumption pattern.
+After those checks pass across realistic usage, Phase C reporting views can be prioritized with better evidence about the app's clean-view consumption pattern.
 
 ## Phase B Clean Export Adapter
 
@@ -132,7 +132,7 @@ Implemented after the recommendation:
 - `app/delivery/AdminDeliveryAnalytics.tsx` now uses the clean export adapter for the order Excel export.
 - The adapter compares existing operational rows with clean-view rows before exporting and stops on parity differences.
 - The generated workbook includes clean operational columns and a `Clean Export QA` sheet.
-- Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, and shared `deliveryService` reads/writes remain unchanged.
+- Delivery Recording, Dispatch, lifecycle RPCs, imports, shared `deliveryService` reads/writes, Owner KPIs, and Delivery Coverage remain unchanged.
 
 Validation is documented in:
 
@@ -142,6 +142,23 @@ docs/CLEAN_EXPORT_ADAPTER_QA.md
 
 Authenticated Admin browser QA on 2026-06-17 confirmed the export downloads and opens as `Delivery_Clean_All_2026-06-01_2026-06-17.xlsx`, with 48 clean data rows, the expected clean operational headers, hidden legacy/raw fields, hidden sensitive fields, and a `Clean Export QA` worksheet where parity checks report `YES`.
 
+## Owner Traceability Clean View Adoption
+
+Implemented after the Admin export adapter:
+
+- `services/ownerTraceabilityCleanService.ts` reads `delivery_orders_clean` for Owner traceability rows/export only.
+- `app/owner-dashboard/ownerDashboardService.ts` keeps Owner KPIs on the existing raw-derived customer-order slice, but adds clean traceability rows with a runtime parity guard.
+- `app/owner-dashboard/OwnerDashboardPage.tsx` uses clean traceability rows for the traceability table and traceability Excel export.
+- Current Owner traceability scope still excludes `internal_transfer` rows to match the previous customer-order behavior.
+- Remote parity for the Owner traceability scope passed with 46 raw customer rows and 46 clean rows, matching latest 20 IDs, payment totals, delivery status counts, and driver display availability.
+- Remote access validation passed for owner/admin reads, branch T001 scoping, anon denial, and write blocking.
+
+Validation is documented in:
+
+```text
+docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md
+```
+
 ## Current Decision
 
-No broad app logic change should be made now. The next approval should be for owner traceability export only, or for additional parity-tested clean report/export adapters. Raw-table writes and operational services remain preserved.
+No broad app logic change should be made now. The next approval should be for Owner traceability browser QA/commit, or for additional parity-tested clean report/export adapters. Raw-table writes and operational services remain preserved.

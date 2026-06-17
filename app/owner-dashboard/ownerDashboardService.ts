@@ -15,6 +15,12 @@ import { branchService } from '../../services/branchService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { deliveryCoverageService } from '../../services/deliveryCoverageService';
 import { deliveryService } from '../../services/deliveryService';
+import {
+  buildOwnerTraceabilityCleanParity,
+  listOwnerTraceabilityCleanRows,
+  OwnerTraceabilityCleanParityResult,
+  OwnerTraceabilityCleanRow
+} from '../../services/ownerTraceabilityCleanService';
 import { saleService } from '../../services/saleService';
 import { isDirectOrder, rangeDayCount, sumValue, todayKey } from '../delivery/utils';
 
@@ -102,6 +108,8 @@ export interface OwnerDashboardBundle {
   branchProfiles: BranchDeliveryProfile[];
   paymentTypes: DeliveryPaymentTypeConfig[];
   orders: DeliveryOrder[];
+  traceabilityRows: OwnerTraceabilityCleanRow[];
+  traceabilityParity: OwnerTraceabilityCleanParityResult;
   sales: LostSale[];
   shortages: Shortage[];
   coverage: DeliveryCoverageBundle;
@@ -127,6 +135,39 @@ const matchesSearch = (order: DeliveryOrder, search?: string | null) => {
     order.pharmacistName,
     order.paymentType,
     order.notes
+  ].filter(Boolean).join(' ').toLowerCase().includes(query);
+};
+
+const matchesTraceabilitySearch = (order: OwnerTraceabilityCleanRow, search?: string | null) => {
+  const query = search?.trim().toLowerCase();
+  if (!query) return true;
+  return [
+    order.blockNumber,
+    order.areaName,
+    order.governorate,
+    order.branchCode,
+    order.branchName,
+    order.driverCode,
+    order.driverName,
+    order.paymentType,
+    order.orderKind,
+    order.deliveryStatus
+  ].filter(Boolean).join(' ').toLowerCase().includes(query);
+};
+
+const matchesOperationalTraceabilitySearch = (order: DeliveryOrder, search?: string | null) => {
+  const query = search?.trim().toLowerCase();
+  if (!query) return true;
+  return [
+    order.blockNumber,
+    order.areaName,
+    order.governorate,
+    order.branchName,
+    order.driverCode,
+    order.driverName,
+    order.paymentType,
+    order.orderKind,
+    order.deliveryStatus
   ].filter(Boolean).join(' ').toLowerCase().includes(query);
 };
 
@@ -400,6 +441,7 @@ export const ownerDashboardService = {
       costSettings,
       paymentTypes,
       rawOrders,
+      rawTraceabilityRows,
       coverage,
       branchProfiles,
       sales,
@@ -413,6 +455,7 @@ export const ownerDashboardService = {
       deliveryService.costSettings.list(),
       deliveryService.paymentTypes.list(true),
       deliveryService.orders.list(orderFilters),
+      listOwnerTraceabilityCleanRows({ ...orderFilters, includeInternalTransfers: false }),
       deliveryCoverageService.getDeliveryCoverageBundle(coverageFilters),
       branchDeliveryProfileService.listBranchDeliveryProfiles().catch(() => []),
       saleService.sales.list(branchId || 'all', 'owner', timestampOptions),
@@ -428,6 +471,15 @@ export const ownerDashboardService = {
       .map(order => ({ ...order, branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch' }))
       .filter(order => matchesSearch(order, filters.search));
     const customerOrders = orders.filter(order => order.orderKind !== 'internal_transfer');
+    const operationalTraceabilityRows = rawOrders
+      .map(order => ({ ...order, branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch' }))
+      .filter(order => order.orderKind !== 'internal_transfer')
+      .filter(order => matchesOperationalTraceabilitySearch(order, filters.search));
+    const traceabilityRows = rawTraceabilityRows.filter(order => matchesTraceabilitySearch(order, filters.search));
+    const traceabilityParity = buildOwnerTraceabilityCleanParity(operationalTraceabilityRows, traceabilityRows);
+    if (!traceabilityParity.matches) {
+      throw new Error(`Owner traceability clean view parity failed: ${traceabilityParity.differences.join('; ')}`);
+    }
 
     return {
       generatedAt: new Date().toISOString(),
@@ -437,6 +489,8 @@ export const ownerDashboardService = {
       branchProfiles,
       paymentTypes,
       orders: customerOrders,
+      traceabilityRows,
+      traceabilityParity,
       sales,
       shortages,
       coverage,

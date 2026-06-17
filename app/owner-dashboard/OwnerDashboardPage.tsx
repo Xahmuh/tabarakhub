@@ -20,17 +20,25 @@ import {
   Wallet,
   X
 } from 'lucide-react';
-import { Branch, DeliveryOrder, DeliveryPaymentType, Governorate } from '../../types';
+import { Branch, DeliveryPaymentType, Governorate } from '../../types';
 import { BackToModulesButton } from '../shared';
 import { PeriodFilter } from '../delivery/components/PeriodFilter';
 import { SearchableSelect } from '../delivery/components/SearchableSelect';
 import { BlockCoverageMap, BlockCoverageMapLoading } from '../delivery/components/BlockCoverageMap';
 import { BlockGeometryDataset, loadBahrainBlockGeometry } from '../delivery/bahrainBlockGeometry';
-import { exportBreakdownToExcel, exportOrdersToExcel, printReport } from '../delivery/exports';
+import { exportBreakdownToExcel, printReport } from '../delivery/exports';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey } from '../delivery/utils';
 import { deliveryService } from '../../services/deliveryService';
 import { isModuleEnabled } from '../../config/clientConfig';
-import { DEFAULT_DELIVERY_PAYMENT_TYPES, isDirectDeliveryOrder, sortDeliveryPaymentTypes } from '../../lib/deliveryPaymentTypes';
+import {
+  DEFAULT_DELIVERY_PAYMENT_TYPES,
+  isDeliveryPaymentBlockExempt,
+  isDirectDeliveryOrder,
+  isInternalTransferPayment,
+  isTalabatDeliveryPayment,
+  sortDeliveryPaymentTypes
+} from '../../lib/deliveryPaymentTypes';
+import { OwnerTraceabilityCleanRow } from '../../services/ownerTraceabilityCleanService';
 import {
   OwnerBranchKpi,
   OwnerDashboardBundle,
@@ -59,6 +67,22 @@ const compactDateTime = (value?: string, locale?: string) => {
 };
 
 const classNames = (...items: Array<string | false | null | undefined>) => items.filter(Boolean).join(' ');
+
+const isTraceabilityDirectOrder = (
+  order: OwnerTraceabilityCleanRow,
+  paymentTypes?: OwnerDashboardBundle['paymentTypes']
+) => order.orderKind !== 'internal_transfer'
+  && !isInternalTransferPayment(order.paymentType)
+  && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
+  && !isTalabatDeliveryPayment(order.paymentType);
+
+const formatTraceabilityBranch = (order: OwnerTraceabilityCleanRow) =>
+  [order.branchCode, order.branchName].filter(Boolean).join(' - ');
+
+const formatTraceabilityDriver = (order: OwnerTraceabilityCleanRow) =>
+  order.driverCode && order.driverName
+    ? `${order.driverCode} - ${order.driverName}`
+    : order.driverCode || order.driverName || '';
 
 const ownerDashboardText = {
   en: {
@@ -530,7 +554,7 @@ const branchTone = (status: OwnerBranchKpi['healthStatus']): 'good' | 'warn' | '
 };
 
 const AuditTimeline: React.FC<{
-  order: DeliveryOrder | null;
+  order: { id: string } | null;
   copy: OwnerDashboardCopy;
 }> = ({ order, copy }) => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -592,7 +616,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<any>(null);
-  const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OwnerTraceabilityCleanRow | null>(null);
 
   const copy = ownerDashboardText[language];
   const isArabic = language === 'ar';
@@ -697,8 +721,48 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
 
   const exportTraceability = () => {
     if (!bundle) return;
-    exportOrdersToExcel(bundle.orders, `${copy.sections.traceability} - ${rangeLabel}`, `Owner_Delivery_Traceability_${range.from}_${range.to}`)
-      .catch(console.error);
+    exportBreakdownToExcel(
+      bundle.traceabilityRows.map(order => ({
+        id: order.id,
+        orderDate: order.orderDate || '',
+        branch: formatTraceabilityBranch(order),
+        orderKind: order.orderKind,
+        status: order.deliveryStatus,
+        value: Number(order.valueBhd.toFixed(3)),
+        payment: order.paymentType,
+        block: order.blockNumber || '',
+        area: order.areaName || '',
+        governorate: order.governorate || '',
+        driverCode: order.driverCode || '',
+        driverName: order.driverName || '',
+        assignedAt: order.assignedAt || '',
+        pickedUpAt: order.pickedUpAt || '',
+        deliveredAt: order.deliveredAt || '',
+        cancelledAt: order.cancelledAt || '',
+        cancelledReason: order.cancelledReason || ''
+      })),
+      [
+        { key: 'id', label: 'ID' },
+        { key: 'orderDate', label: 'Order Date' },
+        { key: 'branch', label: copy.traceability.branch },
+        { key: 'orderKind', label: 'Order Kind' },
+        { key: 'status', label: 'Status' },
+        { key: 'value', label: 'Value BHD', numFmt: '0.000' },
+        { key: 'payment', label: 'Payment Type' },
+        { key: 'block', label: 'Block Number' },
+        { key: 'area', label: copy.traceability.area },
+        { key: 'governorate', label: copy.traceability.governorate },
+        { key: 'driverCode', label: 'Driver Code' },
+        { key: 'driverName', label: 'Driver Name' },
+        { key: 'assignedAt', label: 'Assigned At' },
+        { key: 'pickedUpAt', label: 'Picked Up At' },
+        { key: 'deliveredAt', label: 'Delivered At' },
+        { key: 'cancelledAt', label: 'Cancelled At' },
+        { key: 'cancelledReason', label: 'Cancelled Reason' }
+      ],
+      `${copy.sections.traceability} - ${rangeLabel}`,
+      `Owner_Delivery_Traceability_Clean_${range.from}_${range.to}`
+    ).catch(console.error);
   };
 
   const exportOverview = () => {
@@ -1112,7 +1176,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">{copy.traceability.title}</h3>
-                      <p className="mt-1 text-xs font-bold text-slate-500">{bundle.orders.length} {copy.common.orders} · {money(bundle.orders.reduce((sum, order) => sum + order.valueBhd, 0))}</p>
+                      <p className="mt-1 text-xs font-bold text-slate-500">{bundle.traceabilityRows.length} {copy.common.orders} · {money(bundle.traceabilityRows.reduce((sum, order) => sum + order.valueBhd, 0))}</p>
                     </div>
                     {exportEnabled && <button onClick={exportTraceability} className="btn-secondary text-[10px] uppercase tracking-widest"><Download className="h-3.5 w-3.5" /> {copy.actions.exportAll}</button>}
                   </div>
@@ -1131,13 +1195,13 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {bundle.orders.slice(0, 500).map(order => (
+                      {bundle.traceabilityRows.slice(0, 500).map(order => (
                         <tr key={order.id} onClick={() => setSelectedOrder(order)} className={classNames('cursor-pointer hover:bg-brand/5', selectedOrder?.id === order.id && 'bg-brand/5')}>
-                          <td className="px-4 py-3 font-bold text-slate-700 tabular-nums">{order.orderDate}</td>
-                          <td className="px-4 py-3 font-black text-slate-800">{order.branchName || copy.common.unknownBranch}</td>
-                          <td className="px-4 py-3 font-bold text-slate-600">{order.driverCode ? `${order.driverCode} - ${order.driverName}` : order.driverName || copy.common.empty}</td>
+                          <td className="px-4 py-3 font-bold text-slate-700 tabular-nums">{order.orderDate || copy.common.empty}</td>
+                          <td className="px-4 py-3 font-black text-slate-800">{formatTraceabilityBranch(order) || copy.common.unknownBranch}</td>
+                          <td className="px-4 py-3 font-bold text-slate-600">{formatTraceabilityDriver(order) || copy.common.empty}</td>
                           <td className="px-4 py-3"><StatusPill status={order.paymentType} /></td>
-                          <td className="px-4 py-3 font-black text-slate-700 tabular-nums">{order.blockNumber || (!isDirectDeliveryOrder(order, bundle.paymentTypes) ? copy.overview.talabat : copy.common.empty)}</td>
+                          <td className="px-4 py-3 font-black text-slate-700 tabular-nums">{order.blockNumber || (!isTraceabilityDirectOrder(order, bundle.paymentTypes) ? copy.overview.talabat : copy.common.empty)}</td>
                           <td className="px-4 py-3 font-bold text-slate-500">{order.areaName || (order.governorate ? copy.governorates[order.governorate] : copy.common.empty)}</td>
                           <td className={classNames('px-4 py-3 font-black text-slate-900 tabular-nums', endTextClass)}>{money(order.valueBhd)}</td>
                         </tr>
@@ -1145,7 +1209,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                     </tbody>
                   </table>
                 </div>
-                {bundle.orders.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-400">{copy.traceability.noOrders}</p>}
+                {bundle.traceabilityRows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-400">{copy.traceability.noOrders}</p>}
               </section>
 
               <aside className="space-y-4">
@@ -1155,9 +1219,8 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{copy.traceability.selectedOrder}</p>
                       <h4 className="mt-1 text-xl font-black text-slate-950">{money(selectedOrder.valueBhd)}</h4>
                       <div className="mt-3 space-y-2 text-xs font-bold text-slate-600">
-                        <p>{copy.traceability.branch}: <span className="text-slate-900">{selectedOrder.branchName || copy.common.unknown}</span></p>
-                        <p>{copy.traceability.driver}: <span className="text-slate-900">{selectedOrder.driverName || copy.common.unassigned}</span></p>
-                        <p>{copy.traceability.pharmacist}: <span className="text-slate-900">{selectedOrder.pharmacistName || copy.common.unassigned}</span></p>
+                        <p>{copy.traceability.branch}: <span className="text-slate-900">{formatTraceabilityBranch(selectedOrder) || copy.common.unknown}</span></p>
+                        <p>{copy.traceability.driver}: <span className="text-slate-900">{formatTraceabilityDriver(selectedOrder) || copy.common.unassigned}</span></p>
                         <p>{copy.traceability.block}: <span className="text-slate-900">{selectedOrder.blockNumber || copy.common.noBlock}</span></p>
                         <p>{copy.traceability.governorate}: <span className="text-slate-900">{selectedOrder.governorate ? copy.governorates[selectedOrder.governorate] : copy.common.unknown}</span></p>
                         <p>{copy.traceability.created}: <span className="text-slate-900">{compactDateTime(selectedOrder.createdAt, copy.locale)}</span></p>

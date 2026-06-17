@@ -13,5 +13,6 @@ export * from './contributionService';
 export * from './systemSettingsService';
 export * from './deliveryService';
 export * from './deliveryCleanExportService';
+export * from './ownerTraceabilityCleanService';
 export * from './deliveryCoverageService';
 export * from './branchLoginApprovalService';

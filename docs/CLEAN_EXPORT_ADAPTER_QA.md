@@ -23,7 +23,7 @@ services/deliveryCleanExportService.ts
 app/delivery/AdminDeliveryAnalytics.tsx
 ```
 
-The adapter is used only by the admin delivery analytics order Excel export. It does not replace `deliveryService.orders.list`, Delivery Recording, Dispatch, lifecycle RPCs, imports, owner traceability, or any write path.
+The admin adapter is used only by the admin delivery analytics order Excel export. A separate Owner traceability adapter now uses the same clean view for Owner traceability rows/export only. Neither adapter replaces `deliveryService.orders.list`, Delivery Recording, Dispatch, lifecycle RPCs, imports, Owner KPI calculations, Delivery Coverage, or any write path.
 
 ## Exported Columns
 
@@ -232,11 +232,21 @@ These paths remain on raw operational tables or existing RPCs:
 - Dispatch and lifecycle transitions;
 - lifecycle event reads;
 - imports and upload template handling;
-- Owner Dashboard bundle and traceability export.
+- Owner KPI, branch KPI, driver KPI, and coverage bundle calculations.
+
+## Owner Traceability Follow-up
+
+Owner traceability rows/export now have a separate clean-view adoption record:
+
+```text
+docs/OWNER_TRACEABILITY_CLEAN_VIEW_QA.md
+```
+
+The Owner traceability implementation uses `delivery_orders_clean`, preserves the previous customer-order scope by excluding `internal_transfer`, and passed linked-project SQL parity/access checks. Authenticated Owner browser QA for the new traceability table/export remains pending.
 
 ## Pending
 
-- Owner traceability clean export adapter remains pending.
+- Owner traceability authenticated browser QA remains pending.
 - Delivery Coverage remains on existing raw/domain services.
 - Phase C views remain pending.
 - Phase D cleanup/drop-column work remains blocked pending separate approval.
