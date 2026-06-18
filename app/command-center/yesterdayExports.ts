@@ -6,6 +6,7 @@ import { isManagerRole } from '../../lib/access';
 
 type ExportScope = {
   branchId: string | null;
+  branchIds?: string[];
   label: string;
   filePart: string;
 };
@@ -84,10 +85,24 @@ const sanitizeExportFilePart = (value: string) =>
 
 const canExportAllVisible = (user: Branch) => isManagerRole(user.role);
 
-const resolveExportScope = (user: Branch): ExportScope => {
+const fetchVisibleBranchIds = async (): Promise<string[]> => {
+  const { data, error } = await supabaseClient
+    .from('branches')
+    .select('id')
+    .eq('role', 'branch');
+
+  if (error) throw error;
+  return (data || [])
+    .map(row => row.id)
+    .filter((id): id is string => Boolean(id));
+};
+
+const resolveExportScope = async (user: Branch): Promise<ExportScope> => {
   if (canExportAllVisible(user)) {
+    const branchIds = await fetchVisibleBranchIds();
     return {
       branchId: null,
+      branchIds,
       label: 'All visible branches',
       filePart: 'All_Visible_Branches'
     };
@@ -118,14 +133,15 @@ const fetchAllPages = async (baseQuery: any): Promise<any[]> => {
   return all;
 };
 
-const applyYesterdayScope = (query: any, scope: ExportScope) => {
+const applyYesterdayScope = (query: any, scope: ExportScope, branchIdOverride?: string | null) => {
   const yesterday = getYesterdayWindow();
   let scopedQuery = query
     .gte('timestamp', yesterday.start.toISOString())
     .lte('timestamp', yesterday.end.toISOString());
 
-  if (scope.branchId) {
-    scopedQuery = scopedQuery.eq('branch_id', scope.branchId);
+  const branchId = branchIdOverride ?? scope.branchId;
+  if (branchId) {
+    scopedQuery = scopedQuery.eq('branch_id', branchId);
   }
 
   return scopedQuery.order('timestamp', { ascending: false });
@@ -323,24 +339,75 @@ const saveWorkbook = async (workbook: any, filename: string) => {
   saveAs(blob, filename);
 };
 
-const fetchYesterdayLostSales = async (scope: ExportScope): Promise<LostSaleExportRow[]> => {
+const fetchYesterdayLostSalesForBranch = async (
+  scope: ExportScope,
+  branchIdOverride?: string | null
+): Promise<LostSaleExportRow[]> => {
   const query = applyYesterdayScope(
     supabaseClient.from('lost_sales_excel_export').select('*'),
-    scope
+    scope,
+    branchIdOverride
   );
   return fetchAllPages(query) as Promise<LostSaleExportRow[]>;
 };
 
+const fetchYesterdayLostSales = async (scope: ExportScope): Promise<LostSaleExportRow[]> => {
+  const branchIds = scope.branchIds?.filter(Boolean) || [];
+  if (branchIds.length === 0) {
+    return fetchYesterdayLostSalesForBranch(scope);
+  }
+
+  const rows: LostSaleExportRow[] = [];
+  for (const branchId of branchIds) {
+    rows.push(...await fetchYesterdayLostSalesForBranch(scope, branchId));
+  }
+  return rows.sort((a, b) => new Date(b.timestamp || '').getTime() - new Date(a.timestamp || '').getTime());
+};
+
+const fetchYesterdayShortagesForBranch = async (
+  branchId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<ShortageExportRow[]> => {
+  const PAGE_SIZE = 1000;
+  const rows: ShortageExportRow[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const { data, error } = await supabaseClient.rpc('export_shortages_paginated', {
+      p_branch_id: branchId,
+      p_date_from: dateFrom,
+      p_date_to: dateTo,
+      p_cursor: cursor,
+      p_limit: PAGE_SIZE,
+    });
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...data as ShortageExportRow[]);
+    cursor = data[data.length - 1]?.id || null;
+    if (data.length < PAGE_SIZE || !cursor) break;
+  }
+
+  return rows;
+};
+
 const fetchYesterdayShortages = async (scope: ExportScope): Promise<ShortageExportRow[]> => {
-  const query = applyYesterdayScope(
-    supabaseClient.from('shortages_excel_export').select('*'),
-    scope
-  );
-  return fetchAllPages(query) as Promise<ShortageExportRow[]>;
+  const yesterday = getYesterdayWindow();
+  const branchIds = scope.branchIds?.filter(Boolean) || (scope.branchId ? [scope.branchId] : []);
+  if (branchIds.length === 0) {
+    throw new Error('Shortage export requires a branch scope. Select one branch and retry.');
+  }
+
+  const rows: ShortageExportRow[] = [];
+  for (const branchId of branchIds) {
+    rows.push(...await fetchYesterdayShortagesForBranch(branchId, yesterday.date, yesterday.date));
+  }
+  return rows.sort((a, b) => new Date(b.timestamp || '').getTime() - new Date(a.timestamp || '').getTime());
 };
 
 export const exportYesterdayLostSales = async (user: Branch) => {
-  const scope = resolveExportScope(user);
+  const scope = await resolveExportScope(user);
   const yesterday = getYesterdayWindow();
   const rows = await fetchYesterdayLostSales(scope);
   const workbook = await createExcelWorkbook();
@@ -350,7 +417,7 @@ export const exportYesterdayLostSales = async (user: Branch) => {
 };
 
 export const exportYesterdayShortages = async (user: Branch) => {
-  const scope = resolveExportScope(user);
+  const scope = await resolveExportScope(user);
   const yesterday = getYesterdayWindow();
   const rows = await fetchYesterdayShortages(scope);
   const workbook = await createExcelWorkbook();
@@ -360,7 +427,7 @@ export const exportYesterdayShortages = async (user: Branch) => {
 };
 
 export const exportYesterdayOperationsPack = async (user: Branch) => {
-  const scope = resolveExportScope(user);
+  const scope = await resolveExportScope(user);
   const yesterday = getYesterdayWindow();
   const [lostSalesRows, shortageRows] = await Promise.all([
     fetchYesterdayLostSales(scope),

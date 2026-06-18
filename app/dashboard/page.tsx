@@ -1061,13 +1061,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     };
   };
 
-  const isMissingExportRpcError = (error: any) => {
-    const message = String(error?.message || '');
-    return error?.code === 'PGRST202'
-      || error?.code === '42883'
-      || /export_shortages_paginated|schema cache|function/i.test(message);
-  };
-
   const fetchShortagesExportRowsViaRpc = async (branchId: string) => {
     const PAGE_SIZE = 1000;
     const { dateFrom, dateTo } = getExportDateBounds();
@@ -1084,7 +1077,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       });
 
       if (error) {
-        if (isMissingExportRpcError(error)) return null;
         throw error;
       }
       if (!data || data.length === 0) break;
@@ -1096,24 +1088,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     return rows;
   };
 
-  const fetchExportTableRows = async (
-    tableName: 'lost_sales_excel_export' | 'shortages_excel_export',
+  const fetchLostSalesExportTableRows = async (
     scope: ExportScope,
     branchIdOverride?: string | null
   ) => {
-    const effectiveBranchId = branchIdOverride ?? scope.branchId;
-    if (tableName === 'shortages_excel_export' && effectiveBranchId) {
-      const rpcRows = await fetchShortagesExportRowsViaRpc(effectiveBranchId);
-      if (rpcRows) return rpcRows;
-    }
-
     const PAGE_SIZE = 1000;
     const rows: any[] = [];
     let cursor: { timestamp: string; id: string } | null = null;
 
     while (true) {
       let query = applyExportFilters(
-        supabase.client.from(tableName).select('*'),
+        supabase.client.from('lost_sales_excel_export').select('*'),
         scope,
         branchIdOverride
       );
@@ -1133,15 +1118,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     return rows;
   };
 
-  const fetchExportRows = async (
-    tableName: 'lost_sales_excel_export' | 'shortages_excel_export',
-    scope: ExportScope
-  ) => {
+  const fetchLostSalesExportRows = async (scope: ExportScope) => {
     const scopedBranchIds = scope.branchIds?.filter(Boolean) || [];
     if (scopedBranchIds.length > 0) {
       const rows: any[] = [];
       for (const branchId of scopedBranchIds) {
-        rows.push(...await fetchExportTableRows(tableName, scope, branchId));
+        rows.push(...await fetchLostSalesExportTableRows(scope, branchId));
       }
       return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     }
@@ -1150,7 +1132,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       return [];
     }
 
-    return fetchExportTableRows(tableName, scope);
+    return fetchLostSalesExportTableRows(scope);
+  };
+
+  const fetchShortagesExportRows = async (scope: ExportScope) => {
+    const branchIds = scope.branchIds?.filter(Boolean) || (scope.branchId ? [scope.branchId] : []);
+    if (branchIds.length === 0) {
+      throw new Error('Shortage export requires a branch scope. Select one branch and retry.');
+    }
+
+    const rows: any[] = [];
+    for (const branchId of branchIds) {
+      rows.push(...await fetchShortagesExportRowsViaRpc(branchId));
+    }
+    return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   };
 
   const styleWorksheetHeader = (worksheet: any) => {
@@ -1171,7 +1166,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     try {
       const workbook = await createExcelWorkbook();
       const exportScope = await resolveExportScope();
-      const viewData = await fetchExportRows('lost_sales_excel_export', exportScope);
+      const viewData = await fetchLostSalesExportRows(exportScope);
 
       if (!viewData || viewData.length === 0) {
         showToast("No data passed the filter to export.", 'info');
@@ -1365,7 +1360,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     try {
       const workbook = await createExcelWorkbook();
       const exportScope = await resolveExportScope();
-      const viewData = await fetchExportRows('shortages_excel_export', exportScope);
+      const viewData = await fetchShortagesExportRows(exportScope);
       if (!viewData || viewData.length === 0) {
         showToast("No shortages found for this period.", 'info');
         return;
@@ -1498,8 +1493,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
       // --- 1. FETCH SALES & SHORTAGES IN PARALLEL ---
       const [salesData, shortagesData] = await Promise.all([
-        fetchExportRows('lost_sales_excel_export', exportScope),
-        fetchExportRows('shortages_excel_export', exportScope),
+        fetchLostSalesExportRows(exportScope),
+        fetchShortagesExportRows(exportScope),
       ]);
 
       // --- TAB 1: LOST SALES (Powered by View) ---
