@@ -1,5 +1,4 @@
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import type { Row, Workbook } from 'exceljs';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { DeliveryDriverDutyReportRow, DeliveryOrder } from '../../types';
 
@@ -17,7 +16,7 @@ type KpiRow = {
   value: number;
 };
 
-const styleHeader = (row: ExcelJS.Row) => {
+const styleHeader = (row: Row) => {
   row.font = { bold: true };
   row.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
@@ -121,7 +120,7 @@ const buildKpis = (
 };
 
 const addKpiSheet = (
-  workbook: ExcelJS.Workbook,
+  workbook: Workbook,
   sheetName: string,
   title: string,
   entityLabel: string,
@@ -168,6 +167,10 @@ export const exportOrdersToExcel = async (
   fileName: string
 ) => {
   assertExcelEnabled();
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Delivery Orders');
 
@@ -259,6 +262,10 @@ export const exportBreakdownToExcel = async (
   fileName: string
 ) => {
   assertExcelEnabled();
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Breakdown');
 
@@ -288,6 +295,10 @@ export const exportDriverDutyToExcel = async (
   fileName: string
 ) => {
   assertExcelEnabled();
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Tabarak Hub';
   workbook.created = new Date();

@@ -1,25 +1,28 @@
-with expected(branch_code, origin_block_number) as (
-  values
-    ('H001', '711'), ('H002', '729'), ('H003', '816'), ('H004', '745'), ('H005', '555'),
-    ('T001', '729'), ('T002', '255'), ('T003', '112'), ('T004', '571'), ('T005', '904'),
-    ('T006', '324'), ('T007', '426'), ('T008', '113'), ('T009', '253'), ('T010', '915'),
-    ('S001', '743'), ('S002', '332'), ('S003', '575'), ('S004', '745'), ('D002', '1017')
-),
-missing as (
-  select e.branch_code, e.origin_block_number
-  from expected e
-  left join public.branches b
-    on b.code = e.branch_code
-   and coalesce(b.role, 'branch') = 'branch'
+with orphan_profiles as (
+  select p.id
+  from public.branch_delivery_profiles p
+  left join public.branches b on b.id = p.branch_id
   where b.id is null
 ),
-seeded as (
-  select b.code, p.origin_block_number
+non_branch_profiles as (
+  select b.code
   from public.branch_delivery_profiles p
   join public.branches b on b.id = p.branch_id
-  where b.code in (select branch_code from expected)
+  where coalesce(b.role, 'branch') <> 'branch'
 ),
-duplicates as (
+invalid_radius_profiles as (
+  select p.id
+  from public.branch_delivery_profiles p
+  where p.core_radius_km > p.standard_radius_km
+     or p.standard_radius_km > p.extended_radius_km
+),
+duplicate_branch_profiles as (
+  select branch_id, count(*) as profiles_count
+  from public.branch_delivery_profiles
+  group by branch_id
+  having count(*) > 1
+),
+duplicate_origin_blocks as (
   select
     origin_block_number,
     count(*) as branches_count,
@@ -52,16 +55,17 @@ select jsonb_pretty(jsonb_build_object(
   ),
   'rls_enabled', coalesce((select rls_enabled from table_state), false),
   'anon_grants', (select anon_grant_count from anon),
-  'total_profiles', (select count(*) from public.branch_delivery_profiles),
-  'expected_branches', (select count(*) from expected),
-  'seeded_expected_profiles', (select count(*) from seeded),
-  'missing_branch_codes', coalesce((select jsonb_agg(branch_code order by branch_code) from missing), '[]'::jsonb),
+  'configured_profiles', (select count(*) from public.branch_delivery_profiles),
+  'orphan_profiles', (select count(*) from orphan_profiles),
+  'non_branch_profiles', (select count(*) from non_branch_profiles),
+  'invalid_radius_profiles', (select count(*) from invalid_radius_profiles),
+  'duplicate_branch_profiles', (select count(*) from duplicate_branch_profiles),
   'duplicate_origin_blocks', coalesce((
     select jsonb_agg(jsonb_build_object(
       'origin_block_number', origin_block_number,
       'branches_count', branches_count,
       'branch_codes', branch_codes
     ) order by origin_block_number)
-    from duplicates
+    from duplicate_origin_blocks
   ), '[]'::jsonb)
 )) as validation_summary;

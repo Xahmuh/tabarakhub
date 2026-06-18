@@ -790,12 +790,39 @@ export const DeliverySettings: React.FC = () => {
                 Set actual delivery count targets and incentives. Internal transfers and order values are excluded.
               </p>
             </div>
-            <input
-              type="month"
-              value={targetMonth}
-              onChange={e => setTargetMonth(e.target.value || currentMonthKey())}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand/40"
-            />
+            <div className="flex gap-2">
+              <select
+                aria-label="Select target month"
+                title="Select target month"
+                value={targetMonth.split('-')[1] || '01'}
+                onChange={e => {
+                  const year = targetMonth.split('-')[0] || String(new Date().getFullYear());
+                  setTargetMonth(`${year}-${e.target.value}`);
+                }}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand/40"
+              >
+                {Array.from({ length: 12 }, (_, i) => {
+                  const m = String(i + 1).padStart(2, '0');
+                  const label = new Intl.DateTimeFormat('en-GB', { month: 'short' }).format(new Date(2000, i, 1));
+                  return <option key={m} value={m}>{label}</option>;
+                })}
+              </select>
+              <select
+                aria-label="Select target year"
+                title="Select target year"
+                value={targetMonth.split('-')[0] || String(new Date().getFullYear())}
+                onChange={e => {
+                  const month = targetMonth.split('-')[1] || '01';
+                  setTargetMonth(`${e.target.value}-${month}`);
+                }}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand/40"
+              >
+                {Array.from({ length: 5 }, (_, i) => {
+                  const y = String(new Date().getFullYear() - 2 + i);
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+            </div>
           </div>
           <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-white p-3">

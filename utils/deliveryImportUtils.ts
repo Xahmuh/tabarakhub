@@ -13,7 +13,6 @@ import {
   isTalabatDeliveryPayment,
   normalizeDeliveryPaymentCode
 } from '../lib/deliveryPaymentTypes';
-import { saveAs } from 'file-saver';
 
 export const DELIVERY_ORDER_IMPORT_ACCEPT = '.xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const MAX_DELIVERY_ORDER_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -376,6 +375,7 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
     .replace(/[^a-zA-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     || 'branch';
+  const { saveAs } = await import('file-saver');
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),

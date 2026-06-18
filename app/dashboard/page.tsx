@@ -149,6 +149,42 @@ interface DashboardPageProps {
 
 type DashboardDateType = 'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom';
 
+type DashboardKpiSnapshot = {
+  total_shortages: number;
+  total_lost_sales: number;
+  total_products: number;
+  shortage_by_day: { date: string; count: number }[];
+};
+
+type ExportScope = {
+  branchId: string | null;
+  branchIds?: string[];
+  label: string;
+  filePart: string;
+  isAllBranches: boolean;
+};
+
+const getUnknownErrorMessage = (error: unknown, fallback = 'Failed to sync data') => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const anyError = error as Record<string, unknown>;
+    const parts = [
+      anyError.message,
+      anyError.details,
+      anyError.hint,
+      anyError.code ? `code: ${anyError.code}` : null
+    ].filter(value => typeof value === 'string' && value.trim());
+    if (parts.length > 0) return parts.join(' ');
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+};
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions, onBack }) => {
   const getPermission = (feature: string) => {
     return permissions.find(p => p.featureName === feature)?.accessLevel || 'read';
@@ -161,11 +197,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const [allSales, setAllSales] = useState<LostSale[]>([]); // NEW: Store unfiltered sales for historical calculations
   const [shortages, setShortages] = useState<Shortage[]>([]);
   const [allShortages, setAllShortages] = useState<Shortage[]>([]); // NEW: Store unfiltered shortages
+  const [dashboardKpis, setDashboardKpis] = useState<DashboardKpiSnapshot | null>(null);
 
   const cleanName = (name: string) => name?.toLowerCase().trim().replace(/\s+/g, ' ') || '';
   const [branches, setBranches] = useState<Branch[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const isCanSelectBranch = isManagerRole(user.role) || user.role === 'owner' || user.role === 'warehouse' || user.role === 'supervisor';
+  const isSupervisorRole = user.role === 'supervisor';
+  const supervisorUsesAssignedScope = isSupervisorRole && user.supervisorScopeMode !== 'all_zones';
+  const isCanSelectBranch = isManagerRole(user.role) || user.role === 'owner' || user.role === 'warehouse' || isSupervisorRole;
   const isAdmin = isCanSelectBranch;
   const [selectedBranch, setSelectedBranch] = useState<string>(isCanSelectBranch ? 'all' : user.id);
   const initialDateType = (() => {
@@ -224,6 +263,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     window.dispatchEvent(new CustomEvent('tabarak_toast', { detail: { message, type } }));
   };
+
+  const getSupervisorBranchIds = useCallback(async () => {
+    if (!supervisorUsesAssignedScope) return undefined;
+    let zones;
+    try {
+      zones = await supabase.permissions.listBranchZones();
+    } catch (error) {
+      throw new Error(`Could not load supervisor zone assignments: ${getUnknownErrorMessage(error)}`);
+    }
+    return Array.from(new Set(
+      zones
+        .filter(zone => zone.isActive)
+        .flatMap(zone => zone.branchIds || [])
+        .filter(Boolean)
+    ));
+  }, [supervisorUsesAssignedScope]);
 
   // التحقق من صحة التاريخ المدخل يدوياً - Helper to convert DD-MM-YYYY to YYYY-MM-DD
   const parseManualDate = (dateStr: string) => {
@@ -320,12 +375,86 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     try {
       const activeBranchId = isCanSelectBranch ? selectedBranch : user.id;
       const { start, end } = getDateRange(dateType, startDate, endDate);
+      const supervisorBranchIds = supervisorUsesAssignedScope && activeBranchId === 'all'
+        ? await getSupervisorBranchIds()
+        : undefined;
+
+      if (supervisorUsesAssignedScope && activeBranchId === 'all' && supervisorBranchIds?.length === 0) {
+        setAllSales([]);
+        setAllShortages([]);
+        setSales([]);
+        setShortages([]);
+        setDashboardKpis({
+          total_shortages: 0,
+          total_lost_sales: 0,
+          total_products: 0,
+          shortage_by_day: []
+        });
+        setPerformanceLogPage(1);
+        setBranchPage(1);
+        return;
+      }
+
       const listOptions = {
         timestampFrom: start,
-        timestampTo: end
+        timestampTo: end,
+        branchIds: supervisorBranchIds
       };
-      let rawData: LostSale[] = await supabase.sales.list(activeBranchId, user.role, listOptions);
-      let rawShortages: Shortage[] = await supabase.shortages.list(activeBranchId, user.role, listOptions);
+      let rawData: LostSale[];
+      let rawShortages: Shortage[];
+      try {
+        const toDateParam = (value: Date | null, fallback: Date) =>
+          (value || fallback).toISOString().slice(0, 10);
+        const dateFrom = toDateParam(start, new Date('1900-01-01T00:00:00.000Z'));
+        const dateTo = toDateParam(end, new Date());
+        const kpiBranchIds = activeBranchId === 'all'
+          ? (supervisorBranchIds && supervisorBranchIds.length > 0
+            ? supervisorBranchIds
+            : (await supabase.branches.list()).filter(branch => branch.role === 'branch').map(branch => branch.id))
+          : [activeBranchId];
+
+        const kpiResults = await Promise.all(kpiBranchIds.map(async branchId => {
+          const { data, error } = await supabase.client.rpc('get_dashboard_kpis', {
+            p_branch_id: branchId,
+            p_date_from: dateFrom,
+            p_date_to: dateTo,
+          });
+          if (error) throw error;
+          return data as DashboardKpiSnapshot;
+        }));
+
+        const shortageByDay = new Map<string, number>();
+        const mergedKpis = kpiResults.reduce<DashboardKpiSnapshot>((acc, item) => {
+          acc.total_shortages += Number(item.total_shortages) || 0;
+          acc.total_lost_sales += Number(item.total_lost_sales) || 0;
+          acc.total_products += Number(item.total_products) || 0;
+          (item.shortage_by_day || []).forEach(day => {
+            shortageByDay.set(day.date, (shortageByDay.get(day.date) || 0) + (Number(day.count) || 0));
+          });
+          return acc;
+        }, {
+          total_shortages: 0,
+          total_lost_sales: 0,
+          total_products: 0,
+          shortage_by_day: []
+        });
+        mergedKpis.shortage_by_day = Array.from(shortageByDay.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, count]) => ({ date, count }));
+        setDashboardKpis(mergedKpis);
+      } catch (error) {
+        throw new Error(`Could not load dashboard KPIs: ${getUnknownErrorMessage(error)}`);
+      }
+      try {
+        rawData = await supabase.sales.list(activeBranchId, user.role, listOptions);
+      } catch (error) {
+        throw new Error(`Could not load lost sales: ${getUnknownErrorMessage(error)}`);
+      }
+      try {
+        rawShortages = await supabase.shortages.list(activeBranchId, user.role, listOptions);
+      } catch (error) {
+        throw new Error(`Could not load shortages: ${getUnknownErrorMessage(error)}`);
+      }
 
       // Store raw data for calculations within the selected dashboard range.
       setAllSales(rawData);
@@ -342,7 +471,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     } catch (error) {
       console.error("Critical Failure in Data Sync:", error);
       // معالجة الأخطاء مع إمكانية إعادة المحاولة
-      const errorMessage = error instanceof Error ? error.message : 'Failed to sync data';
+      const errorMessage = getUnknownErrorMessage(error);
       setError({
         message: errorMessage,
         retry: syncDashboardData
@@ -351,17 +480,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     } finally {
       setIsSyncing(false);
     }
-  }, [selectedBranch, dateType, startDate, endDate, isAdmin, user.id, user.role, getDateRange, filterByDateRange]);
+  }, [selectedBranch, dateType, startDate, endDate, isAdmin, isSupervisorRole, supervisorUsesAssignedScope, user.id, user.role, getDateRange, filterByDateRange, getSupervisorBranchIds]);
 
   useEffect(() => {
     const initializeSystem = async () => {
-      const [branchList, productList] = await Promise.all([
-        supabase.branches.list(),
-        supabase.products.list(user.id)
-      ]);
-      setBranches(branchList.filter(b => b.role === 'branch'));
-      setProducts(productList);
-      await syncDashboardData();
+      try {
+        const [branchList, productList, zoneList] = await Promise.all([
+          supabase.branches.list(),
+          supabase.products.list(user.id),
+          supervisorUsesAssignedScope ? supabase.permissions.listBranchZones() : Promise.resolve([])
+        ]);
+        const supervisorBranchIds = supervisorUsesAssignedScope
+          ? new Set(zoneList.filter(zone => zone.isActive).flatMap(zone => zone.branchIds || []))
+          : null;
+        setBranches(branchList.filter(b => b.role === 'branch' && (!supervisorBranchIds || supervisorBranchIds.has(b.id))));
+        setProducts(productList);
+        if (supervisorBranchIds && selectedBranch !== 'all' && !supervisorBranchIds.has(selectedBranch)) {
+          setSelectedBranch('all');
+        }
+        await syncDashboardData();
+      } catch (error) {
+        const errorMessage = `Could not initialize performance dashboard: ${getUnknownErrorMessage(error)}`;
+        console.error(errorMessage, error);
+        setError({
+          message: errorMessage,
+          retry: initializeSystem
+        });
+        showToast(`Data sync failed: ${errorMessage}`, 'error');
+        setIsSyncing(false);
+      }
     };
     initializeSystem();
 
@@ -458,9 +605,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         : 'All statuses';
 
   const aggregateMetrics = useMemo(() => {
-    const totalRevenue = sales.reduce((acc, sale) => acc + (Number(sale.totalValue) || 0), 0);
+    const rawTotalRevenue = sales.reduce((acc, sale) => acc + (Number(sale.totalValue) || 0), 0);
+    const totalRevenue = dashboardKpis ? Number(dashboardKpis.total_lost_sales) || 0 : rawTotalRevenue;
     const totalUnits = sales.reduce((acc, sale) => acc + (Number(sale.quantity) || 0), 0);
-    const skuCount = new Set(sales.map(s => s.productName)).size;
+    const rawSkuCount = new Set(sales.map(s => s.productName)).size;
+    const skuCount = dashboardKpis ? Number(dashboardKpis.total_products) || 0 : rawSkuCount;
     const averageOrderLoss = sales.length > 0 ? totalRevenue / sales.length : 0;
 
     const categoryFrequency: Record<string, number> = {};
@@ -521,7 +670,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       noRecoveryRevenue,
       noRecoveryPercentage
     };
-  }, [sales]);
+  }, [sales, dashboardKpis]);
 
   const paretoAnalysis = useMemo(() => {
     const productMap: Record<string, {
@@ -710,8 +859,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     const lowCount = shortages.filter(s => s.status === 'Low').length;
     const criticalCount = shortages.filter(s => s.status === 'Critical').length;
     const outOfStockCount = shortages.filter(s => s.status === 'Out of Stock').length;
-    const totalCount = shortages.length;
-    const uniqueSkuCount = new Set(shortages.map(s => s.productName)).size;
+    const totalCount = dashboardKpis ? Number(dashboardKpis.total_shortages) || 0 : shortages.length;
+    const uniqueSkuCount = dashboardKpis ? Number(dashboardKpis.total_products) || 0 : new Set(shortages.map(s => s.productName)).size;
     const salesProductSet = new Set(sales.map(s => s.productName));
     const lostSaleLinkedCount = shortages.filter(s => salesProductSet.has(s.productName)).length;
     const lostSaleLinkedPercentage = totalCount > 0 ? (lostSaleLinkedCount / totalCount) * 100 : 0;
@@ -824,24 +973,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       avgCriticalHours,
       trendTimeline
     };
-  }, [shortages, branches, sales, allSales]);
+  }, [shortages, branches, sales, allSales, dashboardKpis]);
 
 
   // --- Operational Handlers ---
 
-  const fetchAllPages = async (baseQuery: any): Promise<any[]> => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
-    let all: any[] = [];
-    while (true) {
-      const { data, error } = await baseQuery.range(from, from + PAGE_SIZE - 1);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      all = [...all, ...data];
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return all;
+  const applyExportCursor = (query: any, cursor: { timestamp: string; id: string } | null) => {
+    if (!cursor?.timestamp || !cursor.id) return query;
+    const timestamp = new Date(cursor.timestamp).toISOString();
+    return query.or(`timestamp.lt.${timestamp},and(timestamp.eq.${timestamp},id.lt.${cursor.id})`);
   };
 
   const sanitizeExportFilePart = (value: string) =>
@@ -850,13 +990,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       .replace(/^_+|_+$/g, '')
       .slice(0, 48) || 'Branch';
 
-  const resolveExportScope = () => {
-    if (isManagerRole(user.role)) {
+  const canExportAllVisibleBranches =
+    isManagerRole(user.role) || user.role === 'supervisor' || user.role === 'warehouse';
+
+  const resolveExportScope = async (): Promise<ExportScope> => {
+    if (canExportAllVisibleBranches) {
       if (selectedBranch === 'all') {
+        const visibleBranchIds = branches
+          .map(branch => branch.id)
+          .filter(Boolean);
+        const supervisorBranchIds = user.role === 'supervisor' && supervisorUsesAssignedScope && visibleBranchIds.length === 0
+          ? await getSupervisorBranchIds()
+          : visibleBranchIds;
         return {
           branchId: null,
-          label: 'All Branches',
-          filePart: 'All_Branches',
+          branchIds: supervisorBranchIds,
+          label: user.role === 'supervisor' && supervisorUsesAssignedScope ? 'Assigned Branches' : 'All Branches',
+          filePart: user.role === 'supervisor' && supervisorUsesAssignedScope ? 'Assigned_Branches' : 'All_Branches',
           isAllBranches: true
         };
       }
@@ -890,15 +1040,117 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       };
     }
 
-    throw new Error('Only manager accounts can export all branches. Select one branch before exporting.');
+    throw new Error('Only admin, supervisor, and warehouse accounts can export all visible branches. Select one branch before exporting.');
   };
 
-  const applyExportFilters = (query: any, scope: ReturnType<typeof resolveExportScope>) => {
+  const applyExportFilters = (query: any, scope: ExportScope, branchIdOverride?: string | null) => {
     const { start, end } = getDateRange(dateType, startDate, endDate);
     if (start) query = query.gte('timestamp', start.toISOString());
     if (end) query = query.lte('timestamp', end.toISOString());
-    if (scope.branchId) query = query.eq('branch_id', scope.branchId);
-    return query.order('timestamp', { ascending: false });
+    const branchId = branchIdOverride ?? scope.branchId;
+    if (branchId) query = query.eq('branch_id', branchId);
+    return query;
+  };
+
+  const getExportDateBounds = () => {
+    const { start, end } = getDateRange(dateType, startDate, endDate);
+    const toDateParam = (value: Date) => value.toISOString().slice(0, 10);
+    return {
+      dateFrom: toDateParam(start || new Date('1900-01-01T00:00:00.000Z')),
+      dateTo: toDateParam(end || new Date())
+    };
+  };
+
+  const isMissingExportRpcError = (error: any) => {
+    const message = String(error?.message || '');
+    return error?.code === 'PGRST202'
+      || error?.code === '42883'
+      || /export_shortages_paginated|schema cache|function/i.test(message);
+  };
+
+  const fetchShortagesExportRowsViaRpc = async (branchId: string) => {
+    const PAGE_SIZE = 1000;
+    const { dateFrom, dateTo } = getExportDateBounds();
+    const rows: any[] = [];
+    let cursor: string | null = null;
+
+    while (true) {
+      const { data, error } = await supabase.client.rpc('export_shortages_paginated', {
+        p_branch_id: branchId,
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+        p_cursor: cursor,
+        p_limit: PAGE_SIZE,
+      });
+
+      if (error) {
+        if (isMissingExportRpcError(error)) return null;
+        throw error;
+      }
+      if (!data || data.length === 0) break;
+      rows.push(...data);
+      cursor = data[data.length - 1]?.id || null;
+      if (data.length < PAGE_SIZE || !cursor) break;
+    }
+
+    return rows;
+  };
+
+  const fetchExportTableRows = async (
+    tableName: 'lost_sales_excel_export' | 'shortages_excel_export',
+    scope: ExportScope,
+    branchIdOverride?: string | null
+  ) => {
+    const effectiveBranchId = branchIdOverride ?? scope.branchId;
+    if (tableName === 'shortages_excel_export' && effectiveBranchId) {
+      const rpcRows = await fetchShortagesExportRowsViaRpc(effectiveBranchId);
+      if (rpcRows) return rpcRows;
+    }
+
+    const PAGE_SIZE = 1000;
+    const rows: any[] = [];
+    let cursor: { timestamp: string; id: string } | null = null;
+
+    while (true) {
+      let query = applyExportFilters(
+        supabase.client.from(tableName).select('*'),
+        scope,
+        branchIdOverride
+      );
+      query = applyExportCursor(query, cursor);
+      const { data, error } = await query
+        .order('timestamp', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(PAGE_SIZE);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      rows.push(...data);
+      const last = data[data.length - 1];
+      if (data.length < PAGE_SIZE || !last?.timestamp || !last?.id) break;
+      cursor = { timestamp: last.timestamp, id: last.id };
+    }
+
+    return rows;
+  };
+
+  const fetchExportRows = async (
+    tableName: 'lost_sales_excel_export' | 'shortages_excel_export',
+    scope: ExportScope
+  ) => {
+    const scopedBranchIds = scope.branchIds?.filter(Boolean) || [];
+    if (scopedBranchIds.length > 0) {
+      const rows: any[] = [];
+      for (const branchId of scopedBranchIds) {
+        rows.push(...await fetchExportTableRows(tableName, scope, branchId));
+      }
+      return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+
+    if (scope.isAllBranches && user.role === 'supervisor' && supervisorUsesAssignedScope) {
+      return [];
+    }
+
+    return fetchExportTableRows(tableName, scope);
   };
 
   const styleWorksheetHeader = (worksheet: any) => {
@@ -918,15 +1170,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setIsExportDropdownOpen(false);
     try {
       const workbook = await createExcelWorkbook();
-      const exportScope = resolveExportScope();
-
-      // Fetch data directly from the Standardized View
-      let query = supabase.client
-        .from('lost_sales_excel_export')
-        .select('*');
-
-      query = applyExportFilters(query, exportScope);
-      const viewData = await fetchAllPages(query);
+      const exportScope = await resolveExportScope();
+      const viewData = await fetchExportRows('lost_sales_excel_export', exportScope);
 
       if (!viewData || viewData.length === 0) {
         showToast("No data passed the filter to export.", 'info');
@@ -1107,7 +1352,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Export Error:", err);
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const errorMsg = getUnknownErrorMessage(err, 'Unknown error');
       showToast(`Extraction failed: ${errorMsg}`, 'error');
     } finally {
       setIsExporting(false);
@@ -1119,15 +1364,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setIsExportDropdownOpen(false);
     try {
       const workbook = await createExcelWorkbook();
-      const exportScope = resolveExportScope();
-
-      // Fetch data directly from the Standardized View
-      let query = supabase.client
-        .from('shortages_excel_export')
-        .select('*');
-
-      query = applyExportFilters(query, exportScope);
-      const viewData = await fetchAllPages(query);
+      const exportScope = await resolveExportScope();
+      const viewData = await fetchExportRows('shortages_excel_export', exportScope);
       if (!viewData || viewData.length === 0) {
         showToast("No shortages found for this period.", 'info');
         return;
@@ -1244,7 +1482,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Export Error:", err);
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const errorMsg = getUnknownErrorMessage(err, 'Unknown error');
       showToast(`Extraction failed: ${errorMsg}`, 'error');
     } finally {
       setIsExporting(false);
@@ -1256,18 +1494,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     setIsExportDropdownOpen(false);
     try {
       const workbook = await createExcelWorkbook();
-      const exportScope = resolveExportScope();
+      const exportScope = await resolveExportScope();
 
       // --- 1. FETCH SALES & SHORTAGES IN PARALLEL ---
-      let salesQuery = supabase.client.from('lost_sales_excel_export').select('*');
-      let shortagesQuery = supabase.client.from('shortages_excel_export').select('*');
-
-      salesQuery = applyExportFilters(salesQuery, exportScope);
-      shortagesQuery = applyExportFilters(shortagesQuery, exportScope);
-
       const [salesData, shortagesData] = await Promise.all([
-        fetchAllPages(salesQuery),
-        fetchAllPages(shortagesQuery),
+        fetchExportRows('lost_sales_excel_export', exportScope),
+        fetchExportRows('shortages_excel_export', exportScope),
       ]);
 
       // --- TAB 1: LOST SALES (Powered by View) ---
@@ -1435,7 +1667,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Export Error:", err);
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const errorMsg = getUnknownErrorMessage(err, 'Unknown error');
       showToast(`Extraction failed: ${errorMsg}`, 'error');
     } finally {
       setIsExporting(false);

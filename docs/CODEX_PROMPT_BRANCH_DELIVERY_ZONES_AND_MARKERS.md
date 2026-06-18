@@ -243,74 +243,15 @@ Do not weaken existing policies.
 
 ---
 
-## Phase 3 — Seed / Upsert Branch Origin Blocks
+## Phase 3 - Admin-Configured Branch Origin Blocks
 
-Create a safe local seed/upsert SQL section that maps `branches.code` to the origin block number.
+Do not seed branch delivery profiles from source code.
 
-Use `branches.code`, not branch names.
+Branch origin blocks, delivery radii, delivery-enabled state, and notes must be created by an admin/manager in Project Settings > Delivery Zones, or by an explicitly approved admin-supplied import for the target client project.
 
-Pattern:
+Use `branches.code`, not branch names, when importing an approved admin file.
 
-```sql
-with branch_blocks(branch_code, origin_block_number) as (
-  values
-    ('H001', '711'),
-    ('H002', '729'),
-    ('H003', '816'),
-    ('H004', '745'),
-    ('H005', '555'),
-    ('T001', '729'),
-    ('T002', '255'),
-    ('T003', '112'),
-    ('T004', '571'),
-    ('T005', '904'),
-    ('T006', '324'),
-    ('T007', '426'),
-    ('T008', '113'),
-    ('T009', '253'),
-    ('T010', '915'),
-    ('S001', '743'),
-    ('S002', '332'),
-    ('S003', '575'),
-    ('S004', '745'),
-    ('D002', '1017')
-)
-insert into public.branch_delivery_profiles (
-  branch_id,
-  origin_block_number,
-  core_radius_km,
-  standard_radius_km,
-  extended_radius_km,
-  target_delivery_minutes,
-  warning_delivery_minutes,
-  is_delivery_enabled
-)
-select
-  b.id,
-  bb.origin_block_number,
-  3,
-  5,
-  8,
-  25,
-  35,
-  true
-from branch_blocks bb
-join public.branches b
-  on b.code = bb.branch_code
-where coalesce(b.role, 'branch') = 'branch'
-on conflict (branch_id)
-do update set
-  origin_block_number = excluded.origin_block_number,
-  core_radius_km = excluded.core_radius_km,
-  standard_radius_km = excluded.standard_radius_km,
-  extended_radius_km = excluded.extended_radius_km,
-  target_delivery_minutes = excluded.target_delivery_minutes,
-  warning_delivery_minutes = excluded.warning_delivery_minutes,
-  is_delivery_enabled = excluded.is_delivery_enabled,
-  updated_at = now();
-```
-
-Before applying remotely, only prepare this locally and report it.
+Before applying any bulk import remotely, only prepare it locally and report it.
 
 ---
 
@@ -723,8 +664,7 @@ B) dedicated-client staging-ready only
 
 - Branch marker appears inside each mapped branch block.
 - Marker location comes from GeoJSON block centroid.
-- H002/T001 cluster correctly in block 729.
-- H004/S004 cluster correctly in block 745.
+- Duplicate origin blocks render offset clusters when admins configure duplicates.
 - Missing blocks show unmapped state instead of fake marker.
 - Manager can configure branch origin block and radius settings.
 - Map shows animated red service circles/rings.

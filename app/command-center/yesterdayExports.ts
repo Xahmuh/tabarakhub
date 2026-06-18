@@ -1,4 +1,3 @@
-import { saveAs } from 'file-saver';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { supabaseClient } from '../../lib/supabaseClient';
 import { Branch } from '../../types';
@@ -318,6 +317,7 @@ const addSummarySheet = (
 };
 
 const saveWorkbook = async (workbook: any, filename: string) => {
+  const { saveAs } = await import('file-saver');
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, filename);

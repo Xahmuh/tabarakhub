@@ -3,11 +3,11 @@ from information_schema.tables
 where table_schema = 'public'
   and table_name = 'branch_delivery_profiles';
 
-select 'profile_count' as check_name, count(*) as total_profiles
+select 'configured_profile_count' as check_name, count(*) as total_profiles
 from public.branch_delivery_profiles;
 
 select
-  'seeded_profile' as check_name,
+  'configured_profile' as check_name,
   b.code,
   b.name,
   p.origin_block_number,
@@ -19,47 +19,50 @@ select
   p.is_delivery_enabled
 from public.branch_delivery_profiles p
 join public.branches b on b.id = p.branch_id
-where b.code in (
-  'H001','H002','H003','H004','H005',
-  'T001','T002','T003','T004','T005','T006','T007','T008','T009','T010',
-  'S001','S002','S003','S004',
-  'D002'
-)
 order by b.code;
 
-with expected(branch_code, origin_block_number) as (
-  values
-    ('H001', '711'),
-    ('H002', '729'),
-    ('H003', '816'),
-    ('H004', '745'),
-    ('H005', '555'),
-    ('T001', '729'),
-    ('T002', '255'),
-    ('T003', '112'),
-    ('T004', '571'),
-    ('T005', '904'),
-    ('T006', '324'),
-    ('T007', '426'),
-    ('T008', '113'),
-    ('T009', '253'),
-    ('T010', '915'),
-    ('S001', '743'),
-    ('S002', '332'),
-    ('S003', '575'),
-    ('S004', '745'),
-    ('D002', '1017')
-)
 select
-  'missing_branch_code' as check_name,
-  e.branch_code,
-  e.origin_block_number
-from expected e
-left join public.branches b
-  on b.code = e.branch_code
- and coalesce(b.role, 'branch') = 'branch'
+  'orphan_profile' as check_name,
+  p.id,
+  p.branch_id,
+  p.origin_block_number
+from public.branch_delivery_profiles p
+left join public.branches b on b.id = p.branch_id
 where b.id is null
-order by e.branch_code;
+order by p.created_at;
+
+select
+  'non_branch_profile' as check_name,
+  b.code,
+  b.name,
+  b.role,
+  p.origin_block_number
+from public.branch_delivery_profiles p
+join public.branches b on b.id = p.branch_id
+where coalesce(b.role, 'branch') <> 'branch'
+order by b.code;
+
+select
+  'invalid_radius_order' as check_name,
+  b.code,
+  p.origin_block_number,
+  p.core_radius_km,
+  p.standard_radius_km,
+  p.extended_radius_km
+from public.branch_delivery_profiles p
+join public.branches b on b.id = p.branch_id
+where p.core_radius_km > p.standard_radius_km
+   or p.standard_radius_km > p.extended_radius_km
+order by b.code;
+
+select
+  'duplicate_branch_profile' as check_name,
+  branch_id,
+  count(*) as profiles_count
+from public.branch_delivery_profiles
+group by branch_id
+having count(*) > 1
+order by profiles_count desc;
 
 select
   'duplicate_origin_block' as check_name,

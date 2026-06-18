@@ -1,5 +1,5 @@
 import { supabaseClient } from '../lib/supabaseClient';
-import { AppUser, BranchStaffAssignment, BranchZone, FeaturePermission, Role, RolePermission, UserFeaturePermission } from '../types';
+import { AppUser, BranchStaffAssignment, BranchZone, FeaturePermission, Role, RolePermission, SupervisorScopeMode, UserFeaturePermission } from '../types';
 
 export type AdminCreateUserInput = {
   email: string;
@@ -173,6 +173,7 @@ export const permissionService = {
       branchId: u.branch_id,
       branchCode: u.branch_code,
       branchName: u.branch_name,
+      supervisorScopeMode: u.supervisor_scope_mode || (u.role === 'supervisor' ? 'assigned_zones' : null),
       isActive: u.is_active,
       createdAt: u.created_at
     }));
@@ -183,6 +184,14 @@ export const permissionService = {
       new_role: role,
       new_branch_id: branchId ?? null,
       new_is_active: isActive
+    });
+    if (error) throw error;
+    return true;
+  },
+  adminSetSupervisorScopeMode: async (userId: string, scopeMode: SupervisorScopeMode) => {
+    const { error } = await supabaseClient.rpc('app_admin_set_supervisor_scope_mode', {
+      target_user_id: userId,
+      new_scope_mode: scopeMode
     });
     if (error) throw error;
     return true;

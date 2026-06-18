@@ -17,7 +17,6 @@ import {
     ShieldCheck,
     XCircle
 } from 'lucide-react';
-import { saveAs } from 'file-saver';
 import { generateDocumentBlob } from '../lib/docGenerator';
 
 type FilterStatus = 'all' | 'Pending' | 'Approved' | 'Rejected' | 'Completed';
@@ -86,6 +85,7 @@ export const HRRequestsSection: React.FC = () => {
 
     const generateWordDocument = async (request: HRRequest) => {
         try {
+            const { saveAs } = await import('file-saver');
             const typesToGenerate: string[] = [];
 
             if (request.docTypes.some(type => type.toLowerCase().includes('experience'))) typesToGenerate.push('Experience Certificate');

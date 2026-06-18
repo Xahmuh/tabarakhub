@@ -1,5 +1,5 @@
 import { supabaseClient } from '../lib/supabaseClient';
-import { AuthState, Branch, Role } from '../types';
+import { AuthState, Branch, Role, SupervisorScopeMode } from '../types';
 
 const BRANCH_SELECT = `
   id,
@@ -91,11 +91,23 @@ export const authService = {
       return { user: null, pharmacist: null, permissions: [] };
     }
 
-    const { data: profile, error: profileError } = await supabaseClient
+    const profileResult = await supabaseClient
       .from('app_user_profiles')
-      .select(`role, branch:branches(${BRANCH_SELECT})`)
+      .select(`role, supervisor_scope_mode, branch:branches(${BRANCH_SELECT})`)
       .eq('user_id', data.session.user.id)
       .maybeSingle();
+    let profile: any = profileResult.data;
+    let profileError = profileResult.error;
+
+    if (profileError && /supervisor_scope_mode/i.test(profileError.message || '')) {
+      const fallback = await supabaseClient
+        .from('app_user_profiles')
+        .select(`role, branch:branches(${BRANCH_SELECT})`)
+        .eq('user_id', data.session.user.id)
+        .maybeSingle();
+      profile = fallback.data;
+      profileError = fallback.error;
+    }
 
     if (profileError || !profile) {
       return { user: null, pharmacist: null, permissions: [] };
@@ -106,6 +118,9 @@ export const authService = {
     const normalizedRole: Role = profile.role === 'manager'
       ? 'admin'
       : profile.role as Role;
+    const supervisorScopeMode = normalizedRole === 'supervisor'
+      ? (profile.supervisor_scope_mode || 'assigned_zones') as SupervisorScopeMode
+      : null;
 
     if (normalizedRole !== 'branch') {
       const identityUser: Branch = {
@@ -113,7 +128,8 @@ export const authService = {
         userId: data.session.user.id,
         code: normalizedRole.toUpperCase(),
         name: normalizedRole.toUpperCase(),
-        role: normalizedRole
+        role: normalizedRole,
+        supervisorScopeMode
       };
       return { user: identityUser, pharmacist: null, permissions: [] };
     }

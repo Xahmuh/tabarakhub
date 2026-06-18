@@ -4,12 +4,10 @@ Current known state:
 
 * Migration `20260614163000_add_branch_delivery_profiles.sql` was applied to linked Supabase.
 * Migration list is clean through `20260614163000`.
-* `branch_delivery_profiles` exists and has 20/20 seeded profiles.
-* GeoJSON validation passed: 20 mapped, 0 unmapped.
-* Duplicate groups validated:
-
-  * `729`: H002/T001
-  * `745`: H004/S004
+* `branch_delivery_profiles` exists.
+* Source code no longer seeds fixed branch delivery profiles.
+* GeoJSON validation applies to admin-configured origin blocks only.
+* Duplicate groups are admin-owned configuration and should be validated only when configured.
 * Branch T001 RLS check passed: own profile only.
 * Typecheck/build/npm ls passed.
 * Code is still local.
@@ -131,8 +129,7 @@ Verify:
 * Bahrain map loads;
 * served blocks still appear;
 * branch markers appear inside origin blocks;
-* H002/T001 cluster or offset correctly in block 729;
-* H004/S004 cluster or offset correctly in block 745;
+* duplicate branch markers offset correctly when duplicate origin blocks are configured;
 * animated red service rings appear;
 * service rings do not hide the heatmap;
 * toggles work:

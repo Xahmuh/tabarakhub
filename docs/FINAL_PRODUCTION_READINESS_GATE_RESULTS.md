@@ -13,7 +13,7 @@ B) dedicated-client staging-ready only
 | Access source of truth | Pass | Zones and branch staff assignment are managed from Access Control. |
 | Delivery source boundary | Pass | Delivery Settings no longer owns supervisor zone assignment; Delivery Recording and dispatch consume branch-scoped staff lists. |
 | Zones schema | Applied | `branch_zones` and `branch_zone_members` were applied by `20260617233656_access_supervisor_zones.sql`. |
-| Supervisor RLS compatibility | Applied | `supervisor_branches` remains the derived branch-scope table and matched derived zone membership in post-apply validation. |
+| Supervisor RLS compatibility | Applied | `supervisor_branches` remains the derived branch-scope table and matched configured Access Control zone membership in post-apply validation. |
 | Pharmacist assignment | Pass | Existing `pharmacist_branches` remains the branch-pharmacist table; orphan checks passed. |
 | Driver assignment | Applied | New `delivery_driver_branches` table, constraints, indexes, and RLS policies are applied. |
 | Old delivery-area supervisor model | Applied | Wrong `delivery_areas` supervisor fields were backed up before removal; removed-column validation passed. |

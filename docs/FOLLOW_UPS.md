@@ -3,11 +3,11 @@
 Recommended improvements after the role restructure and Delivery Recording &
 Traceability release. None of these block production.
 
-1. **Block Coverage Analyzer should read `delivery_blocks`.**
-   `app/block-analyzer/BlockCoverageAnalyzer.jsx` still hardcodes
-   `BLOCK_AREA_NAMES`. Now that `delivery_blocks` is the editable source of
-   truth (seeded with the same data plus governorates), the analyzer should
-   load from it so manager edits propagate everywhere.
+1. **Block Coverage Analyzer should use a database-backed admin source.**
+   `app/block-analyzer/BlockCoverageAnalyzer.jsx` no longer ships bundled
+   coverage, area, or pharmacy maps, but it still stores admin-entered analyzer
+   data in browser storage. Move it to `delivery_blocks` plus an approved
+   coverage-zone table so manager edits propagate everywhere.
 
 2. **Replace supervisor-name filtering with `supervisor_branches` links.**
    Delivery analytics currently filters by the free-text

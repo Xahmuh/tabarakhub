@@ -1,6 +1,7 @@
 
 // Define Role type for consistent usage
 export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver';
+export type SupervisorScopeMode = 'assigned_zones' | 'all_zones';
 
 export interface Branch {
   id: string;
@@ -19,6 +20,7 @@ export interface Branch {
   lat?: number | null;
   lng?: number | null;
   dutyRadiusM?: number | null;
+  supervisorScopeMode?: SupervisorScopeMode | null;
 }
 
 export type DeliveryZoneClass = 'core' | 'standard' | 'extended' | 'outside_range' | 'unavailable';
@@ -502,6 +504,7 @@ export interface AppUser {
   branchId?: string | null;
   branchCode?: string | null;
   branchName?: string | null;
+  supervisorScopeMode?: SupervisorScopeMode | null;
   isActive: boolean;
   createdAt?: string;
 }

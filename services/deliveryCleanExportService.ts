@@ -1,5 +1,4 @@
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import type { Row, Worksheet } from 'exceljs';
 import { isModuleEnabled } from '../config/clientConfig';
 import { supabaseClient } from '../lib/supabaseClient';
 import { DeliveryOrder, Governorate } from '../types';
@@ -34,6 +33,22 @@ export interface DeliveryOrderCleanExportRow {
   deliveredAt: string | null;
   cancelledAt: string | null;
   cancelledReason: string | null;
+}
+
+export interface ShortageExportRow {
+  id: string;
+  branch_id: string;
+  branch_name: string | null;
+  pharmacist_id: string | null;
+  pharmacist_name: string | null;
+  internal_code: string | null;
+  product_id: string | null;
+  product_name: string | null;
+  category: string | null;
+  agent_name: string | null;
+  status: string | null;
+  timestamp: string;
+  notes: string | null;
 }
 
 interface DeliveryOrderCleanExportDbRow {
@@ -192,6 +207,35 @@ export const listDeliveryOrderCleanExportRows = async (
   return rows.map(toCleanExportRow);
 };
 
+export async function fetchAllShortagesForExport(
+  branchId: string,
+  dateFrom: string,
+  dateTo: string
+) {
+  const rows: ShortageExportRow[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const { data, error } = await supabaseClient.rpc('export_shortages_paginated', {
+      p_branch_id: branchId,
+      p_date_from: dateFrom,
+      p_date_to: dateTo,
+      p_cursor: cursor,
+      p_limit: PAGE_SIZE,
+    });
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    rows.push(...data as ShortageExportRow[]);
+    cursor = data[data.length - 1]?.id || null;
+
+    if (data.length < PAGE_SIZE || !cursor) break;
+  }
+
+  return rows;
+}
+
 export const buildDeliveryOrderCleanExportParity = (
   operationalRows: DeliveryOrder[],
   cleanRows: DeliveryOrderCleanExportRow[]
@@ -246,7 +290,7 @@ export const buildDeliveryOrderCleanExportParity = (
   };
 };
 
-const styleHeader = (row: ExcelJS.Row) => {
+const styleHeader = (row: Row) => {
   row.font = { bold: true };
   row.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
@@ -255,7 +299,7 @@ const styleHeader = (row: ExcelJS.Row) => {
 };
 
 const writeObjectRows = (
-  sheet: ExcelJS.Worksheet,
+  sheet: Worksheet,
   rows: Array<Record<string, string | number | boolean | null>>,
   columns: Array<{ key: string; label: string; numFmt?: string; width?: number }>
 ) => {
@@ -274,6 +318,10 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
   parity?: DeliveryCleanExportParityResult
 ) => {
   assertExcelEnabled();
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Tabarak Hub';
@@ -376,5 +424,8 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
 export const deliveryCleanExportService = {
   orders: {
     list: listDeliveryOrderCleanExportRows
+  },
+  shortages: {
+    listForExport: fetchAllShortagesForExport
   }
 };

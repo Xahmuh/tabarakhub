@@ -1,5 +1,3 @@
-
-import { saveAs } from 'file-saver';
 import { Product } from '../types';
 import { isModuleEnabled } from '../config/clientConfig';
 import { BAHRAIN_VAT_RATE, formatVatLabel, parseVatEnabled } from './vat';
@@ -217,6 +215,7 @@ export const generateProductTemplate = async () => {
     ]);
     notes.getRow(1).font = { bold: true };
 
+    const { saveAs } = await import('file-saver');
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     saveAs(blob, 'product_import_template.xlsx');
@@ -253,6 +252,7 @@ export const generateProductListExport = async (products: Product[]) => {
     // Style header
     worksheet.getRow(1).font = { bold: true };
 
+    const { saveAs } = await import('file-saver');
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     saveAs(blob, `product_list_export_${new Date().toISOString().split('T')[0]}.xlsx`);

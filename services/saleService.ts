@@ -28,6 +28,7 @@ const throwUnlessDemoMode = (error: unknown) => {
 type BranchScopedListOptions = {
   timestampFrom?: Date | string | null;
   timestampTo?: Date | string | null;
+  branchIds?: string[];
   maxRows?: number;
 };
 
@@ -48,6 +49,62 @@ const applyTimestampBounds = (query: any, options?: BranchScopedListOptions) => 
   return query;
 };
 
+const normalizeBranchIds = (branchIds?: string[]) =>
+  Array.from(new Set((branchIds || []).filter(isUUID)));
+
+const hasExplicitBranchScope = (options?: BranchScopedListOptions) =>
+  Array.isArray(options?.branchIds);
+
+const shouldSplitExplicitBranchScope = (branchId: string | undefined, role: Role, options?: BranchScopedListOptions) =>
+  role !== 'branch' &&
+  branchId === 'all' &&
+  hasExplicitBranchScope(options) &&
+  normalizeBranchIds(options?.branchIds).length > 0;
+
+const applyBranchScope = (
+  query: any,
+  branchId: string | undefined,
+  role: Role,
+  options?: BranchScopedListOptions
+) => {
+  if (role === 'branch') {
+    return isUUID(branchId) ? query.eq('branch_id', branchId) : null;
+  }
+
+  if (branchId && branchId !== 'all') {
+    return isUUID(branchId) ? query.eq('branch_id', branchId) : null;
+  }
+
+  if (hasExplicitBranchScope(options)) {
+    const branchIds = normalizeBranchIds(options?.branchIds);
+    return branchIds.length > 0 ? query.in('branch_id', branchIds) : null;
+  }
+
+  return query;
+};
+
+const filterLocalByBranchScope = <T extends { branchId: string }>(
+  items: T[],
+  branchId: string | undefined,
+  role: Role,
+  options?: BranchScopedListOptions
+) => {
+  if (role === 'branch') {
+    return isUUID(branchId) ? items.filter(item => item.branchId === branchId) : [];
+  }
+
+  if (branchId && branchId !== 'all') {
+    return isUUID(branchId) ? items.filter(item => item.branchId === branchId) : [];
+  }
+
+  if (hasExplicitBranchScope(options)) {
+    const branchIds = new Set(normalizeBranchIds(options?.branchIds));
+    return items.filter(item => branchIds.has(item.branchId));
+  }
+
+  return items;
+};
+
 const isWithinTimestampBounds = (timestamp: string, options?: BranchScopedListOptions) => {
   const value = new Date(timestamp).getTime();
   if (Number.isNaN(value)) return false;
@@ -63,6 +120,62 @@ const getMaxRows = (options?: BranchScopedListOptions) =>
   typeof options?.maxRows === 'number' && Number.isFinite(options.maxRows) && options.maxRows > 0
     ? Math.floor(options.maxRows)
     : Number.POSITIVE_INFINITY;
+
+const applyKeysetCursor = (query: any, cursor: { timestamp: string; id: string } | null) => {
+  if (!cursor?.timestamp || !cursor.id) return query;
+  const timestamp = new Date(cursor.timestamp).toISOString();
+  return query.or(`timestamp.lt.${timestamp},and(timestamp.eq.${timestamp},id.lt.${cursor.id})`);
+};
+
+const fetchBranchScopedRows = async (
+  tableName: 'lost_sales' | 'shortages',
+  branchId: string | undefined,
+  role: Role,
+  options?: BranchScopedListOptions
+) => {
+  if (role === 'branch' && !isUUID(branchId)) return [];
+
+  const shouldSplitScope = shouldSplitExplicitBranchScope(branchId, role, options);
+  const branchIds = shouldSplitScope
+    ? normalizeBranchIds(options?.branchIds)
+    : [branchId];
+  const queryOptions = shouldSplitScope
+    ? { ...options, branchIds: undefined }
+    : options;
+  const allRecords: any[] = [];
+  const maxRows = getMaxRows(options);
+
+  for (const scopedBranchId of branchIds) {
+    let cursor: { timestamp: string; id: string } | null = null;
+    let hasMore = true;
+    while (hasMore && allRecords.length < maxRows) {
+      let query = supabaseClient.from(tableName).select('*');
+      query = applyBranchScope(query, scopedBranchId, role, queryOptions);
+      if (!query) break;
+      query = applyTimestampBounds(query, queryOptions);
+      query = applyKeysetCursor(query, cursor);
+      const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
+      const { data, error } = await query
+        .order('timestamp', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(currentPageSize);
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        hasMore = false;
+      } else {
+        allRecords.push(...data);
+        const last = data[data.length - 1];
+        if (data.length < currentPageSize || allRecords.length >= maxRows || !last?.timestamp || !last?.id) {
+          hasMore = false;
+        } else {
+          cursor = { timestamp: last.timestamp, id: last.id };
+        }
+      }
+    }
+  }
+
+  return allRecords;
+};
 
 export const saleService = {
   products: {
@@ -184,32 +297,7 @@ export const saleService = {
     list: async (branchId?: string, role: Role = 'branch', options?: BranchScopedListOptions): Promise<LostSale[]> => {
       let remoteData: LostSale[] = [];
       try {
-        if (role === 'branch' && !isUUID(branchId)) return [];
-
-        let allRecords: any[] = [];
-        let from = 0;
-        const maxRows = getMaxRows(options);
-        let hasMore = true;
-        while (hasMore && allRecords.length < maxRows) {
-          let query = supabaseClient.from('lost_sales').select('*');
-          if (role !== 'branch' && branchId && branchId !== 'all') {
-            if (isUUID(branchId)) query = query.eq('branch_id', branchId);
-          } else if (role === 'branch') {
-            if (isUUID(branchId)) query = query.eq('branch_id', branchId);
-          }
-          query = applyTimestampBounds(query, options);
-          const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
-          const { data, error } = await query
-            .order('timestamp', { ascending: false })
-            .range(from, from + currentPageSize - 1);
-          if (error) throw error;
-          if (!data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allRecords = [...allRecords, ...data];
-            if (data.length < currentPageSize || allRecords.length >= maxRows) hasMore = false; else from += currentPageSize;
-          }
-        }
+        const allRecords = await fetchBranchScopedRows('lost_sales', branchId, role, options);
         remoteData = allRecords.map(s => ({
           id: s.id, branchId: s.branch_id, pharmacistId: s.pharmacist_id,
           pharmacistName: s.pharmacist_name, productId: s.product_id,
@@ -227,7 +315,7 @@ export const saleService = {
         throwUnlessDemoMode(e);
       }
       const localData = readDemoArray<LostSale>(SALES_KEY);
-      const filteredLocal = (branchId && branchId !== 'all' ? localData.filter(s => s.branchId === branchId) : localData)
+      const filteredLocal = filterLocalByBranchScope(localData, branchId, role, options)
         .filter(s => isWithinTimestampBounds(s.timestamp, options));
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();
@@ -302,29 +390,7 @@ export const saleService = {
     list: async (branchId?: string, role: Role = 'branch', options?: BranchScopedListOptions): Promise<Shortage[]> => {
       let remoteData: Shortage[] = [];
       try {
-        if (role === 'branch' && !isUUID(branchId)) return [];
-
-        let allRecords: any[] = [];
-        let from = 0;
-        const maxRows = getMaxRows(options);
-        let hasMore = true;
-        while (hasMore && allRecords.length < maxRows) {
-          let query = supabaseClient.from('shortages').select('*');
-          if (role !== 'branch' && branchId && branchId !== 'all' && isUUID(branchId)) query = query.eq('branch_id', branchId);
-          else if (role === 'branch' && isUUID(branchId)) query = query.eq('branch_id', branchId);
-          query = applyTimestampBounds(query, options);
-          const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
-          const { data, error } = await query
-            .order('timestamp', { ascending: false })
-            .range(from, from + currentPageSize - 1);
-          if (error) throw error;
-          if (!data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allRecords = [...allRecords, ...data];
-            if (data.length < currentPageSize || allRecords.length >= maxRows) hasMore = false; else from += currentPageSize;
-          }
-        }
+        const allRecords = await fetchBranchScopedRows('shortages', branchId, role, options);
         remoteData = allRecords.map(s => ({
           id: s.id, branchId: s.branch_id, pharmacistId: s.pharmacist_id,
           productId: s.product_id, productName: s.product_name,
@@ -336,7 +402,7 @@ export const saleService = {
         throwUnlessDemoMode(e);
       }
       const localData = readDemoArray<Shortage>('tabarak_offline_shortages');
-      const filteredLocal = (branchId && branchId !== 'all' ? localData.filter((s: any) => s.branchId === branchId) : localData)
+      const filteredLocal = filterLocalByBranchScope(localData, branchId, role, options)
         .filter(s => isWithinTimestampBounds(s.timestamp, options));
       const combined = [...remoteData, ...filteredLocal].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       const seen = new Set();

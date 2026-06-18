@@ -129,11 +129,10 @@ Zones**. The map derives branch markers from the centroid of each branch
 `origin_block_number` in `public/data/bahrain-blocks.geojson`; no stored or fake
 coordinates are used.
 
-When profiles are available, the map can show branch code markers, subtle
-animated red service rings for core/standard/extended radius bands, and toggles
-for branch markers, service rings, and served blocks. Duplicate origin blocks
-such as `729` (H002/T001) and `745` (H004/S004) render as offset markers around
-the same real centroid.
+When admin-configured profiles are available, the map can show branch code
+markers, subtle animated red service rings for core/standard/extended radius
+bands, and toggles for branch markers, service rings, and served blocks.
+Duplicate origin blocks render as offset markers around the same real centroid.
 
 Served blocks are classified against the dominant branch profile as `core`,
 `standard`, `extended`, `outside_range`, or `unavailable`. These classifications
@@ -141,15 +140,17 @@ are centroid-based approximations only; they are not route-time or driving
 distance calculations. See `docs/DELIVERY_BRANCH_ZONES_AND_MARKERS.md`.
 
 Linked Supabase validation on 2026-06-14 applied
-`20260614163000_add_branch_delivery_profiles.sql` successfully and confirmed 20
-seeded branch profiles, RLS enabled, 0 anon grants, anon REST denial, and branch
-T001 own-only visibility. Manager/owner/supervisor/warehouse browser-session
-validation and deployed marker/ring smoke tests remain pending. Authenticated
-browser QA was attempted locally on 2026-06-14; the app loaded the login page with
-no observed console errors, but the available in-app browser had no authenticated
-session and the linked `app_user_profiles` inventory contained only 20 active
-branch profiles, so manager/owner/supervisor/warehouse UI checks could not be
-completed without provisioning or credentials.
+`20260614163000_add_branch_delivery_profiles.sql` successfully and confirmed
+RLS enabled, 0 anon grants, anon REST denial, and branch-scoped visibility on
+the linked project. The source migration no longer seeds branch delivery
+profiles; zone/profile rows are admin-owned configuration. Manager/owner/
+supervisor/warehouse browser-session validation and deployed marker/ring smoke
+tests remain pending. Authenticated browser QA was attempted locally on
+2026-06-14; the app loaded the login page with no observed console errors, but
+the available in-app browser had no authenticated session and the linked
+`app_user_profiles` inventory contained only branch profiles, so manager/owner/
+supervisor/warehouse UI checks could not be completed without provisioning or
+credentials.
 
 ### Replacing or updating the geometry
 

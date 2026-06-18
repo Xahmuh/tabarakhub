@@ -32,49 +32,15 @@ public/data/bahrain-blocks.geojson
 
 No fake coordinates are stored or generated. If the origin block is not present in the GeoJSON, the branch is shown as unmapped.
 
-## Default Branch Mapping
+## Admin Configuration
 
-The local migration seeds profiles by `branches.code`:
+No branch-to-origin-block mapping is hardcoded or seeded by the app.
 
-| Branch code | Origin block |
-|---|---:|
-| H001 | 711 |
-| H002 | 729 |
-| H003 | 816 |
-| H004 | 745 |
-| H005 | 555 |
-| T001 | 729 |
-| T002 | 255 |
-| T003 | 112 |
-| T004 | 571 |
-| T005 | 904 |
-| T006 | 324 |
-| T007 | 426 |
-| T008 | 113 |
-| T009 | 253 |
-| T010 | 915 |
-| S001 | 743 |
-| S002 | 332 |
-| S003 | 575 |
-| S004 | 745 |
-| D002 | 1017 |
-
-Local GeoJSON verification found all provided origin blocks present:
-
-```text
-711, 729, 816, 745, 555, 255, 112, 571, 904, 324, 426, 113, 253, 915, 743, 332, 575, 1017
-```
+Admins configure delivery profiles in Project Settings > Delivery Zones. A profile becomes active only when an admin/manager saves a branch origin block and radius settings. The migration creates the table, RLS, grants, indexes, and triggers only.
 
 ## Duplicate Block Behavior
 
-Some branches intentionally share an origin block:
-
-| Origin block | Branches |
-|---|---|
-| 729 | H002, T001 |
-| 745 | H004, S004 |
-
-The map offsets duplicate markers around the same centroid and shows a small connector back to the true centroid. Service rings remain centered on the real block centroid.
+Admins may intentionally place more than one branch on the same origin block. When duplicate origin blocks are configured, the map offsets duplicate markers around the same centroid and shows a small connector back to the true centroid. Service rings remain centered on the real block centroid.
 
 ## Animated Service Rings
 
@@ -206,12 +172,12 @@ Validation results on the currently linked Supabase project:
 | `branch_delivery_profiles` table exists | Pass |
 | RLS enabled | Pass |
 | Anon table grants | Pass - 0 grants |
-| Seeded expected profiles | Pass - 20 of 20 |
-| Missing configured branch codes | Pass - none |
-| Expected duplicate block groups | Pass - `729` = H002/T001, `745` = H004/S004 |
+| Source migration seed map | Pass - no hardcoded profile rows |
+| Configured profiles | Environment-owned rows only; no required default count |
+| Duplicate origin blocks | Informational/admin-owned; no expected hardcoded groups |
 | Anon REST read | Pass - denied with permission error |
-| Branch T001 own profile visibility | Pass - 1 visible |
-| Branch T001 cross-branch H003 visibility | Pass - 0 visible |
+| Branch own-profile visibility | Requires target profile/session validation |
+| Branch cross-profile isolation | Requires target profile/session validation |
 
 Pending validation before any production claim:
 
@@ -248,7 +214,7 @@ No Auth users, profiles, passwords, migrations, commits, pushes, or deployments 
 
 ## Updating Origin Blocks Later
 
-Use Project Settings for normal edits. For bulk provisioning, use the local migration pattern:
+Use Project Settings for normal edits. For approved bulk provisioning, import an admin-supplied file or SQL statement with explicit values for the target client project:
 
 ```sql
 insert into public.branch_delivery_profiles (...)
@@ -268,10 +234,8 @@ Use `branches.code`, not branch names.
 - Confirm manager/owner can read/write profiles.
 - Confirm branch user can read only own profile and cannot edit.
 - Confirm supervisor can read assigned branch profiles only.
-- Confirm all provided origin blocks map to GeoJSON.
-- Confirm duplicate origin blocks render offset markers.
-- Confirm H002/T001 cluster in block 729.
-- Confirm H004/S004 cluster in block 745.
+- Confirm admin-configured origin blocks map to GeoJSON.
+- Confirm duplicate origin blocks render offset markers when admins configure duplicates.
 - Confirm service rings render and can be toggled off.
 - Confirm served block zone classifications appear in block details.
 - Confirm matrix fallback still works.

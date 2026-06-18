@@ -57,7 +57,9 @@ supabase/migrations/20260618013956_revoke_access_zone_trigger_helper_authenticat
 
 The linked Supabase project is aligned through `20260618013956`.
 
-The migration also backs up wrong `delivery_areas` supervisor fields before removing the wrong access ownership model from `delivery_areas`.
+The migration backs up wrong `delivery_areas` supervisor fields before removing the wrong access ownership model from `delivery_areas`.
+
+The migration source does not auto-create generated supervisor zones from legacy rows. Admins create zones, assign branch members, and assign supervisors in Access Control. `supervisor_branches` is maintained as a derived compatibility table after zones are managed there.
 
 ## Post-Apply Validation
 
@@ -71,7 +73,7 @@ Applied database checks passed for:
 - no orphan `pharmacist_branches`
 - no orphan `delivery_driver_branches`
 - no duplicate staff assignments
-- `supervisor_branches` derived sync parity
+- `supervisor_branches` derived sync parity for configured Access Control zones
 - RLS enabled and no `anon` table/RPC grants
 - trigger helper not exposed as an authenticated RPC endpoint
 

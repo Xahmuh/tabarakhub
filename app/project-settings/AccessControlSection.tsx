@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import { Bike, Building2, Eye, EyeOff, KeyRound, LayoutGrid, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
 import { permissionService, branchService, deliveryService, pharmacistService } from '../../services';
-import { AppUser, Branch, BranchStaffAssignment, BranchZone, DeliveryDriver, MaintenanceSettings, Pharmacist, Role, RolePermission } from '../../types';
+import { AppUser, Branch, BranchStaffAssignment, BranchZone, DeliveryDriver, MaintenanceSettings, Pharmacist, Role, RolePermission, SupervisorScopeMode } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
@@ -44,6 +44,9 @@ const escapeHtml = (value: string | null | undefined) =>
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+
+const getSupervisorScopeMode = (user: AppUser): SupervisorScopeMode =>
+    user.supervisorScopeMode === 'all_zones' ? 'all_zones' : 'assigned_zones';
 
 type RoleModuleLayoutItem = {
     key: string;
@@ -417,26 +420,43 @@ export const AccessControlSection: React.FC<{
 
     const handleSupervisorZones = async (user: AppUser) => {
         const current = supervisorAssignments[user.userId] || [];
+        const currentScopeMode = getSupervisorScopeMode(user);
         const { value } = await Swal.fire({
             title: `<span class="text-xl font-black tracking-tight">Zones for ${user.email}</span>`,
             html: `
-              <div class="space-y-2 text-left max-h-72 overflow-y-auto p-2">
-                ${zoneOptions.map(zone => `
-                  <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
-                    <input type="checkbox" value="${zone.id}" ${current.includes(zone.id) ? 'checked' : ''} class="swal-supervisor-zone h-4 w-4 accent-[#B91c1c]">
-                    ${escapeHtml(zone.code)} - ${escapeHtml(zone.name)} <span class="text-slate-400 font-medium">(${zone.branchIds.length} branches)</span>
-                  </label>`).join('')}
+              <div class="space-y-4 text-left">
+                <div>
+                  <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Scope mode</label>
+                  <select id="swal-supervisor-scope-mode" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                    <option value="assigned_zones" ${currentScopeMode === 'assigned_zones' ? 'selected' : ''}>Assigned zones only</option>
+                    <option value="all_zones" ${currentScopeMode === 'all_zones' ? 'selected' : ''}>All zones</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Assigned zones</label>
+                  <div class="max-h-72 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                    ${zoneOptions.map(zone => `
+                      <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
+                        <input type="checkbox" value="${zone.id}" ${current.includes(zone.id) ? 'checked' : ''} class="swal-supervisor-zone h-4 w-4 accent-[#B91c1c]">
+                        ${escapeHtml(zone.code)} - ${escapeHtml(zone.name)} <span class="text-slate-400 font-medium">(${zone.branchIds.length} branches)</span>
+                      </label>`).join('')}
+                  </div>
+                </div>
               </div>`,
             showCancelButton: true,
             confirmButtonText: 'Save assignment',
             confirmButtonColor: '#B91c1c',
-            preConfirm: () => Array.from(document.querySelectorAll<HTMLInputElement>('.swal-supervisor-zone:checked')).map(i => i.value)
+            preConfirm: () => ({
+                scopeMode: (document.getElementById('swal-supervisor-scope-mode') as HTMLSelectElement).value as SupervisorScopeMode,
+                zoneIds: Array.from(document.querySelectorAll<HTMLInputElement>('.swal-supervisor-zone:checked')).map(i => i.value)
+            })
         });
         if (!value) return;
 
         setSavingKey(user.userId);
         try {
-            await permissionService.setSupervisorZones(user.userId, value);
+            await permissionService.adminSetSupervisorScopeMode(user.userId, value.scopeMode);
+            await permissionService.setSupervisorZones(user.userId, value.zoneIds);
             await load();
         } catch (e: any) {
             Swal.fire('Assignment failed', e?.message || 'Could not save supervisor zones.', 'error');
@@ -1011,17 +1031,20 @@ export const AccessControlSection: React.FC<{
                                     const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
                                     const supervisorZoneIds = supervisorAssignments[user.userId] || [];
                                     const assignedZones = zoneOptions.filter(zone => supervisorZoneIds.includes(zone.id));
+                                    const supervisorScopeMode = getSupervisorScopeMode(user);
                                     const scopeSummary = user.role === 'branch'
                                         ? (user.branchName || 'No branch linked')
                                         : user.role === 'supervisor'
-                                            ? `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`
+                                            ? (supervisorScopeMode === 'all_zones' ? 'All zones' : `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`)
                                             : user.role === 'driver'
                                                 ? 'Driver mobile'
                                                 : 'All branches';
                                     const scopeDetail = user.role === 'branch'
                                         ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                         : user.role === 'supervisor'
-                                            ? (assignedZones.length > 0 ? assignedZones.slice(0, 4).map(zone => zone.name).join(', ') : 'No zones assigned yet')
+                                            ? (supervisorScopeMode === 'all_zones'
+                                                ? 'Full branch visibility'
+                                                : (assignedZones.length > 0 ? assignedZones.slice(0, 4).map(zone => zone.name).join(', ') : 'No zones assigned yet'))
                                             : user.role === 'driver'
                                                 ? 'Linked to a delivery driver profile.'
                                                 : 'Cross-branch visibility follows this role.';
@@ -1061,6 +1084,8 @@ export const AccessControlSection: React.FC<{
                                                     <label className="min-w-0 space-y-1.5">
                                                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login role</span>
                                                         <select
+                                                            title="Login role"
+                                                            aria-label="Login role"
                                                             value={user.role}
                                                             disabled={roleLocked}
                                                             onChange={event => handleRoleChange(user, event.target.value as Role)}
@@ -1166,6 +1191,8 @@ export const AccessControlSection: React.FC<{
                                             <td className="px-4 py-3">
                                                 <select
                                                     value={user.role}
+                                                    title="Login role"
+                                                    aria-label="Login role"
                                                     disabled={isSelf || isSaving || isProtectedAdmin}
                                                     onChange={e => handleRoleChange(user, e.target.value as Role)}
                                                     className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold outline-none focus:border-brand/40 disabled:opacity-50"
@@ -1248,17 +1275,20 @@ export const AccessControlSection: React.FC<{
                             const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
                             const supervisorZoneIds = supervisorAssignments[user.userId] || [];
                             const assignedZones = zoneOptions.filter(zone => supervisorZoneIds.includes(zone.id));
+                            const supervisorScopeMode = getSupervisorScopeMode(user);
                             const scopeSummary = user.role === 'branch'
                                 ? (user.branchName || 'No branch linked')
                                 : user.role === 'supervisor'
-                                    ? `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`
+                                    ? (supervisorScopeMode === 'all_zones' ? 'All zones' : `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`)
                                     : user.role === 'driver'
                                         ? 'Driver mobile'
                                         : 'All branches';
                             const scopeDetail = user.role === 'branch'
                                 ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                 : user.role === 'supervisor'
-                                    ? (assignedZones.length > 0 ? assignedZones.slice(0, 3).map(zone => zone.name).join(', ') : 'No zones assigned yet')
+                                    ? (supervisorScopeMode === 'all_zones'
+                                        ? 'Full branch visibility'
+                                        : (assignedZones.length > 0 ? assignedZones.slice(0, 3).map(zone => zone.name).join(', ') : 'No zones assigned yet'))
                                     : user.role === 'driver'
                                         ? 'Linked to a delivery driver profile.'
                                         : 'Cross-branch visibility follows this role.';
@@ -1285,18 +1315,20 @@ export const AccessControlSection: React.FC<{
                                             {(isSaving || isPermissionsSaving) && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-brand" />}
                                         </div>
                                     </div>
-                                    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.72fr)]">
+                                    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.7)]">
                                         <div className="grid gap-4 md:grid-cols-2">
                                             <label className="min-w-0 space-y-1.5">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Login role</span>
                                                 <select
-                                            value={user.role}
-                                            disabled={isSelf || isSaving || isProtectedAdmin}
-                                            onChange={e => handleRoleChange(user, e.target.value as Role)}
+                                                    title="Login role"
+                                                    aria-label="Login role"
+                                                    value={user.role}
+                                                    disabled={isSelf || isSaving || isProtectedAdmin}
+                                                    onChange={e => handleRoleChange(user, e.target.value as Role)}
                                                     className="min-h-[44px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-                                        >
-                                            {ASSIGNABLE_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                                            {!ASSIGNABLE_ROLES.includes(user.role) && <option value={user.role}>{ROLE_LABELS[user.role] || user.role}</option>}
+                                                >
+                                                    {ASSIGNABLE_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                                                    {!ASSIGNABLE_ROLES.includes(user.role) && <option value={user.role}>{ROLE_LABELS[user.role] || user.role}</option>}
                                                 </select>
                                                 {isProtectedAdmin && <p className="text-[10px] font-bold text-slate-400">Protected system role.</p>}
                                             </label>
