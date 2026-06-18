@@ -31,6 +31,8 @@ const escapeHtml = (value: unknown) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
+
 const formatDutyDateTime = (value?: string | null) => {
   if (!value) return '';
   const date = new Date(value);
@@ -183,12 +185,13 @@ export const exportOrdersToExcel = async (
   sheet.addRow([]);
 
   const header = sheet.addRow([
-    'Date', 'Type', 'Branch', 'From Branch', 'To Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
+    'Order #', 'Date', 'Type', 'Branch', 'From Branch', 'To Branch', 'Value (BHD)', 'Payment', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
   ]);
   styleHeader(header);
 
   orders.forEach(order => {
     sheet.addRow([
+      deliveryOrderNumber(order),
       order.orderDate,
       order.orderKind === 'internal_transfer' ? 'Internal transfer' : 'Actual delivery',
       order.branchName || '',
@@ -208,10 +211,10 @@ export const exportOrdersToExcel = async (
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
-  sheet.getColumn(6).numFmt = '0.000';
+  sheet.getColumn(7).numFmt = '0.000';
 
   const totalRow = sheet.addRow([
-    'TOTAL', '', '', '', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
+    'TOTAL', '', '', '', '', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
   ]);
   totalRow.font = { bold: true };
 

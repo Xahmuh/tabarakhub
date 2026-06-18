@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2, FileDown, Lock, MapPin, Pencil, Plus, Tras
 import { deliveryService } from '../../services/deliveryService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
-  Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentType, DeliveryPaymentTypeConfig, Pharmacist
+  Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentCollectionStatus, DeliveryPaymentType, DeliveryPaymentTypeConfig, Pharmacist
 } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
 import { formatBhd, todayKey, yesterdayKey } from './utils';
@@ -27,11 +27,44 @@ const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) 
     ? 'border-orange-200 bg-orange-50 text-orange-700'
     : 'border-brand/10 bg-brand/5 text-brand';
 
+const paymentCollectionMeta: Record<DeliveryPaymentCollectionStatus, { label: string; shortLabel: string; className: string }> = {
+  paid: {
+    label: 'Paid already',
+    shortLabel: 'Paid',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  },
+  collect_on_delivery: {
+    label: 'Collect on delivery',
+    shortLabel: 'Collect',
+    className: 'border-red-200 bg-red-50 text-red-700'
+  },
+  partial: {
+    label: 'Partial paid',
+    shortLabel: 'Partial',
+    className: 'border-amber-200 bg-amber-50 text-amber-700'
+  }
+};
+
+const paymentCollectionOptions: Array<{ value: DeliveryPaymentCollectionStatus; label: string; hint: string }> = [
+  { value: 'paid', label: 'Paid', hint: 'Money already received' },
+  { value: 'collect_on_delivery', label: 'On delivery', hint: 'Driver collects full amount' },
+  { value: 'partial', label: 'Partial', hint: 'Driver collects remaining amount' }
+];
+
+const isPaymentCollectionPending = (order: DeliveryOrder) =>
+  order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
+
+const shouldShowPaymentCollectionStatusBadge = (order: DeliveryOrder) =>
+  order.paymentCollectionStatus !== 'collect_on_delivery' || !isPaymentCollectionPending(order);
+
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
   isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? 'External channel' : order.driverName || '-';
 
+const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
+
 const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
+const reconcileActionClass = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-widest text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50';
 const lockButtonClass = (locked: boolean) =>
   `mt-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${
     locked
@@ -111,6 +144,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const [isTemplateDownloading, setIsTemplateDownloading] = useState(false);
   const [isHistoryBulkCancelling, setIsHistoryBulkCancelling] = useState(false);
+  const [reconcilingOrderIds, setReconcilingOrderIds] = useState<Set<string>>(() => new Set());
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
 
@@ -118,6 +152,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const [orderDate, setOrderDate] = useState(todayKey());
   const [value, setValue] = useState('');
   const [paymentType, setPaymentType] = useState<DeliveryPaymentType>('CASH');
+  const [paymentCollectionStatus, setPaymentCollectionStatus] = useState<DeliveryPaymentCollectionStatus>('paid');
+  const [amountReceived, setAmountReceived] = useState('');
+  const [cashHandedToDriver, setCashHandedToDriver] = useState('');
+  const [driverPaymentNote, setDriverPaymentNote] = useState('');
 
 
   const [pharmacistId, setPharmacistId] = useState<string | null>(null);
@@ -158,6 +196,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const selectedPaymentType = paymentOptions.find(type => type.code === paymentType);
   const requiresBlock = selectedPaymentType?.requiresBlock ?? !isDeliveryPaymentBlockExempt(paymentType, paymentTypes);
   const isBlockExemptPayment = !requiresBlock;
+  const orderValueNumber = Number(value);
+  const amountReceivedNumber = Number(amountReceived);
+  const amountToCollectPreview = paymentCollectionStatus === 'paid' || !Number.isFinite(orderValueNumber)
+    ? 0
+    : paymentCollectionStatus === 'collect_on_delivery'
+      ? Math.max(orderValueNumber, 0)
+      : Number.isFinite(amountReceivedNumber)
+        ? Math.max(orderValueNumber - amountReceivedNumber, 0)
+        : 0;
   const areaPreview = !requiresBlock
     ? `Not required for ${selectedPaymentType?.label || paymentType}`
     : selectedBlock
@@ -285,6 +332,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     if (!isBlockExemptPayment) return;
     setDriverId(null);
     setIsDriverLocked(false);
+    setPaymentCollectionStatus('paid');
+    setAmountReceived('');
+    setCashHandedToDriver('');
+    setDriverPaymentNote('');
   }, [isBlockExemptPayment]);
 
   // Resolve block -> area as the user types.
@@ -361,6 +412,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     setBlockMatches([]);
     setBlockNotFound(false);
     setIsBlockSearching(false);
+    setPaymentCollectionStatus('paid');
+    setAmountReceived('');
+    setCashHandedToDriver('');
+    setDriverPaymentNote('');
     setEditingOrder(null);
     if (!preserveBatchContext) {
       setOrderDate(todayKey());
@@ -399,12 +454,19 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   };
 
   const handleEdit = (order: DeliveryOrder) => {
+    const nextPaymentCollectionStatus = isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
+      ? 'paid'
+      : order.paymentCollectionStatus || 'paid';
     setEditingOrder(order);
     setOrderDate(order.orderDate);
     setHistoryFrom(order.orderDate);
     setHistoryTo(order.orderDate);
     setValue(order.valueBhd.toFixed(3));
     setPaymentType(order.paymentType);
+    setPaymentCollectionStatus(nextPaymentCollectionStatus);
+    setAmountReceived(nextPaymentCollectionStatus === 'partial' ? order.amountReceivedBhd.toFixed(3) : '');
+    setCashHandedToDriver(order.cashHandedToDriverBhd > 0 ? order.cashHandedToDriverBhd.toFixed(3) : '');
+    setDriverPaymentNote(order.driverPaymentNote || '');
     setPharmacistId(order.pharmacistId || null);
     setDriverId(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? null : order.driverId || null);
     setBlockInput(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? '' : order.blockNumber || '');
@@ -433,6 +495,21 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue) || numericValue <= 0) {
       Swal.fire('Invalid value', 'Enter an order value greater than zero in BHD.', 'warning');
+      return;
+    }
+    const normalizedPaymentCollectionStatus: DeliveryPaymentCollectionStatus = isBlockExemptPayment ? 'paid' : paymentCollectionStatus;
+    const normalizedAmountReceived = normalizedPaymentCollectionStatus === 'paid'
+      ? numericValue
+      : normalizedPaymentCollectionStatus === 'collect_on_delivery'
+        ? 0
+        : Number(amountReceived);
+    const normalizedCashHandedToDriver = isBlockExemptPayment ? 0 : Number(cashHandedToDriver || 0);
+    if (normalizedPaymentCollectionStatus === 'partial' && (!Number.isFinite(normalizedAmountReceived) || normalizedAmountReceived <= 0 || normalizedAmountReceived >= numericValue)) {
+      Swal.fire('Partial payment amount required', 'Enter the amount already received. It must be greater than zero and less than the order value.', 'warning');
+      return;
+    }
+    if (!Number.isFinite(normalizedCashHandedToDriver) || normalizedCashHandedToDriver < 0) {
+      Swal.fire('Invalid driver cash', 'Cash/change handed to driver must be zero or greater.', 'warning');
       return;
     }
     if (!pharmacistId) {
@@ -472,6 +549,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       orderDate,
       valueBhd: numericValue,
       paymentType,
+      paymentCollectionStatus: normalizedPaymentCollectionStatus,
+      amountReceivedBhd: normalizedAmountReceived,
+      cashHandedToDriverBhd: normalizedCashHandedToDriver,
+      driverPaymentNote: isBlockExemptPayment ? null : driverPaymentNote.trim() || null,
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
       driverId: isBlockExemptPayment ? null : driverId,
@@ -520,7 +601,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const handleDelete = async (order: DeliveryOrder) => {
     const confirm = await Swal.fire({
       title: 'Delete recorded invoice?',
-      text: `${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
+      text: `${deliveryOrderNumber(order)} · ${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Delete recording',
@@ -537,6 +618,45 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       });
     } catch (e: any) {
       Swal.fire('Delete failed', e?.message || 'Could not delete this recorded delivery invoice.', 'error');
+    }
+  };
+
+  const handleReconcilePayment = async (order: DeliveryOrder) => {
+    if (!isPaymentCollectionPending(order) || reconcilingOrderIds.has(order.id)) return;
+
+    const confirm = await Swal.fire({
+      title: 'Reconcile payment?',
+      html: `Confirm receipt of <b>${formatBhd(order.amountToCollectBhd)}</b> for this delivery order.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Reconcile',
+      confirmButtonColor: '#2563eb'
+    });
+    if (!confirm.isConfirmed) return;
+
+    setReconcilingOrderIds(prev => new Set(prev).add(order.id));
+    try {
+      const updated = await deliveryService.orders.reconcilePayment(order.id, order.amountToCollectBhd);
+      setHistoryOrders(prev => {
+        const withoutCurrent = prev.filter(item => item.id !== updated.id);
+        return isOrderInsideHistoryRange(updated)
+          ? sortOrdersNewestFirst([updated, ...withoutCurrent])
+          : withoutCurrent;
+      });
+      setSelectedHistoryIds(prev => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+      Swal.fire('Reconciled', `Payment receipt confirmed for ${formatBhd(order.amountToCollectBhd)}.`, 'success');
+    } catch (e: any) {
+      Swal.fire('Reconcile failed', e?.message || 'Could not reconcile this delivery payment.', 'error');
+    } finally {
+      setReconcilingOrderIds(prev => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
     }
   };
 
@@ -733,7 +853,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
 
   const totals = useMemo(() => ({
     count: historyOrders.length,
-    value: historyOrders.reduce((acc, o) => acc + o.valueBhd, 0)
+    value: historyOrders.reduce((acc, o) => acc + o.valueBhd, 0),
+    pendingCollection: historyOrders.reduce((acc, o) => acc + (isPaymentCollectionPending(o) ? o.amountToCollectBhd : 0), 0),
+    driverCash: historyOrders.reduce((acc, o) => acc + o.cashHandedToDriverBhd, 0)
   }), [historyOrders]);
 
   return (
@@ -747,7 +869,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               </h3>
               {editingOrder && (
                 <p className="mt-1 text-[11px] font-bold text-slate-500">
-                  Editing {formatBhd(editingOrder.valueBhd)} / {editingOrder.paymentType}
+                  Editing {deliveryOrderNumber(editingOrder)} / {formatBhd(editingOrder.valueBhd)} / {editingOrder.paymentType}
                 </p>
               )}
             </div>
@@ -861,6 +983,97 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
+            <div className="order-6 space-y-2 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Payment collection
+              </label>
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#0f172a]/20 bg-[#0f172a]/10 p-1">
+                {paymentCollectionOptions.map(option => {
+                  const isActive = paymentCollectionStatus === option.value || (isBlockExemptPayment && option.value === 'paid');
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      disabled={isBlockExemptPayment}
+                      onClick={() => setPaymentCollectionStatus(option.value)}
+                      className={`rounded-md px-2 py-2 text-center transition-all disabled:cursor-not-allowed ${
+                        isActive
+                          ? 'bg-[#0f172a] text-white shadow-sm'
+                          : 'bg-[#0f172a]/80 text-white/75 hover:bg-[#0f172a] hover:text-white disabled:bg-slate-200 disabled:text-slate-400'
+                      }`}
+                    >
+                      <span className="block text-[10px] font-black uppercase tracking-widest">{option.label}</span>
+                      <span className="mt-0.5 block text-[9px] font-bold normal-case tracking-normal opacity-70">{option.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {isBlockExemptPayment ? (
+                <p className="text-[10px] font-bold text-orange-600">
+                  External channels stay out of internal driver collection.
+                </p>
+              ) : paymentCollectionStatus === 'paid' ? (
+                <p className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                  Payment received before dispatch
+                </p>
+              ) : (
+                <div className="grid gap-2 rounded-lg border border-red-100 bg-red-50/60 p-3 sm:grid-cols-2">
+                  {paymentCollectionStatus === 'partial' && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-red-500">
+                        Amount received now <RequiredMark />
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.001"
+                        min="0"
+                        placeholder="0.000"
+                        value={amountReceived}
+                        onChange={e => setAmountReceived(e.target.value)}
+                        className="w-full rounded-lg border border-red-100 bg-white px-3 py-2 text-sm font-black text-red-900 outline-none focus:border-red-300"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-red-500">
+                      Driver should collect
+                    </label>
+                    <div className="flex min-h-[40px] items-center rounded-lg border border-red-100 bg-white px-3 py-2 text-sm font-black text-red-800 tabular-nums">
+                      {Number.isFinite(amountToCollectPreview) ? formatBhd(amountToCollectPreview) : formatBhd(0)}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-red-500">
+                      Cash/change handed to driver
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.001"
+                      min="0"
+                      placeholder="0.000"
+                      value={cashHandedToDriver}
+                      onChange={e => setCashHandedToDriver(e.target.value)}
+                      className="w-full rounded-lg border border-red-100 bg-white px-3 py-2 text-sm font-black text-red-900 outline-none focus:border-red-300"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-red-500">
+                      Driver payment note
+                    </label>
+                    <textarea
+                      value={driverPaymentNote}
+                      onChange={e => setDriverPaymentNote(e.target.value)}
+                      rows={2}
+                      placeholder="Example: customer will pay on delivery; driver has BHD 2.000 change."
+                      className="w-full resize-none rounded-lg border border-red-100 bg-white px-3 py-2 text-sm font-bold text-red-900 outline-none placeholder:text-red-300 focus:border-red-300"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="order-2 space-y-1 lg:col-start-1 lg:row-start-2">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Pharmacist <RequiredMark />
@@ -928,7 +1141,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
-            <div className="order-6 space-y-1 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
+            <div className="order-7 space-y-1 lg:col-start-2 lg:row-start-4 lg:border-l lg:border-slate-100 lg:pl-6">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Block or Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}
               </label>
@@ -970,7 +1183,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               )}
             </div>
 
-            <div className="order-7 space-y-1 lg:col-start-2 lg:row-start-4 lg:border-l lg:border-slate-100 lg:pl-6">
+            <div className="order-8 space-y-1 lg:col-start-2 lg:row-start-5 lg:border-l lg:border-slate-100 lg:pl-6">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Area {requiresBlock && <RequiredMark />}
               </label>
@@ -1054,6 +1267,22 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               <span>{totals.count} orders</span>
               <span className="text-slate-300">|</span>
               <span className="text-brand">{formatBhd(totals.value)}</span>
+              {totals.pendingCollection > 0 && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-red-700">
+                    Collect {formatBhd(totals.pendingCollection)}
+                  </span>
+                </>
+              )}
+              {totals.driverCash > 0 && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600">
+                    Driver cash {formatBhd(totals.driverCash)}
+                  </span>
+                </>
+              )}
               {selectedHistoryOrders.length > 0 && (
                 <>
                   <span className="text-slate-300">|</span>
@@ -1104,7 +1333,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                         />
                       </th>
                     )}
-                    <th className="py-2 pr-3">Date / time</th>
+                    <th className="py-2 pr-3">Order / date</th>
                     <th className="py-2 pr-3 text-right">Value</th>
                     <th className="py-2 px-3">Payment</th>
                     <th className="py-2 pr-3">Pharmacist</th>
@@ -1123,11 +1352,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                             checked={selectedHistoryIds.has(order.id)}
                             onChange={() => toggleHistorySelection(order.id)}
                             className="h-4 w-4 rounded border-slate-300 accent-red-700"
-                            aria-label={`Select invoice ${order.orderDate}`}
+                            aria-label={`Select invoice ${deliveryOrderNumber(order)}`}
                           />
                         </td>
                       )}
                       <td className="py-2.5 pr-3 text-xs font-bold text-slate-400">
+                        <span className="block font-black text-brand">{deliveryOrderNumber(order)}</span>
                         <span className="block text-slate-600">{order.orderDate}</span>
                         <span className="text-[11px] text-slate-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </td>
@@ -1136,6 +1366,28 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                         <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType, paymentTypes)}`}>
                           {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
                         </span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {shouldShowPaymentCollectionStatusBadge(order) && (
+                            <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${paymentCollectionMeta[order.paymentCollectionStatus].className}`}>
+                              {paymentCollectionMeta[order.paymentCollectionStatus].shortLabel}
+                            </span>
+                          )}
+                          {isPaymentCollectionPending(order) && (
+                            <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                              collect {formatBhd(order.amountToCollectBhd)}
+                            </span>
+                          )}
+                        </div>
+                        {order.cashHandedToDriverBhd > 0 && (
+                          <p className="mt-1 text-[10px] font-bold text-slate-500">
+                            Driver cash {formatBhd(order.cashHandedToDriverBhd)}
+                          </p>
+                        )}
+                        {order.driverPaymentNote && (
+                          <p className="mt-1 max-w-[220px] truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
+                            {order.driverPaymentNote}
+                          </p>
+                        )}
                       </td>
                       <td className="py-2.5 pr-3 font-bold text-slate-600">{order.pharmacistName || '—'}</td>
                       <td className="py-2.5 pr-3 font-bold text-slate-600">{driverDisplayName(order, paymentTypes)}</td>
@@ -1152,6 +1404,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       <td className="py-2.5 text-right">
                         {canEdit && (
                           <div className="inline-flex items-center gap-1">
+                            {isPaymentCollectionPending(order) && (
+                              <button
+                                onClick={() => handleReconcilePayment(order)}
+                                disabled={reconcilingOrderIds.has(order.id)}
+                                className={reconcileActionClass}
+                                title="Reconcile payment"
+                                aria-label="Reconcile payment"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Reconcile'}
+                              </button>
+                            )}
                             <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -1179,7 +1443,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                           checked={selectedHistoryIds.has(order.id)}
                           onChange={() => toggleHistorySelection(order.id)}
                           className="h-4 w-4 rounded border-slate-300 accent-red-700"
-                          aria-label={`Select invoice ${order.orderDate}`}
+                          aria-label={`Select invoice ${deliveryOrderNumber(order)}`}
                         />
                       )}
                       <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadge(order.paymentType, paymentTypes)}`}>
@@ -1187,6 +1451,29 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       </span>
                     </div>
                   </div>
+                  <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-brand">{deliveryOrderNumber(order)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {shouldShowPaymentCollectionStatusBadge(order) && (
+                      <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${paymentCollectionMeta[order.paymentCollectionStatus].className}`}>
+                        {paymentCollectionMeta[order.paymentCollectionStatus].label}
+                      </span>
+                    )}
+                    {isPaymentCollectionPending(order) && (
+                      <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                        collect {formatBhd(order.amountToCollectBhd)}
+                      </span>
+                    )}
+                    {order.cashHandedToDriverBhd > 0 && (
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                        driver cash {formatBhd(order.cashHandedToDriverBhd)}
+                      </span>
+                    )}
+                  </div>
+                  {order.driverPaymentNote && (
+                    <p className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-bold leading-5 text-red-700">
+                      {order.driverPaymentNote}
+                    </p>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
                     {order.driverName && <span>🛵 {order.driverName}</span>}
@@ -1198,6 +1485,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                   </div>
                   {canEdit && (
                     <div className="mt-3 flex justify-end gap-2">
+                      {isPaymentCollectionPending(order) && (
+                        <button
+                          onClick={() => handleReconcilePayment(order)}
+                          disabled={reconcilingOrderIds.has(order.id)}
+                          className={reconcileActionClass}
+                          title="Reconcile payment"
+                          aria-label="Reconcile payment"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Reconcile'}
+                        </button>
+                      )}
                       <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                         <Pencil className="h-4 w-4" />
                       </button>

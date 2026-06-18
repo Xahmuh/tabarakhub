@@ -77,7 +77,7 @@ const DEFAULT_MOBILE_SETTINGS: DriverMobileAppSettings = {
   updatedAt: null
 };
 
-type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
+type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark' | 'collected';
 type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications' | 'dutyRecord';
 type HistoryStatusFilter = 'all' | DriverHistoryStatusFilter;
 type HistoryOrderTypeFilter = 'delivery' | 'internal_transfer';
@@ -85,8 +85,22 @@ type HistoryPeriodFilter = 'all' | 'today' | 'week' | 'month';
 type DriverCopy = ReturnType<typeof getDriverCopy>;
 
 const incentiveMoney = (value?: number | null) => `BHD ${Number(value || 0).toFixed(3)}`;
+const paymentMoney = (value?: number | null) => `BHD ${Number(value || 0).toFixed(3)}`;
+const isDriverPaymentPending = (order: DriverOrder) =>
+  order.orderKind !== 'internal_transfer' && order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
+const paymentCollectionActionText = {
+  confirmCollected: 'Payment collected',
+  deliveredAndCollected: 'Collected',
+  confirmCollectedTitle: 'Confirm payment collection',
+  confirmCollectedMessage: 'Confirm you received {amount} from the customer.',
+  confirmCollectedSuccessTitle: 'Payment confirmed',
+  confirmCollectedSuccessText: 'This order is now marked as paid.',
+  connectBeforeConfirm: 'Connect to the internet before confirming customer payment.'
+};
 
 const shortId = (id: string) => id.slice(0, 8);
+const orderDisplayNumber = (order: Pick<DriverOrder, 'id' | 'orderNumber'>) =>
+  order.orderNumber?.trim() || `#${shortId(order.id)}`;
 
 const localeByLanguage: Record<DriverLanguage, string> = {
   en: 'en-GB',
@@ -115,6 +129,51 @@ const orderRouteLabel = (order: DriverOrder, copy: DriverCopy) => {
 
 const orderTypeLabel = (order: DriverOrder, copy: DriverCopy) =>
   order.orderKind === 'internal_transfer' ? copy.common.internalTransfer : copy.common.actualDelivery;
+
+const paymentCollectionText = (language: DriverLanguage) => {
+  if (language === 'ar') {
+    return {
+      title: 'ØªØ­ØµÙŠÙ„ Ø¹Ù†Ø¯ Ø§Ù„ØªÙˆØµÙŠÙ„',
+      collectFromCustomer: 'ÙŠØªÙ… ØªØ­ØµÙŠÙ„Ù‡ Ù…Ù† Ø§Ù„Ø¹Ù…ÙŠÙ„',
+      cashWithDriver: 'ÙƒØ§Ø´/Ø¨Ø§Ù‚ÙŠ Ù…Ø¹ Ø§Ù„Ø¯Ø±Ø§ÙŠÙØ±',
+      note: 'Ù…Ù„Ø§Ø­Ø¸Ø© Ø§Ù„Ø¯ÙØ¹',
+      collected: 'ØªÙ… ØªØ­ØµÙŠÙ„ Ø§Ù„Ø¯ÙØ¹',
+      partial: 'Ø¯ÙØ¹ Ø¬Ø²Ø¦ÙŠ',
+      collectOnDelivery: 'ØªØ­ØµÙŠÙ„ Ø¹Ù†Ø¯ Ø§Ù„ØªÙˆØµÙŠÙ„'
+    };
+  }
+  if (language === 'ur') {
+    return {
+      title: 'ÚˆÙ„ÛŒÙˆØ±ÛŒ Ù¾Ø± ÙˆØµÙˆÙ„ÛŒ',
+      collectFromCustomer: 'Ú©Ø³Ù¹Ù…Ø± Ø³Û’ ÙˆØµÙˆÙ„ Ú©Ø±ÛŒÚº',
+      cashWithDriver: 'ÚˆØ±Ø§Ø¦ÛŒÙˆØ± Ú©Û’ Ù¾Ø§Ø³ Ú©ÛŒØ´/Ú†ÛŒÙ†Ø¬',
+      note: 'Ù¾ÛŒÙ…Ù†Ù¹ Ù†ÙˆÙ¹',
+      collected: 'Ù¾ÛŒÙ…Ù†Ù¹ ÙˆØµÙˆÙ„ ÛÙˆ Ú¯Ø¦ÛŒ',
+      partial: 'Ø¬Ø²ÙˆÛŒ Ø§Ø¯Ø§Ø¦ÛŒÚ¯ÛŒ',
+      collectOnDelivery: 'ÚˆÙ„ÛŒÙˆØ±ÛŒ Ù¾Ø± ÙˆØµÙˆÙ„ÛŒ'
+    };
+  }
+  if (language === 'bn') {
+    return {
+      title: 'à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿à¦¤à§‡ à¦•à¦¾à¦²à§‡à¦•à¦¶à¦¨',
+      collectFromCustomer: 'à¦•à¦¾à¦¸à§à¦Ÿà¦®à¦¾à¦° à¦¥à§‡à¦•à§‡ à¦¨à¦¿à¦¨',
+      cashWithDriver: 'à¦¡à§à¦°à¦¾à¦‡à¦­à¦¾à¦°à§‡à¦° à¦•à¦¾à¦›à§‡ à¦•à§à¦¯à¦¾à¦¶/à¦šà§‡à¦žà§à¦œ',
+      note: 'à¦ªà§‡à¦®à§‡à¦¨à§à¦Ÿ à¦¨à§‹à¦Ÿ',
+      collected: 'à¦ªà§‡à¦®à§‡à¦¨à§à¦Ÿ à¦•à¦¾à¦²à§‡à¦•à§à¦Ÿà§‡à¦¡',
+      partial: 'à¦ªà¦¾à¦°à§à¦¶à¦¿à§Ÿà¦¾à¦² à¦ªà§‡à¦‡à¦¡',
+      collectOnDelivery: 'à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿à¦¤à§‡ à¦•à¦¾à¦²à§‡à¦•à¦¶à¦¨'
+    };
+  }
+  return {
+    title: 'Delivery payment',
+    collectFromCustomer: 'Collect from customer',
+    cashWithDriver: 'Cash/change with driver',
+    note: 'Payment note',
+    collected: 'Payment collected',
+    partial: 'Partial paid',
+    collectOnDelivery: 'Collect on delivery'
+  };
+};
 
 const historyDetailText = (language: DriverLanguage) => {
   if (language === 'ar') {
@@ -742,7 +801,8 @@ const Button = ({
       styles.buttonText,
       tone === 'light' && styles.buttonTextLight,
       tone === 'danger' && styles.buttonTextDanger,
-      tone === 'warning' && styles.buttonTextLight
+      tone === 'warning' && styles.buttonTextLight,
+      tone === 'collected' && styles.buttonTextCollected
     ]}>
       {label}
     </Text>
@@ -1336,6 +1396,47 @@ const InfoRow = ({ label, value, isRtl = false }: { label: string; value: string
   </View>
 );
 
+const PaymentCollectionPanel = ({
+  order,
+  language,
+  isRtl,
+  forceCollected = false
+}: {
+  order: DriverOrder;
+  language: DriverLanguage;
+  isRtl: boolean;
+  forceCollected?: boolean;
+}) => {
+  const text = paymentCollectionText(language);
+  const hasCollectionDetails = order.amountToCollectBhd > 0
+    || order.cashHandedToDriverBhd > 0
+    || Boolean(order.driverPaymentNote);
+  const isCollected = forceCollected || (order.paymentCollectionStatus === 'paid' && hasCollectionDetails);
+  const shouldShow = order.orderKind !== 'internal_transfer'
+    && (hasCollectionDetails || forceCollected);
+
+  if (!shouldShow) return null;
+
+  return (
+    <View style={[styles.paymentPanel, isCollected && styles.paymentPanelCollected]}>
+      <Text style={[styles.paymentPanelTitle, isCollected && styles.paymentPanelTitleCollected, isRtl && styles.rtlText]}>
+        {isCollected ? text.collected : order.paymentCollectionStatus === 'partial' ? text.partial : text.collectOnDelivery}
+      </Text>
+      {order.amountToCollectBhd > 0 ? (
+        <InfoRow label={text.collectFromCustomer} value={paymentMoney(order.amountToCollectBhd)} isRtl={isRtl} />
+      ) : null}
+      {order.cashHandedToDriverBhd > 0 ? (
+        <InfoRow label={text.cashWithDriver} value={paymentMoney(order.cashHandedToDriverBhd)} isRtl={isRtl} />
+      ) : null}
+      {order.driverPaymentNote ? (
+        <Text style={[styles.paymentNote, isCollected && styles.paymentNoteCollected, isRtl && styles.rtlText]}>
+          {text.note}: {order.driverPaymentNote}
+        </Text>
+      ) : null}
+    </View>
+  );
+};
+
 const OrderCard = ({
   order,
   copy,
@@ -1344,7 +1445,9 @@ const OrderCard = ({
   busy,
   onPickUp,
   onDeliver,
+  onConfirmPayment,
   onCancel,
+  paymentCollected = false,
   selectable = false,
   selected = false,
   onToggleSelected,
@@ -1357,7 +1460,9 @@ const OrderCard = ({
   busy?: boolean;
   onPickUp?: (order: DriverOrder) => void;
   onDeliver?: (order: DriverOrder) => void;
+  onConfirmPayment?: (order: DriverOrder) => void;
   onCancel?: (order: DriverOrder) => void;
+  paymentCollected?: boolean;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelected?: (order: DriverOrder) => void;
@@ -1365,6 +1470,7 @@ const OrderCard = ({
 }) => {
   const canPickUp = order.deliveryStatus === 'assigned';
   const canDeliver = order.deliveryStatus === 'picked_up';
+  const canConfirmPayment = canDeliver && isDriverPaymentPending(order);
   const isClosed = order.deliveryStatus === 'delivered' || order.deliveryStatus === 'cancelled';
   const isTransfer = order.orderKind === 'internal_transfer';
   const routeLabel = orderRouteLabel(order, copy);
@@ -1378,7 +1484,7 @@ const OrderCard = ({
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: selected }}
-            accessibilityLabel={formatCopy(copy.order.selectForBatch, { id: shortId(order.id) })}
+            accessibilityLabel={formatCopy(copy.order.selectForBatch, { id: orderDisplayNumber(order) })}
             onPress={() => onToggleSelected(order)}
             style={[styles.pickupSelect, selected && styles.pickupSelectActive]}
           >
@@ -1389,7 +1495,7 @@ const OrderCard = ({
         ) : null}
         <View style={styles.orderTitleWrap}>
           <Text style={[styles.orderBranch, isRtl && styles.rtlText]}>{routeLabel}</Text>
-          <Text style={[styles.orderMeta, isRtl && styles.rtlText]}>#{shortId(order.id)} - {orderTypeLabel(order, copy)}</Text>
+          <Text style={[styles.orderMeta, isRtl && styles.rtlText]}>{orderDisplayNumber(order)} - {orderTypeLabel(order, copy)}</Text>
         </View>
         <Pill
           label={statusLabel(order.deliveryStatus, copy)}
@@ -1422,6 +1528,8 @@ const OrderCard = ({
         </View>
       </View>
 
+      <PaymentCollectionPanel order={order} language={language} isRtl={isRtl} forceCollected={paymentCollected} />
+
       {order.notes ? <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>{order.notes}</Text> : null}
 
       <View style={styles.timeline}>
@@ -1437,13 +1545,26 @@ const OrderCard = ({
         ) : null}
       </View>
 
-      {!isClosed && (onPickUp || onDeliver || onCancel) ? (
+      {!isClosed && (onPickUp || onDeliver || onConfirmPayment || onCancel) ? (
         <View style={styles.orderActions}>
           {canPickUp && onPickUp ? (
             <Button label={copy.order.pickedUpAction} tone="light" disabled={busy} onPress={() => onPickUp(order)} />
           ) : null}
+          {canConfirmPayment && onConfirmPayment ? (
+            <Button
+              label={paymentCollectionActionText.confirmCollected}
+              tone="collected"
+              disabled={busy}
+              onPress={() => onConfirmPayment(order)}
+            />
+          ) : null}
           {canDeliver && onDeliver ? (
-            <Button label={copy.order.deliveredAction} tone="success" disabled={busy} onPress={() => onDeliver(order)} />
+            <Button
+              label={canConfirmPayment ? paymentCollectionActionText.deliveredAndCollected : copy.order.deliveredAction}
+              tone="success"
+              disabled={busy}
+              onPress={() => onDeliver(order)}
+            />
           ) : null}
           {onCancel ? (
             <Button label={copy.order.cancelAction} tone="danger" disabled={busy} onPress={() => onCancel(order)} />
@@ -1486,7 +1607,7 @@ const HistoryOrderStrip = ({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${detailText.openDetails} #${shortId(order.id)}`}
+      accessibilityLabel={`${detailText.openDetails} ${orderDisplayNumber(order)}`}
       onPress={() => onPress(order)}
       style={({ pressed }) => [styles.historyStrip, pressed && styles.historyStripPressed]}
     >
@@ -1494,7 +1615,7 @@ const HistoryOrderStrip = ({
         <View style={styles.historyStripTitleWrap}>
           <Text style={[styles.historyStripTitle, isRtl && styles.rtlText]} numberOfLines={1}>{routeLabel}</Text>
           <Text style={[styles.historyStripMeta, isRtl && styles.rtlText]} numberOfLines={2}>
-            #{shortId(order.id)} | {orderTypeLabel(order, copy)} | {order.paymentType} | {routeDetail}{pickupRunValue}
+            {orderDisplayNumber(order)} | {orderTypeLabel(order, copy)} | {order.paymentType} | {routeDetail}{pickupRunValue}
           </Text>
         </View>
         <Pill
@@ -1588,7 +1709,7 @@ const HistoryDetailSheet = ({
               <Text style={[styles.sheetEyebrow, isRtl && styles.rtlText]}>{copy.history.title}</Text>
               <Text style={[styles.sheetTitle, isRtl && styles.rtlText]}>{routeLabel}</Text>
               <Text style={[styles.sheetSub, isRtl && styles.rtlText]}>
-                #{shortId(order.id)} | {orderTypeLabel(order, copy)}
+                {orderDisplayNumber(order)} | {orderTypeLabel(order, copy)}
               </Text>
             </View>
             <Pill
@@ -1600,7 +1721,7 @@ const HistoryDetailSheet = ({
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.historyDetailScroll}>
             <View style={styles.blockCompare}>
               <Text style={[styles.historyDetailSectionTitle, isRtl && styles.rtlText]}>{detailText.orderDetails}</Text>
-              <InfoRow label={copy.sheet.order} value={`#${shortId(order.id)}`} isRtl={isRtl} />
+              <InfoRow label={copy.sheet.order} value={orderDisplayNumber(order)} isRtl={isRtl} />
               <InfoRow label={copy.sheet.type} value={orderTypeLabel(order, copy)} isRtl={isRtl} />
               <InfoRow label={detailText.status} value={statusLabel(order.deliveryStatus, copy)} isRtl={isRtl} />
               <InfoRow label={detailText.orderDate} value={order.orderDate || copy.common.notRecorded} isRtl={isRtl} />
@@ -1622,6 +1743,8 @@ const HistoryDetailSheet = ({
               <InfoRow label={copy.order.pickupRun} value={pickupRunValue} isRtl={isRtl} />
               <InfoRow label={detailText.notes} value={order.notes || copy.common.notRecorded} isRtl={isRtl} />
             </View>
+
+            <PaymentCollectionPanel order={order} language={language} isRtl={isRtl} />
 
             <View style={styles.historyPathwayCard}>
               <Text style={[styles.historyDetailSectionTitle, isRtl && styles.rtlText]}>{detailText.fullPathway}</Text>
@@ -1678,6 +1801,7 @@ const DeliveryConfirmSheet = ({
   const submit = () => {
     onConfirm(order, notes.trim() || null);
   };
+  const requiresPaymentConfirmation = isDriverPaymentPending(order);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -1689,7 +1813,7 @@ const DeliveryConfirmSheet = ({
           <Text style={[styles.sheetSub, isRtl && styles.rtlText]}>{copy.sheet.sub}</Text>
 
           <View style={styles.blockCompare}>
-            <InfoRow label={copy.sheet.order} value={`#${shortId(order.id)}`} isRtl={isRtl} />
+            <InfoRow label={copy.sheet.order} value={orderDisplayNumber(order)} isRtl={isRtl} />
             <InfoRow label={copy.sheet.type} value={orderTypeLabel(order, copy)} isRtl={isRtl} />
             {order.orderKind === 'internal_transfer' ? (
               <>
@@ -1705,6 +1829,8 @@ const DeliveryConfirmSheet = ({
             )}
           </View>
 
+          <PaymentCollectionPanel order={order} language={language} isRtl={isRtl} />
+
           <TextInput
             value={notes}
             onChangeText={setNotes}
@@ -1716,7 +1842,12 @@ const DeliveryConfirmSheet = ({
 
           <View style={[styles.sheetActions, isRtl && styles.rtlRow]}>
             <Button label={copy.common.back} tone="light" onPress={onClose} disabled={busy} />
-            <Button label={copy.sheet.markDelivered} tone="success" onPress={submit} disabled={busy} />
+            <Button
+              label={requiresPaymentConfirmation ? paymentCollectionActionText.deliveredAndCollected : copy.sheet.markDelivered}
+              tone="success"
+              onPress={submit}
+              disabled={busy}
+            />
           </View>
         </View>
       </View>
@@ -1943,6 +2074,7 @@ const Dashboard = ({
   const [deliveryDraft, setDeliveryDraft] = useState<DriverOrder | null>(null);
   const [historyDetailOrder, setHistoryDetailOrder] = useState<DriverOrder | null>(null);
   const [recentHistoryOrders, setRecentHistoryOrders] = useState<DriverOrder[]>([]);
+  const [paymentCollectedOrderIds, setPaymentCollectedOrderIds] = useState<Set<string>>(() => new Set());
   const [selectedPickupOrderIds, setSelectedPickupOrderIds] = useState<Set<string>>(() => new Set());
   const [transferFromBranchId, setTransferFromBranchId] = useState('');
   const [transferToBranchId, setTransferToBranchId] = useState('');
@@ -1998,6 +2130,20 @@ const Dashboard = ({
       queryClient.invalidateQueries({ queryKey: ['driver-transfer-branches'] }),
       queryClient.invalidateQueries({ queryKey: ['driver-nearby-start-branch'] })
     ]);
+  }, [queryClient]);
+
+  const markPaymentCollectedLocally = useCallback((orderId: string) => {
+    setPaymentCollectedOrderIds(previous => {
+      const next = new Set(previous);
+      next.add(orderId);
+      return next;
+    });
+    queryClient.setQueryData<DriverOrder[]>(['driver-active-orders'], current => (
+      current?.map(order => order.id === orderId
+        ? { ...order, paymentCollectionStatus: 'paid', amountToCollectBhd: 0 }
+        : order
+      ) || current
+    ));
   }, [queryClient]);
 
   const syncQueue = useCallback(async () => {
@@ -2096,6 +2242,9 @@ const Dashboard = ({
       const network = await NetInfo.fetch();
       const actionNotes = notes || (nextStatus === 'cancelled' ? copy.errors.cancelledFromMobile : null);
       if (!network.isConnected) {
+        if (nextStatus === 'delivered' && isDriverPaymentPending(order)) {
+          throw new Error(paymentCollectionActionText.connectBeforeConfirm);
+        }
         await enqueueOrderAction(
           order.id,
           nextStatus,
@@ -2103,8 +2252,14 @@ const Dashboard = ({
         );
         return { result: 'queued' as const, order, nextStatus };
       }
+      const settledOrder = nextStatus === 'delivered' && isDriverPaymentPending(order)
+        ? { ...order, paymentCollectionStatus: 'paid' as const, amountToCollectBhd: 0 }
+        : order;
+      if (settledOrder !== order) {
+        await driverApi.confirmPaymentCollected(order.id);
+      }
       await driverApi.transitionOrder(order.id, nextStatus, actionNotes);
-      return { result: 'sent' as const, order, nextStatus };
+      return { result: 'sent' as const, order: settledOrder, nextStatus };
     },
     onSuccess: async ({ result, order, nextStatus }) => {
       setDeliveryDraft(null);
@@ -2124,6 +2279,21 @@ const Dashboard = ({
       }
       await refreshAll();
       if (result === 'queued') Alert.alert(copy.errors.queuedOffline, copy.errors.syncWhenConnected);
+    },
+    onError: (error: any) => Alert.alert(copy.errors.orderUpdateFailed, localizedDriverError(error, copy, copy.errors.couldNotUpdateOrder))
+  });
+
+  const paymentCollectionMutation = useMutation({
+    mutationFn: async (order: DriverOrder) => {
+      const network = await NetInfo.fetch();
+      if (!network.isConnected) throw new Error(paymentCollectionActionText.connectBeforeConfirm);
+      await driverApi.confirmPaymentCollected(order.id);
+      return order;
+    },
+    onSuccess: async order => {
+      markPaymentCollectedLocally(order.id);
+      await refreshAll();
+      Alert.alert(paymentCollectionActionText.confirmCollectedSuccessTitle, paymentCollectionActionText.confirmCollectedSuccessText);
     },
     onError: (error: any) => Alert.alert(copy.errors.orderUpdateFailed, localizedDriverError(error, copy, copy.errors.couldNotUpdateOrder))
   });
@@ -2214,7 +2384,13 @@ const Dashboard = ({
   );
   const activeShift = session?.activeShift;
   const monthlyTarget = session?.monthlyTarget;
-  const isBusy = shiftMutation.isPending || orderMutation.isPending || pickupBatchMutation.isPending || transferMutation.isPending || isSyncing || isExportingDuty;
+  const isBusy = shiftMutation.isPending
+    || orderMutation.isPending
+    || paymentCollectionMutation.isPending
+    || pickupBatchMutation.isPending
+    || transferMutation.isPending
+    || isSyncing
+    || isExportingDuty;
   const isLoading = sessionQuery.isLoading || ordersQuery.isLoading;
   const nearbyStartBranch = nearbyStartBranchQuery.data;
   const shiftBranchInfo = shiftBranchStatus(
@@ -2315,6 +2491,20 @@ const Dashboard = ({
     }
 
     orderMutation.mutate({ order, nextStatus });
+  };
+
+  const confirmPaymentCollection = (order: DriverOrder) => {
+    Alert.alert(
+      paymentCollectionActionText.confirmCollectedTitle,
+      paymentCollectionActionText.confirmCollectedMessage.replace('{amount}', paymentMoney(order.amountToCollectBhd)),
+      [
+        { text: copy.common.back, style: 'cancel' },
+        {
+          text: paymentCollectionActionText.confirmCollected,
+          onPress: () => paymentCollectionMutation.mutate(order)
+        }
+      ]
+    );
   };
 
   const confirmDelivery = (order: DriverOrder, notes: string | null) => {
@@ -2426,7 +2616,9 @@ const Dashboard = ({
           busy={isBusy}
           onPickUp={order => actionOrder(order, 'picked_up')}
           onDeliver={order => actionOrder(order, 'delivered')}
+          onConfirmPayment={confirmPaymentCollection}
           onCancel={order => actionOrder(order, 'cancelled')}
+          paymentCollected={paymentCollectedOrderIds.has(orders[0].id)}
           compact
         />
       ) : (
@@ -2480,7 +2672,9 @@ const Dashboard = ({
             busy={isBusy}
             onPickUp={nextOrder => actionOrder(nextOrder, 'picked_up')}
             onDeliver={nextOrder => actionOrder(nextOrder, 'delivered')}
+            onConfirmPayment={confirmPaymentCollection}
             onCancel={nextOrder => actionOrder(nextOrder, 'cancelled')}
+            paymentCollected={paymentCollectedOrderIds.has(order.id)}
             selectable
             selected={selectedPickupOrderIds.has(order.id)}
             onToggleSelected={togglePickupSelection}
@@ -2645,7 +2839,9 @@ const Dashboard = ({
               busy={isBusy}
               onPickUp={nextOrder => actionOrder(nextOrder, 'picked_up')}
               onDeliver={nextOrder => actionOrder(nextOrder, 'delivered')}
+              onConfirmPayment={confirmPaymentCollection}
               onCancel={nextOrder => actionOrder(nextOrder, 'cancelled')}
+              paymentCollected={paymentCollectedOrderIds.has(order.id)}
               selectable
               selected={selectedPickupOrderIds.has(order.id)}
               onToggleSelected={togglePickupSelection}
@@ -3523,6 +3719,10 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     backgroundColor: colors.warningSoft,
     borderColor: colors.warningBorder
   },
+  button_collected: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successBorder
+  },
   button_dark: {
     backgroundColor: colors.navy,
     borderColor: colors.navy
@@ -3549,6 +3749,9 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   buttonTextDanger: {
     color: colors.danger
+  },
+  buttonTextCollected: {
+    color: colors.success
   },
   iconBox: {
     position: 'relative',
@@ -4455,6 +4658,40 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   blockStatusRow: {
     alignItems: 'flex-start',
     marginTop: 2
+  },
+  paymentPanel: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.md,
+    gap: spacing.sm
+  },
+  paymentPanelCollected: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  paymentPanelTitle: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
+  },
+  paymentPanelTitleCollected: {
+    color: colors.success
+  },
+  paymentNote: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    padding: 10,
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18
+  },
+  paymentNoteCollected: {
+    color: colors.success
   },
   infoRow: {
     flexDirection: 'row',

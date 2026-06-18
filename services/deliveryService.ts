@@ -13,6 +13,7 @@ import {
   DeliveryOrderEvent,
   DeliveryOrderLifecycleInput,
   DeliveryOrderInput,
+  DeliveryPaymentCollectionStatus,
   DeliveryPaymentTypeConfig,
   DeliverySupervisor
 } from '../types';
@@ -24,6 +25,7 @@ import {
 import { generateUUID } from '../utils/uuid';
 
 const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
+const PAYMENT_COLLECTION_STATUSES: DeliveryPaymentCollectionStatus[] = ['paid', 'collect_on_delivery', 'partial'];
 const DRIVER_MOBILE_ASSETS_BUCKET = 'driver-mobile-assets';
 const DEFAULT_DELIVERY_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
   id: 'global',
@@ -144,6 +146,13 @@ const resolvePaymentType = async (paymentType: string | null | undefined) => {
   return config;
 };
 
+const roundBhd = (value: number) => Math.round(value * 1000) / 1000;
+
+const toPaymentCollectionStatus = (value: string | null | undefined): DeliveryPaymentCollectionStatus =>
+  PAYMENT_COLLECTION_STATUSES.includes(value as DeliveryPaymentCollectionStatus)
+    ? value as DeliveryPaymentCollectionStatus
+    : 'paid';
+
 const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryOrderInput> => {
   const branchId = input.branchId?.trim();
   const orderDate = input.orderDate?.trim();
@@ -152,20 +161,42 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
   const usesExternalChannel = !paymentTypeConfig.requiresBlock;
   const valueBhd = Number(input.valueBhd);
   const blockNumber = input.blockNumber?.trim() || null;
+  const paymentCollectionStatus = usesExternalChannel ? 'paid' : toPaymentCollectionStatus(input.paymentCollectionStatus);
+  let amountReceivedBhd = input.amountReceivedBhd === null || input.amountReceivedBhd === undefined
+    ? paymentCollectionStatus === 'paid' ? valueBhd : 0
+    : Number(input.amountReceivedBhd);
+  const cashHandedToDriverBhd = usesExternalChannel ? 0 : Number(input.cashHandedToDriverBhd || 0);
+  const driverPaymentNote = usesExternalChannel ? null : input.driverPaymentNote?.trim() || null;
 
   if (!branchId) throw new Error('Branch is required for delivery orders.');
   if (!orderDate || !isValidDateKey(orderDate)) throw new Error('A valid order date is required.');
   if (!Number.isFinite(valueBhd) || valueBhd <= 0) throw new Error('Order value must be greater than zero.');
+  if (!Number.isFinite(cashHandedToDriverBhd) || cashHandedToDriverBhd < 0) {
+    throw new Error('Cash handed to driver must be zero or greater.');
+  }
   if (paymentTypeConfig.requiresBlock && !blockNumber) {
     throw new Error(`Block number is required for ${paymentTypeConfig.label} delivery orders.`);
+  }
+  if (paymentCollectionStatus === 'paid') {
+    amountReceivedBhd = valueBhd;
+  } else if (paymentCollectionStatus === 'collect_on_delivery') {
+    amountReceivedBhd = 0;
+  } else {
+    if (!Number.isFinite(amountReceivedBhd) || amountReceivedBhd <= 0 || amountReceivedBhd >= valueBhd) {
+      throw new Error('Partial payment requires the received amount to be greater than zero and less than the order value.');
+    }
   }
 
   return {
     ...input,
     branchId,
     orderDate,
-    valueBhd,
+    valueBhd: roundBhd(valueBhd),
     paymentType,
+    paymentCollectionStatus,
+    amountReceivedBhd: roundBhd(amountReceivedBhd),
+    cashHandedToDriverBhd: roundBhd(cashHandedToDriverBhd),
+    driverPaymentNote,
     pharmacistId: input.pharmacistId || null,
     pharmacistName: input.pharmacistName?.trim() || null,
     driverId: usesExternalChannel ? null : input.driverId || null,
@@ -236,11 +267,17 @@ const toOrderKind = (value: string | null | undefined) =>
 
 const toOrder = (row: any): DeliveryOrder => ({
   id: row.id,
+  orderNumber: row.order_number || null,
   branchId: row.branch_id,
   branchName: row.branch?.name,
   orderDate: row.order_date,
   valueBhd: Number(row.value_bhd || 0),
   paymentType: row.payment_type,
+  paymentCollectionStatus: toPaymentCollectionStatus(row.payment_collection_status),
+  amountReceivedBhd: Number(row.amount_received_bhd ?? row.value_bhd ?? 0),
+  amountToCollectBhd: Number(row.amount_to_collect_bhd || 0),
+  cashHandedToDriverBhd: Number(row.cash_handed_to_driver_bhd || 0),
+  driverPaymentNote: row.driver_payment_note || null,
   orderKind: toOrderKind(row.order_kind),
   pharmacistId: row.pharmacist_id,
   pharmacistName: row.pharmacist_name || row.pharmacist?.name || null,
@@ -414,7 +451,11 @@ export const deliveryService = {
           p_pharmacist_id: normalized.pharmacistId || null,
           p_driver_id: normalized.driverId,
           p_block_number: normalized.blockNumber,
-          p_notes: normalized.notes || null
+          p_notes: normalized.notes || null,
+          p_payment_collection_status: normalized.paymentCollectionStatus || 'paid',
+          p_amount_received_bhd: normalized.amountReceivedBhd ?? null,
+          p_cash_handed_to_driver_bhd: normalized.cashHandedToDriverBhd ?? 0,
+          p_driver_payment_note: normalized.driverPaymentNote || null
         });
         if (assignError) throw assignError;
 
@@ -432,6 +473,10 @@ export const deliveryService = {
         order_date: normalized.orderDate,
         value_bhd: normalized.valueBhd,
         payment_type: normalized.paymentType,
+        payment_collection_status: normalized.paymentCollectionStatus || 'paid',
+        amount_received_bhd: normalized.amountReceivedBhd ?? normalized.valueBhd,
+        cash_handed_to_driver_bhd: normalized.cashHandedToDriverBhd ?? 0,
+        driver_payment_note: normalized.driverPaymentNote || null,
         order_kind: normalized.orderKind || 'actual_delivery',
         pharmacist_id: normalized.pharmacistId || null,
         pharmacist_name: pharmacistName || null,
@@ -480,6 +525,9 @@ export const deliveryService = {
         if (!paymentTypeConfig.requiresBlock) {
           payload.block_number = null;
           payload.driver_id = null;
+          payload.payment_collection_status = 'paid';
+          payload.cash_handed_to_driver_bhd = 0;
+          payload.driver_payment_note = null;
         }
       }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
@@ -490,11 +538,32 @@ export const deliveryService = {
       }
       if (input.blockNumber !== undefined) payload.block_number = input.blockNumber?.trim() || null;
       if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
+      if (input.paymentCollectionStatus !== undefined) {
+        payload.payment_collection_status = toPaymentCollectionStatus(input.paymentCollectionStatus);
+      }
+      if (input.amountReceivedBhd !== undefined) {
+        const amountReceivedBhd = Number(input.amountReceivedBhd || 0);
+        if (!Number.isFinite(amountReceivedBhd) || amountReceivedBhd < 0) {
+          throw new Error('Received amount must be zero or greater.');
+        }
+        payload.amount_received_bhd = roundBhd(amountReceivedBhd);
+      }
+      if (input.cashHandedToDriverBhd !== undefined) {
+        const cashHandedToDriverBhd = Number(input.cashHandedToDriverBhd || 0);
+        if (!Number.isFinite(cashHandedToDriverBhd) || cashHandedToDriverBhd < 0) {
+          throw new Error('Cash handed to driver must be zero or greater.');
+        }
+        payload.cash_handed_to_driver_bhd = roundBhd(cashHandedToDriverBhd);
+      }
+      if (input.driverPaymentNote !== undefined) payload.driver_payment_note = input.driverPaymentNote?.trim() || null;
       if (payload.payment_type) {
         const paymentTypeConfig = await resolvePaymentType(payload.payment_type);
         if (!paymentTypeConfig.requiresBlock) {
           payload.block_number = null;
           payload.driver_id = null;
+          payload.payment_collection_status = 'paid';
+          payload.cash_handed_to_driver_bhd = 0;
+          payload.driver_payment_note = null;
         }
       }
 
@@ -520,6 +589,23 @@ export const deliveryService = {
       });
       if (error) throw error;
       return true;
+    },
+
+    reconcilePayment: async (id: string, collectedAmountBhd?: number | null): Promise<DeliveryOrder> => {
+      const { data: orderId, error: reconcileError } = await supabaseClient.rpc('app_delivery_reconcile_payment' as any, {
+        p_order_id: id,
+        p_collected_amount_bhd: collectedAmountBhd ?? null,
+        p_notes: null
+      });
+      if (reconcileError) throw reconcileError;
+
+      const { data, error } = await supabaseClient
+        .from('delivery_orders')
+        .select(ORDER_SELECT)
+        .eq('id', orderId as string)
+        .single();
+      if (error) throw error;
+      return toOrder(data);
     },
 
     /** Possible duplicate: same branch/date/value/payment/driver created in the last N minutes. */

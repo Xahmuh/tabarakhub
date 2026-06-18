@@ -2,6 +2,15 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
+const POSTGRES_INTEGER_MAX = 2147483647;
+const ANDROID_BUILD_BYPASS = POSTGRES_INTEGER_MAX;
+
+const normalizeAndroidBuild = (value: unknown) => {
+  const build = Number(value);
+  if (!Number.isFinite(build) || build < 1) return 1;
+  return Math.min(Math.floor(build), POSTGRES_INTEGER_MAX);
+};
+
 export type DriverSessionPayload = {
   driver: {
     id: string;
@@ -48,6 +57,7 @@ export type DriverSessionPayload = {
 
 export type DriverOrderStatus = 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
 export type DriverOrderKind = 'actual_delivery' | 'internal_transfer';
+export type DriverPaymentCollectionStatus = 'paid' | 'collect_on_delivery' | 'partial';
 export type DriverHistoryStatusFilter = Extract<DriverOrderStatus, 'picked_up' | 'delivered' | 'cancelled'>;
 export type DriverHistoryKindFilter = DriverOrderKind;
 
@@ -114,16 +124,14 @@ export type DriverMobileAppSettings = {
 
 export const currentAndroidBuild = () => {
   if (Platform.OS !== 'android' || Constants.appOwnership === 'expo') {
-    return Number.MAX_SAFE_INTEGER;
+    return ANDROID_BUILD_BYPASS;
   }
 
-  const build = Number(
+  return normalizeAndroidBuild(
     Constants.platform?.android?.versionCode
       ?? Constants.expoConfig?.android?.versionCode
       ?? 1
   );
-
-  return Number.isFinite(build) && build >= 1 ? build : 1;
 };
 
 export const isDriverForceUpdateRequired = (settings: DriverMobileAppSettings) => (
@@ -135,10 +143,15 @@ export const isDriverForceUpdateRequired = (settings: DriverMobileAppSettings) =
 
 export type DriverOrder = {
   id: string;
+  orderNumber?: string | null;
   branchId: string;
   branchName: string;
   orderDate: string;
   paymentType: string;
+  paymentCollectionStatus: DriverPaymentCollectionStatus;
+  amountToCollectBhd: number;
+  cashHandedToDriverBhd: number;
+  driverPaymentNote?: string | null;
   orderKind: DriverOrderKind;
   transferFromBranchId?: string | null;
   transferFromBranchCode?: string | null;
@@ -184,10 +197,17 @@ const isRpcSignatureError = (error: any) => {
 
 const mapOrder = (row: any): DriverOrder => ({
   id: row.id,
+  orderNumber: row.order_number || null,
   branchId: row.branch_id,
   branchName: row.branch_name || 'Branch',
   orderDate: row.order_date,
   paymentType: row.payment_type,
+  paymentCollectionStatus: ['paid', 'collect_on_delivery', 'partial'].includes(row.payment_collection_status)
+    ? row.payment_collection_status
+    : 'paid',
+  amountToCollectBhd: Number(row.amount_to_collect_bhd || 0),
+  cashHandedToDriverBhd: Number(row.cash_handed_to_driver_bhd || 0),
+  driverPaymentNote: row.driver_payment_note || null,
   orderKind: row.order_kind === 'internal_transfer' ? 'internal_transfer' : 'actual_delivery',
   transferFromBranchId: row.transfer_from_branch_id,
   transferFromBranchCode: row.transfer_from_branch_code,
@@ -440,6 +460,15 @@ export const driverApi = {
       p_next_status: nextStatus,
       p_notes: notes || null,
       p_idempotency_key: idempotencyKey
+    });
+    if (error) throw error;
+  },
+
+  confirmPaymentCollected: async (orderId: string) => {
+    const { error } = await supabase.rpc('app_delivery_reconcile_payment', {
+      p_order_id: orderId,
+      p_collected_amount_bhd: null,
+      p_notes: null
     });
     if (error) throw error;
   },

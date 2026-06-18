@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { deliveryService } from '../../services/deliveryService';
-import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent, DeliveryPaymentTypeConfig } from '../../types';
+import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent, DeliveryPaymentCollectionStatus, DeliveryPaymentTypeConfig } from '../../types';
 import { isDeliveryPaymentBlockExempt } from '../../lib/deliveryPaymentTypes';
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey, yesterdayKey } from './utils';
@@ -46,6 +46,12 @@ const STATUS_META: Record<DeliveryLifecycleStatus, { label: string; className: s
 
 const STATUS_ORDER: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
 
+const PAYMENT_COLLECTION_META: Record<DeliveryPaymentCollectionStatus, { label: string; className: string }> = {
+  paid: { label: 'Paid', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  collect_on_delivery: { label: 'Collect on delivery', className: 'border-red-200 bg-red-50 text-red-700' },
+  partial: { label: 'Partial collect', className: 'border-amber-200 bg-amber-50 text-amber-700' }
+};
+
 const lifecycleTimeFor = (order: DeliveryOrder) =>
   order.deliveredAt || order.pickedUpAt || order.assignedAt || order.cancelledAt || order.lifecycleUpdatedAt || order.createdAt;
 
@@ -72,6 +78,7 @@ const formatDuration = (minutes: number | null) => {
 };
 
 const shortRunId = (value?: string | null) => value ? value.slice(0, 8) : null;
+const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 
 const isInsideBranchTransitionWindow = (order: DeliveryOrder) =>
   order.orderDate >= yesterdayKey() && order.orderDate <= todayKey();
@@ -85,6 +92,9 @@ const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStat
 
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
   order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes);
+
+const isPendingCollectionOrder = (order: DeliveryOrder) =>
+  order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
 
 const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) => {
   const meta = STATUS_META[status];
@@ -205,6 +215,12 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     () => internalDispatchOrders
       .filter(order => order.deliveryStatus === 'assigned' || order.deliveryStatus === 'picked_up')
       .reduce((total, order) => total + order.valueBhd, 0),
+    [internalDispatchOrders]
+  );
+  const pendingCollectionValue = useMemo(
+    () => internalDispatchOrders
+      .filter(isPendingCollectionOrder)
+      .reduce((total, order) => total + order.amountToCollectBhd, 0),
     [internalDispatchOrders]
   );
 
@@ -363,6 +379,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
         <KpiCard label="Assigned" value={String(statusCounts.get('assigned') || 0)} icon={<Truck className="h-4 w-4" />} />
         <KpiCard label="Picked up" value={String(statusCounts.get('picked_up') || 0)} icon={<Route className="h-4 w-4" />} />
         <KpiCard label="Delivered" value={String(statusCounts.get('delivered') || 0)} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <KpiCard label="Pending collect" value={formatBhd(pendingCollectionValue)} icon={<Clock3 className="h-4 w-4" />} />
         <KpiCard label="In motion value" value={formatBhd(valueInMotion)} icon={<Clock3 className="h-4 w-4" />} />
         <KpiCard label="Avg delivery" value={formatDuration(timingSummary.avgDriverDelivery)} sub="pickup to delivered" icon={<Route className="h-4 w-4" />} />
         <KpiCard label="Pickup runs" value={String(timingSummary.batchCount)} sub={timingSummary.avgBatchSize ? `${timingSummary.avgBatchSize} orders/run avg` : 'awaiting batches'} icon={<Truck className="h-4 w-4" />} />
@@ -425,6 +442,9 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                     return (
                       <tr key={order.id} className="hover:bg-slate-50/50">
                         <td className="py-3 pr-3">
+                          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-brand">
+                            {deliveryOrderNumber(order)}
+                          </p>
                           <p className="text-xs font-black text-slate-900">
                             {order.orderDate} - {order.orderKind === 'internal_transfer' ? 'Internal transfer' : formatBhd(order.valueBhd)}
                           </p>
@@ -433,6 +453,28 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                               ? `${order.transferFromBranchName || order.branchName || 'Source'} -> ${order.transferToBranchName || 'Destination'}`
                               : `${order.paymentType} ${order.blockNumber ? `- Block ${order.blockNumber}` : ''}`}
                           </p>
+                          {order.orderKind !== 'internal_transfer' && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PAYMENT_COLLECTION_META[order.paymentCollectionStatus].className}`}>
+                                {PAYMENT_COLLECTION_META[order.paymentCollectionStatus].label}
+                              </span>
+                              {isPendingCollectionOrder(order) && (
+                                <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                                  collect {formatBhd(order.amountToCollectBhd)}
+                                </span>
+                              )}
+                              {order.cashHandedToDriverBhd > 0 && (
+                                <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                                  driver cash {formatBhd(order.cashHandedToDriverBhd)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {order.driverPaymentNote && (
+                            <p className="mt-1 max-w-[280px] truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
+                              {order.driverPaymentNote}
+                            </p>
+                          )}
                         </td>
                         <td className="py-3 pr-3">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${

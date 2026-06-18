@@ -594,6 +594,7 @@ export interface DeliveryDriver {
 
 export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';
 export type DeliveryOrderKind = 'actual_delivery' | 'internal_transfer';
+export type DeliveryPaymentCollectionStatus = 'paid' | 'collect_on_delivery' | 'partial';
 
 export interface BranchClassification {
   branchId: string;
@@ -645,11 +646,17 @@ export interface DeliveryDriverMonthlyTarget {
 
 export interface DeliveryOrder {
   id: string;
+  orderNumber?: string | null;
   branchId: string;
   branchName?: string;
   orderDate: string; // yyyy-mm-dd
   valueBhd: number;
   paymentType: DeliveryPaymentType;
+  paymentCollectionStatus: DeliveryPaymentCollectionStatus;
+  amountReceivedBhd: number;
+  amountToCollectBhd: number;
+  cashHandedToDriverBhd: number;
+  driverPaymentNote?: string | null;
   orderKind: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;
@@ -684,6 +691,10 @@ export interface DeliveryOrderInput {
   orderDate: string;
   valueBhd: number;
   paymentType: DeliveryPaymentType;
+  paymentCollectionStatus?: DeliveryPaymentCollectionStatus;
+  amountReceivedBhd?: number | null;
+  cashHandedToDriverBhd?: number | null;
+  driverPaymentNote?: string | null;
   orderKind?: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;
