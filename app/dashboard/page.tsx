@@ -65,6 +65,13 @@ const createExcelWorkbook = async () => {
   return new ExcelJS.Workbook();
 };
 
+const toLocalDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const StrategicKPI: React.FC<{
   label: string;
   value: string | number;
@@ -404,7 +411,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       let rawShortages: Shortage[];
       try {
         const toDateParam = (value: Date | null, fallback: Date) =>
-          (value || fallback).toISOString().slice(0, 10);
+          toLocalDateKey(value || fallback);
         const dateFrom = toDateParam(start, new Date('1900-01-01T00:00:00.000Z'));
         const dateTo = toDateParam(end, new Date());
         const kpiBranchIds = activeBranchId === 'all'
@@ -606,10 +613,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
   const aggregateMetrics = useMemo(() => {
     const rawTotalRevenue = sales.reduce((acc, sale) => acc + (Number(sale.totalValue) || 0), 0);
-    const totalRevenue = dashboardKpis ? Number(dashboardKpis.total_lost_sales) || 0 : rawTotalRevenue;
+    const totalRevenue = rawTotalRevenue;
     const totalUnits = sales.reduce((acc, sale) => acc + (Number(sale.quantity) || 0), 0);
     const rawSkuCount = new Set(sales.map(s => s.productName)).size;
-    const skuCount = dashboardKpis ? Number(dashboardKpis.total_products) || 0 : rawSkuCount;
+    const skuCount = rawSkuCount;
     const averageOrderLoss = sales.length > 0 ? totalRevenue / sales.length : 0;
 
     const categoryFrequency: Record<string, number> = {};
@@ -670,7 +677,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       noRecoveryRevenue,
       noRecoveryPercentage
     };
-  }, [sales, dashboardKpis]);
+  }, [sales]);
 
   const paretoAnalysis = useMemo(() => {
     const productMap: Record<string, {
@@ -859,8 +866,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     const lowCount = shortages.filter(s => s.status === 'Low').length;
     const criticalCount = shortages.filter(s => s.status === 'Critical').length;
     const outOfStockCount = shortages.filter(s => s.status === 'Out of Stock').length;
-    const totalCount = dashboardKpis ? Number(dashboardKpis.total_shortages) || 0 : shortages.length;
-    const uniqueSkuCount = dashboardKpis ? Number(dashboardKpis.total_products) || 0 : new Set(shortages.map(s => s.productName)).size;
+    const totalCount = shortages.length;
+    const uniqueSkuCount = new Set(shortages.map(s => s.productName)).size;
     const salesProductSet = new Set(sales.map(s => s.productName));
     const lostSaleLinkedCount = shortages.filter(s => salesProductSet.has(s.productName)).length;
     const lostSaleLinkedPercentage = totalCount > 0 ? (lostSaleLinkedCount / totalCount) * 100 : 0;
@@ -973,7 +980,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       avgCriticalHours,
       trendTimeline
     };
-  }, [shortages, branches, sales, allSales, dashboardKpis]);
+  }, [shortages, branches, sales, allSales]);
 
 
   // --- Operational Handlers ---
@@ -1054,7 +1061,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
   const getExportDateBounds = () => {
     const { start, end } = getDateRange(dateType, startDate, endDate);
-    const toDateParam = (value: Date) => value.toISOString().slice(0, 10);
+    const toDateParam = (value: Date) => toLocalDateKey(value);
     return {
       dateFrom: toDateParam(start || new Date('1900-01-01T00:00:00.000Z')),
       dateTo: toDateParam(end || new Date())
