@@ -201,14 +201,13 @@ const resolveActiveDriverForBranch = async (branchId: string, driverId?: string 
     .maybeSingle();
   if (assignmentError) throw assignmentError;
   if (!assignment) {
-    const { data: branchAssignments, error: branchAssignmentError } = await supabaseClient
+    const { count: branchAssignmentCount, error: branchAssignmentError } = await supabaseClient
       .from('delivery_driver_branches')
-      .select('driver_id')
-      .eq('branch_id', branchId)
-      .limit(1);
+      .select('driver_id', { count: 'exact', head: true })
+      .eq('branch_id', branchId);
     if (branchAssignmentError) throw branchAssignmentError;
-    if ((branchAssignments || []).length > 0) {
-      throw new Error('Selected driver is not assigned to this branch.');
+    if ((branchAssignmentCount || 0) > 0) {
+      throw new Error('Selected driver is not assigned to this branch. Assign drivers from Access Control before recording or dispatching orders.');
     }
   }
 
