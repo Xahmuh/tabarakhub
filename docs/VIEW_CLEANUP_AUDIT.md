@@ -1,7 +1,7 @@
 # View Cleanup Audit Report
 Generated: 2026-06-18
 
-Scope: `public` schema views only. This is audit-only: no views were dropped, no migrations were created, and no data was modified.
+Scope: `public` schema views only. The initial audit was read-only. After owner approval, the legacy `shortages_excel_export` view was dropped by a dedicated migration.
 
 ## Summary
 - Views audited: 5
@@ -9,14 +9,18 @@ Scope: `public` schema views only. This is audit-only: no views were dropped, no
 - Views with Edge Function references: 0
 - Views with RLS policies: 0
 - Views using `security_invoker=true`: 5
-- Safe-to-drop candidates for owner review: 1
+- Dropped after owner approval: 1
+- Safe-to-drop candidates remaining: 0
 - Needs review: 2
 - Keep: 2
 
+## Dropped After Owner Approval
+| View | Migration | Reason |
+|------|-----------|--------|
+| `shortages_excel_export` | `20260618064024_drop_shortages_excel_export_view.sql` | No active `.ts/.tsx/.js/.jsx` runtime references found. Existing code was migrated to `export_shortages_paginated` RPC. References were limited to docs, migrations, and the RPC migration comment that says it mirrored this view. No Edge Function refs, no RLS policies, and no external view dependencies were found. Post-apply verification returned `view_exists=false`. |
+
 ## Safe to Drop Candidate
-| View | Reason |
-|------|--------|
-| `shortages_excel_export` | No active `.ts/.tsx/.js/.jsx` runtime references found. Existing code was migrated to `export_shortages_paginated` RPC. References are limited to docs, migrations, and the RPC migration comment that says it mirrors this view. No Edge Function refs and no RLS policies. Do not drop until owner approves a dedicated migration. |
+_None remaining._
 
 ## Needs Review
 | View | Referenced In | Notes |
@@ -37,7 +41,7 @@ Scope: `public` schema views only. This is audit-only: no views were dropped, no
 | `delivery_drivers_clean` | 0 | yes | `authenticated`: SELECT; `service_role`: all listed privileges |
 | `delivery_orders_clean` | 0 | yes | `authenticated`: SELECT; `service_role`: all listed privileges |
 | `lost_sales_excel_export` | 0 | yes | `authenticated`: broad legacy privileges including SELECT; `service_role`: all listed privileges |
-| `shortages_excel_export` | 0 | yes | `authenticated`: broad legacy privileges including SELECT; `service_role`: all listed privileges |
+| `shortages_excel_export` | n/a after drop | n/a after drop | n/a after drop |
 
 Security note: views do not have table-style RLS policies here. Access is controlled by grants plus the view definitions and underlying functions/tables. The two legacy Excel views still have broad authenticated grants, so any drop or grant tightening should be handled in a separate reviewed migration.
 
@@ -51,7 +55,7 @@ No references found in `supabase/functions/`.
 | `delivery_drivers_clean` | Created/granted/commented in `supabase/migrations/20260617151416_create_phase_b_clean_views.sql`. |
 | `delivery_orders_clean` | Created/granted/commented in `supabase/migrations/20260617151416_create_phase_b_clean_views.sql`. |
 | `lost_sales_excel_export` | Hardened in `supabase/migrations/20260612034500_security_auth_rls_hardening.sql`; recreated/scoped in `supabase/migrations/20260612193000_manager_scoped_excel_exports.sql`. |
-| `shortages_excel_export` | Hardened in `supabase/migrations/20260612034500_security_auth_rls_hardening.sql`; recreated/scoped in `supabase/migrations/20260612193000_manager_scoped_excel_exports.sql`; mirrored by `supabase/migrations/20260618033203_export_shortages_paginated_rpc.sql`. |
+| `shortages_excel_export` | Hardened in `supabase/migrations/20260612034500_security_auth_rls_hardening.sql`; recreated/scoped in `supabase/migrations/20260612193000_manager_scoped_excel_exports.sql`; mirrored by `supabase/migrations/20260618033203_export_shortages_paginated_rpc.sql`; dropped by `supabase/migrations/20260618064024_drop_shortages_excel_export_view.sql`. |
 
 ## View Definitions
 
@@ -180,7 +184,7 @@ LEFT JOIN branches b ON ls.branch_id = b.id
 WHERE current_app_can_export_branch(ls.branch_id);
 ```
 
-### `shortages_excel_export`
+### `shortages_excel_export` (dropped)
 Base objects: `shortages`, `products`, `branches`; scope helper: `current_app_can_export_branch`.
 
 ```sql
@@ -205,4 +209,4 @@ WHERE current_app_can_export_branch(s.branch_id);
 ## Recommendation
 1. Keep `delivery_orders_clean` and `lost_sales_excel_export` because they are actively referenced at runtime.
 2. Hold `branches_clean` and `delivery_drivers_clean` for owner review because they are prepared clean views with grants but no current runtime usage.
-3. Consider a future isolated migration to drop `shortages_excel_export` only after owner approval and one final production Network QA confirming no `/rest/v1/shortages_excel_export` calls.
+3. `shortages_excel_export` has been dropped after owner approval. Keep browser Network QA focused on confirming shortage export uses `/rest/v1/rpc/export_shortages_paginated` and does not call `/rest/v1/shortages_excel_export`.
