@@ -86,15 +86,25 @@ type DriverCopy = ReturnType<typeof getDriverCopy>;
 
 const incentiveMoney = (value?: number | null) => `BHD ${Number(value || 0).toFixed(3)}`;
 const paymentMoney = (value?: number | null) => `BHD ${Number(value || 0).toFixed(3)}`;
+const isDriverPaymentCollected = (order: DriverOrder) =>
+  Boolean(order.driverPaymentCollectedAt) || order.driverPaymentCollectedAmountBhd > 0;
 const isDriverPaymentPending = (order: DriverOrder) =>
-  order.orderKind !== 'internal_transfer' && order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
+  order.orderKind !== 'internal_transfer'
+  && order.paymentCollectionStatus !== 'paid'
+  && order.amountToCollectBhd > 0
+  && !isDriverPaymentCollected(order);
+const withPaymentCollected = (order: DriverOrder): DriverOrder => ({
+  ...order,
+  driverPaymentCollectedAt: order.driverPaymentCollectedAt || new Date().toISOString(),
+  driverPaymentCollectedAmountBhd: order.driverPaymentCollectedAmountBhd || order.amountToCollectBhd
+});
 const paymentCollectionActionText = {
   confirmCollected: 'Payment collected',
   deliveredAndCollected: 'Collected',
   confirmCollectedTitle: 'Confirm payment collection',
   confirmCollectedMessage: 'Confirm you received {amount} from the customer.',
   confirmCollectedSuccessTitle: 'Payment confirmed',
-  confirmCollectedSuccessText: 'This order is now marked as paid.',
+  confirmCollectedSuccessText: 'Payment collection is confirmed.',
   connectBeforeConfirm: 'Connect to the internet before confirming customer payment.'
 };
 
@@ -1411,7 +1421,7 @@ const PaymentCollectionPanel = ({
   const hasCollectionDetails = order.amountToCollectBhd > 0
     || order.cashHandedToDriverBhd > 0
     || Boolean(order.driverPaymentNote);
-  const isCollected = forceCollected || (order.paymentCollectionStatus === 'paid' && hasCollectionDetails);
+  const isCollected = forceCollected || isDriverPaymentCollected(order) || (order.paymentCollectionStatus === 'paid' && hasCollectionDetails);
   const shouldShow = order.orderKind !== 'internal_transfer'
     && (hasCollectionDetails || forceCollected);
 
@@ -2140,7 +2150,7 @@ const Dashboard = ({
     });
     queryClient.setQueryData<DriverOrder[]>(['driver-active-orders'], current => (
       current?.map(order => order.id === orderId
-        ? { ...order, paymentCollectionStatus: 'paid', amountToCollectBhd: 0 }
+        ? withPaymentCollected(order)
         : order
       ) || current
     ));
@@ -2253,7 +2263,7 @@ const Dashboard = ({
         return { result: 'queued' as const, order, nextStatus };
       }
       const settledOrder = nextStatus === 'delivered' && isDriverPaymentPending(order)
-        ? { ...order, paymentCollectionStatus: 'paid' as const, amountToCollectBhd: 0 }
+        ? withPaymentCollected(order)
         : order;
       if (settledOrder !== order) {
         await driverApi.confirmPaymentCollected(order.id);

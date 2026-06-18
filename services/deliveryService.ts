@@ -278,6 +278,8 @@ const toOrder = (row: any): DeliveryOrder => ({
   amountToCollectBhd: Number(row.amount_to_collect_bhd || 0),
   cashHandedToDriverBhd: Number(row.cash_handed_to_driver_bhd || 0),
   driverPaymentNote: row.driver_payment_note || null,
+  driverPaymentCollectedAt: row.driver_payment_collected_at || null,
+  driverPaymentCollectedAmountBhd: Number(row.driver_payment_collected_amount_bhd || 0),
   orderKind: toOrderKind(row.order_kind),
   pharmacistId: row.pharmacist_id,
   pharmacistName: row.pharmacist_name || row.pharmacist?.name || null,

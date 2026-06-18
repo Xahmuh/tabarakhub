@@ -54,8 +54,17 @@ const paymentCollectionOptions: Array<{ value: DeliveryPaymentCollectionStatus; 
 const isPaymentCollectionPending = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
 
+const isPaymentCollectionConfirmed = (order: DeliveryOrder) =>
+  isPaymentCollectionPending(order)
+  && (Boolean(order.driverPaymentCollectedAt) || order.driverPaymentCollectedAmountBhd > 0);
+
 const shouldShowPaymentCollectionStatusBadge = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'collect_on_delivery' || !isPaymentCollectionPending(order);
+
+const collectionValueBadgeClass = (order: DeliveryOrder) =>
+  isPaymentCollectionConfirmed(order)
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-red-200 bg-red-50 text-red-700';
 
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
   isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? 'External channel' : order.driverName || '-';
@@ -855,8 +864,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
     count: historyOrders.length,
     value: historyOrders.reduce((acc, o) => acc + o.valueBhd, 0),
     pendingCollection: historyOrders.reduce((acc, o) => acc + (isPaymentCollectionPending(o) ? o.amountToCollectBhd : 0), 0),
+    pendingCollectionUnconfirmed: historyOrders.reduce((acc, o) => acc + (isPaymentCollectionPending(o) && !isPaymentCollectionConfirmed(o) ? o.amountToCollectBhd : 0), 0),
     driverCash: historyOrders.reduce((acc, o) => acc + o.cashHandedToDriverBhd, 0)
   }), [historyOrders]);
+
+  const collectionSummaryBadgeClass = totals.pendingCollectionUnconfirmed > 0
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : 'border-emerald-200 bg-emerald-50 text-emerald-700';
 
   return (
     <div className="space-y-5">
@@ -1270,7 +1284,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               {totals.pendingCollection > 0 && (
                 <>
                   <span className="text-slate-300">|</span>
-                  <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-red-700">
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${collectionSummaryBadgeClass}`}>
                     Collect {formatBhd(totals.pendingCollection)}
                   </span>
                 </>
@@ -1373,7 +1387,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                             </span>
                           )}
                           {isPaymentCollectionPending(order) && (
-                            <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                            <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
                               collect {formatBhd(order.amountToCollectBhd)}
                             </span>
                           )}
@@ -1459,7 +1473,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
                       </span>
                     )}
                     {isPaymentCollectionPending(order) && (
-                      <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                      <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
                         collect {formatBhd(order.amountToCollectBhd)}
                       </span>
                     )}

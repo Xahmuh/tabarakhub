@@ -152,6 +152,8 @@ export type DriverOrder = {
   amountToCollectBhd: number;
   cashHandedToDriverBhd: number;
   driverPaymentNote?: string | null;
+  driverPaymentCollectedAt?: string | null;
+  driverPaymentCollectedAmountBhd: number;
   orderKind: DriverOrderKind;
   transferFromBranchId?: string | null;
   transferFromBranchCode?: string | null;
@@ -208,6 +210,8 @@ const mapOrder = (row: any): DriverOrder => ({
   amountToCollectBhd: Number(row.amount_to_collect_bhd || 0),
   cashHandedToDriverBhd: Number(row.cash_handed_to_driver_bhd || 0),
   driverPaymentNote: row.driver_payment_note || null,
+  driverPaymentCollectedAt: row.driver_payment_collected_at || null,
+  driverPaymentCollectedAmountBhd: Number(row.driver_payment_collected_amount_bhd || 0),
   orderKind: row.order_kind === 'internal_transfer' ? 'internal_transfer' : 'actual_delivery',
   transferFromBranchId: row.transfer_from_branch_id,
   transferFromBranchCode: row.transfer_from_branch_code,

@@ -96,6 +96,15 @@ const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPayme
 const isPendingCollectionOrder = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
 
+const isCollectionConfirmedByDriver = (order: DeliveryOrder) =>
+  isPendingCollectionOrder(order)
+  && (Boolean(order.driverPaymentCollectedAt) || order.driverPaymentCollectedAmountBhd > 0);
+
+const collectionValueBadgeClass = (order: DeliveryOrder) =>
+  isCollectionConfirmedByDriver(order)
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-red-200 bg-red-50 text-red-700';
+
 const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) => {
   const meta = STATUS_META[status];
   const Icon = meta.icon;
@@ -459,7 +468,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                                 {PAYMENT_COLLECTION_META[order.paymentCollectionStatus].label}
                               </span>
                               {isPendingCollectionOrder(order) && (
-                                <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-red-700">
+                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
                                   collect {formatBhd(order.amountToCollectBhd)}
                                 </span>
                               )}

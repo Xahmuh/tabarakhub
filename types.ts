@@ -657,6 +657,8 @@ export interface DeliveryOrder {
   amountToCollectBhd: number;
   cashHandedToDriverBhd: number;
   driverPaymentNote?: string | null;
+  driverPaymentCollectedAt?: string | null;
+  driverPaymentCollectedAmountBhd: number;
   orderKind: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;
