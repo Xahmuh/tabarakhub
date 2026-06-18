@@ -200,7 +200,17 @@ const resolveActiveDriverForBranch = async (branchId: string, driverId?: string 
     .eq('driver_id', driverId)
     .maybeSingle();
   if (assignmentError) throw assignmentError;
-  if (!assignment) throw new Error('Selected driver is not assigned to this branch.');
+  if (!assignment) {
+    const { data: branchAssignments, error: branchAssignmentError } = await supabaseClient
+      .from('delivery_driver_branches')
+      .select('driver_id')
+      .eq('branch_id', branchId)
+      .limit(1);
+    if (branchAssignmentError) throw branchAssignmentError;
+    if ((branchAssignments || []).length > 0) {
+      throw new Error('Selected driver is not assigned to this branch.');
+    }
+  }
 
   const { data, error } = await supabaseClient
     .from('delivery_drivers')
@@ -598,7 +608,9 @@ export const deliveryService = {
       const driverIds = Array.from(new Set((assignments || [])
         .map((row: any) => row.driver_id)
         .filter(Boolean)));
-      if (driverIds.length === 0) return [];
+      if (driverIds.length === 0) {
+        return deliveryService.drivers.list(includeInactive);
+      }
 
       let query = supabaseClient
         .from('delivery_drivers')
