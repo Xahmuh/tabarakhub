@@ -246,6 +246,8 @@ const localizedDriverError = (error: unknown, copy: DriverCopy, fallback: string
     'Could not find this driver code.': copy.login.driverCodeNotFound,
     'Email ID or driver code is required.': copy.login.identifierRequired,
     'Could not load driver session.': copy.errors.couldNotLoadAccess,
+    'Driver mobile access requires a driver login': copy.errors.driverLoginRequired,
+    'This driver login is not linked to an active delivery driver': copy.errors.driverLoginNotLinked,
     'Could not load assigned orders.': copy.errors.couldNotLoadAssignedOrders,
     'Could not load order history.': copy.errors.couldNotLoadOrderHistory,
     'Could not load duty records.': copy.profile.dutyRecordsUnavailable,
@@ -256,7 +258,7 @@ const localizedDriverError = (error: unknown, copy: DriverCopy, fallback: string
     'Could not create internal transfer.': copy.errors.couldNotCreateInternalTransfer
   };
 
-  return knownMessages[message] || fallback;
+  return knownMessages[message] || message || fallback;
 };
 
 const shiftBranchStatus = (
@@ -658,6 +660,32 @@ const createDutyPdfFile = async (records: DriverDutyRecord[], month: string, lan
   return { uri, fileName, mimeType: 'application/pdf', title: `${copy.profile.exportPdf} - ${month}`, uti: 'com.adobe.pdf' };
 };
 
+const downloadDutyFileOnWeb = (
+  records: DriverDutyRecord[],
+  month: string,
+  language: DriverLanguage,
+  copy: DriverCopy,
+  format: 'excel' | 'pdf'
+) => {
+  const fileName = dutyExportFileName(month, format === 'excel' ? 'xls' : 'pdf');
+  const content = format === 'excel'
+    ? buildDutyPdfHtml(records, month, language, copy)
+    : buildSimpleDutyPdf(records, month, language, copy);
+  const mimeType = format === 'excel' ? 'application/vnd.ms-excel' : 'application/pdf';
+  const blob = new Blob(
+    [format === 'excel' ? content : Uint8Array.from(content, character => character.charCodeAt(0) & 255)],
+    { type: mimeType }
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
+
 const exportDutyFile = async (
   records: DriverDutyRecord[],
   month: string,
@@ -665,6 +693,11 @@ const exportDutyFile = async (
   copy: DriverCopy,
   format: 'excel' | 'pdf'
 ) => {
+  if (Platform.OS === 'web') {
+    downloadDutyFileOnWeb(records, month, language, copy, format);
+    return;
+  }
+
   const file = format === 'excel'
     ? await createDutyExcelFile(records, month, language, copy)
     : await createDutyPdfFile(records, month, language, copy);

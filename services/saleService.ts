@@ -135,6 +135,45 @@ const applyKeysetCursor = (query: any, cursor: { timestamp: string; id: string }
   return query.or(`timestamp.lt.${timestamp},and(timestamp.eq.${timestamp},id.lt.${cursor.id})`);
 };
 
+const normalizeSearchText = (value?: string | null) =>
+  (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const mapProductRow = (p: any): Product => ({
+  id: p.id,
+  name: p.name,
+  category: p.category,
+  agent: p.agent,
+  defaultPrice: Number(p.default_price || 0),
+  isManual: !!p.is_manual,
+  vatEnabled: !!p.vat_enabled,
+  vatRate: Number(p.vat_rate ?? BAHRAIN_VAT_RATE),
+  internalCode: p.internal_code,
+  internationalCode: p.international_code,
+  createdByBranch: p.created_by_branch
+});
+
+const isCodeSearchQuery = (query: string) => /\d/.test(query);
+
+const productSearchRank = (product: Product, query: string, includeCodeMatches: boolean) => {
+  const name = normalizeSearchText(product.name);
+  const internalCode = normalizeSearchText(product.internalCode);
+  const internationalCode = normalizeSearchText(product.internationalCode);
+
+  if (name.startsWith(query)) return 0;
+  if (includeCodeMatches && internalCode.startsWith(query)) return 1;
+  if (includeCodeMatches && internationalCode.startsWith(query)) return 2;
+  return Number.POSITIVE_INFINITY;
+};
+
+const sortPrefixProductMatches = (products: Product[], query: string, includeCodeMatches: boolean) =>
+  products
+    .filter(product => productSearchRank(product, query, includeCodeMatches) !== Number.POSITIVE_INFINITY)
+    .sort((a, b) => {
+      const rankDifference = productSearchRank(a, query, includeCodeMatches) - productSearchRank(b, query, includeCodeMatches);
+      if (rankDifference !== 0) return rankDifference;
+      return a.name.localeCompare(b.name);
+    });
+
 const fetchBranchScopedRows = async (
   tableName: 'lost_sales' | 'shortages',
   branchId: string | undefined,
@@ -226,32 +265,29 @@ export const saleService = {
       }
     },
     search: async (query: string, branchId?: string) => {
-      const q = query.trim().toLowerCase();
+      const q = normalizeSearchText(query);
       if (!q) return [];
       try {
+        const prefixPattern = `${q}%`;
+        const includeCodeMatches = isCodeSearchQuery(q);
+        const filters = [`name.ilike.${prefixPattern}`];
+        if (includeCodeMatches) {
+          filters.push(`internal_code.ilike.${prefixPattern}`, `international_code.ilike.${prefixPattern}`);
+        }
         const { data } = await supabaseClient
           .from('products')
           .select('*')
-          .or(`name.ilike.%${q}%,internal_code.ilike.%${q}%,international_code.eq.${q}`)
-          .limit(20);
-        if (data && data.length > 0) return data.map(p => ({
-          id: p.id, name: p.name, category: p.category, agent: p.agent,
-          defaultPrice: Number(p.default_price || 0), isManual: !!p.is_manual,
-          vatEnabled: !!p.vat_enabled, vatRate: Number(p.vat_rate ?? BAHRAIN_VAT_RATE),
-          internalCode: p.internal_code, internationalCode: p.international_code,
-          createdByBranch: p.created_by_branch
-        }));
+          .or(filters.join(','))
+          .order('name')
+          .limit(40);
+        if (data && data.length > 0) return sortPrefixProductMatches(data.map(mapProductRow), q, includeCodeMatches).slice(0, 20);
         if (!isDemoMode) return [];
         throw new Error("No remote results");
       } catch (e) {
         throwUnlessDemoMode(e);
         const localProducts = readDemoArray<Product>(PRODUCTS_KEY);
         const allLocal = [...localProducts];
-        return allLocal.filter(p =>
-          p.name.toLowerCase().includes(q) ||
-          p.internalCode?.toLowerCase().includes(q) ||
-          p.internationalCode === q
-        ).slice(0, 20);
+        return sortPrefixProductMatches(allLocal, q, isCodeSearchQuery(q)).slice(0, 20);
       }
     },
     create: async (product: Omit<Product, 'id'>) => {
