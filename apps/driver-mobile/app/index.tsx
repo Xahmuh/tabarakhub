@@ -906,7 +906,7 @@ const PasswordEyeIcon = ({ visible }: { visible: boolean }) => (
   </View>
 );
 
-type IconName = 'home' | 'orders' | 'history' | 'stats' | 'profile' | 'alert';
+type IconName = 'home' | 'orders' | 'history' | 'timer' | 'stats' | 'profile' | 'alert';
 
 const FlatIcon = ({
   name,
@@ -985,6 +985,48 @@ const FlatIcon = ({
         ]}>
           <View style={[styles.historyHandTall, { height: 6 * scale, backgroundColor: stroke }]} />
           <View style={[styles.historyHandWide, { width: 5 * scale, backgroundColor: stroke }]} />
+        </View>
+      </View>
+    );
+  }
+
+  if (name === 'timer') {
+    return (
+      <View style={[styles.iconBox, { width: size, height: size }]}>
+        <View style={[
+          styles.timerCrown,
+          {
+            width: 7 * scale,
+            height: 3 * scale,
+            borderRadius: 2 * scale,
+            backgroundColor: stroke,
+            top: 1 * scale
+          }
+        ]} />
+        <View style={[
+          styles.timerSideButton,
+          {
+            width: 3 * scale,
+            height: 6 * scale,
+            borderRadius: 2 * scale,
+            backgroundColor: accent,
+            right: 1 * scale,
+            top: 7 * scale
+          }
+        ]} />
+        <View style={[
+          styles.timerDial,
+          {
+            width: 18 * scale,
+            height: 18 * scale,
+            borderRadius: 9 * scale,
+            borderColor: stroke,
+            top: 4 * scale
+          }
+        ]}>
+          <View style={[styles.timerHandTall, { height: 6 * scale, backgroundColor: stroke }]} />
+          <View style={[styles.timerHandWide, { width: 5 * scale, backgroundColor: stroke }]} />
+          <View style={[styles.timerCenterDot, { backgroundColor: accent }]} />
         </View>
       </View>
     );
@@ -1448,7 +1490,7 @@ const OrderRunTimer = ({
   return (
     <View style={[styles.runTimerCard, isOnRoad && styles.runTimerCardActive, isRtl && styles.rtlRow]}>
       <View style={[styles.runTimerIcon, isOnRoad && styles.runTimerIconActive]}>
-        <FlatIcon name="history" active={isOnRoad} size={20} color={isOnRoad ? colors.success : colors.warning} />
+        <FlatIcon name="timer" active={isOnRoad} size={20} color={isOnRoad ? colors.success : colors.warning} />
       </View>
       <View style={styles.runTimerCopy}>
         <Text style={[styles.runTimerLabel, isOnRoad && styles.runTimerLabelActive, isRtl && styles.rtlText]}>
@@ -1617,10 +1659,12 @@ const OrderCard = ({
         />
       </View>
 
-      <View style={[styles.orderKindRow, isRtl && styles.rtlRow]}>
-        <Text style={[styles.orderKindValue, isRtl && styles.rtlText]}>{isTransfer ? copy.order.transferRoute : copy.common.actualDelivery}</Text>
-        <Text style={[styles.orderArea, isRtl && styles.rtlInfoValue]}>{isTransfer ? copy.order.branchToBranch : (order.areaName || order.governorate || copy.order.areaPending)}</Text>
-      </View>
+      {isTransfer ? (
+        <View style={[styles.orderKindRow, isRtl && styles.rtlRow]}>
+          <Text style={[styles.orderKindValue, isRtl && styles.rtlText]}>{copy.order.transferRoute}</Text>
+          <Text style={[styles.orderArea, isRtl && styles.rtlInfoValue]}>{copy.order.branchToBranch}</Text>
+        </View>
+      ) : null}
 
       <OrderRunTimer order={order} copy={copy} isRtl={isRtl} />
 
@@ -3910,6 +3954,37 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     height: 2,
     borderRadius: radius.pill,
     right: 4
+  },
+  timerCrown: {
+    position: 'absolute'
+  },
+  timerSideButton: {
+    position: 'absolute',
+    transform: [{ rotate: '28deg' }]
+  },
+  timerDial: {
+    position: 'absolute',
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  timerHandTall: {
+    position: 'absolute',
+    width: 2,
+    borderRadius: radius.pill,
+    top: 5
+  },
+  timerHandWide: {
+    position: 'absolute',
+    height: 2,
+    borderRadius: radius.pill,
+    right: 4
+  },
+  timerCenterDot: {
+    width: 4,
+    height: 4,
+    borderRadius: radius.pill
   },
   profileHead: {
     position: 'absolute',
