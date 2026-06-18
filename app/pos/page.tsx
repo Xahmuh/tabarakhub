@@ -44,6 +44,14 @@ interface POSPageProps {
 
 type Mode = 'sales' | 'shortages';
 
+const getCheckoutErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/permission denied/i.test(message)) {
+    return 'Your login session cannot save this POS record. Sign out, sign in again, then retry. If it continues, ask admin to verify your account and branch access.';
+  }
+  return message || 'Unable to save this POS record.';
+};
+
 export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permissions, onBackToPharmacist }) => {
   const getPermission = (feature: string) => {
     if (isManagerRole(branch.role)) return 'edit';
@@ -251,7 +259,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
       console.error("Checkout Error:", err);
-      setToastMessage({ message: `System Error: ${(err as any).message}`, type: 'error' });
+      setToastMessage({ message: getCheckoutErrorMessage(err), type: 'error' });
     } finally {
       setIsSubmitting(false);
     }

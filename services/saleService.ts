@@ -25,6 +25,14 @@ const throwUnlessDemoMode = (error: unknown) => {
   if (!isDemoMode) throw error;
 };
 
+const assertAuthenticatedSession = async (action: string) => {
+  if (isDemoMode) return;
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error || !data.session?.user) {
+    throw new Error(`Your secure login session expired. Please sign out and sign in again before you ${action}.`);
+  }
+};
+
 type BranchScopedListOptions = {
   timestampFrom?: Date | string | null;
   timestampTo?: Date | string | null;
@@ -326,6 +334,7 @@ export const saleService = {
       });
     },
     insert: async (sale: Omit<LostSale, 'id' | 'totalValue' | 'timestamp' | 'lostDate' | 'lostHour'>) => {
+      await assertAuthenticatedSession('log lost sales');
       const now = new Date();
       const id = generateUUID();
       const payload = {
@@ -374,6 +383,7 @@ export const saleService = {
       }
     },
     delete: async (id: string) => {
+      await assertAuthenticatedSession('delete lost sales records');
       try {
         if (isUUID(id)) await supabaseClient.from('lost_sales').delete().eq('id', id);
       } catch (e) {
@@ -413,6 +423,7 @@ export const saleService = {
       });
     },
     create: async (shortage: Omit<Shortage, 'id'>) => {
+      await assertAuthenticatedSession('log shortages');
       try {
         if (!isUUID(shortage.branchId) || !isUUID(shortage.pharmacistId)) throw new Error("Invalid IDs");
         let query = supabaseClient.from('shortages').select('*').eq('branch_id', shortage.branchId).eq('product_name', shortage.productName);
@@ -481,6 +492,7 @@ export const saleService = {
       }
     },
     delete: async (id: string) => {
+      await assertAuthenticatedSession('delete shortage records');
       try {
         if (isUUID(id)) await supabaseClient.from('shortages').delete().eq('id', id);
       } catch (e) {
