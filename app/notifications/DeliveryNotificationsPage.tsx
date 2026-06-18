@@ -214,7 +214,7 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Unread</p>
           <p className="mt-2 text-3xl font-black tracking-tight text-brand">{unreadTotal}</p>
@@ -222,10 +222,6 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Loaded</p>
           <p className="mt-2 text-3xl font-black tracking-tight text-slate-950">{notifications.length}</p>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Sound</p>
-          <p className="mt-2 text-sm font-black leading-7 text-slate-950">pharmacy.mp3 alarm enabled</p>
         </div>
       </div>
 
