@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 export type DriverSessionPayload = {
@@ -100,8 +102,36 @@ export type DriverMobileAppSettings = {
   loginLogoUrl?: string | null;
   footerLogoUrl?: string | null;
   footerCredit?: string | null;
+  androidMinimumBuild: number;
+  androidLatestBuild: number;
+  androidLatestVersion: string;
+  androidApkUrl: string;
+  forceUpdateEnabled: boolean;
+  forceUpdateTitle: string;
+  forceUpdateMessage: string;
   updatedAt?: string | null;
 };
+
+export const currentAndroidBuild = () => {
+  if (Platform.OS !== 'android' || Constants.appOwnership === 'expo') {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const build = Number(
+    Constants.platform?.android?.versionCode
+      ?? Constants.expoConfig?.android?.versionCode
+      ?? 1
+  );
+
+  return Number.isFinite(build) && build >= 1 ? build : 1;
+};
+
+export const isDriverForceUpdateRequired = (settings: DriverMobileAppSettings) => (
+  Platform.OS === 'android'
+  && Constants.appOwnership !== 'expo'
+  && settings.forceUpdateEnabled === true
+  && currentAndroidBuild() < Math.max(1, Number(settings.androidMinimumBuild || 1))
+);
 
 export type DriverOrder = {
   id: string;
@@ -132,11 +162,24 @@ export type DriverOrder = {
 
 const assertRpc = <T,>(data: T | null, error: unknown, fallback: string): T => {
   if (error) {
-    const message = error instanceof Error ? error.message : fallback;
+    const message = error instanceof Error ? error.message : (error as any)?.message || fallback;
     throw new Error(message);
   }
   if (data === null || data === undefined) throw new Error(fallback);
   return data;
+};
+
+const isRpcSignatureError = (error: any) => {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  const details = String(error?.details || '');
+  const combined = `${message} ${details}`.toLowerCase();
+
+  return code === 'PGRST202'
+    || combined.includes('schema cache')
+    || combined.includes('could not find the function')
+    || combined.includes('function public.app_driver_')
+    || combined.includes('p_android_build');
 };
 
 const mapOrder = (row: any): DriverOrder => ({
@@ -187,11 +230,32 @@ const mapDutyRecord = (row: any): DriverDutyRecord => ({
   internalTransferCount: Number(row.internal_transfer_count || 0)
 });
 
+const defaultMobileAppSettings: DriverMobileAppSettings = {
+  loginLogoUrl: null,
+  footerLogoUrl: null,
+  footerCredit: 'Developed by Ahmed Elsherbini',
+  androidMinimumBuild: 1,
+  androidLatestBuild: 1,
+  androidLatestVersion: '0.1.0',
+  androidApkUrl: '',
+  forceUpdateEnabled: false,
+  forceUpdateTitle: 'Update required',
+  forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
+  updatedAt: null
+};
+
 const mapMobileAppSettings = (row: any): DriverMobileAppSettings => ({
-  loginLogoUrl: row?.login_logo_url || null,
-  footerLogoUrl: row?.footer_logo_url || null,
-  footerCredit: row?.footer_credit || 'Developed by Ahmed Elsherbini',
-  updatedAt: row?.updated_at || null
+  loginLogoUrl: row?.login_logo_url || defaultMobileAppSettings.loginLogoUrl,
+  footerLogoUrl: row?.footer_logo_url || defaultMobileAppSettings.footerLogoUrl,
+  footerCredit: row?.footer_credit || defaultMobileAppSettings.footerCredit,
+  androidMinimumBuild: Number(row?.android_minimum_build || defaultMobileAppSettings.androidMinimumBuild),
+  androidLatestBuild: Number(row?.android_latest_build || defaultMobileAppSettings.androidLatestBuild),
+  androidLatestVersion: row?.android_latest_version || defaultMobileAppSettings.androidLatestVersion,
+  androidApkUrl: row?.android_apk_url || defaultMobileAppSettings.androidApkUrl,
+  forceUpdateEnabled: row?.force_update_enabled === true,
+  forceUpdateTitle: row?.force_update_title || defaultMobileAppSettings.forceUpdateTitle,
+  forceUpdateMessage: row?.force_update_message || defaultMobileAppSettings.forceUpdateMessage,
+  updatedAt: row?.updated_at || defaultMobileAppSettings.updatedAt
 });
 
 export const driverApi = {
@@ -228,7 +292,7 @@ export const driverApi = {
   mobileAppSettings: async (): Promise<DriverMobileAppSettings> => {
     const { data, error } = await supabase
       .from('delivery_mobile_app_settings')
-      .select('login_logo_url, footer_logo_url, footer_credit, updated_at')
+      .select('login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at')
       .eq('id', 'global')
       .maybeSingle();
     if (error) {
@@ -239,7 +303,14 @@ export const driverApi = {
   },
 
   session: async (): Promise<DriverSessionPayload> => {
-    const { data, error } = await supabase.rpc('app_driver_get_session');
+    const result = await supabase.rpc('app_driver_get_session', {
+      p_android_build: currentAndroidBuild()
+    });
+    if (result.error && isRpcSignatureError(result.error)) {
+      const fallback = await supabase.rpc('app_driver_get_session');
+      return assertRpc(fallback.data as DriverSessionPayload, fallback.error, 'Could not load driver session.');
+    }
+    const { data, error } = result;
     return assertRpc(data as DriverSessionPayload, error, 'Could not load driver session.');
   },
 
@@ -301,16 +372,34 @@ export const driverApi = {
   },
 
   startShift: async (location: DriverDutyStartLocation): Promise<DriverSessionPayload> => {
-    const { data, error } = await supabase.rpc('app_driver_start_shift', {
+    const payload = {
       p_lat: location.latitude,
       p_lng: location.longitude,
-      p_accuracy_m: location.accuracyMeters ?? null
-    });
+      p_accuracy_m: location.accuracyMeters ?? null,
+      p_android_build: currentAndroidBuild()
+    };
+    const result = await supabase.rpc('app_driver_start_shift', payload);
+    if (result.error && isRpcSignatureError(result.error)) {
+      const fallback = await supabase.rpc('app_driver_start_shift', {
+        p_lat: location.latitude,
+        p_lng: location.longitude,
+        p_accuracy_m: location.accuracyMeters ?? null
+      });
+      return assertRpc(fallback.data as DriverSessionPayload, fallback.error, 'Could not start shift.');
+    }
+    const { data, error } = result;
     return assertRpc(data as DriverSessionPayload, error, 'Could not start shift.');
   },
 
   endShift: async (): Promise<DriverSessionPayload> => {
-    const { data, error } = await supabase.rpc('app_driver_end_shift');
+    const result = await supabase.rpc('app_driver_end_shift', {
+      p_android_build: currentAndroidBuild()
+    });
+    if (result.error && isRpcSignatureError(result.error)) {
+      const fallback = await supabase.rpc('app_driver_end_shift');
+      return assertRpc(fallback.data as DriverSessionPayload, fallback.error, 'Could not end shift.');
+    }
+    const { data, error } = result;
     return assertRpc(data as DriverSessionPayload, error, 'Could not end shift.');
   },
 

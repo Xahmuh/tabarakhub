@@ -129,8 +129,6 @@ const en = {
     pharmacy: 'Pharmacy',
     payment: 'Payment',
     block: 'Block',
-    statusOnly: 'Status update only',
-    noBlockCheck: 'No block-number double check is required in the driver app.',
     optionalNote: 'Optional delivery note',
     markDelivered: 'Mark delivered'
   },
@@ -468,8 +466,6 @@ const translations: Record<DriverLanguage, DeepPartial<DriverCopy>> = {
       pharmacy: 'الصيدلية',
       payment: 'الدفع',
       block: 'البلوك',
-      statusOnly: 'تحديث حالة فقط',
-      noBlockCheck: 'لا يوجد تحقق إضافي من رقم البلوك داخل تطبيق السائق.',
       optionalNote: 'ملاحظة توصيل اختيارية',
       markDelivered: 'تسجيل كمسلم'
     },
@@ -799,8 +795,6 @@ const translations: Record<DriverLanguage, DeepPartial<DriverCopy>> = {
       pharmacy: 'فارمیسی',
       payment: 'ادائیگی',
       block: 'بلاک',
-      statusOnly: 'صرف اسٹیٹس اپ ڈیٹ',
-      noBlockCheck: 'ڈرائیور ایپ میں بلاک نمبر کی دوبارہ جانچ ضروری نہیں۔',
       optionalNote: 'اختیاری ڈیلیوری نوٹ',
       markDelivered: 'ڈیلیور مارک کریں'
     },
@@ -1130,8 +1124,6 @@ const translations: Record<DriverLanguage, DeepPartial<DriverCopy>> = {
       pharmacy: 'ফার্মেসি',
       payment: 'পেমেন্ট',
       block: 'ব্লক',
-      statusOnly: 'শুধু স্ট্যাটাস আপডেট',
-      noBlockCheck: 'ড্রাইভার অ্যাপে ব্লক নম্বর আবার যাচাই করার দরকার নেই।',
       optionalNote: 'ঐচ্ছিক ডেলিভারি নোট',
       markDelivered: 'ডেলিভার মার্ক'
     },

@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileDown, Printer, Package, Wallet, MessageCircle, UtensilsCrossed } from 'lucide-react';
+import { FileDown, Printer, Package, Wallet, MessageCircle, Globe2 } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
-import { Branch, DeliveryOrder } from '../../types';
+import { Branch, DeliveryOrder, DeliveryPaymentTypeConfig } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
 import { exportOrdersToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
 import Swal from 'sweetalert2';
 
-type ViewMode = 'combined' | 'direct' | 'talabat';
+type ViewMode = 'combined' | 'direct' | 'external';
 
 const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -32,6 +32,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('combined');
 
@@ -43,12 +44,19 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
     const load = async () => {
       setIsLoading(true);
       try {
-        const data = await deliveryService.orders.list({
-          branchId: branch.id,
-          dateFrom: range.from,
-          dateTo: range.to
-        });
+        const [data, paymentTypeRows] = await Promise.all([
+          deliveryService.orders.list({
+            branchId: branch.id,
+            dateFrom: range.from,
+            dateTo: range.to
+          }),
+          deliveryService.paymentTypes.list(true).catch(error => {
+            console.warn('Delivery payment types load failed', error);
+            return [] as DeliveryPaymentTypeConfig[];
+          })
+        ]);
         if (!cancelled) setOrders(data);
+        if (!cancelled) setPaymentTypes(paymentTypeRows);
       } catch (e) {
         console.error('Delivery dashboard load failed', e);
         if (!cancelled) setOrders([]);
@@ -60,10 +68,13 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
     return () => { cancelled = true; };
   }, [branch.id, range.from, range.to]);
 
-  const direct = useMemo(() => orders.filter(isDirectOrder), [orders]);
-  const talabat = useMemo(() => orders.filter(o => o.paymentType === 'TALABAT'), [orders]);
+  const direct = useMemo(() => orders.filter(order => isDirectOrder(order, paymentTypes)), [orders, paymentTypes]);
+  const external = useMemo(
+    () => orders.filter(order => order.orderKind !== 'internal_transfer' && !isDirectOrder(order, paymentTypes)),
+    [orders, paymentTypes]
+  );
 
-  const visibleOrders = view === 'combined' ? orders : view === 'direct' ? direct : talabat;
+  const visibleOrders = view === 'combined' ? orders : view === 'direct' ? direct : external;
 
   const handlePeriodChange = (p: PeriodPreset, from?: string, to?: string) => {
     setPreset(p);
@@ -129,10 +140,10 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
           icon={<MessageCircle className="h-4 w-4" />}
         />
         <KpiCard
-          label="Talabat"
-          value={String(talabat.length)}
-          sub={formatBhd(sumValue(talabat))}
-          icon={<UtensilsCrossed className="h-4 w-4" />}
+          label="External / no-block"
+          value={String(external.length)}
+          sub={formatBhd(sumValue(external))}
+          icon={<Globe2 className="h-4 w-4" />}
         />
       </div>
 
@@ -142,7 +153,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
             {([
               { id: 'combined', label: 'Combined' },
               { id: 'direct', label: 'WhatsApp / Direct' },
-              { id: 'talabat', label: 'Talabat' }
+              { id: 'external', label: 'External / no-block' }
             ] as Array<{ id: ViewMode; label: string }>).map(v => (
               <button
                 key={v.id}

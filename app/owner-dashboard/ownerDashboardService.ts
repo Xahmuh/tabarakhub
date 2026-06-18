@@ -173,6 +173,9 @@ const matchesOperationalTraceabilitySearch = (order: DeliveryOrder, search?: str
 
 const pct = (part: number, total: number) => total > 0 ? (part / total) * 100 : 0;
 
+const effectiveWorkingDays = (periodDays: number, workingDaysPerMonth = 26) =>
+  Math.max(1, Math.min(periodDays, Math.round(periodDays * (workingDaysPerMonth / 30))));
+
 const formatBranchName = (branch: Branch) =>
   [branch.code, branch.name].filter(Boolean).join(' - ') || 'Unknown branch';
 
@@ -241,10 +244,11 @@ const classifyDriver = (
   setting: DeliveryCostSetting | undefined,
   periodDays: number
 ): OwnerDriverKpi => {
-  const driverOrders = orders.filter(order => order.driverId === driver.id);
+  const driverOrders = orders.filter(order => order.driverId === driver.id && order.orderKind !== 'internal_transfer');
   const orderCount = driverOrders.length;
   const totalValue = sumValue(driverOrders);
-  const ordersPerDay = orderCount / Math.max(1, periodDays);
+  const workingDaysInPeriod = effectiveWorkingDays(periodDays, setting?.workingDaysPerMonth);
+  const ordersPerDay = orderCount / workingDaysInPeriod;
 
   if (!setting) {
     return {
@@ -263,7 +267,6 @@ const classifyDriver = (
     };
   }
 
-  const workingDaysInPeriod = Math.min(periodDays, Math.round(periodDays * (setting.workingDaysPerMonth / 30)));
   const periodCost = (setting.monthlyCostBhd / setting.workingDaysPerMonth) * Math.max(1, workingDaysInPeriod);
   const costPerOrder = orderCount > 0 ? periodCost / orderCount : null;
   const target = setting.targetOrdersPerDay;

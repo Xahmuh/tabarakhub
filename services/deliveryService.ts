@@ -18,7 +18,6 @@ import {
 } from '../types';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
-  isTalabatDeliveryPayment,
   normalizeDeliveryPaymentCode,
   normalizeDeliveryPaymentLabel
 } from '../lib/deliveryPaymentTypes';
@@ -31,6 +30,13 @@ const DEFAULT_DELIVERY_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
   loginLogoUrl: '',
   footerLogoUrl: '',
   footerCredit: 'Developed by Ahmed Elsherbini',
+  androidMinimumBuild: 1,
+  androidLatestBuild: 1,
+  androidLatestVersion: '0.1.0',
+  androidApkUrl: '',
+  forceUpdateEnabled: false,
+  forceUpdateTitle: 'Update required',
+  forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
   updatedAt: null,
   updatedBy: null
 };
@@ -143,7 +149,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
   const orderDate = input.orderDate?.trim();
   const paymentTypeConfig = await resolvePaymentType(input.paymentType);
   const paymentType = paymentTypeConfig.code;
-  const isTalabatOrder = isTalabatDeliveryPayment(paymentType);
+  const usesExternalChannel = !paymentTypeConfig.requiresBlock;
   const valueBhd = Number(input.valueBhd);
   const blockNumber = input.blockNumber?.trim() || null;
 
@@ -162,7 +168,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
     paymentType,
     pharmacistId: input.pharmacistId || null,
     pharmacistName: input.pharmacistName?.trim() || null,
-    driverId: isTalabatOrder ? null : input.driverId || null,
+    driverId: usesExternalChannel ? null : input.driverId || null,
     blockNumber: paymentTypeConfig.requiresBlock ? blockNumber : null,
     notes: input.notes?.trim() || undefined
   };
@@ -309,6 +315,13 @@ const toMobileAppSettings = (row: any): DeliveryMobileAppSettings => ({
   loginLogoUrl: row?.login_logo_url || '',
   footerLogoUrl: row?.footer_logo_url || '',
   footerCredit: row?.footer_credit || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.footerCredit,
+  androidMinimumBuild: Number(row?.android_minimum_build || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidMinimumBuild),
+  androidLatestBuild: Number(row?.android_latest_build || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestBuild),
+  androidLatestVersion: row?.android_latest_version || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestVersion,
+  androidApkUrl: row?.android_apk_url || '',
+  forceUpdateEnabled: row?.force_update_enabled === true,
+  forceUpdateTitle: row?.force_update_title || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateTitle,
+  forceUpdateMessage: row?.force_update_message || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateMessage,
   updatedAt: row?.updated_at || null,
   updatedBy: row?.updated_by || null
 });
@@ -319,6 +332,7 @@ const cleanBlockSearchTerm = (value: string) => value.trim().replace(/[,%()]/g, 
 
 const ORDER_SELECT = `
   *,
+  branch:branches!delivery_orders_branch_id_fkey(code, name),
   driver:delivery_drivers(name, driver_code),
   pharmacist:pharmacists(name),
   transfer_from_branch:branches!delivery_orders_transfer_from_branch_id_fkey(code, name),
@@ -463,8 +477,10 @@ export const deliveryService = {
       if (input.paymentType !== undefined) {
         const paymentTypeConfig = await resolvePaymentType(input.paymentType);
         payload.payment_type = paymentTypeConfig.code;
-        if (!paymentTypeConfig.requiresBlock) payload.block_number = null;
-        if (isTalabatDeliveryPayment(paymentTypeConfig.code)) payload.driver_id = null;
+        if (!paymentTypeConfig.requiresBlock) {
+          payload.block_number = null;
+          payload.driver_id = null;
+        }
       }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
       if (input.pharmacistName !== undefined) payload.pharmacist_name = input.pharmacistName;
@@ -476,7 +492,10 @@ export const deliveryService = {
       if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
       if (payload.payment_type) {
         const paymentTypeConfig = await resolvePaymentType(payload.payment_type);
-        if (!paymentTypeConfig.requiresBlock) payload.block_number = null;
+        if (!paymentTypeConfig.requiresBlock) {
+          payload.block_number = null;
+          payload.driver_id = null;
+        }
       }
 
       if (input.pharmacistId) {
@@ -917,7 +936,7 @@ export const deliveryService = {
     get: async (): Promise<DeliveryMobileAppSettings> => {
       const { data, error } = await supabaseClient
         .from('delivery_mobile_app_settings')
-        .select('id, login_logo_url, footer_logo_url, footer_credit, updated_at, updated_by')
+        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
         .eq('id', 'global')
         .maybeSingle();
       if (error) {
@@ -933,13 +952,23 @@ export const deliveryService = {
         login_logo_url: normalizeImageUrl(settings.loginLogoUrl),
         footer_logo_url: normalizeImageUrl(settings.footerLogoUrl),
         footer_credit: settings.footerCredit?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.footerCredit,
+        android_minimum_build: Math.max(1, Math.floor(Number(settings.androidMinimumBuild || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidMinimumBuild))),
+        android_latest_build: Math.max(
+          Math.max(1, Math.floor(Number(settings.androidMinimumBuild || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidMinimumBuild))),
+          Math.floor(Number(settings.androidLatestBuild || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestBuild))
+        ),
+        android_latest_version: settings.androidLatestVersion?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestVersion,
+        android_apk_url: settings.androidApkUrl?.trim() || '',
+        force_update_enabled: settings.forceUpdateEnabled === true,
+        force_update_title: settings.forceUpdateTitle?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateTitle,
+        force_update_message: settings.forceUpdateMessage?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateMessage,
         updated_by: session.session?.user?.id || null,
         updated_at: new Date().toISOString()
       };
       const { data, error } = await supabaseClient
         .from('delivery_mobile_app_settings')
         .upsert(payload, { onConflict: 'id' })
-        .select('id, login_logo_url, footer_logo_url, footer_credit, updated_at, updated_by')
+        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
         .single();
       if (error) throw error;
       return toMobileAppSettings(data);

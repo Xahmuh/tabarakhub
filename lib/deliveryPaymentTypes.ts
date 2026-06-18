@@ -78,5 +78,4 @@ export const isDirectDeliveryOrder = (
   types?: DeliveryPaymentTypeConfig[] | null
 ) => order.orderKind !== 'internal_transfer'
   && !isInternalTransferPayment(order.paymentType)
-  && !isDeliveryPaymentBlockExempt(order.paymentType, types)
-  && !isTalabatDeliveryPayment(order.paymentType);
+  && !isDeliveryPaymentBlockExempt(order.paymentType, types);

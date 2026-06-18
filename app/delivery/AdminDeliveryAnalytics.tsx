@@ -4,7 +4,7 @@ import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
-  Branch, BranchClassification, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, Governorate, Pharmacist
+  Branch, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, Governorate, Pharmacist
 } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
 import { SearchableSelect } from './components/SearchableSelect';
@@ -81,7 +81,6 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [customTo, setCustomTo] = useState(todayKey());
 
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
-  const [supervisorFilter, setSupervisorFilter] = useState<string | null>(null);
   const [governorateFilter, setGovernorateFilter] = useState<string | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<string | null>(null);
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
@@ -92,7 +91,6 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
-  const [classifications, setClassifications] = useState<BranchClassification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExportingCleanOrders, setIsExportingCleanOrders] = useState(false);
   const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
@@ -106,14 +104,12 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       branchService.list(),
       deliveryService.drivers.list(true),
       deliveryService.paymentTypes.list(true),
-      pharmacistService.listAll(),
-      deliveryService.classifications.list()
-    ]).then(([b, d, pay, p, c]) => {
+      pharmacistService.listAll()
+    ]).then(([b, d, pay, p]) => {
       setBranches(b.filter(x => x.role === 'branch'));
       setDrivers(d);
       setPaymentTypes(pay);
       setPharmacists(p as Pharmacist[]);
-      setClassifications(c);
     }).catch(e => console.error('Analytics reference load failed', e));
   }, []);
 
@@ -141,27 +137,10 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     return () => { cancelled = true; };
   }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter, branches]);
 
-  const supervisorOptions = useMemo(() => {
-    const names = new Set<string>();
-    classifications.forEach(c => { if (c.supervisorName) names.add(c.supervisorName); });
-    return [...names].sort().map(n => ({ value: n, label: n }));
-  }, [classifications]);
-
-  const supervisedBranchIds = useMemo(() => {
-    if (!supervisorFilter) return null;
-    return new Set(
-      classifications.filter(c => c.supervisorName === supervisorFilter).map(c => c.branchId)
-    );
-  }, [supervisorFilter, classifications]);
-
-  // Supervisor filter is applied client-side via branch classification.
-  const filteredOrders = useMemo(() => {
-    if (!supervisedBranchIds) return orders;
-    return orders.filter(o => supervisedBranchIds.has(o.branchId));
-  }, [orders, supervisedBranchIds]);
+  const filteredOrders = orders;
 
   const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
-  const talabat = useMemo(
+  const external = useMemo(
     () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer' && !isDirectOrder(order, paymentTypes)),
     [filteredOrders, paymentTypes]
   );
@@ -289,7 +268,6 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     try {
       const cleanRows = await deliveryCleanExportService.orders.list({
         branchId: branchFilter || undefined,
-        branchIds: supervisedBranchIds ? [...supervisedBranchIds] : undefined,
         dateFrom: range.from,
         dateTo: range.to,
         paymentType: paymentFilter || undefined,
@@ -336,9 +314,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <SearchableSelect options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))} value={branchFilter} onChange={setBranchFilter} placeholder="All branches" />
-          <SearchableSelect options={supervisorOptions} value={supervisorFilter} onChange={setSupervisorFilter} placeholder="All supervisors" />
           <SearchableSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" />
           <SearchableSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} value={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" />
           <SearchableSelect
@@ -377,7 +354,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             <KpiCard label="Actual delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
             <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
             <KpiCard label="WhatsApp / Direct" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
-            <KpiCard label="Talabat" value={String(talabat.length)} sub={formatBhd(sumValue(talabat))} />
+            <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
             <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
             <KpiCard label="Active branches" value={String(branchBoard.length)} sub="with orders in period" />
           </div>

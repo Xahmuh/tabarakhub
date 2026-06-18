@@ -619,6 +619,13 @@ export interface DeliveryMobileAppSettings {
   loginLogoUrl: string;
   footerLogoUrl: string;
   footerCredit: string;
+  androidMinimumBuild: number;
+  androidLatestBuild: number;
+  androidLatestVersion: string;
+  androidApkUrl: string;
+  forceUpdateEnabled: boolean;
+  forceUpdateTitle: string;
+  forceUpdateMessage: string;
   updatedAt?: string | null;
   updatedBy?: string | null;
 }

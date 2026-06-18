@@ -119,6 +119,10 @@ const buildKpis = (
     .sort((a, b) => b.orders - a.orders || b.value - a.value || a.label.localeCompare(b.label));
 };
 
+const deliveryAreaLabel = (order: DeliveryOrder) => (
+  order.areaName || (order.blockNumber ? 'Unknown area' : 'No mapped area')
+);
+
 const addKpiSheet = (
   workbook: Workbook,
   sheetName: string,
@@ -244,8 +248,8 @@ export const exportOrdersToExcel = async (
     'Area',
     buildKpis(
       orders,
-      order => `${order.governorate || 'No governorate'}|${order.areaName || (order.paymentType === 'TALABAT' ? 'Talabat / No area' : 'Unknown area')}`,
-      order => order.areaName || (order.paymentType === 'TALABAT' ? 'Talabat / No area' : 'Unknown area'),
+      order => `${order.governorate || 'No governorate'}|${deliveryAreaLabel(order)}`,
+      deliveryAreaLabel,
       order => order.governorate || undefined
     ),
     'Governorate'

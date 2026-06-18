@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { deliveryService } from '../../services/deliveryService';
-import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent } from '../../types';
-import { isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
+import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent, DeliveryPaymentTypeConfig } from '../../types';
+import { isDeliveryPaymentBlockExempt } from '../../lib/deliveryPaymentTypes';
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey, yesterdayKey } from './utils';
 
@@ -83,6 +83,9 @@ const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStat
   return [];
 };
 
+const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
+  order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes);
+
 const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) => {
   const meta = STATUS_META[status];
   const Icon = meta.icon;
@@ -115,6 +118,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [events, setEvents] = useState<DeliveryOrderEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -129,12 +133,19 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     setErrorMessage(null);
     setEventErrorMessage(null);
     try {
-      const orderRows = await deliveryService.orders.list({
-        branchId: branch?.id,
-        dateFrom: range.from,
-        dateTo: range.to
-      });
+      const [orderRows, paymentTypeRows] = await Promise.all([
+        deliveryService.orders.list({
+          branchId: branch?.id,
+          dateFrom: range.from,
+          dateTo: range.to
+        }),
+        deliveryService.paymentTypes.list(true).catch(paymentTypeError => {
+          console.warn('Delivery payment types unavailable for lifecycle board', paymentTypeError);
+          return [] as DeliveryPaymentTypeConfig[];
+        })
+      ]);
       setOrders(orderRows);
+      setPaymentTypes(paymentTypeRows);
 
       try {
         const eventRows = await deliveryService.lifecycle.listEvents({
@@ -171,14 +182,14 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     const counts = new Map<DeliveryLifecycleStatus, number>();
     STATUS_ORDER.forEach(status => counts.set(status, 0));
     orders
-      .filter(order => !isTalabatDeliveryPayment(order.paymentType))
+      .filter(order => isDriverDispatchOrder(order, paymentTypes))
       .forEach(order => counts.set(order.deliveryStatus, (counts.get(order.deliveryStatus) || 0) + 1));
     return counts;
-  }, [orders]);
+  }, [orders, paymentTypes]);
 
   const internalDispatchOrders = useMemo(
-    () => orders.filter(order => !isTalabatDeliveryPayment(order.paymentType)),
-    [orders]
+    () => orders.filter(order => isDriverDispatchOrder(order, paymentTypes)),
+    [orders, paymentTypes]
   );
   const actualDispatchOrders = useMemo(
     () => internalDispatchOrders.filter(order => order.orderKind !== 'internal_transfer'),
@@ -188,7 +199,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     () => internalDispatchOrders.filter(order => order.orderKind === 'internal_transfer'),
     [internalDispatchOrders]
   );
-  const talabatExternalCount = orders.length - internalDispatchOrders.length;
+  const externalNoBlockCount = orders.length - internalDispatchOrders.length;
 
   const valueInMotion = useMemo(
     () => internalDispatchOrders
@@ -365,9 +376,9 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
               <p className="mt-1 text-xs font-bold text-slate-400">
                 {branch ? branch.name : 'All operational branches'} - {label}
               </p>
-              {talabatExternalCount > 0 && (
+              {externalNoBlockCount > 0 && (
                 <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-orange-600">
-                  {talabatExternalCount} Talabat external order{talabatExternalCount === 1 ? '' : 's'} hidden from dispatch
+                  {externalNoBlockCount} external/no-block order{externalNoBlockCount === 1 ? '' : 's'} hidden from dispatch
                 </p>
               )}
             </div>
@@ -432,7 +443,11 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                             {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
                           </span>
                         </td>
-                        {!branch && <td className="py-3 pr-3 text-xs font-bold text-slate-500">{order.branchName || 'Unknown branch'}</td>}
+                        {!branch && (
+                          <td className="py-3 pr-3 text-xs font-bold text-slate-500">
+                            {order.transferFromBranchName || order.branchName || 'Unknown branch'}
+                          </td>
+                        )}
                         <td className="py-3 pr-3 text-xs font-bold text-slate-500">{order.driverName || 'Unassigned'}</td>
                         <td className="py-3 pr-3"><StatusBadge status={order.deliveryStatus} /></td>
                         <td className="py-3 pr-3 text-[10px] font-bold leading-5 text-slate-500">

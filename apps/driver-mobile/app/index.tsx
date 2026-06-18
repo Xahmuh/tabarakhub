@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -22,10 +23,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
 import {
+  currentAndroidBuild,
   driverApi,
   DriverBranchOption,
   DriverDutyRecord,
   DriverHistoryStatusFilter,
+  isDriverForceUpdateRequired,
   DriverMobileAppSettings,
   DriverNearbyStartBranch,
   DriverOrder,
@@ -60,6 +63,19 @@ const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
 const hubFooterLogo = require('../src/assets/logo/hublogo.png');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
 const DEFAULT_FOOTER_CREDIT = 'Developed by Ahmed Elsherbini';
+const DEFAULT_MOBILE_SETTINGS: DriverMobileAppSettings = {
+  loginLogoUrl: null,
+  footerLogoUrl: null,
+  footerCredit: DEFAULT_FOOTER_CREDIT,
+  androidMinimumBuild: 1,
+  androidLatestBuild: 1,
+  androidLatestVersion: '0.1.0',
+  androidApkUrl: '',
+  forceUpdateEnabled: false,
+  forceUpdateTitle: 'Update required',
+  forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
+  updatedAt: null
+};
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark';
 type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications' | 'dutyRecord';
@@ -441,41 +457,231 @@ const buildDutyPdfHtml = (records: DriverDutyRecord[], month: string, language: 
   `;
 };
 
-const shareDutyExcel = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
-  const FileSystem = await import('expo-file-system/legacy');
+const pdfSafeText = (value: string | number, maxLength = 90) => {
+  const clean = String(value ?? '')
+    .replace(/[^\x20-\x7E]/g, '?')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+
+  return clean
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+};
+
+const base64FromBinaryString = (value: string) => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+
+  for (let index = 0; index < value.length; index += 3) {
+    const first = value.charCodeAt(index) & 255;
+    const second = index + 1 < value.length ? value.charCodeAt(index + 1) & 255 : 0;
+    const third = index + 2 < value.length ? value.charCodeAt(index + 2) & 255 : 0;
+    const triple = (first << 16) | (second << 8) | third;
+
+    output += chars[(triple >> 18) & 63];
+    output += chars[(triple >> 12) & 63];
+    output += index + 1 < value.length ? chars[(triple >> 6) & 63] : '=';
+    output += index + 2 < value.length ? chars[triple & 63] : '=';
+  }
+
+  return output;
+};
+
+const buildSimpleDutyPdf = (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
+  const pageLines: string[][] = [[]];
+  const pushLine = (line: string) => {
+    const current = pageLines[pageLines.length - 1];
+    if (current.length >= 42) {
+      pageLines.push([line]);
+      return;
+    }
+    current.push(line);
+  };
+
+  pushLine(`${copy.profile.pdfTitle} - ${month}`);
+  pushLine('');
+  pushLine('Date       Start        Leave        Hours  Orders  Transfers  Starting location');
+  pushLine('--------------------------------------------------------------------------');
+  records.forEach(record => {
+    const date = record.statDate.padEnd(10).slice(0, 10);
+    const start = formatDateTime(record.firstOnlineAt, language, copy).padEnd(12).slice(0, 12);
+    const leave = formatDateTime(record.lastOfflineAt, language, copy).padEnd(12).slice(0, 12);
+    const hours = formatShiftHours(record.totalWorkingMinutes, copy).padEnd(6).slice(0, 6);
+    const orders = String(dutyRecordTotalOrders(record)).padEnd(7).slice(0, 7);
+    const transfers = String(record.internalTransferCount).padEnd(9).slice(0, 9);
+    const location = dutyLocationLabel(record, copy).slice(0, 35);
+    pushLine(`${date}   ${start} ${leave} ${hours} ${orders} ${transfers} ${location}`);
+  });
+
+  const objects: string[] = [];
+  const addObject = (body: string) => {
+    objects.push(body);
+    return objects.length;
+  };
+
+  const catalogObject = addObject('<< /Type /Catalog /Pages 2 0 R >>');
+  const pagesObjectIndex = addObject('');
+  const regularFontObject = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+  const boldFontObject = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+  const pageObjectIds: number[] = [];
+
+  pageLines.forEach((lines, pageIndex) => {
+    const content = [
+      '0.2 w',
+      'BT /F2 16 Tf 40 760 Td (Driver Duty Record) Tj ET',
+      `BT /F1 9 Tf 40 744 Td (${pdfSafeText(`Month: ${month} | Page ${pageIndex + 1}/${pageLines.length}`, 80)}) Tj ET`,
+      '36 732 m 576 732 l S',
+      ...lines.map((line, lineIndex) => (
+        `BT /F1 8 Tf 40 ${712 - (lineIndex * 15)} Td (${pdfSafeText(line, 115)}) Tj ET`
+      ))
+    ].join('\n');
+    const contentObject = addObject(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    const pageObject = addObject(`<< /Type /Page /Parent ${pagesObjectIndex} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${regularFontObject} 0 R /F2 ${boldFontObject} 0 R >> >> /Contents ${contentObject} 0 R >>`);
+    pageObjectIds.push(pageObject);
+  });
+
+  objects[pagesObjectIndex - 1] = `<< /Type /Pages /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+  objects[catalogObject - 1] = `<< /Type /Catalog /Pages ${pagesObjectIndex} 0 R >>`;
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach(offset => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogObject} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+};
+
+const dutyExportFileName = (month: string, extension: 'xls' | 'pdf') =>
+  `driver-duty-${month.replace(/[^0-9-]/g, '') || toMonthInput(new Date())}.${extension}`;
+
+type DutyExportFile = {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+  title: string;
+  uti: string;
+  textContent?: string;
+};
+
+const shareDutyFile = async (
+  uri: string,
+  mimeType: string,
+  dialogTitle: string,
+  uti: string,
+  copy: DriverCopy
+) => {
   const Sharing = await import('expo-sharing');
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error(copy.profile.exportUnavailableText);
   }
-  if (!FileSystem.cacheDirectory) {
-    throw new Error(copy.profile.exportUnavailableText);
-  }
-  const uri = `${FileSystem.cacheDirectory}driver-duty-${month}.xls`;
-  await FileSystem.writeAsStringAsync(uri, buildDutyPdfHtml(records, month, language, copy), {
-    encoding: FileSystem.EncodingType.UTF8
-  });
+
   await Sharing.shareAsync(uri, {
-    mimeType: 'application/vnd.ms-excel',
-    dialogTitle: `${copy.profile.exportExcel} - ${month}`,
-    UTI: 'com.microsoft.excel.xls'
+    mimeType,
+    dialogTitle,
+    UTI: uti
   });
 };
 
-const shareDutyPdf = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy) => {
-  const Print = await import('expo-print');
-  const Sharing = await import('expo-sharing');
-  if (!(await Sharing.isAvailableAsync())) {
+const saveDutyFileToAndroidFolder = async (
+  sourceUri: string,
+  fileName: string,
+  mimeType: string,
+  textContent?: string
+) => {
+  const FileSystem = await import('expo-file-system/legacy');
+
+  const initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot('Download');
+  const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+  if (!permissions.granted) return false;
+
+  const targetUri = await FileSystem.StorageAccessFramework.createFileAsync(
+    permissions.directoryUri,
+    fileName,
+    mimeType
+  );
+
+  if (textContent !== undefined) {
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(targetUri, textContent, {
+      encoding: FileSystem.EncodingType.UTF8
+    });
+  } else {
+    const content = await FileSystem.readAsStringAsync(sourceUri, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    await FileSystem.StorageAccessFramework.writeAsStringAsync(targetUri, content, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+  }
+
+  return true;
+};
+
+const createDutyExcelFile = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy): Promise<DutyExportFile> => {
+  const FileSystem = await import('expo-file-system/legacy');
+  if (!FileSystem.cacheDirectory) {
     throw new Error(copy.profile.exportUnavailableText);
   }
-  const { uri } = await Print.printToFileAsync({
-    html: buildDutyPdfHtml(records, month, language, copy),
-    base64: false
+
+  const fileName = dutyExportFileName(month, 'xls');
+  const content = buildDutyPdfHtml(records, month, language, copy);
+  const uri = `${FileSystem.cacheDirectory}${fileName}`;
+  await FileSystem.writeAsStringAsync(uri, content, {
+    encoding: FileSystem.EncodingType.UTF8
   });
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    dialogTitle: `${copy.profile.exportPdf} - ${month}`,
-    UTI: 'com.adobe.pdf'
+
+  return { uri, fileName, mimeType: 'application/vnd.ms-excel', title: `${copy.profile.exportExcel} - ${month}`, uti: 'com.microsoft.excel.xls', textContent: content };
+};
+
+const createDutyPdfFile = async (records: DriverDutyRecord[], month: string, language: DriverLanguage, copy: DriverCopy): Promise<DutyExportFile> => {
+  const FileSystem = await import('expo-file-system/legacy');
+  if (!FileSystem.cacheDirectory) {
+    throw new Error(copy.profile.exportUnavailableText);
+  }
+
+  const fileName = dutyExportFileName(month, 'pdf');
+  const pdf = buildSimpleDutyPdf(records, month, language, copy);
+  const uri = `${FileSystem.cacheDirectory}${fileName}`;
+  await FileSystem.writeAsStringAsync(uri, base64FromBinaryString(pdf), {
+    encoding: FileSystem.EncodingType.Base64
   });
+
+  return { uri, fileName, mimeType: 'application/pdf', title: `${copy.profile.exportPdf} - ${month}`, uti: 'com.adobe.pdf' };
+};
+
+const exportDutyFile = async (
+  records: DriverDutyRecord[],
+  month: string,
+  language: DriverLanguage,
+  copy: DriverCopy,
+  format: 'excel' | 'pdf'
+) => {
+  const file = format === 'excel'
+    ? await createDutyExcelFile(records, month, language, copy)
+    : await createDutyPdfFile(records, month, language, copy);
+
+  if (Platform.OS === 'android') {
+    try {
+      const saved = await saveDutyFileToAndroidFolder(file.uri, file.fileName, file.mimeType, file.textContent);
+      if (saved) {
+        Alert.alert('Download complete', `${file.fileName} saved to the selected folder.`);
+        return;
+      }
+    } catch (error) {
+      if (__DEV__) console.warn('Android duty export save failed, falling back to share.', error);
+    }
+  }
+
+  await shareDutyFile(file.uri, file.mimeType, file.title, file.uti, copy);
 };
 
 const Button = ({
@@ -788,6 +994,86 @@ const BottomNavButton = ({
     <Text style={[styles.bottomNavLabel, active && styles.bottomNavLabelActive]}>{label}</Text>
   </Pressable>
 );
+
+const ForceUpdateScreen = ({
+  settings,
+  isRtl,
+  refreshing,
+  onRetry
+}: {
+  settings: DriverMobileAppSettings;
+  isRtl: boolean;
+  refreshing: boolean;
+  onRetry: () => void;
+}) => {
+  const currentBuild = currentAndroidBuild();
+  const requiredBuild = Math.max(1, Number(settings.androidMinimumBuild || 1));
+  const latestBuild = Math.max(requiredBuild, Number(settings.androidLatestBuild || requiredBuild));
+  const apkUrl = settings.androidApkUrl?.trim() || '';
+
+  const openApk = async () => {
+    if (!apkUrl) {
+      Alert.alert('APK link missing', 'Please contact the operations team for the latest driver APK.');
+      return;
+    }
+
+    try {
+      await Linking.openURL(apkUrl);
+    } catch {
+      Alert.alert('Could not open APK', 'Please contact the operations team for the latest driver APK.');
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.forceUpdateScroll}>
+        <View style={styles.forceUpdatePanel}>
+          <View style={styles.forceUpdateBadge}>
+            <Text style={styles.forceUpdateBadgeText}>APK UPDATE</Text>
+          </View>
+          <Text style={[styles.forceUpdateTitle, isRtl && styles.rtlText]}>
+            {settings.forceUpdateTitle?.trim() || DEFAULT_MOBILE_SETTINGS.forceUpdateTitle}
+          </Text>
+          <Text style={[styles.forceUpdateText, isRtl && styles.rtlText]}>
+            {settings.forceUpdateMessage?.trim() || DEFAULT_MOBILE_SETTINGS.forceUpdateMessage}
+          </Text>
+
+          <View style={styles.forceUpdateMeta}>
+            <View style={styles.forceUpdateMetaRow}>
+              <Text style={styles.forceUpdateMetaLabel}>Current build</Text>
+              <Text style={styles.forceUpdateMetaValue}>{currentBuild}</Text>
+            </View>
+            <View style={styles.forceUpdateMetaRow}>
+              <Text style={styles.forceUpdateMetaLabel}>Required build</Text>
+              <Text style={styles.forceUpdateMetaValue}>{requiredBuild}</Text>
+            </View>
+            <View style={styles.forceUpdateMetaRow}>
+              <Text style={styles.forceUpdateMetaLabel}>Latest version</Text>
+              <Text style={styles.forceUpdateMetaValue}>
+                {settings.androidLatestVersion || '0.1.0'} - {latestBuild}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.forceUpdateActions}>
+            <Button
+              label={apkUrl ? 'Download APK' : 'APK link missing'}
+              onPress={openApk}
+              tone="warning"
+              disabled={!apkUrl}
+            />
+            <Button
+              label={refreshing ? 'Checking...' : 'Check again'}
+              onPress={onRetry}
+              tone="light"
+              disabled={refreshing}
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
 
 const LoginScreen = ({
   onSignedIn,
@@ -1384,11 +1670,6 @@ const DeliveryConfirmSheet = ({
                 <InfoRow label={copy.sheet.block} value={order.blockNumber || copy.common.notRequired} isRtl={isRtl} />
               </>
             )}
-          </View>
-
-          <View style={styles.infoBox}>
-            <Text style={[styles.infoTitle, isRtl && styles.rtlText]}>{copy.sheet.statusOnly}</Text>
-            <Text style={[styles.infoText, isRtl && styles.rtlText]}>{copy.sheet.noBlockCheck}</Text>
           </View>
 
           <TextInput
@@ -2042,11 +2323,7 @@ const Dashboard = ({
 
     setIsExportingDuty(true);
     try {
-      if (format === 'excel') {
-        await shareDutyExcel(dutyRecords, dutyMonthFilter, language, copy);
-      } else {
-        await shareDutyPdf(dutyRecords, dutyMonthFilter, language, copy);
-      }
+      await exportDutyFile(dutyRecords, dutyMonthFilter, language, copy, format);
     } catch (error) {
       Alert.alert(
         error instanceof Error && error.message === copy.profile.exportUnavailableText
@@ -2753,9 +3030,9 @@ export default function DriverApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [language, setLanguage] = useState<DriverLanguage>('en');
   const [themeMode, setThemeMode] = useState<DriverThemeMode>('dark');
-  const [mobileSettings, setMobileSettings] = useState<DriverMobileAppSettings>({
-    footerCredit: DEFAULT_FOOTER_CREDIT
-  });
+  const [mobileSettings, setMobileSettings] = useState<DriverMobileAppSettings>(DEFAULT_MOBILE_SETTINGS);
+  const [mobileSettingsLoaded, setMobileSettingsLoaded] = useState(false);
+  const [mobileSettingsRefreshing, setMobileSettingsRefreshing] = useState(false);
   const [languageLoaded, setLanguageLoaded] = useState(false);
   const copy = useMemo(() => getDriverCopy(language), [language]);
   const isRtl = isRtlLanguage(language);
@@ -2768,11 +3045,28 @@ export default function DriverApp() {
     return () => subscription.subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    driverApi.mobileAppSettings()
-      .then(setMobileSettings)
-      .catch(error => console.info('Driver mobile settings unavailable; using bundled branding.', error?.message || error));
+  const refreshMobileSettings = useCallback(async () => {
+    if (!hasSupabaseConfig) {
+      setMobileSettings(DEFAULT_MOBILE_SETTINGS);
+      setMobileSettingsLoaded(true);
+      return;
+    }
+
+    setMobileSettingsRefreshing(true);
+    try {
+      setMobileSettings(await driverApi.mobileAppSettings());
+    } catch (error: any) {
+      console.info('Driver mobile settings unavailable; using bundled branding.', error?.message || error);
+      setMobileSettings(DEFAULT_MOBILE_SETTINGS);
+    } finally {
+      setMobileSettingsLoaded(true);
+      setMobileSettingsRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshMobileSettings();
+  }, [refreshMobileSettings]);
 
   useEffect(() => {
     Promise.all([loadSavedDriverLanguage(), loadSavedDriverTheme()])
@@ -2795,7 +3089,7 @@ export default function DriverApp() {
     saveDriverTheme(nextThemeMode).catch(error => console.warn('Driver theme save failed', error));
   }, []);
 
-  if (!languageLoaded) {
+  if (!languageLoaded || !mobileSettingsLoaded) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
@@ -2813,6 +3107,17 @@ export default function DriverApp() {
           <Text style={[styles.errorText, isRtl && styles.rtlText]}>{copy.errors.envMissingText}</Text>
         </View>
       </SafeAreaView>
+    );
+  }
+
+  if (isDriverForceUpdateRequired(mobileSettings)) {
+    return (
+      <ForceUpdateScreen
+        settings={mobileSettings}
+        isRtl={isRtl}
+        refreshing={mobileSettingsRefreshing}
+        onRetry={refreshMobileSettings}
+      />
     );
   }
 
@@ -2882,6 +3187,83 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   hidden: {
     display: 'none'
+  },
+  forceUpdateScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    backgroundColor: colors.page
+  },
+  forceUpdatePanel: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    gap: spacing.lg,
+    ...shadows.card
+  },
+  forceUpdateBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  forceUpdateBadgeText: {
+    color: colors.warning,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8
+  },
+  forceUpdateTitle: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 34
+  },
+  forceUpdateText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21
+  },
+  forceUpdateMeta: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.md,
+    gap: spacing.sm
+  },
+  forceUpdateMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  forceUpdateMetaLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase'
+  },
+  forceUpdateMetaValue: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right'
+  },
+  forceUpdateActions: {
+    gap: spacing.sm
   },
   loginWrap: {
     flex: 1,
@@ -4208,25 +4590,6 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   successText: {
     marginTop: 4,
     color: colors.success,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 18
-  },
-  infoBox: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.infoBorder,
-    backgroundColor: colors.infoSoft,
-    padding: spacing.md
-  },
-  infoTitle: {
-    color: colors.info,
-    fontSize: 13,
-    fontWeight: '900'
-  },
-  infoText: {
-    marginTop: 4,
-    color: colors.info,
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 18

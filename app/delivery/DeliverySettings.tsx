@@ -38,6 +38,13 @@ const DEFAULT_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
   loginLogoUrl: '',
   footerLogoUrl: '',
   footerCredit: 'Developed by Ahmed Elsherbini',
+  androidMinimumBuild: 1,
+  androidLatestBuild: 1,
+  androidLatestVersion: '0.1.0',
+  androidApkUrl: '',
+  forceUpdateEnabled: false,
+  forceUpdateTitle: 'Update required',
+  forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
   updatedAt: null,
   updatedBy: null
 };
@@ -123,7 +130,7 @@ export const DeliverySettings: React.FC = () => {
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Area name</label>
             <input id="swal-area-name" value="${escapeHtml(area?.name)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
-          <div class="hidden">
+          <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Governorate</label>
             <select id="swal-area-gov" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
               ${GOVERNORATES.map(g => `<option value="${g}" ${area?.governorate === g ? 'selected' : ''}>${g}</option>`).join('')}
@@ -434,7 +441,7 @@ export const DeliverySettings: React.FC = () => {
             <input id="swal-payment-requires-block" type="checkbox" class="mt-0.5" ${paymentType?.requiresBlock === false ? '' : 'checked'}>
             <span>
               Requires block / area mapping
-              <span class="mt-1 block text-[10px] font-bold text-slate-400">Turn this off only for marketplace/external channels like Talabat.</span>
+              <span class="mt-1 block text-[10px] font-bold text-slate-400">Turn this off only for marketplace or external channels managed outside internal dispatch.</span>
             </span>
           </label>
           <div>
@@ -618,6 +625,14 @@ export const DeliverySettings: React.FC = () => {
   };
 
   const saveMobileSettings = async (nextSettings = mobileSettings) => {
+    if (nextSettings.forceUpdateEnabled && !nextSettings.androidApkUrl.trim()) {
+      Swal.fire('APK URL required', 'Add the latest APK download URL before enabling force update.', 'warning');
+      return;
+    }
+    if (nextSettings.androidLatestBuild < nextSettings.androidMinimumBuild) {
+      Swal.fire('Invalid build numbers', 'Latest Android build must be greater than or equal to the minimum build.', 'warning');
+      return;
+    }
     setIsSavingMobileSettings(true);
     try {
       const saved = await deliveryService.mobileAppSettings.upsert(nextSettings);
@@ -940,7 +955,7 @@ export const DeliverySettings: React.FC = () => {
                 </div>
               </div>
             ))}
-            {paymentTypes.length === 0 && <p className="text-xs font-bold text-slate-400">No payment types yet - add Cash, Card, BP, Talabat, and Insurance.</p>}
+            {paymentTypes.length === 0 && <p className="text-xs font-bold text-slate-400">No payment types yet - add the channels used by this client.</p>}
           </div>
         </section>
       ) : tab === 'areas' ? (
@@ -1172,6 +1187,89 @@ export const DeliverySettings: React.FC = () => {
                 Tip: leave a logo URL empty to keep using the bundled app fallback.
               </p>
             </div>
+
+            <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 xl:col-span-3">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-red-800">APK force update</p>
+                  <p className="mt-1 max-w-2xl text-[11px] font-bold leading-5 text-red-700/70">
+                    For side-loaded APKs, drivers must install the latest APK manually. The app blocks login when the installed Android build is below the minimum build.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-700">
+                  <input
+                    type="checkbox"
+                    checked={mobileSettings.forceUpdateEnabled}
+                    onChange={event => setMobileSettings(previous => ({ ...previous, forceUpdateEnabled: event.target.checked }))}
+                  />
+                  Force update
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Minimum Android build</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={mobileSettings.androidMinimumBuild}
+                    onChange={event => setMobileSettings(previous => ({
+                      ...previous,
+                      androidMinimumBuild: Math.max(1, Math.floor(Number(event.target.value || 1)))
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Latest Android build</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={mobileSettings.androidLatestBuild}
+                    onChange={event => setMobileSettings(previous => ({
+                      ...previous,
+                      androidLatestBuild: Math.max(1, Math.floor(Number(event.target.value || 1)))
+                    }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Latest version label</label>
+                  <input
+                    value={mobileSettings.androidLatestVersion}
+                    onChange={event => setMobileSettings(previous => ({ ...previous, androidLatestVersion: event.target.value }))}
+                    placeholder="0.1.1"
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">APK download URL</label>
+                <input
+                  value={mobileSettings.androidApkUrl}
+                  onChange={event => setMobileSettings(previous => ({ ...previous, androidApkUrl: event.target.value }))}
+                  placeholder="https://.../tabarak-driver-v2.apk"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Update title</label>
+                  <input
+                    value={mobileSettings.forceUpdateTitle}
+                    onChange={event => setMobileSettings(previous => ({ ...previous, forceUpdateTitle: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Update message</label>
+                  <input
+                    value={mobileSettings.forceUpdateMessage}
+                    onChange={event => setMobileSettings(previous => ({ ...previous, forceUpdateMessage: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand/40"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       ) : (
@@ -1200,7 +1298,9 @@ const DataQualityPanel: React.FC<{
   }, []);
 
   const issues = useMemo(() => {
-    const missingDriver = orders.filter(o => !o.driverId);
+    const missingDriver = orders.filter(o => (
+      o.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes)
+    ) && !o.driverId);
     const missingPharmacist = orders.filter(o => !o.pharmacistId && !o.pharmacistName);
     const unknownBlock = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes) && o.blockNumber && !o.areaName);
     const missingBlock = orders.filter(o => !isDeliveryPaymentBlockExempt(o.paymentType, paymentTypes) && !o.blockNumber);
@@ -1237,7 +1337,7 @@ const DataQualityPanel: React.FC<{
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Tile label="Missing driver" items={issues.missingDriver} tone="amber" />
         <Tile label="Missing pharmacist" items={issues.missingPharmacist} tone="amber" />
-        <Tile label="Missing block (non-Talabat)" items={issues.missingBlock} tone="red" />
+        <Tile label="Missing block (mappable)" items={issues.missingBlock} tone="red" />
         <Tile label="Unknown block" items={issues.unknownBlock} tone="red" />
         <Tile label="Outside governorate" items={issues.outside} tone="slate" />
       </div>

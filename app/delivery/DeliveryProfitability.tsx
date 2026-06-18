@@ -3,10 +3,10 @@ import Swal from 'sweetalert2';
 import { Coins, Lightbulb, Save, TrendingDown, TrendingUp } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import {
-  DeliveryCostSetting, DeliveryDriver, DeliveryOrder, DriverEfficiency
+  DeliveryCostSetting, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, DriverEfficiency
 } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
-import { PeriodPreset, formatBhd, getPresetRange, periodLabel, rangeDayCount, sumValue, todayKey } from './utils';
+import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, rangeDayCount, sumValue, todayKey } from './utils';
 
 const CLASS_META: Record<string, { label: string; className: string }> = {
   optimum: { label: 'Optimum', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
@@ -15,6 +15,9 @@ const CLASS_META: Record<string, { label: string; className: string }> = {
   loss_making: { label: 'Loss-making', className: 'border-red-200 bg-red-50 text-red-700' },
   no_cost_data: { label: 'No cost data', className: 'border-slate-200 bg-white text-slate-400' }
 };
+
+const effectiveWorkingDays = (periodDays: number, workingDaysPerMonth = 26) =>
+  Math.max(1, Math.min(periodDays, Math.round(periodDays * (workingDaysPerMonth / 30))));
 
 /**
  * Efficiency model:
@@ -30,10 +33,11 @@ const classifyDriver = (
   setting: DeliveryCostSetting | undefined,
   periodDays: number
 ): DriverEfficiency => {
-  const driverOrders = orders.filter(o => o.driverId === driver.id);
+  const driverOrders = orders.filter(o => o.driverId === driver.id && o.orderKind !== 'internal_transfer');
   const count = driverOrders.length;
   const value = sumValue(driverOrders);
-  const ordersPerDay = count / periodDays;
+  const workingDaysInPeriod = effectiveWorkingDays(periodDays, setting?.workingDaysPerMonth);
+  const ordersPerDay = count / workingDaysInPeriod;
 
   if (!setting) {
     return {
@@ -43,7 +47,6 @@ const classifyDriver = (
     };
   }
 
-  const workingDaysInPeriod = Math.min(periodDays, Math.round(periodDays * (setting.workingDaysPerMonth / 30)));
   const periodCost = (setting.monthlyCostBhd / setting.workingDaysPerMonth) * Math.max(1, workingDaysInPeriod);
   const costPerOrder = count > 0 ? periodCost / count : null;
   const target = setting.targetOrdersPerDay;
@@ -85,7 +88,7 @@ const buildRecommendations = (rows: DriverEfficiency[], outsidePct: number): str
     recs.push(`${lossMakers.map(r => r.driverName).join(', ')}: estimated cost exceeds estimated margin. Consider sharing the driver across nearby branches, merging routes, or revisiting working hours.`);
   }
   if (lowEff.length > 0) {
-    recs.push(`${lowEff.map(r => r.driverName).join(', ')}: well below the target orders/day. Check whether the branch routes Talabat-heavy demand away from the driver or whether marketing of direct delivery is needed.`);
+    recs.push(`${lowEff.map(r => r.driverName).join(', ')}: well below the target orders/day. Check whether the branch routes external-channel demand away from the driver or whether marketing of direct delivery is needed.`);
   }
   if (noData.length > 0) {
     recs.push(`Set monthly cost for: ${noData.map(r => r.driverName).join(', ')} to include them in profitability ranking.`);
@@ -106,6 +109,7 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
 
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [settings, setSettings] = useState<DeliveryCostSetting[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -115,12 +119,14 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
   const periodDays = rangeDayCount(range.from, range.to);
 
   const loadReference = async () => {
-    const [driverList, settingList] = await Promise.all([
+    const [driverList, settingList, paymentTypeRows] = await Promise.all([
       deliveryService.drivers.list(),
-      deliveryService.costSettings.list()
+      deliveryService.costSettings.list(),
+      deliveryService.paymentTypes.list(true)
     ]);
     setDrivers(driverList);
     setSettings(settingList);
+    setPaymentTypes(paymentTypeRows);
   };
 
   useEffect(() => { loadReference().catch(e => console.error(e)); }, []);
@@ -145,10 +151,10 @@ export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit 
   }, [drivers, settings, orders, periodDays]);
 
   const outsidePct = useMemo(() => {
-    const direct = orders.filter(o => o.paymentType !== 'TALABAT' && o.governorate);
+    const direct = orders.filter(o => isDirectOrder(o, paymentTypes) && o.governorate);
     if (direct.length === 0) return 0;
     return (direct.filter(o => o.isOutsideGovernorate).length / direct.length) * 100;
-  }, [orders]);
+  }, [orders, paymentTypes]);
 
   const recommendations = useMemo(() => buildRecommendations(efficiency, outsidePct), [efficiency, outsidePct]);
 
