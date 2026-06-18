@@ -114,7 +114,11 @@ const en = {
     stop: 'Stop',
     pickedUpAction: 'Picked up',
     deliveredAction: 'Delivered',
-    cancelAction: 'Cancel'
+    cancelAction: 'Cancel',
+    waitingPickupTimer: 'Waiting pickup',
+    onRoadTimer: 'On road',
+    sinceAssignment: 'since assignment',
+    sincePickup: 'since pickup'
   },
   sheet: {
     transferConfirmation: 'Transfer confirmation',

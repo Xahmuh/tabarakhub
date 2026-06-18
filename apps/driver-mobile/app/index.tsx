@@ -249,6 +249,29 @@ const formatDateTime = (value: string | null | undefined, language: DriverLangua
   }
 };
 
+const useElapsedClock = (enabled: boolean) => {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    setNowMs(Date.now());
+    const interval = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(interval);
+  }, [enabled]);
+
+  return nowMs;
+};
+
+const formatElapsedClock = (startAt: string | null | undefined, nowMs: number) => {
+  if (!startAt) return '00:00';
+  const startedMs = new Date(startAt).getTime();
+  if (!Number.isFinite(startedMs)) return '00:00';
+  const totalMinutes = Math.max(0, Math.floor((nowMs - startedMs) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
 const formatMonth = (value: string | null | undefined, language: DriverLanguage, copy: DriverCopy) => {
   if (!value) return copy.target.thisMonth;
   try {
@@ -1406,6 +1429,87 @@ const InfoRow = ({ label, value, isRtl = false }: { label: string; value: string
   </View>
 );
 
+const OrderRunTimer = ({
+  order,
+  copy,
+  isRtl
+}: {
+  order: DriverOrder;
+  copy: DriverCopy;
+  isRtl: boolean;
+}) => {
+  const isOnRoad = order.deliveryStatus === 'picked_up';
+  const isWaitingPickup = order.deliveryStatus === 'assigned';
+  const startAt = isOnRoad ? order.pickedUpAt : isWaitingPickup ? order.assignedAt || order.createdAt : null;
+  const nowMs = useElapsedClock(Boolean(startAt && (isOnRoad || isWaitingPickup)));
+
+  if (!startAt || (!isOnRoad && !isWaitingPickup)) return null;
+
+  return (
+    <View style={[styles.runTimerCard, isOnRoad && styles.runTimerCardActive, isRtl && styles.rtlRow]}>
+      <View style={[styles.runTimerIcon, isOnRoad && styles.runTimerIconActive]}>
+        <FlatIcon name="history" active={isOnRoad} size={20} color={isOnRoad ? colors.success : colors.warning} />
+      </View>
+      <View style={styles.runTimerCopy}>
+        <Text style={[styles.runTimerLabel, isOnRoad && styles.runTimerLabelActive, isRtl && styles.rtlText]}>
+          {isOnRoad ? copy.order.onRoadTimer : copy.order.waitingPickupTimer}
+        </Text>
+        <Text style={[styles.runTimerHint, isRtl && styles.rtlText]}>
+          {isOnRoad ? copy.order.sincePickup : copy.order.sinceAssignment}
+        </Text>
+      </View>
+      <Text style={[styles.runTimerValue, isOnRoad && styles.runTimerValueActive, isRtl && styles.rtlInfoValue]}>
+        {formatElapsedClock(startAt, nowMs)}
+      </Text>
+    </View>
+  );
+};
+
+const TimelineTile = ({
+  label,
+  value,
+  isRtl = false,
+  wide = false
+}: {
+  label: string;
+  value: string;
+  isRtl?: boolean;
+  wide?: boolean;
+}) => (
+  <View style={[styles.timelineTile, wide && styles.timelineTileWide]}>
+    <Text style={[styles.timelineTileLabel, isRtl && styles.rtlText]}>{label}</Text>
+    <Text style={[styles.timelineTileValue, isRtl && styles.rtlInfoValue]} numberOfLines={1}>
+      {value}
+    </Text>
+  </View>
+);
+
+const OrderTimeline = ({
+  order,
+  copy,
+  language,
+  isRtl
+}: {
+  order: DriverOrder;
+  copy: DriverCopy;
+  language: DriverLanguage;
+  isRtl: boolean;
+}) => (
+  <View style={styles.timelineGrid}>
+    <TimelineTile label={copy.common.assigned} value={formatDateTime(order.assignedAt || order.createdAt, language, copy)} isRtl={isRtl} />
+    <TimelineTile label={copy.common.pickedUp} value={formatDateTime(order.pickedUpAt, language, copy)} isRtl={isRtl} />
+    <TimelineTile label={copy.common.delivered} value={formatDateTime(order.deliveredAt, language, copy)} isRtl={isRtl} />
+    {order.pickupBatchId ? (
+      <TimelineTile
+        label={copy.order.pickupRun}
+        value={`#${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` / ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`}
+        isRtl={isRtl}
+        wide
+      />
+    ) : null}
+  </View>
+);
+
 const PaymentCollectionPanel = ({
   order,
   language,
@@ -1518,6 +1622,8 @@ const OrderCard = ({
         <Text style={[styles.orderArea, isRtl && styles.rtlInfoValue]}>{isTransfer ? copy.order.branchToBranch : (order.areaName || order.governorate || copy.order.areaPending)}</Text>
       </View>
 
+      <OrderRunTimer order={order} copy={copy} isRtl={isRtl} />
+
       <View style={styles.blockPanel}>
         {isTransfer ? (
           <>
@@ -1542,18 +1648,7 @@ const OrderCard = ({
 
       {order.notes ? <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>{order.notes}</Text> : null}
 
-      <View style={styles.timeline}>
-        <InfoRow label={copy.common.assigned} value={formatDateTime(order.assignedAt || order.createdAt, language, copy)} isRtl={isRtl} />
-        <InfoRow label={copy.common.pickedUp} value={formatDateTime(order.pickedUpAt, language, copy)} isRtl={isRtl} />
-        <InfoRow label={copy.common.delivered} value={formatDateTime(order.deliveredAt, language, copy)} isRtl={isRtl} />
-        {order.pickupBatchId ? (
-          <InfoRow
-            label={copy.order.pickupRun}
-            value={`#${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` · ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`}
-            isRtl={isRtl}
-          />
-        ) : null}
-      </View>
+      <OrderTimeline order={order} copy={copy} language={language} isRtl={isRtl} />
 
       {!isClosed && (onPickUp || onDeliver || onConfirmPayment || onCancel) ? (
         <View style={styles.orderActions}>
@@ -4647,8 +4742,9 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   orderKindValue: {
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '900'
+    fontSize: 22,
+    fontWeight: '900',
+    flexShrink: 1
   },
   orderArea: {
     flex: 1,
@@ -4656,6 +4752,64 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'right'
+  },
+  runTimerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    gap: spacing.sm
+  },
+  runTimerCardActive: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  runTimerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  runTimerIconActive: {
+    borderColor: colors.successBorder
+  },
+  runTimerCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  runTimerLabel: {
+    color: colors.warning,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
+  },
+  runTimerLabelActive: {
+    color: colors.success
+  },
+  runTimerHint: {
+    marginTop: 2,
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  runTimerValue: {
+    color: colors.warning,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    fontVariant: ['tabular-nums']
+  },
+  runTimerValueActive: {
+    color: colors.success
   },
   blockPanel: {
     borderRadius: radius.lg,
@@ -4731,8 +4885,37 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18
   },
-  timeline: {
-    gap: 7
+  timelineGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm
+  },
+  timelineTile: {
+    flexGrow: 1,
+    flexBasis: '31%',
+    minWidth: 96,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 9
+  },
+  timelineTileWide: {
+    flexBasis: '100%'
+  },
+  timelineTileLabel: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase'
+  },
+  timelineTileValue: {
+    marginTop: 4,
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900'
   },
   orderActions: {
     flexDirection: 'row',
