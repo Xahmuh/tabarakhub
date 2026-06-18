@@ -714,6 +714,44 @@ export interface DeliveryOrderEvent {
   createdAt: string;
 }
 
+export interface DeliveryNotificationPayload {
+  orderId?: string | null;
+  orderDate?: string | null;
+  orderKind?: DeliveryOrderKind | string | null;
+  paymentType?: string | null;
+  blockNumber?: string | null;
+  areaName?: string | null;
+  governorate?: Governorate | string | null;
+  branchId?: string | null;
+  branchName?: string | null;
+  branchCode?: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+  driverCode?: string | null;
+  deliveredAt?: string | null;
+  eventId?: string | null;
+}
+
+export interface DeliveryNotification {
+  id: string;
+  notificationType: 'delivery_delivered';
+  orderId: string;
+  eventId: string;
+  branchId: string;
+  branchName?: string | null;
+  branchCode?: string | null;
+  driverId?: string | null;
+  driverName?: string | null;
+  driverCode?: string | null;
+  title: string;
+  body: string;
+  payload: DeliveryNotificationPayload;
+  isRead: boolean;
+  readAt?: string | null;
+  readBy?: string | null;
+  createdAt: string;
+}
+
 export interface DeliveryDriverDutyReportRow {
   driverId: string;
   driverCode?: string | null;

@@ -12,6 +12,7 @@ export * from './permissionService';
 export * from './contributionService';
 export * from './systemSettingsService';
 export * from './deliveryService';
+export * from './deliveryNotificationService';
 export * from './deliveryCleanExportService';
 export * from './ownerTraceabilityCleanService';
 export * from './deliveryCoverageService';

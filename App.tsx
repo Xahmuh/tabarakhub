@@ -9,12 +9,13 @@ import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { spinWinService } from './services/spinWin';
 import { getSystemSettingsErrorMessage } from './services/systemSettingsService';
 import { branchLoginApprovalService } from './services/branchLoginApprovalService';
+import { deliveryNotificationService } from './services/deliveryNotificationService';
 import { 
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, OwnerDashboardPage
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, DeliveryNotificationsPage, OwnerDashboardPage
 } from './app/index';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
@@ -26,7 +27,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery';
+type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery' | 'notifications';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
@@ -147,6 +148,8 @@ const App: React.FC = () => {
   const [showPharmacistSelector, setShowPharmacistSelector] = useState(false);
   const [customerFlowError, setCustomerFlowError] = useState<string | null>(null);
   const [activePOSBranch, setActivePOSBranch] = useState<Branch | null>(null);
+  const [deliveryNotificationUnreadCount, setDeliveryNotificationUnreadCount] = useState(0);
+  const [hasDeliveryNotificationAlert, setHasDeliveryNotificationAlert] = useState(false);
   const [isCustomerFlow] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('token') || params.has('node') || params.has('branch');
@@ -161,6 +164,7 @@ const App: React.FC = () => {
 
   const canUseFeature = (feature: string, minimum: 'read' | 'edit' = 'read', role = authState.user?.role) =>
     buildPermissionChecker(role, authState.permissions, authState.rolePermissions)(feature, minimum);
+  const canReceiveDeliveryNotifications = !!authState.user && isModuleEnabled('delivery') && canUseFeature('delivery', 'read');
   const shouldShowPOSGuideline = () => maintenanceSettings?.posGuidelineEnabled !== false;
   const isBranchLoginApprovalRequired = maintenanceSettings?.branchLoginApprovalRequired !== false;
 
@@ -206,10 +210,22 @@ const App: React.FC = () => {
         return isManagerRole(role) && canUseFeature('block_analyzer', 'read', role);
       case 'delivery':
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
+      case 'notifications':
+        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
       default:
         return true;
     }
   };
+
+  const playDeliveryNotificationSound = useCallback(() => {
+    try {
+      const audio = new Audio('/sounds/pharmacy.mp3');
+      audio.volume = 0.8;
+      void audio.play().catch(() => undefined);
+    } catch {
+      // Browser audio can be unavailable until the first user gesture.
+    }
+  }, []);
 
   const handleTabChange = (tab: AppTab | null) => {
     if (!isTabEnabled(tab)) {
@@ -378,6 +394,46 @@ const App: React.FC = () => {
       clientConfig.logoUrl
     );
   }, [maintenanceSettings?.browserIconUrl, maintenanceSettings?.pharmacyLogoUrl]);
+
+  useEffect(() => {
+    if (!canReceiveDeliveryNotifications) {
+      setDeliveryNotificationUnreadCount(0);
+      setHasDeliveryNotificationAlert(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const refreshUnreadCount = async () => {
+      try {
+        const count = await deliveryNotificationService.getUnreadCount();
+        if (isMounted) setDeliveryNotificationUnreadCount(count);
+      } catch (error) {
+        console.warn('Delivery notification count failed:', error);
+      }
+    };
+
+    void refreshUnreadCount();
+
+    const unsubscribe = deliveryNotificationService.subscribeToNew(notification => {
+      if (!isMounted) return;
+      setDeliveryNotificationUnreadCount(count => count + 1);
+      setHasDeliveryNotificationAlert(true);
+      playDeliveryNotificationSound();
+      window.dispatchEvent(new CustomEvent('tabarak_delivery_notification_received', { detail: notification }));
+    });
+    const intervalId = window.setInterval(refreshUnreadCount, 60000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [authState.user?.id, canReceiveDeliveryNotifications, playDeliveryNotificationSound]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') setHasDeliveryNotificationAlert(false);
+  }, [activeTab]);
 
   useEffect(() => {
     let isMounted = true;
@@ -577,6 +633,8 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setAuthState({ user: null, pharmacist: null, permissions: [] });
     setActivePOSBranch(null);
+    setDeliveryNotificationUnreadCount(0);
+    setHasDeliveryNotificationAlert(false);
     setActiveTab(null);
     setIsMaintenanceAdminLoginOpen(false);
   };
@@ -744,6 +802,9 @@ const App: React.FC = () => {
           onNavigateHome={() => handleTabChange('selector')}
           onTabChange={handleTabChange}
           onLogout={logout}
+          onOpenNotifications={canReceiveDeliveryNotifications ? () => handleTabChange('notifications') : undefined}
+          notificationUnreadCount={deliveryNotificationUnreadCount}
+          hasNotificationAlert={hasDeliveryNotificationAlert}
           settings={maintenanceSettings}
         />
         <SuitePage
@@ -772,6 +833,9 @@ const App: React.FC = () => {
         onNavigateHome={() => handleTabChange('selector')}
         onTabChange={handleTabChange}
         onLogout={logout}
+        onOpenNotifications={canReceiveDeliveryNotifications ? () => handleTabChange('notifications') : undefined}
+        notificationUnreadCount={deliveryNotificationUnreadCount}
+        hasNotificationAlert={hasDeliveryNotificationAlert}
         settings={maintenanceSettings}
       />
 
@@ -852,6 +916,11 @@ const App: React.FC = () => {
             user={authState.user!}
             onBack={() => handleTabChange('selector')}
             checkPermission={checkPermission}
+          />
+        ) : activeTab === 'notifications' ? (
+          <DeliveryNotificationsPage
+            onBack={() => handleTabChange('selector')}
+            onUnreadCountChange={setDeliveryNotificationUnreadCount}
           />
         ) : (
 

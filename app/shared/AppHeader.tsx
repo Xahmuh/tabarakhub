@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, LogOut, RefreshCcw, Settings, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { BellRing, LayoutDashboard, LogOut, RefreshCcw, Settings, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { AuthState, MaintenanceSettings } from '../../types';
 import { clientConfig, isModuleEnabled } from '../../config/clientConfig';
 import { isManagerRole } from '../../lib/access';
@@ -15,6 +15,9 @@ interface AppHeaderProps {
   onNavigateHome: () => void;
   onTabChange?: (tab: any) => void;
   onLogout: () => void;
+  onOpenNotifications?: () => void;
+  notificationUnreadCount?: number;
+  hasNotificationAlert?: boolean;
   settings?: MaintenanceSettings | null;
 }
 
@@ -27,6 +30,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onNavigateHome,
   onTabChange,
   onLogout,
+  onOpenNotifications,
+  notificationUnreadCount = 0,
+  hasNotificationAlert = false,
   settings
 }) => {
   const canOpenApprovalQueue = isManagerRole(authState.user?.role);
@@ -138,6 +144,29 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           >
             <RefreshCcw className="h-4.5 w-4.5 transition-transform duration-500 group-hover:rotate-180" />
           </button>
+          {onOpenNotifications && (
+            <button
+              type="button"
+              onClick={onOpenNotifications}
+              className={`group relative rounded-lg p-2.5 transition-all active:scale-90 ${
+                activeTab === 'notifications'
+                  ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                  : 'text-slate-300 hover:bg-brand/5 hover:text-brand'
+              }`}
+              title="Delivery notifications"
+              aria-label={`Delivery notifications${notificationUnreadCount > 0 ? `, ${notificationUnreadCount} unread` : ''}`}
+            >
+              <BellRing className={`h-4.5 w-4.5 transition-transform duration-300 ${hasNotificationAlert ? 'animate-pulse' : 'group-hover:-rotate-12'}`} />
+              {notificationUnreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-black leading-none text-white ring-2 ring-white">
+                  {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+                </span>
+              )}
+              {hasNotificationAlert && (
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-white" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={onLogout}
