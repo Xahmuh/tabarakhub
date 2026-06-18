@@ -116,7 +116,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
   const [customTo, setCustomTo] = useState(todayKey());
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [events, setEvents] = useState<DeliveryOrderEvent[]>([]);
-  const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [eventErrorMessage, setEventErrorMessage] = useState<string | null>(null);
@@ -130,16 +129,12 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     setErrorMessage(null);
     setEventErrorMessage(null);
     try {
-      const [orderRows, driverRows] = await Promise.all([
-        deliveryService.orders.list({
-          branchId: branch?.id,
-          dateFrom: range.from,
-          dateTo: range.to
-        }),
-        deliveryService.drivers.list()
-      ]);
+      const orderRows = await deliveryService.orders.list({
+        branchId: branch?.id,
+        dateFrom: range.from,
+        dateTo: range.to
+      });
       setOrders(orderRows);
-      setDrivers(driverRows);
 
       try {
         const eventRows = await deliveryService.lifecycle.listEvents({
@@ -243,13 +238,21 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
   };
 
   const chooseDriver = async (order: DeliveryOrder) => {
-    const options = drivers.reduce<Record<string, string>>((driverOptions, driver) => {
+    let branchDrivers: DeliveryDriver[] = [];
+    try {
+      branchDrivers = await deliveryService.drivers.listByBranch(order.branchId);
+    } catch (driverLoadError: any) {
+      await Swal.fire('Driver assignments unavailable', driverLoadError?.message || 'Could not load assigned drivers for this branch.', 'error');
+      return null;
+    }
+
+    const options = branchDrivers.reduce<Record<string, string>>((driverOptions, driver) => {
       driverOptions[driver.id] = `${driver.driverCode ? `${driver.driverCode} - ` : ''}${driver.name}`;
       return driverOptions;
     }, {});
 
     if (Object.keys(options).length === 0) {
-      await Swal.fire('No active drivers', 'Add or activate drivers in Delivery Settings before assigning orders.', 'warning');
+      await Swal.fire('No branch drivers', 'Assign active drivers to this branch from Access Control before dispatching orders.', 'warning');
       return null;
     }
 

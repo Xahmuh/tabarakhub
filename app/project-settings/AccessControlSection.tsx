@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { Eye, EyeOff, KeyRound, LayoutGrid, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
-import { permissionService, branchService, deliveryService } from '../../services';
-import { AppUser, Branch, DeliveryDriver, MaintenanceSettings, Role, RolePermission } from '../../types';
+import { Bike, Building2, Eye, EyeOff, KeyRound, LayoutGrid, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
+import { permissionService, branchService, deliveryService, pharmacistService } from '../../services';
+import { AppUser, Branch, BranchStaffAssignment, BranchZone, DeliveryDriver, MaintenanceSettings, Pharmacist, Role, RolePermission } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
@@ -59,41 +59,65 @@ export const AccessControlSection: React.FC<{
 }> = ({ currentUserId, settings }) => {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
+    const [zones, setZones] = useState<BranchZone[]>([]);
     const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+    const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
+    const [branchStaffAssignments, setBranchStaffAssignments] = useState<BranchStaffAssignment[]>([]);
     const [roleDefaults, setRoleDefaults] = useState<RolePermission[]>([]);
     const [supervisorAssignments, setSupervisorAssignments] = useState<Record<string, string[]>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [savingKey, setSavingKey] = useState<string | null>(null);
-    const [view, setView] = useState<'users' | 'matrix'>('users');
+    const [view, setView] = useState<'users' | 'zones' | 'staff' | 'matrix'>('users');
 
     const branchOptions = useMemo(
         () => branches.filter(b => b.role === 'branch').sort((a, b) => a.name.localeCompare(b.name)),
         [branches]
     );
+    const zoneOptions = useMemo(
+        () => zones.filter(zone => zone.isActive).sort((a, b) => a.name.localeCompare(b.name)),
+        [zones]
+    );
     const driverOptions = useMemo(
         () => drivers.filter(driver => driver.isActive).sort((a, b) => a.name.localeCompare(b.name)),
         [drivers]
     );
+    const pharmacistOptions = useMemo(
+        () => pharmacists.filter(pharmacist => pharmacist.isActive).sort((a, b) => (a.code || '').localeCompare(b.code || '') || a.name.localeCompare(b.name)),
+        [pharmacists]
+    );
+    const branchStaffByBranchId = useMemo(() => {
+        const map = new Map<string, BranchStaffAssignment>();
+        branchStaffAssignments.forEach(assignment => map.set(assignment.branchId, assignment));
+        return map;
+    }, [branchStaffAssignments]);
 
     const load = async () => {
         setIsLoading(true);
         try {
-            const [userList, branchList, defaults, driverList] = await Promise.all([
+            const [userList, branchList, defaults, driverList, zoneList, pharmacistList, staffAssignments] = await Promise.all([
                 permissionService.adminListUsers(),
                 branchService.list(),
                 permissionService.listAllRoleDefaults(),
-                deliveryService.drivers.list(true)
+                deliveryService.drivers.list(true),
+                permissionService.listBranchZones(),
+                pharmacistService.listAll(),
+                permissionService.listBranchStaffAssignments()
             ]);
             setUsers(userList);
             setBranches(branchList);
             setRoleDefaults(defaults);
             setDrivers(driverList);
+            setZones(zoneList);
+            setPharmacists(pharmacistList);
+            setBranchStaffAssignments(staffAssignments);
 
             const supervisors = userList.filter(u => u.role === 'supervisor');
             const assignments: Record<string, string[]> = {};
-            await Promise.all(supervisors.map(async s => {
-                assignments[s.userId] = await permissionService.listSupervisorBranches(s.userId);
-            }));
+            supervisors.forEach(s => {
+                assignments[s.userId] = zoneList
+                    .filter(zone => zone.supervisorUserId === s.userId)
+                    .map(zone => zone.id);
+            });
             setSupervisorAssignments(assignments);
         } catch (e: any) {
             Swal.fire('Access Control', e?.message || 'Failed to load users. Only admins can open this panel.', 'error');
@@ -111,10 +135,10 @@ export const AccessControlSection: React.FC<{
         const driverOptionsHtml = driverOptions.map(driver =>
             `<option value="${escapeHtml(driver.id)}">${escapeHtml(driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name)}${driver.authUserId ? ' (linked)' : ''}</option>`
         ).join('');
-        const supervisorOptionsHtml = branchOptions.map(b => `
+        const supervisorOptionsHtml = zoneOptions.map(zone => `
             <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
-                <input type="checkbox" value="${escapeHtml(b.id)}" class="swal-new-supervisor-branch h-4 w-4 accent-[#B91c1c]">
-                ${escapeHtml(b.name)} <span class="text-slate-400 font-medium">(${escapeHtml(b.code)})</span>
+                <input type="checkbox" value="${escapeHtml(zone.id)}" class="swal-new-supervisor-zone h-4 w-4 accent-[#B91c1c]">
+                ${escapeHtml(zone.code)} - ${escapeHtml(zone.name)} <span class="text-slate-400 font-medium">(${zone.branchIds.length} branches)</span>
             </label>`
         ).join('');
 
@@ -153,9 +177,9 @@ export const AccessControlSection: React.FC<{
                         <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">The mobile app uses this link to show the driver's assigned delivery orders.</p>
                     </div>
                     <div id="swal-new-supervisor-wrap" class="hidden">
-                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor branches</label>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor zones</label>
                         <div class="max-h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
-                            ${supervisorOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No branch logins found.</p>'}
+                            ${supervisorOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No zones found. Create zones first, then assign them here.</p>'}
                         </div>
                     </div>
                     <label class="flex items-center gap-2 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-600">
@@ -194,7 +218,7 @@ export const AccessControlSection: React.FC<{
                 const branchId = (document.getElementById('swal-new-branch') as HTMLSelectElement).value || null;
                 const driverId = (document.getElementById('swal-new-driver') as HTMLSelectElement).value || null;
                 const isActive = role === 'admin' ? true : (document.getElementById('swal-new-active') as HTMLInputElement).checked;
-                const supervisorBranchIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-branch:checked')).map(i => i.value);
+                const supervisorZoneIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-zone:checked')).map(i => i.value);
 
                 if (!email || !email.includes('@')) {
                     Swal.showValidationMessage('Enter a valid email.');
@@ -213,7 +237,7 @@ export const AccessControlSection: React.FC<{
                     return false;
                 }
 
-                return { email, password, role, branchId, driverId, supervisorBranchIds, isActive };
+                return { email, password, role, branchId, driverId, supervisorZoneIds, isActive };
             }
         });
 
@@ -391,31 +415,203 @@ export const AccessControlSection: React.FC<{
         }
     };
 
-    const handleSupervisorBranches = async (user: AppUser) => {
+    const handleSupervisorZones = async (user: AppUser) => {
         const current = supervisorAssignments[user.userId] || [];
         const { value } = await Swal.fire({
-            title: `<span class="text-xl font-black tracking-tight">Branches for ${user.email}</span>`,
+            title: `<span class="text-xl font-black tracking-tight">Zones for ${user.email}</span>`,
             html: `
               <div class="space-y-2 text-left max-h-72 overflow-y-auto p-2">
-                ${branchOptions.map(b => `
+                ${zoneOptions.map(zone => `
                   <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
-                    <input type="checkbox" value="${b.id}" ${current.includes(b.id) ? 'checked' : ''} class="swal-supervisor-branch h-4 w-4 accent-[#B91c1c]">
-                    ${b.name} <span class="text-slate-400 font-medium">(${b.code})</span>
+                    <input type="checkbox" value="${zone.id}" ${current.includes(zone.id) ? 'checked' : ''} class="swal-supervisor-zone h-4 w-4 accent-[#B91c1c]">
+                    ${escapeHtml(zone.code)} - ${escapeHtml(zone.name)} <span class="text-slate-400 font-medium">(${zone.branchIds.length} branches)</span>
                   </label>`).join('')}
               </div>`,
             showCancelButton: true,
             confirmButtonText: 'Save assignment',
             confirmButtonColor: '#B91c1c',
-            preConfirm: () => Array.from(document.querySelectorAll<HTMLInputElement>('.swal-supervisor-branch:checked')).map(i => i.value)
+            preConfirm: () => Array.from(document.querySelectorAll<HTMLInputElement>('.swal-supervisor-zone:checked')).map(i => i.value)
         });
         if (!value) return;
 
         setSavingKey(user.userId);
         try {
-            await permissionService.setSupervisorBranches(user.userId, value);
-            setSupervisorAssignments(prev => ({ ...prev, [user.userId]: value }));
+            await permissionService.setSupervisorZones(user.userId, value);
+            await load();
         } catch (e: any) {
-            Swal.fire('Assignment failed', e?.message || 'Could not save supervisor branches.', 'error');
+            Swal.fire('Assignment failed', e?.message || 'Could not save supervisor zones.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
+    const handleZoneEditor = async (zone?: BranchZone) => {
+        const activeSupervisorUsers = users.filter(user => user.role === 'supervisor' && user.isActive);
+        const supervisorOptionsHtml = activeSupervisorUsers.map(user => `
+            <option value="${escapeHtml(user.userId)}" ${zone?.supervisorUserId === user.userId ? 'selected' : ''}>
+                ${escapeHtml(user.email)}
+            </option>
+        `).join('');
+        const branchOptionsHtml = branchOptions.map(branch => {
+            const ownerZone = zones.find(item => item.id !== zone?.id && item.branchIds.includes(branch.id));
+            return `
+                <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
+                    <input type="checkbox" value="${escapeHtml(branch.id)}" ${zone?.branchIds.includes(branch.id) ? 'checked' : ''} class="swal-zone-branch h-4 w-4 accent-[#B91c1c]">
+                    <span class="min-w-0">
+                        <span class="block">${escapeHtml(branch.name)} <span class="text-slate-400 font-medium">(${escapeHtml(branch.code)})</span></span>
+                        ${ownerZone ? `<span class="block text-[10px] font-bold uppercase tracking-widest text-amber-600">Currently in ${escapeHtml(ownerZone.name)}</span>` : ''}
+                    </span>
+                </label>`;
+        }).join('');
+
+        const { value } = await Swal.fire({
+            title: `<span class="text-xl font-black tracking-tight">${zone ? 'Edit' : 'Create'} zone</span>`,
+            html: `
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Zone code</label>
+                        <input id="swal-zone-code" value="${escapeHtml(zone?.code)}" placeholder="ZONE_1" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold uppercase outline-none">
+                        <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">Letters, numbers, underscore, or dash. Keep it stable for reporting.</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Zone name</label>
+                        <input id="swal-zone-name" value="${escapeHtml(zone?.name)}" placeholder="Zone 1" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor</label>
+                        <select id="swal-zone-supervisor" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                            <option value="">No supervisor assigned</option>
+                            ${supervisorOptionsHtml}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Branches in this zone</label>
+                        <div class="max-h-72 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                            ${branchOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No operational branches found.</p>'}
+                        </div>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Notes</label>
+                        <textarea id="swal-zone-notes" class="min-h-[72px] w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">${escapeHtml(zone?.notes)}</textarea>
+                    </div>
+                    <label class="flex items-center gap-2 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-600">
+                        <input id="swal-zone-active" type="checkbox" ${zone?.isActive === false ? '' : 'checked'} class="h-4 w-4 accent-[#B91c1c]">
+                        Active zone
+                    </label>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Save zone',
+            confirmButtonColor: '#B91c1c',
+            width: 680,
+            preConfirm: () => {
+                const code = (document.getElementById('swal-zone-code') as HTMLInputElement).value.trim().toUpperCase();
+                const name = (document.getElementById('swal-zone-name') as HTMLInputElement).value.trim();
+                const supervisorUserId = (document.getElementById('swal-zone-supervisor') as HTMLSelectElement).value || null;
+                const notes = (document.getElementById('swal-zone-notes') as HTMLTextAreaElement).value.trim();
+                const isActive = (document.getElementById('swal-zone-active') as HTMLInputElement).checked;
+                const branchIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-zone-branch:checked')).map(input => input.value);
+                if (!code) {
+                    Swal.showValidationMessage('Zone code is required.');
+                    return false;
+                }
+                if (!/^[A-Z0-9_-]{1,32}$/.test(code)) {
+                    Swal.showValidationMessage('Zone code can only contain letters, numbers, underscore, or dash.');
+                    return false;
+                }
+                if (!name) {
+                    Swal.showValidationMessage('Zone name is required.');
+                    return false;
+                }
+                return { code, name, supervisorUserId, notes, isActive, branchIds };
+            }
+        });
+
+        if (!value) return;
+
+        setSavingKey(zone?.id || 'create-zone');
+        try {
+            const saved = await permissionService.upsertBranchZone({
+                id: zone?.id,
+                code: value.code,
+                name: value.name,
+                supervisorUserId: value.supervisorUserId,
+                notes: value.notes || undefined,
+                isActive: value.isActive,
+                branchIds: value.branchIds
+            });
+            await permissionService.replaceBranchZoneBranches(saved.id, value.branchIds);
+            await load();
+            Swal.fire('Zone saved', 'The zone, branches, and supervisor access were updated.', 'success');
+        } catch (e: any) {
+            Swal.fire('Zone save failed', e?.message || 'Could not save this zone.', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
+    const handleBranchStaffEditor = async (branch: Branch) => {
+        const current = branchStaffByBranchId.get(branch.id) || { branchId: branch.id, pharmacistIds: [], driverIds: [] };
+        const pharmacistOptionsHtml = pharmacistOptions.map(pharmacist => `
+            <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
+                <input type="checkbox" value="${escapeHtml(pharmacist.id)}" ${current.pharmacistIds.includes(pharmacist.id) ? 'checked' : ''} class="swal-staff-pharmacist h-4 w-4 accent-[#B91c1c]">
+                <span class="min-w-0">
+                    <span class="block">${escapeHtml(pharmacist.code ? `${pharmacist.code} - ${pharmacist.name}` : pharmacist.name)}</span>
+                    <span class="block text-[10px] font-bold uppercase tracking-widest text-slate-400">Pharmacist</span>
+                </span>
+            </label>
+        `).join('');
+        const driverOptionsHtml = driverOptions.map(driver => `
+            <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
+                <input type="checkbox" value="${escapeHtml(driver.id)}" ${current.driverIds.includes(driver.id) ? 'checked' : ''} class="swal-staff-driver h-4 w-4 accent-[#B91c1c]">
+                <span class="min-w-0">
+                    <span class="block">${escapeHtml(driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name)}</span>
+                    <span class="block text-[10px] font-bold uppercase tracking-widest text-slate-400">Driver</span>
+                </span>
+            </label>
+        `).join('');
+
+        const { value } = await Swal.fire({
+            title: `<span class="text-xl font-black tracking-tight">Branch staff - ${escapeHtml(branch.code || branch.name)}</span>`,
+            html: `
+                <div class="space-y-4 text-left">
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p class="text-sm font-black text-slate-900">${escapeHtml(branch.name)}</p>
+                        <p class="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">${escapeHtml(branch.code || 'No branch code')}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Assigned pharmacists</label>
+                        <div class="max-h-64 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                            ${pharmacistOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No active pharmacists found. Create pharmacist profiles first.</p>'}
+                        </div>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Assigned drivers</label>
+                        <div class="max-h-64 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
+                            ${driverOptionsHtml || '<p class="p-3 text-xs font-bold text-slate-400">No active drivers found. Create driver profiles first.</p>'}
+                        </div>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Save staff',
+            confirmButtonColor: '#B91c1c',
+            width: 760,
+            preConfirm: () => ({
+                pharmacistIds: Array.from(document.querySelectorAll<HTMLInputElement>('.swal-staff-pharmacist:checked')).map(input => input.value),
+                driverIds: Array.from(document.querySelectorAll<HTMLInputElement>('.swal-staff-driver:checked')).map(input => input.value)
+            })
+        });
+
+        if (!value) return;
+
+        setSavingKey(`staff:${branch.id}`);
+        try {
+            await permissionService.replaceBranchStaffAssignments(branch.id, value.pharmacistIds, value.driverIds);
+            await load();
+            Swal.fire('Branch staff saved', 'Pharmacist and driver assignments were updated for this branch.', 'success');
+        } catch (e: any) {
+            Swal.fire('Staff assignment failed', e?.message || 'Could not update branch staff assignments.', 'error');
         } finally {
             setSavingKey(null);
         }
@@ -718,6 +914,18 @@ export const AccessControlSection: React.FC<{
                         <UserCog className="h-3.5 w-3.5" /> Users & Roles
                     </button>
                     <button
+                        onClick={() => setView('zones')}
+                        className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${view === 'zones' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Users className="h-3.5 w-3.5" /> Zones
+                    </button>
+                    <button
+                        onClick={() => setView('staff')}
+                        className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${view === 'staff' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Building2 className="h-3.5 w-3.5" /> Branch Staff
+                    </button>
+                    <button
                         onClick={() => setView('matrix')}
                         className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${view === 'matrix' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
@@ -751,7 +959,7 @@ export const AccessControlSection: React.FC<{
                                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Workspace access</p>
                                     <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Users & Roles</h3>
                                     <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
-                                        Assign login roles, connect branch users to one branch, and keep supervisor branch scopes visible without hunting through a dense table.
+                                        Assign login roles, connect branch users to one branch, and keep supervisor zone scopes visible without hunting through a dense table.
                                     </p>
                                 </div>
                             </div>
@@ -801,19 +1009,19 @@ export const AccessControlSection: React.FC<{
                                     const isSaving = savingKey === user.userId;
                                     const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
                                     const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
-                                    const supervisorBranchIds = supervisorAssignments[user.userId] || [];
-                                    const assignedBranches = branchOptions.filter(branch => supervisorBranchIds.includes(branch.id));
+                                    const supervisorZoneIds = supervisorAssignments[user.userId] || [];
+                                    const assignedZones = zoneOptions.filter(zone => supervisorZoneIds.includes(zone.id));
                                     const scopeSummary = user.role === 'branch'
                                         ? (user.branchName || 'No branch linked')
                                         : user.role === 'supervisor'
-                                            ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
+                                            ? `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`
                                             : user.role === 'driver'
                                                 ? 'Driver mobile'
                                                 : 'All branches';
                                     const scopeDetail = user.role === 'branch'
                                         ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                         : user.role === 'supervisor'
-                                            ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 4).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
+                                            ? (assignedZones.length > 0 ? assignedZones.slice(0, 4).map(zone => zone.name).join(', ') : 'No zones assigned yet')
                                             : user.role === 'driver'
                                                 ? 'Linked to a delivery driver profile.'
                                                 : 'Cross-branch visibility follows this role.';
@@ -868,9 +1076,9 @@ export const AccessControlSection: React.FC<{
                                                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch / scope</span>
                                                         {user.role === 'supervisor' ? (
                                                             <button
-                                                                onClick={() => handleSupervisorBranches(user)}
+                                                                onClick={() => handleSupervisorZones(user)}
                                                                 disabled={isSaving}
-                                                                title={assignedBranches.map(branch => `${branch.name} (${branch.code})`).join(', ')}
+                                                                title={assignedZones.map(zone => `${zone.name} (${zone.branchIds.length} branches)`).join(', ')}
                                                                 className="flex min-h-[46px] w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-brand/30 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60"
                                                             >
                                                                 <span className="min-w-0">
@@ -975,12 +1183,12 @@ export const AccessControlSection: React.FC<{
                                                     <span className="text-xs font-bold text-slate-600">{user.branchName || '—'} {user.branchCode ? `(${user.branchCode})` : ''}</span>
                                                 ) : user.role === 'supervisor' ? (
                                                     <button
-                                                        onClick={() => handleSupervisorBranches(user)}
+                                                        onClick={() => handleSupervisorZones(user)}
                                                         disabled={isSaving}
                                                         className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-brand/30 hover:text-brand"
                                                     >
                                                         <Users className="mr-1 inline h-3.5 w-3.5" />
-                                                        {(supervisorAssignments[user.userId] || []).length} branches
+                                                        {(supervisorAssignments[user.userId] || []).length} zones
                                                     </button>
                                                 ) : user.role === 'driver' ? (
                                                     <span className="text-xs font-medium text-cyan-600">Driver mobile profile</span>
@@ -1038,19 +1246,19 @@ export const AccessControlSection: React.FC<{
                             const isSaving = savingKey === user.userId;
                             const isProtectedAdmin = user.role === 'admin' || user.role === 'manager';
                             const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
-                            const supervisorBranchIds = supervisorAssignments[user.userId] || [];
-                            const assignedBranches = branchOptions.filter(branch => supervisorBranchIds.includes(branch.id));
+                            const supervisorZoneIds = supervisorAssignments[user.userId] || [];
+                            const assignedZones = zoneOptions.filter(zone => supervisorZoneIds.includes(zone.id));
                             const scopeSummary = user.role === 'branch'
                                 ? (user.branchName || 'No branch linked')
                                 : user.role === 'supervisor'
-                                    ? `${supervisorBranchIds.length} assigned branch${supervisorBranchIds.length === 1 ? '' : 'es'}`
+                                    ? `${supervisorZoneIds.length} assigned zone${supervisorZoneIds.length === 1 ? '' : 's'}`
                                     : user.role === 'driver'
                                         ? 'Driver mobile'
                                         : 'All branches';
                             const scopeDetail = user.role === 'branch'
                                 ? (user.branchCode ? `Branch code ${user.branchCode}` : 'Branch code not set')
                                 : user.role === 'supervisor'
-                                    ? (assignedBranches.length > 0 ? assignedBranches.slice(0, 3).map(branch => branch.code || branch.name).join(', ') : 'No branches assigned yet')
+                                    ? (assignedZones.length > 0 ? assignedZones.slice(0, 3).map(zone => zone.name).join(', ') : 'No zones assigned yet')
                                     : user.role === 'driver'
                                         ? 'Linked to a delivery driver profile.'
                                         : 'Cross-branch visibility follows this role.';
@@ -1096,7 +1304,7 @@ export const AccessControlSection: React.FC<{
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch / scope</span>
                                                 {user.role === 'supervisor' ? (
                                                     <button
-                                                        onClick={() => handleSupervisorBranches(user)}
+                                                        onClick={() => handleSupervisorZones(user)}
                                                         disabled={isSaving}
                                                         className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-all hover:border-brand/30 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60"
                                                     >
@@ -1155,6 +1363,168 @@ export const AccessControlSection: React.FC<{
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            ) : view === 'zones' ? (
+                <div className="space-y-5">
+                    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Supervisor zones</p>
+                                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Branch Zones</h3>
+                                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+                                    Create Zone 1, Zone 2, assign branches to each zone, then link each zone to one supervisor login.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => handleZoneEditor()}
+                                disabled={savingKey === 'create-zone'}
+                                className="btn-primary w-fit text-[10px] uppercase tracking-widest disabled:opacity-50"
+                            >
+                                {savingKey === 'create-zone' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                                Create Zone
+                            </button>
+                        </div>
+                    </section>
+
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        {zones.map(zone => {
+                            const supervisor = zone.supervisorUserId
+                                ? users.find(user => user.userId === zone.supervisorUserId)
+                                : undefined;
+                            const assignedBranches = branchOptions.filter(branch => zone.branchIds.includes(branch.id));
+                            return (
+                                <article key={zone.id} className={`rounded-xl border bg-white p-4 shadow-sm ${zone.isActive ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="break-words text-base font-black text-slate-950">{zone.name}</p>
+                                            <p className="mt-1 text-[11px] font-bold text-slate-400">
+                                                {zone.code} / {assignedBranches.length} branch{assignedBranches.length === 1 ? '' : 'es'}
+                                            </p>
+                                            <p className={`mt-1 text-[10px] font-black uppercase tracking-widest ${supervisor ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                {supervisor ? `Supervisor: ${supervisor.email}` : 'No supervisor assigned'}
+                                            </p>
+                                        </div>
+                                        <span className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase ${zone.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                            {zone.isActive ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                    {zone.notes && <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{zone.notes}</p>}
+                                    <p className="mt-3 line-clamp-2 text-[11px] font-bold leading-5 text-slate-400" title={assignedBranches.map(branch => `${branch.name} (${branch.code})`).join(', ')}>
+                                        {assignedBranches.length > 0
+                                            ? assignedBranches.map(branch => branch.code || branch.name).join(', ')
+                                            : 'No branches assigned yet'}
+                                    </p>
+                                    <button
+                                        onClick={() => handleZoneEditor(zone)}
+                                        disabled={savingKey === zone.id}
+                                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:border-brand/30 hover:text-brand disabled:opacity-50"
+                                    >
+                                        {savingKey === zone.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                                        Edit Zone
+                                    </button>
+                                </article>
+                            );
+                        })}
+                        {zones.length === 0 && (
+                            <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center xl:col-span-2">
+                                <Users className="mx-auto h-9 w-9 text-slate-300" />
+                                <p className="mt-3 text-sm font-black text-slate-800">No zones yet</p>
+                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Create Zone 1 and assign branches before linking supervisors.</p>
+                            </section>
+                        )}
+                    </div>
+                </div>
+            ) : view === 'staff' ? (
+                <div className="space-y-5">
+                    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Branch staff</p>
+                                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Pharmacists & Drivers</h3>
+                                <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
+                                    Assign active pharmacists and delivery drivers to each operational branch. Delivery Recording uses these branch-scoped lists.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+                                <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Branches</p>
+                                    <p className="mt-1 text-xl font-black tabular-nums text-slate-900">{branchOptions.length}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Pharmacists</p>
+                                    <p className="mt-1 text-xl font-black tabular-nums text-brand">{pharmacistOptions.length}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Drivers</p>
+                                    <p className="mt-1 text-xl font-black tabular-nums text-cyan-700">{driverOptions.length}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        {branchOptions.map(branch => {
+                            const assignment = branchStaffByBranchId.get(branch.id) || { branchId: branch.id, pharmacistIds: [], driverIds: [] };
+                            const assignedPharmacists = pharmacistOptions.filter(pharmacist => assignment.pharmacistIds.includes(pharmacist.id));
+                            const assignedDrivers = driverOptions.filter(driver => assignment.driverIds.includes(driver.id));
+                            const isSaving = savingKey === `staff:${branch.id}`;
+                            return (
+                                <article key={branch.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="break-words text-base font-black text-slate-950">{branch.name}</p>
+                                            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{branch.code || 'No branch code'}</p>
+                                        </div>
+                                        <Building2 className="h-5 w-5 shrink-0 text-brand" />
+                                    </div>
+
+                                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pharmacists</p>
+                                                <Users className="h-4 w-4 text-brand" />
+                                            </div>
+                                            <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{assignedPharmacists.length}</p>
+                                            <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-5 text-slate-400" title={assignedPharmacists.map(pharmacist => pharmacist.code ? `${pharmacist.code} - ${pharmacist.name}` : pharmacist.name).join(', ')}>
+                                                {assignedPharmacists.length > 0
+                                                    ? assignedPharmacists.slice(0, 4).map(pharmacist => pharmacist.code || pharmacist.name).join(', ')
+                                                    : 'No pharmacists assigned'}
+                                            </p>
+                                        </div>
+
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drivers</p>
+                                                <Bike className="h-4 w-4 text-cyan-700" />
+                                            </div>
+                                            <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{assignedDrivers.length}</p>
+                                            <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-5 text-slate-400" title={assignedDrivers.map(driver => driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name).join(', ')}>
+                                                {assignedDrivers.length > 0
+                                                    ? assignedDrivers.slice(0, 4).map(driver => driver.driverCode || driver.name).join(', ')
+                                                    : 'No drivers assigned'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => handleBranchStaffEditor(branch)}
+                                        disabled={isSaving}
+                                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:border-brand/30 hover:text-brand disabled:opacity-50"
+                                    >
+                                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                                        Assign Staff
+                                    </button>
+                                </article>
+                            );
+                        })}
+                        {branchOptions.length === 0 && (
+                            <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center xl:col-span-2">
+                                <Building2 className="mx-auto h-9 w-9 text-slate-300" />
+                                <p className="mt-3 text-sm font-black text-slate-800">No branches found</p>
+                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Create operational branches before assigning branch staff.</p>
+                            </section>
+                        )}
                     </div>
                 </div>
             ) : (

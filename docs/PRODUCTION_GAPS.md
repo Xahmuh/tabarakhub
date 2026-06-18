@@ -1,5 +1,37 @@
 # Production Gaps
 
+## Access Control Zones and Branch Staff - 2026-06-18
+
+Current status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Applied / prepared:
+
+- Access Control is the source of truth for zones and branch staff assignment.
+- `20260617233656_access_supervisor_zones.sql` is applied on the linked Supabase project.
+- `20260618013407_revoke_access_zone_rpc_anon.sql` is applied on the linked Supabase project.
+- `20260618013956_revoke_access_zone_trigger_helper_authenticated.sql` is applied on the linked Supabase project.
+- `branch_zones` and `branch_zone_members` define supervisor zones independently from Delivery Areas.
+- `supervisor_branches` remains derived for existing RLS compatibility.
+- Existing `pharmacist_branches` is reused for branch-pharmacist assignment.
+- New `delivery_driver_branches` is prepared for branch-driver assignment.
+- Delivery Recording and dispatch now consume branch-scoped pharmacist and driver lists.
+- Delivery Settings no longer owns supervisor zone logic.
+- Post-apply validation passed for table existence, removed old delivery-area supervisor columns, backup rows, RLS/grants, RPC grant surface, orphan checks, duplicate checks, and `supervisor_branches` derived parity.
+
+Open blockers:
+
+- Access Control Zones browser QA is pending.
+- Branch Staff browser QA is pending.
+- Delivery Recording and dispatch branch-scoped driver/pharmacist QA is pending.
+- Dispatch branch-scoped driver picker QA is pending.
+- No manual deployment was performed.
+
+Reference: `docs/ACCESS_CONTROL_ZONES_AND_BRANCH_STAFF.md`.
+
 <!-- project-wide-db-cleanup-audit-20260617:start -->
 
 ## Project-Wide DB Cleanup Audit - 2026-06-17

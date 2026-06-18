@@ -511,6 +511,24 @@ export interface SupervisorBranchAssignment {
   branchId: string;
 }
 
+export interface BranchZone {
+  id: string;
+  code: string;
+  name: string;
+  supervisorUserId?: string | null;
+  notes?: string;
+  isActive: boolean;
+  branchIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BranchStaffAssignment {
+  branchId: string;
+  pharmacistIds: string[];
+  driverIds: string[];
+}
+
 // --- Delivery Recording & Traceability Types ---
 
 export type Governorate = 'Capital' | 'Muharraq' | 'Northern' | 'Southern';
@@ -562,6 +580,7 @@ export interface DeliveryDriver {
   phone?: string;
   notes?: string;
   isActive: boolean;
+  branchIds?: string[];
   authUserId?: string | null;
   isOnline?: boolean;
   statusChangedAt?: string | null;

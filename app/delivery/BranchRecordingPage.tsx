@@ -185,7 +185,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
   const loadReference = async () => {
     try {
       const [driverList, pharmacistList, blockList] = await Promise.all([
-        deliveryService.drivers.list(),
+        deliveryService.drivers.listByBranch(branch.id),
         pharmacistService.listByBranch(branch.id),
         deliveryService.blocks.list()
       ]);
@@ -913,6 +913,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
               {isTalabatPayment ? (
                 <p className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
                   Internal driver off
+                </p>
+              ) : drivers.length === 0 ? (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+                  No drivers are assigned to this branch yet. Please ask a manager to update driver assignments.
                 </p>
               ) : (
                 <button

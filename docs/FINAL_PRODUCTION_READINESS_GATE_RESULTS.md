@@ -1,5 +1,29 @@
 # Final Production Readiness Gate Results
 
+## Access Control Zones and Branch Staff Gate - 2026-06-18
+
+Decision:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+| Gate | Result | Evidence / blocker |
+| --- | --- | --- |
+| Access source of truth | Pass | Zones and branch staff assignment are managed from Access Control. |
+| Delivery source boundary | Pass | Delivery Settings no longer owns supervisor zone assignment; Delivery Recording and dispatch consume branch-scoped staff lists. |
+| Zones schema | Applied | `branch_zones` and `branch_zone_members` were applied by `20260617233656_access_supervisor_zones.sql`. |
+| Supervisor RLS compatibility | Applied | `supervisor_branches` remains the derived branch-scope table and matched derived zone membership in post-apply validation. |
+| Pharmacist assignment | Pass | Existing `pharmacist_branches` remains the branch-pharmacist table; orphan checks passed. |
+| Driver assignment | Applied | New `delivery_driver_branches` table, constraints, indexes, and RLS policies are applied. |
+| Old delivery-area supervisor model | Applied | Wrong `delivery_areas` supervisor fields were backed up before removal; removed-column validation passed. |
+| RPC grants | Pass | Follow-up migrations `20260618013407_revoke_access_zone_rpc_anon.sql` and `20260618013956_revoke_access_zone_trigger_helper_authenticated.sql` removed anonymous RPC grants and kept the trigger helper internal. |
+| Remote apply | Pass | Linked Supabase migration history is aligned through `20260618013956`. |
+| Browser QA | Pending | Access Zones, Branch Staff, Delivery Recording, and dispatch branch-scoped dropdowns still need browser QA. |
+| Production readiness | Not promoted | Authenticated browser QA, Phase C, Phase D/drop-column cleanup, and broader production readiness remain pending. No manual deployment was performed. |
+
+Reference: `docs/ACCESS_CONTROL_ZONES_AND_BRANCH_STAFF.md`.
+
 <!-- project-wide-db-cleanup-audit-20260617:start -->
 
 ## Project-Wide DB Cleanup Audit Gate - 2026-06-17

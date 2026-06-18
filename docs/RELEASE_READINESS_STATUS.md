@@ -1,5 +1,30 @@
 # Release Readiness Status
 
+## Access Control Zones and Branch Staff - 2026-06-18
+
+Status:
+
+```text
+B) dedicated-client staging-ready only
+```
+
+Summary:
+
+- Completed the Access-first design for supervisor zones and branch staff assignment.
+- Applied `supabase/migrations/20260617233656_access_supervisor_zones.sql` to the linked Supabase project.
+- Applied `supabase/migrations/20260618013407_revoke_access_zone_rpc_anon.sql` to remove anonymous execute grants from the new Access-first RPCs.
+- Applied `supabase/migrations/20260618013956_revoke_access_zone_trigger_helper_authenticated.sql` to keep the zone sync trigger helper internal.
+- Added `branch_zones`, `branch_zone_members`, and `delivery_driver_branches`.
+- Kept `supervisor_branches` as a derived RLS compatibility table.
+- Reused `pharmacist_branches` for pharmacist branch assignment.
+- Access Control now exposes `Zones` and `Branch Staff` sections.
+- Delivery Recording and dispatch read branch-scoped pharmacists and drivers.
+- Delivery Settings no longer defines supervisor zone ownership.
+- Migration history is aligned through `20260618013956`.
+- Browser QA remains pending; no manual deployment was performed.
+
+Reference: `docs/ACCESS_CONTROL_ZONES_AND_BRANCH_STAFF.md`.
+
 <!-- project-wide-db-cleanup-audit-20260617:start -->
 
 ## Project-Wide DB Cleanup Audit - 2026-06-17

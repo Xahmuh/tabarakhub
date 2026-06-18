@@ -57,64 +57,30 @@ const toPaymentTypeConfig = (row: any): DeliveryPaymentTypeConfig => ({
   updatedAt: row.updated_at
 });
 
-const syncSupervisorBranchAccess = async (
-  branchId: string,
-  previousSupervisorUserId?: string | null,
-  nextSupervisorUserId?: string | null
-) => {
-  if (previousSupervisorUserId && previousSupervisorUserId !== nextSupervisorUserId) {
-    const { error } = await supabaseClient
-      .from('supervisor_branches')
-      .delete()
-      .eq('supervisor_user_id', previousSupervisorUserId)
-      .eq('branch_id', branchId);
-    if (error) throw error;
-  }
-
-  if (nextSupervisorUserId) {
-    const { error } = await supabaseClient
-      .from('supervisor_branches')
-      .upsert(
-        { supervisor_user_id: nextSupervisorUserId, branch_id: branchId },
-        { onConflict: 'supervisor_user_id,branch_id' }
-      );
-    if (error) throw error;
-  }
-};
-
-const getSupervisorAssignment = async (
-  supervisorId?: string | null,
-  supervisorUserId?: string | null
-) => {
-  if (!supervisorId) {
-    return { supervisorId: null, supervisorName: null, supervisorUserId: null };
-  }
-
-  const { data, error } = await supabaseClient
-    .from('delivery_supervisors')
-    .select('id, name, user_id')
-    .eq('id', supervisorId)
-    .maybeSingle();
-  if (error) throw error;
-
-  return {
-    supervisorId: data?.id || supervisorId,
-    supervisorName: data?.name || null,
-    supervisorUserId: supervisorUserId || data?.user_id || null
-  };
-};
+const toDriver = (row: any, branchIds: string[] = []): DeliveryDriver => ({
+  id: row.id,
+  driverCode: row.driver_code || undefined,
+  name: row.name,
+  phone: row.phone || undefined,
+  notes: row.notes || undefined,
+  isActive: row.is_active,
+  branchIds,
+  authUserId: row.auth_user_id || null,
+  isOnline: !!row.is_online,
+  statusChangedAt: row.status_changed_at || null,
+  lastSeenAt: row.last_seen_at || null,
+  createdAt: row.created_at || null,
+  updatedAt: row.updated_at || null
+});
 
 const toArea = (row: any): DeliveryArea => {
-  const supervisor = Array.isArray(row.delivery_supervisors)
-    ? row.delivery_supervisors[0]
-    : row.delivery_supervisors;
   return {
     id: row.id,
     name: row.name,
     governorate: row.governorate,
-    supervisorId: row.supervisor_id,
-    supervisorName: supervisor?.name || undefined,
-    supervisorUserId: row.supervisor_user_id,
+    supervisorId: null,
+    supervisorName: undefined,
+    supervisorUserId: null,
     notes: row.notes || undefined,
     isActive: row.is_active
   };
@@ -134,103 +100,19 @@ const getAreaAssignment = async (areaId?: string | null) => {
 
   const { data, error } = await supabaseClient
     .from('delivery_areas')
-    .select('id, name, governorate, supervisor_id, supervisor_user_id, delivery_supervisors(name, user_id)')
+    .select('id, name, governorate')
     .eq('id', areaId)
     .maybeSingle();
   if (error) throw error;
-
-  const supervisor = Array.isArray(data?.delivery_supervisors)
-    ? data?.delivery_supervisors[0]
-    : data?.delivery_supervisors;
 
   return {
     areaId: data?.id || null,
     areaName: data?.name || null,
     governorate: data?.governorate || null,
-    supervisorId: data?.supervisor_id || null,
-    supervisorName: supervisor?.name || null,
-    supervisorUserId: data?.supervisor_user_id || supervisor?.user_id || null
+    supervisorId: null,
+    supervisorName: null,
+    supervisorUserId: null
   };
-};
-
-const syncAreaSupervisorAccess = async (
-  areaId: string,
-  supervisorId?: string | null,
-  supervisorUserId?: string | null
-) => {
-  const supervisorAssignment = await getSupervisorAssignment(supervisorId, supervisorUserId);
-  const { data, error } = await supabaseClient
-    .from('branch_classifications')
-    .select('branch_id, supervisor_user_id')
-    .eq('area_id', areaId);
-  if (error) throw error;
-
-  const rows = data || [];
-  if (rows.length === 0) return;
-
-  const branchIds = Array.from(new Set(rows.map(row => row.branch_id).filter(Boolean)));
-  const previousUserIds = Array.from(new Set(
-    rows
-      .map(row => row.supervisor_user_id)
-      .filter((userId): userId is string => Boolean(userId) && userId !== supervisorAssignment.supervisorUserId)
-  ));
-
-  if (previousUserIds.length > 0 && branchIds.length > 0) {
-    const { error: deleteError } = await supabaseClient
-      .from('supervisor_branches')
-      .delete()
-      .in('supervisor_user_id', previousUserIds)
-      .in('branch_id', branchIds);
-    if (deleteError) throw deleteError;
-  }
-
-  const { error: updateError } = await supabaseClient
-    .from('branch_classifications')
-    .update({
-      supervisor_id: supervisorAssignment.supervisorId,
-      supervisor_name: supervisorAssignment.supervisorName,
-      supervisor_user_id: supervisorAssignment.supervisorUserId,
-      updated_at: new Date().toISOString()
-    })
-    .eq('area_id', areaId);
-  if (updateError) throw updateError;
-
-  if (supervisorAssignment.supervisorUserId && branchIds.length > 0) {
-    const { error: upsertError } = await supabaseClient
-      .from('supervisor_branches')
-      .upsert(
-        branchIds.map(branchId => ({
-          supervisor_user_id: supervisorAssignment.supervisorUserId,
-          branch_id: branchId
-        })),
-        { onConflict: 'supervisor_user_id,branch_id' }
-      );
-    if (upsertError) throw upsertError;
-  }
-};
-
-const syncDeliverySupervisorAccess = async (
-  supervisorId: string,
-  nextSupervisorUserId?: string | null
-) => {
-  const { data: areaRows, error } = await supabaseClient
-    .from('delivery_areas')
-    .select('id')
-    .eq('supervisor_id', supervisorId);
-  if (error) throw error;
-
-  const areas = areaRows || [];
-  if (areas.length === 0) return;
-
-  const { error: updateError } = await supabaseClient
-    .from('delivery_areas')
-    .update({ supervisor_user_id: nextSupervisorUserId || null, updated_at: new Date().toISOString() })
-    .eq('supervisor_id', supervisorId);
-  if (updateError) throw updateError;
-
-  for (const area of areas) {
-    await syncAreaSupervisorAccess(area.id, supervisorId, nextSupervisorUserId || null);
-  }
 };
 
 const listPaymentTypes = async (includeInactive = false): Promise<DeliveryPaymentTypeConfig[]> => {
@@ -308,8 +190,18 @@ const resolveActivePharmacistForBranch = async (branchId: string, pharmacistId?:
   return pharmacist.name as string;
 };
 
-const assertActiveDriver = async (driverId?: string | null) => {
+const resolveActiveDriverForBranch = async (branchId: string, driverId?: string | null) => {
   if (!driverId) return;
+
+  const { data: assignment, error: assignmentError } = await supabaseClient
+    .from('delivery_driver_branches')
+    .select('driver_id')
+    .eq('branch_id', branchId)
+    .eq('driver_id', driverId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error('Selected driver is not assigned to this branch.');
+
   const { data, error } = await supabaseClient
     .from('delivery_drivers')
     .select('id, is_active')
@@ -487,7 +379,7 @@ export const deliveryService = {
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {
       const normalized = await normalizeOrderInput(input);
       const pharmacistName = await resolveActivePharmacistForBranch(normalized.branchId, normalized.pharmacistId);
-      await assertActiveDriver(normalized.driverId);
+      await resolveActiveDriverForBranch(normalized.branchId, normalized.driverId);
       const { data: session } = await supabaseClient.auth.getSession();
 
       if (normalized.driverId) {
@@ -537,6 +429,18 @@ export const deliveryService = {
     update: async (id: string, input: Partial<DeliveryOrderInput>): Promise<DeliveryOrder> => {
       const { data: session } = await supabaseClient.auth.getSession();
       const payload: any = { updated_at: new Date().toISOString(), updated_by: session.session?.user?.id || null };
+      let currentBranchId: string | null = null;
+      const getCurrentBranchId = async () => {
+        if (currentBranchId) return currentBranchId;
+        const { data: current, error: currentError } = await supabaseClient
+          .from('delivery_orders')
+          .select('branch_id')
+          .eq('id', id)
+          .single();
+        if (currentError) throw currentError;
+        currentBranchId = current.branch_id;
+        return currentBranchId;
+      };
       if (input.orderDate !== undefined) {
         const orderDate = input.orderDate.trim();
         if (!isValidDateKey(orderDate)) throw new Error('A valid order date is required.');
@@ -556,7 +460,7 @@ export const deliveryService = {
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
       if (input.pharmacistName !== undefined) payload.pharmacist_name = input.pharmacistName;
       if (input.driverId !== undefined) {
-        await assertActiveDriver(input.driverId);
+        if (input.driverId) await resolveActiveDriverForBranch(await getCurrentBranchId(), input.driverId);
         payload.driver_id = input.driverId || null;
       }
       if (input.blockNumber !== undefined) payload.block_number = input.blockNumber?.trim() || null;
@@ -567,13 +471,7 @@ export const deliveryService = {
       }
 
       if (input.pharmacistId) {
-        const { data: current, error: currentError } = await supabaseClient
-          .from('delivery_orders')
-          .select('branch_id')
-          .eq('id', id)
-          .single();
-        if (currentError) throw currentError;
-        payload.pharmacist_name = await resolveActivePharmacistForBranch(current.branch_id, input.pharmacistId);
+        payload.pharmacist_name = await resolveActivePharmacistForBranch(await getCurrentBranchId(), input.pharmacistId);
       } else if (input.pharmacistId === null) {
         payload.pharmacist_name = null;
       }
@@ -635,7 +533,15 @@ export const deliveryService = {
     transition: async (input: DeliveryOrderLifecycleInput): Promise<DeliveryOrderEvent> => {
       if (!input.orderId) throw new Error('Delivery order is required.');
       if (!LIFECYCLE_STATUSES.includes(input.nextStatus)) throw new Error('A valid delivery status is required.');
-      if (input.driverId) await assertActiveDriver(input.driverId);
+      if (input.driverId) {
+        const { data: current, error: currentError } = await supabaseClient
+          .from('delivery_orders')
+          .select('branch_id')
+          .eq('id', input.orderId)
+          .single();
+        if (currentError) throw currentError;
+        await resolveActiveDriverForBranch(current.branch_id, input.driverId);
+      }
       const { data, error } = await supabaseClient.rpc('app_delivery_transition_order', {
         p_order_id: input.orderId,
         p_next_status: input.nextStatus,
@@ -679,20 +585,30 @@ export const deliveryService = {
       if (!includeInactive) query = query.eq('is_active', true);
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []).map(d => ({
-        id: d.id,
-        driverCode: d.driver_code || undefined,
-        name: d.name,
-        phone: d.phone || undefined,
-        notes: d.notes || undefined,
-        isActive: d.is_active,
-        authUserId: d.auth_user_id || null,
-        isOnline: !!d.is_online,
-        statusChangedAt: d.status_changed_at || null,
-        lastSeenAt: d.last_seen_at || null,
-        createdAt: d.created_at || null,
-        updatedAt: d.updated_at || null
-      }));
+      return (data || []).map(d => toDriver(d));
+    },
+    listByBranch: async (branchId: string, includeInactive = false): Promise<DeliveryDriver[]> => {
+      if (!branchId) return [];
+      const { data: assignments, error: assignmentError } = await supabaseClient
+        .from('delivery_driver_branches')
+        .select('driver_id')
+        .eq('branch_id', branchId);
+      if (assignmentError) throw assignmentError;
+
+      const driverIds = Array.from(new Set((assignments || [])
+        .map((row: any) => row.driver_id)
+        .filter(Boolean)));
+      if (driverIds.length === 0) return [];
+
+      let query = supabaseClient
+        .from('delivery_drivers')
+        .select('*')
+        .in('id', driverIds)
+        .order('name');
+      if (!includeInactive) query = query.eq('is_active', true);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(driver => toDriver(driver, [branchId]));
     },
     upsert: async (driver: Partial<DeliveryDriver>): Promise<DeliveryDriver> => {
       const payload: any = {
@@ -705,20 +621,7 @@ export const deliveryService = {
       if (driver.id) payload.id = driver.id;
       const { data, error } = await supabaseClient.from('delivery_drivers').upsert(payload).select().single();
       if (error) throw error;
-      return {
-        id: data.id,
-        driverCode: data.driver_code || undefined,
-        name: data.name,
-        phone: data.phone || undefined,
-        notes: data.notes || undefined,
-        isActive: data.is_active,
-        authUserId: data.auth_user_id || null,
-        isOnline: !!data.is_online,
-        statusChangedAt: data.status_changed_at || null,
-        lastSeenAt: data.last_seen_at || null,
-        createdAt: data.created_at || null,
-        updatedAt: data.updated_at || null
-      };
+      return toDriver(data);
     },
     delete: async (id: string) => {
       const { error } = await supabaseClient.from('delivery_drivers').delete().eq('id', id);
@@ -814,19 +717,16 @@ export const deliveryService = {
 
   areas: {
     list: async (includeInactive = false): Promise<DeliveryArea[]> => {
-      let query = supabaseClient.from('delivery_areas').select('*, delivery_supervisors(name)').order('name');
+      let query = supabaseClient.from('delivery_areas').select('*').order('name');
       if (!includeInactive) query = query.eq('is_active', true);
       const { data, error } = await query;
       if (error) throw error;
       return (data || []).map(toArea);
     },
     upsert: async (area: Partial<DeliveryArea>): Promise<DeliveryArea> => {
-      const supervisorAssignment = await getSupervisorAssignment(area.supervisorId, area.supervisorUserId);
       const payload: any = {
         name: area.name?.trim(),
         governorate: area.governorate,
-        supervisor_id: supervisorAssignment.supervisorId,
-        supervisor_user_id: supervisorAssignment.supervisorUserId,
         notes: area.notes || null,
         is_active: area.isActive ?? true,
         updated_at: new Date().toISOString()
@@ -835,10 +735,9 @@ export const deliveryService = {
       const { data, error } = await supabaseClient
         .from('delivery_areas')
         .upsert(payload)
-        .select('*, delivery_supervisors(name)')
+        .select()
         .single();
       if (error) throw error;
-      await syncAreaSupervisorAccess(data.id, data.supervisor_id, data.supervisor_user_id);
       return toArea(data);
     }
   },
@@ -872,7 +771,6 @@ export const deliveryService = {
       if (supervisor.id) payload.id = supervisor.id;
       const { data, error } = await supabaseClient.from('delivery_supervisors').upsert(payload).select().single();
       if (error) throw error;
-      await syncDeliverySupervisorAccess(data.id, data.user_id);
       return {
         id: data.id,
         name: data.name,
@@ -955,13 +853,6 @@ export const deliveryService = {
       }));
     },
     upsert: async (classification: BranchClassification) => {
-      const { data: existing, error: existingError } = await supabaseClient
-        .from('branch_classifications')
-        .select('supervisor_user_id')
-        .eq('branch_id', classification.branchId)
-        .maybeSingle();
-      if (existingError) throw existingError;
-
       const areaAssignment = await getAreaAssignment(classification.areaId);
 
       const { error } = await supabaseClient.from('branch_classifications').upsert({
@@ -975,11 +866,8 @@ export const deliveryService = {
         updated_at: new Date().toISOString()
       });
       if (error) throw error;
-      await syncSupervisorBranchAccess(
-        classification.branchId,
-        existing?.supervisor_user_id || null,
-        areaAssignment.supervisorUserId
-      );
+      const { error: syncError } = await supabaseClient.rpc('app_sync_supervisor_zone_access');
+      if (syncError) throw syncError;
       return true;
     }
   },
