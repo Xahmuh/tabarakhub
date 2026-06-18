@@ -152,6 +152,7 @@ interface VacationRequestFlowProps {
     onBack: () => void;
     onComplete: () => void;
     lang: 'en' | 'ar';
+    logoUrl?: string;
 }
 
 const inputClass = "w-full h-11 bg-white border border-slate-200 focus:border-red-400 focus:ring-2 focus:ring-red-50 px-3.5 rounded-lg text-sm font-medium text-slate-900 placeholder-slate-400 outline-none transition-all";
@@ -195,7 +196,7 @@ const FlowSignal = ({ icon: Icon, label, value, tone = 'slate' }: { icon: React.
     );
 };
 
-export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employee, onBack, onComplete, lang }) => {
+export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employee, onBack, onComplete, lang, logoUrl }) => {
     const [step, setStep] = useState<'policy' | 'form' | 'review'>('policy');
     const [policyRead, setPolicyRead] = useState(false);
 
@@ -592,7 +593,11 @@ export const VacationRequestFlow: React.FC<VacationRequestFlowProps> = ({ employ
                             <div className={`flex items-center justify-between border-b-4 border-black pb-4 mb-6 ${isRtl ? 'flex-row-reverse' : 'flex-row'}`}>
                                 <div className={`flex items-center gap-4 ${isRtl ? 'flex-row-reverse' : 'flex-row'}`}>
                                     <div className="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center bg-white border border-gray-100">
-                                        <img src="/logo.jpg" alt="Company Logo" className="w-full h-full object-contain" />
+                                        {logoUrl ? (
+                                            <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />
+                                        ) : (
+                                            <span className="text-sm font-black tracking-tighter text-black">TP</span>
+                                        )}
                                     </div>
                                     <div className={isRtl ? 'text-right' : 'text-left'}>
                                         <h1 className="text-xl font-black uppercase text-black">{isRtl ? 'صيدلية تبارك' : 'Tabarak Pharmacy'}</h1>

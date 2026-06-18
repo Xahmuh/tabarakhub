@@ -1,8 +1,10 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { MaintenanceSettings } from '../types';
 import { normalizeModuleDisplaySettings } from '../lib/moduleDisplay';
+import { generateUUID } from '../utils/uuid';
 
 const SETTINGS_ID = 'global';
+const SYSTEM_BRANDING_ASSETS_BUCKET = 'system-branding-assets';
 
 const DEFAULT_MAINTENANCE_SETTINGS: MaintenanceSettings = {
   id: SETTINGS_ID,
@@ -14,10 +16,10 @@ const DEFAULT_MAINTENANCE_SETTINGS: MaintenanceSettings = {
   posGuidelineIntro: 'Choose the correct type before submitting to keep reports accurate.',
   posGuidelineLostSalesEn: 'Actual customer request + item unavailable in branch.',
   posGuidelineShortageEn: 'Daily missing stock, even without a customer request.',
-  pharmacyLogoUrl: '/logo.jpg',
-  hubLogoUrl: '/tabarak-logo.svg',
-  browserIconUrl: '/logo.jpg',
-  loadingSpinnerUrl: '/spinner.svg',
+  pharmacyLogoUrl: '',
+  hubLogoUrl: '',
+  browserIconUrl: '',
+  loadingSpinnerUrl: '',
   footerLogoUrl: '',
   footerText: 'HUB',
   loginBadges: [],
@@ -107,6 +109,10 @@ const BRANDING_PAYLOAD_KEYS = [
   'browser_icon_url',
   'loading_spinner_url'
 ];
+
+export type SystemBrandingAssetSlot = 'pharmacy' | 'hub' | 'browser-icon' | 'spinner' | 'footer';
+
+const normalizeImageUrl = (value?: string | null) => value?.trim() || '';
 
 const normalizeLoginBadges = (value: unknown): string[] => {
   if (!Array.isArray(value)) return DEFAULT_MAINTENANCE_SETTINGS.loginBadges;
@@ -298,5 +304,27 @@ export const systemSettingsService = {
     }
 
     throw new Error('Failed to update system settings.');
+  },
+
+  uploadBrandingAsset: async (file: File, slot: SystemBrandingAssetSlot): Promise<string> => {
+    if (!file.type.startsWith('image/')) throw new Error('Please upload an image file.');
+    if (file.size > 5 * 1024 * 1024) throw new Error('Logo image must be 5MB or smaller.');
+
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = `logos/${slot}/${generateUUID()}_${safeName || `logo.${extension}`}`;
+    const { error } = await supabaseClient.storage
+      .from(SYSTEM_BRANDING_ASSETS_BUCKET)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        contentType: file.type,
+        upsert: true
+      });
+    if (error) throw error;
+
+    const { data } = supabaseClient.storage
+      .from(SYSTEM_BRANDING_ASSETS_BUCKET)
+      .getPublicUrl(filePath);
+    return normalizeImageUrl(data.publicUrl);
   }
 };

@@ -189,6 +189,7 @@ type Step = 1 | 2 | 3 | 4 | 5;
 
 interface HRPortalPageProps {
     onBack?: () => void;
+    logoUrl?: string;
 }
 
 // Reusable form field component
@@ -312,7 +313,7 @@ const ModulePageTitle = ({
     </div>
 );
 
-export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
+export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) => {
     const [lang, setLang] = useState<Language>('en');
     const [step, setStep] = useState<Step>(1);
     const [selectedService, setSelectedService] = useState<'documents' | 'vacation' | null>(null);
@@ -658,6 +659,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack }) => {
                         <VacationRequestFlow
                             employee={employee}
                             lang={lang}
+                            logoUrl={logoUrl}
                             onBack={() => { setSelectedService(null); setStep(2); }}
                             onComplete={() => window.location.reload()}
                         />

@@ -3,18 +3,20 @@ import React, { useState } from 'react';
 
 interface LogoProps {
   className?: string;
+  src?: string;
+  alt?: string;
 }
 
-export const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12" }) => {
+export const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", src, alt = 'Tabarak Logo' }) => {
   const [hasError, setHasError] = useState(false);
-  const logoUrl = "https://rvoqfhvdwadauoeemyvs.supabase.co/storage/v1/object/public/assets/tabarak-logo.png";
+  const logoUrl = src?.trim() || '';
 
   return (
     <div className={`relative flex items-center justify-center overflow-hidden rounded-2xl bg-brand shadow-xl ${className}`}>
-      {!hasError ? (
+      {logoUrl && !hasError ? (
         <img 
           src={logoUrl} 
-          alt="Tabarak Logo"
+          alt={alt}
           className="w-full h-full object-contain p-1"
           onError={() => setHasError(true)}
         />

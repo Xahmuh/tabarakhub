@@ -129,7 +129,7 @@ const saveSpinRecoveryState = (draft: Omit<SpinFlowDraft, 'savedAt'> & { url: st
     }
 };
 
-export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = clientConfig.logoUrl, spinnerUrl = '/spinner.svg' }) => {
+export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = clientConfig.logoUrl, spinnerUrl = '' }) => {
     const [step, setStep] = useState<'validate' | 'info' | 'review' | 'spin' | 'result'>('validate');
     const [session, setSession] = useState<(SpinSession & { branches?: { name?: string, google_maps_link?: string, whatsapp_number?: string } }) | null>(null);
     const voucherRef = useRef<HTMLDivElement>(null);
@@ -629,7 +629,11 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                 {step === 'validate' && (
                     <div className="flex-1 flex flex-col items-center justify-center space-y-6 animate-pulse">
                         <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-slate-100">
-                            <img src={spinnerUrl} alt="Loading" className="h-20 w-20 object-contain" />
+                            {spinnerUrl ? (
+                                <img src={spinnerUrl} alt="Loading" className="h-20 w-20 object-contain" />
+                            ) : (
+                                <Loader2 className="h-14 w-14 animate-spin text-brand" />
+                            )}
                         </div>
                         <div className="text-center">
                             <h3 className="text-lg font-bold text-slate-900">Verifying Token</h3>

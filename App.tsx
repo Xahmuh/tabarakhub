@@ -592,7 +592,7 @@ const App: React.FC = () => {
   const isMaintenanceAdminLoginAllowed = isMaintenanceEnabled && isMaintenanceAdminLoginOpen && !authState.user;
   const shouldRenderMaintenance = isMaintenanceEnabled && !canBypassMaintenance && !isMaintenanceAdminLoginAllowed;
   const pharmacyLogoUrl = maintenanceSettings?.pharmacyLogoUrl?.trim() || clientConfig.logoUrl;
-  const loadingSpinnerUrl = maintenanceSettings?.loadingSpinnerUrl?.trim() || '/spinner.svg';
+  const loadingSpinnerUrl = maintenanceSettings?.loadingSpinnerUrl?.trim() || '';
 
   if (isInitializing || isMaintenanceLoading) {
     const isRewardFlowLoading = isCustomerFlow && !isMaintenanceLoading;
@@ -601,11 +601,15 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-10 text-center space-y-8">
         <div className="relative flex h-24 w-24 items-center justify-center">
           <div className="absolute inset-0 rounded-3xl bg-brand/5 blur-xl"></div>
-          <img
-            src={loadingSpinnerUrl}
-            alt="Loading"
-            className="relative h-20 w-20 object-contain"
-          />
+          {loadingSpinnerUrl ? (
+            <img
+              src={loadingSpinnerUrl}
+              alt="Loading"
+              className="relative h-20 w-20 object-contain"
+            />
+          ) : (
+            <Loader2 className="relative h-14 w-14 animate-spin text-brand" />
+          )}
         </div>
         <div className="space-y-2">
           <h3 className="text-xl font-black text-slate-900 tracking-tight">
@@ -788,7 +792,7 @@ const App: React.FC = () => {
             userRole={authState.user?.role || 'branch'}
           />
         ) : activeTab === 'hr' ? (
-          <HRPortalPage onBack={() => handleTabChange('selector')} />
+          <HRPortalPage onBack={() => handleTabChange('selector')} logoUrl={pharmacyLogoUrl} />
         ) : activeTab === 'hr-manager' ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between mb-8">

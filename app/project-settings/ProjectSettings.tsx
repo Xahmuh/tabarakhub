@@ -31,14 +31,16 @@ import {
     Hash,
     KeyRound,
     MapPinned,
-    LayoutGrid
+    LayoutGrid,
+    UploadCloud,
+    Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission } from '../../types';
 import Swal from 'sweetalert2';
 import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
-import { getSystemSettingsErrorMessage } from '../../services/systemSettingsService';
+import { getSystemSettingsErrorMessage, type SystemBrandingAssetSlot } from '../../services/systemSettingsService';
 import { BranchLoginApprovalsSection } from './BranchLoginApprovalsSection';
 import { DeliveryZonesSection } from './DeliveryZonesSection';
 import { ModuleDisplaySettingsSection } from './ModuleDisplaySettingsSection';
@@ -74,6 +76,15 @@ const DEFAULT_LOADING_SPINNER_URL = '/spinner.svg';
 
 type SettingsTab = 'branches' | 'module-layout' | 'delivery-zones' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
 type SettingsMode = 'combined' | 'system' | 'access';
+type BrandingLogoSettingKey = 'pharmacyLogoUrl' | 'hubLogoUrl' | 'browserIconUrl' | 'loadingSpinnerUrl' | 'footerLogoUrl';
+
+const BRANDING_ASSET_FIELD_BY_SLOT: Record<SystemBrandingAssetSlot, BrandingLogoSettingKey> = {
+    pharmacy: 'pharmacyLogoUrl',
+    hub: 'hubLogoUrl',
+    'browser-icon': 'browserIconUrl',
+    spinner: 'loadingSpinnerUrl',
+    footer: 'footerLogoUrl'
+};
 
 const SETTINGS_MODE_TABS: Record<SettingsMode, SettingsTab[]> = {
     combined: ['branches', 'module-layout', 'delivery-zones', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'],
@@ -301,6 +312,7 @@ export const ProjectSettings: React.FC<{
     const [isSavingGuideline, setIsSavingGuideline] = useState(false);
     const [isSavingFooter, setIsSavingFooter] = useState(false);
     const [isSavingLoginBadges, setIsSavingLoginBadges] = useState(false);
+    const [uploadingBrandingSlot, setUploadingBrandingSlot] = useState<SystemBrandingAssetSlot | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined);
 
@@ -522,6 +534,32 @@ export const ProjectSettings: React.FC<{
             Swal.fire('Error', err.message || 'Failed to save branding settings', 'error');
         } finally {
             setIsSavingFooter(false);
+        }
+    };
+
+    const handleUploadBrandingAsset = async (slot: SystemBrandingAssetSlot, file?: File | null) => {
+        if (!file || !maintenanceSettings || uploadingBrandingSlot) return;
+
+        const fieldName = BRANDING_ASSET_FIELD_BY_SLOT[slot];
+        setUploadingBrandingSlot(slot);
+        try {
+            const uploadedUrl = await supabase.systemSettings.uploadBrandingAsset(file, slot);
+            const updated = await supabase.systemSettings.updateMaintenanceSettings({ [fieldName]: uploadedUrl });
+            setMaintenanceSettings(updated);
+            onSettingsChange?.(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Logo uploaded',
+                text: 'Branding asset was uploaded and saved to system settings.',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2200
+            });
+        } catch (err: any) {
+            Swal.fire('Upload failed', err?.message || 'Could not upload branding asset.', 'error');
+        } finally {
+            setUploadingBrandingSlot(null);
         }
     };
 
@@ -747,6 +785,55 @@ export const ProjectSettings: React.FC<{
     const footerPreviewLogoUrl = configuredFooterLogoUrl || hubPreviewLogoUrl;
     const footerPreviewText = maintenanceSettings?.footerText?.trim() ?? 'HUB';
     const showFooterPreviewText = Boolean(footerPreviewText) && footerPreviewText.toLowerCase() !== 'hub';
+    const brandingAssets = maintenanceSettings
+        ? [
+            {
+                slot: 'pharmacy' as const,
+                keyName: 'pharmacyLogoUrl' as const,
+                title: 'Pharmacy logo',
+                helper: 'Login, header, loading screen, HR print, and public flows.',
+                recommended: 'Best: 512 x 512 PNG/WebP or SVG, transparent background.',
+                value: maintenanceSettings.pharmacyLogoUrl,
+                placeholder: 'Upload pharmacy logo'
+            },
+            {
+                slot: 'hub' as const,
+                keyName: 'hubLogoUrl' as const,
+                title: 'HUB login logo',
+                helper: 'Large animated HUB/logo artwork on the login page.',
+                recommended: 'Best: 1200 x 360 SVG/PNG, transparent background.',
+                value: maintenanceSettings.hubLogoUrl,
+                placeholder: 'Upload HUB logo'
+            },
+            {
+                slot: 'browser-icon' as const,
+                keyName: 'browserIconUrl' as const,
+                title: 'Browser icon',
+                helper: 'Favicon shown in the browser tab.',
+                recommended: 'Best: 512 x 512 PNG/SVG, simple mark, transparent background.',
+                value: maintenanceSettings.browserIconUrl,
+                placeholder: 'Upload favicon'
+            },
+            {
+                slot: 'spinner' as const,
+                keyName: 'loadingSpinnerUrl' as const,
+                title: 'Loading spinner',
+                helper: 'Shown while the app connects and inside public verification flows.',
+                recommended: 'Best: 512 x 512 SVG/PNG/WebP, centered mark, transparent background.',
+                value: maintenanceSettings.loadingSpinnerUrl,
+                placeholder: 'Upload spinner'
+            },
+            {
+                slot: 'footer' as const,
+                keyName: 'footerLogoUrl' as const,
+                title: 'Footer logo',
+                helper: 'Optional footer override. Empty uses the HUB login logo.',
+                recommended: 'Best: 900 x 300 SVG/PNG, dark/colored logo; footer renders it white.',
+                value: maintenanceSettings.footerLogoUrl,
+                placeholder: 'Upload footer logo'
+            }
+        ]
+        : [];
     const visibleRecordCount = activeTab === 'branches'
         ? filteredBranches.length
         : activeTab === 'pharmacists'
@@ -1447,67 +1534,61 @@ export const ProjectSettings: React.FC<{
 
                                         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.9fr]">
                                             <div className="space-y-4">
-                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                    <div className="space-y-2">
-                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pharmacy logo URL / path</label>
-                                                        <input
-                                                            type="text"
-                                                            value={maintenanceSettings.pharmacyLogoUrl}
-                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, pharmacyLogoUrl: e.target.value })}
-                                                            maxLength={500}
-                                                            placeholder="/logo.jpg"
-                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
-                                                        />
-                                                        <p className="text-xs font-semibold leading-5 text-slate-400">Used in login, header, loading, and fallback browser icon.</p>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Browser icon URL / path</label>
-                                                        <input
-                                                            type="text"
-                                                            value={maintenanceSettings.browserIconUrl}
-                                                            onChange={e => setMaintenanceSettings({ ...maintenanceSettings, browserIconUrl: e.target.value })}
-                                                            maxLength={500}
-                                                            placeholder="/logo.jpg"
-                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
-                                                        />
-                                                        <p className="text-xs font-semibold leading-5 text-slate-400">Shown in the browser tab favicon.</p>
-                                                    </div>
+                                                <div className="rounded-lg border border-brand/10 bg-brand/5 p-4">
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Recommended upload format</p>
+                                                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                                                        Use SVG when available. For raster files, use PNG/WebP with transparent background. Maximum file size is 5MB.
+                                                    </p>
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">HUB logo URL / path</label>
-                                                    <input
-                                                        type="text"
-                                                        value={maintenanceSettings.hubLogoUrl}
-                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, hubLogoUrl: e.target.value })}
-                                                        maxLength={500}
-                                                        placeholder="/tabarak-logo.svg"
-                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
-                                                    />
-                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Used for the large animated HUB logo on login and as the default footer logo.</p>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Loading spinner URL / path</label>
-                                                    <input
-                                                        type="text"
-                                                        value={maintenanceSettings.loadingSpinnerUrl}
-                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, loadingSpinnerUrl: e.target.value })}
-                                                        maxLength={500}
-                                                        placeholder="/spinner.svg"
-                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
-                                                    />
-                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Used during app loading and public reward-flow verification.</p>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Footer logo override URL / path</label>
-                                                    <input
-                                                        type="text"
-                                                        value={maintenanceSettings.footerLogoUrl}
-                                                        onChange={e => setMaintenanceSettings({ ...maintenanceSettings, footerLogoUrl: e.target.value })}
-                                                        maxLength={500}
-                                                        placeholder="/logo.jpg"
-                                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
-                                                    />
-                                                    <p className="text-xs font-semibold leading-5 text-slate-400">Leave empty to use the HUB logo.</p>
+                                                <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                                                    {brandingAssets.map(item => (
+                                                        <div key={item.slot} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                                <div>
+                                                                    <p className="text-xs font-black uppercase tracking-widest text-slate-700">{item.title}</p>
+                                                                    <p className="mt-1 text-[11px] font-bold leading-5 text-slate-400">{item.helper}</p>
+                                                                </div>
+                                                                <ImageIcon className="h-4 w-4 shrink-0 text-brand" />
+                                                            </div>
+                                                            <div className="mb-3 flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                                                                {item.value?.trim() ? (
+                                                                    <img src={item.value} alt={`${item.title} preview`} className="max-h-full max-w-full object-contain" />
+                                                                ) : (
+                                                                    <div className="text-center">
+                                                                        <ImageIcon className="mx-auto h-6 w-6 text-slate-300" />
+                                                                        <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">No uploaded logo</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <p className="mb-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-bold leading-5 text-slate-500">
+                                                                {item.recommended}
+                                                            </p>
+                                                            <label className="mb-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-brand/15 bg-brand/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand transition hover:bg-brand/10">
+                                                                <UploadCloud className="h-3.5 w-3.5" />
+                                                                {uploadingBrandingSlot === item.slot ? 'Uploading...' : item.placeholder}
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                                                    className="hidden"
+                                                                    disabled={!!uploadingBrandingSlot || isSavingFooter}
+                                                                    onChange={event => {
+                                                                        const file = event.target.files?.[0];
+                                                                        event.currentTarget.value = '';
+                                                                        handleUploadBrandingAsset(item.slot, file);
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Advanced URL</label>
+                                                            <input
+                                                                type="text"
+                                                                value={item.value}
+                                                                onChange={event => setMaintenanceSettings({ ...maintenanceSettings, [item.keyName]: event.target.value })}
+                                                                maxLength={500}
+                                                                placeholder="Upload an image or paste a public image URL"
+                                                                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none transition-all focus:border-brand/40 focus:ring-2 focus:ring-brand/10"
+                                                            />
+                                                        </div>
+                                                    ))}
                                                 </div>
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Footer text</label>
@@ -1523,7 +1604,7 @@ export const ProjectSettings: React.FC<{
                                                 <div className="flex flex-wrap gap-2">
                                                     <button
                                                         onClick={handleSaveFooterSettings}
-                                                        disabled={isSavingFooter}
+                                                        disabled={isSavingFooter || !!uploadingBrandingSlot}
                                                         className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
                                                     >
                                                         <Save size={18} />
@@ -1532,17 +1613,18 @@ export const ProjectSettings: React.FC<{
                                                     <button
                                                         onClick={() => setMaintenanceSettings({
                                                             ...maintenanceSettings,
-                                                            pharmacyLogoUrl: DEFAULT_PHARMACY_LOGO_URL,
-                                                            hubLogoUrl: DEFAULT_HUB_LOGO_URL,
-                                                            browserIconUrl: DEFAULT_PHARMACY_LOGO_URL,
-                                                            loadingSpinnerUrl: DEFAULT_LOADING_SPINNER_URL,
+                                                            pharmacyLogoUrl: '',
+                                                            hubLogoUrl: '',
+                                                            browserIconUrl: '',
+                                                            loadingSpinnerUrl: '',
                                                             footerLogoUrl: '',
                                                             footerText: 'HUB'
                                                         })}
-                                                        className="btn-secondary text-[10px] uppercase tracking-widest"
+                                                        disabled={!!uploadingBrandingSlot}
+                                                        className="btn-secondary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
                                                     >
                                                         <RotateCcw size={16} />
-                                                        Reset branding
+                                                        Clear logo URLs
                                                     </button>
                                                 </div>
                                             </div>
