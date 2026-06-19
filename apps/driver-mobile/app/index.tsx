@@ -1632,6 +1632,10 @@ const OrderCard = ({
   const routeLabel = orderRouteLabel(order, copy);
   const fromBranch = order.transferFromBranchName || order.branchName;
   const toBranch = order.transferToBranchName || copy.common.destinationPending;
+  const typeLabel = orderTypeLabel(order, copy);
+  const assignmentSourceText = isTransfer
+    ? copy.order.createdByDriver
+    : order.pharmacistName || (order.blockNumber ? copy.order.recordedByPharmacy : copy.order.noBlockRequired);
 
   return (
     <View style={[styles.orderCard, compact && styles.orderCardCompact]}>
@@ -1651,7 +1655,8 @@ const OrderCard = ({
         ) : null}
         <View style={styles.orderTitleWrap}>
           <Text style={[styles.orderBranch, isRtl && styles.rtlText]}>{routeLabel}</Text>
-          <Text style={[styles.orderMeta, isRtl && styles.rtlText]}>{orderDisplayNumber(order)} - {orderTypeLabel(order, copy)}</Text>
+          <Text style={[styles.orderMeta, isRtl && styles.rtlText]}>{orderDisplayNumber(order)}</Text>
+          <Text style={[styles.orderTypeMeta, isRtl && styles.rtlText]}>{typeLabel}</Text>
         </View>
         <Pill
           label={statusLabel(order.deliveryStatus, copy)}
@@ -1680,12 +1685,7 @@ const OrderCard = ({
             <InfoRow label={copy.order.area} value={order.areaName || order.governorate || copy.common.pending} isRtl={isRtl} />
           </>
         )}
-        <View style={styles.blockStatusRow}>
-          <Pill
-            label={isTransfer ? copy.order.createdByDriver : (order.blockNumber ? copy.order.recordedByPharmacy : copy.order.noBlockRequired)}
-            tone={isTransfer ? 'amber' : (order.blockNumber ? 'blue' : 'neutral')}
-          />
-        </View>
+        <Text style={[styles.blockSourceText, isRtl && styles.rtlText]}>{assignmentSourceText}</Text>
       </View>
 
       <PaymentCollectionPanel order={order} language={language} isRtl={isRtl} forceCollected={paymentCollected} />
@@ -4809,6 +4809,12 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
+  orderTypeMeta: {
+    marginTop: 2,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800'
+  },
   orderKindRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4897,6 +4903,12 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   blockStatusRow: {
     alignItems: 'flex-start',
     marginTop: 2
+  },
+  blockSourceText: {
+    marginTop: 2,
+    color: colors.brand,
+    fontSize: 13,
+    fontWeight: '800'
   },
   paymentPanel: {
     borderRadius: radius.lg,

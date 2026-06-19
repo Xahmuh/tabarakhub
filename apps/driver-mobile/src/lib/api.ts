@@ -146,6 +146,7 @@ export type DriverOrder = {
   orderNumber?: string | null;
   branchId: string;
   branchName: string;
+  pharmacistName?: string | null;
   orderDate: string;
   paymentType: string;
   paymentCollectionStatus: DriverPaymentCollectionStatus;
@@ -202,6 +203,7 @@ const mapOrder = (row: any): DriverOrder => ({
   orderNumber: row.order_number || null,
   branchId: row.branch_id,
   branchName: row.branch_name || 'Branch',
+  pharmacistName: row.pharmacist_name || null,
   orderDate: row.order_date,
   paymentType: row.payment_type,
   paymentCollectionStatus: ['paid', 'collect_on_delivery', 'partial'].includes(row.payment_collection_status)
