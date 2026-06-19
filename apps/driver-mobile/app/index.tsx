@@ -1138,26 +1138,35 @@ const HeaderAction = ({
   icon,
   label,
   onPress,
-  hasBadge = false
+  badgeCount = 0
 }: {
   icon: IconName;
   label: string;
   onPress: () => void;
-  hasBadge?: boolean;
-}) => (
-  <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={label}
-    onPress={onPress}
-    style={({ pressed }) => [
-      styles.headerAction,
-      pressed && styles.buttonPressed
-    ]}
-  >
-    <FlatIcon name={icon} />
-    {hasBadge ? <View style={styles.headerActionBadge} /> : null}
-  </Pressable>
-);
+  badgeCount?: number;
+}) => {
+  const normalizedBadgeCount = Math.max(0, Math.floor(Number(badgeCount || 0)));
+  const badgeLabel = normalizedBadgeCount > 99 ? '99+' : String(normalizedBadgeCount);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={normalizedBadgeCount > 0 ? `${label}, ${badgeLabel}` : label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.headerAction,
+        pressed && styles.buttonPressed
+      ]}
+    >
+      <FlatIcon name={icon} />
+      {normalizedBadgeCount > 0 ? (
+        <View style={styles.headerActionBadge}>
+          <Text style={styles.headerActionBadgeText}>{badgeLabel}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+};
 
 const driverInitials = (name?: string | null) => {
   const parts = String(name || 'Driver').trim().split(/\s+/).filter(Boolean);
@@ -3819,7 +3828,7 @@ const Dashboard = ({
                 {formatCopy(copy.header.incomingActive, { incoming: incomingOrders.length, active: orders.length })}
               </Text>
             </View>
-            <HeaderAction icon="alert" label={copy.notifications.playAlarm} hasBadge={incomingOrders.length > 0} onPress={playDriverAlarm} />
+            <HeaderAction icon="alert" label={copy.notifications.playAlarm} badgeCount={incomingOrders.length} onPress={playDriverAlarm} />
           </>
         ) : activeTab === 'dutyRecord' ? (
           <>
@@ -3845,7 +3854,7 @@ const Dashboard = ({
               <HeaderAction
                 icon="alert"
                 label={copy.header.notifications}
-                hasBadge={orders.length > 0}
+                badgeCount={orders.length}
                 onPress={openNotifications}
               />
               <HeaderAvatar name={session?.driver.name} label={copy.header.openProfile} onPress={() => setActiveTab('profile')} />
@@ -4723,14 +4732,23 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   headerActionBadge: {
     position: 'absolute',
-    top: 9,
-    right: 9,
-    width: 8,
-    height: 8,
+    top: -5,
+    right: -5,
+    minWidth: 20,
+    height: 20,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.surface,
-    backgroundColor: colors.brand
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5
+  },
+  headerActionBadgeText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12
   },
   headerBackButton: {
     width: 44,

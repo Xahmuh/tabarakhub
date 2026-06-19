@@ -270,7 +270,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({ branch
       const orders = await deliveryService.orders.list({
         branchId: branch.id,
         dateFrom: historyRange.from,
-        dateTo: historyRange.to
+        dateTo: historyRange.to,
+        orderKind: 'actual_delivery'
       });
       setHistoryOrders(orders);
     } catch (e) {

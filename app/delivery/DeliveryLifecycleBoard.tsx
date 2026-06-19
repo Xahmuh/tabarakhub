@@ -118,14 +118,78 @@ const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) 
   );
 };
 
-const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex items-center justify-between">
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/5 text-brand">{icon}</div>
+type KpiTone = 'brand' | 'blue' | 'amber' | 'emerald' | 'rose' | 'slate';
+
+const KPI_TONE_CLASSES: Record<KpiTone, { card: string; icon: string; label: string; sub: string }> = {
+  brand: {
+    card: 'border-brand/20 bg-brand/5',
+    icon: 'bg-brand text-white',
+    label: 'text-brand',
+    sub: 'text-slate-600'
+  },
+  blue: {
+    card: 'border-blue-200 bg-blue-50/70',
+    icon: 'bg-blue-600 text-white',
+    label: 'text-blue-700',
+    sub: 'text-blue-900/70'
+  },
+  amber: {
+    card: 'border-amber-200 bg-amber-50/80',
+    icon: 'bg-amber-600 text-white',
+    label: 'text-amber-700',
+    sub: 'text-amber-900/70'
+  },
+  emerald: {
+    card: 'border-emerald-200 bg-emerald-50/80',
+    icon: 'bg-emerald-600 text-white',
+    label: 'text-emerald-700',
+    sub: 'text-emerald-900/70'
+  },
+  rose: {
+    card: 'border-red-200 bg-red-50/80',
+    icon: 'bg-red-600 text-white',
+    label: 'text-red-700',
+    sub: 'text-red-900/70'
+  },
+  slate: {
+    card: 'border-slate-200 bg-white',
+    icon: 'bg-slate-900 text-white',
+    label: 'text-slate-500',
+    sub: 'text-slate-500'
+  }
+};
+
+interface KpiCardProps {
+  label: string;
+  value: string;
+  sub?: string;
+  icon: React.ReactNode;
+  tone?: KpiTone;
+}
+
+const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, icon, tone = 'slate' }) => {
+  const toneClasses = KPI_TONE_CLASSES[tone];
+
+  return (
+    <div className={`group min-h-[116px] rounded-xl border p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${toneClasses.card}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${toneClasses.label}`}>{label}</p>
+          <p className="mt-2 break-words text-2xl font-black leading-tight text-slate-950 tabular-nums">{value}</p>
+        </div>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-sm ${toneClasses.icon}`}>
+          {icon}
+        </div>
+      </div>
+      {sub && <p className={`mt-3 text-xs font-bold leading-4 ${toneClasses.sub}`}>{sub}</p>}
     </div>
-    <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{value}</p>
-    {sub && <p className="mt-1 text-xs font-bold text-slate-500">{sub}</p>}
+  );
+};
+
+const DispatchMetaItem: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="min-w-0">
+    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+    <div className="mt-1 text-xs font-bold leading-5 text-slate-700">{children}</div>
   </div>
 );
 
@@ -159,7 +223,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
         deliveryService.orders.list({
           branchId: branch?.id,
           dateFrom: range.from,
-          dateTo: range.to
+          dateTo: range.to,
+          orderKind: canManageAll ? 'all' : 'actual_delivery'
         }),
         deliveryService.paymentTypes.list(true).catch(paymentTypeError => {
           console.warn('Delivery payment types unavailable for lifecycle board', paymentTypeError);
@@ -176,7 +241,12 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
           dateTo: range.to,
           limit: 300
         });
-        setEvents(eventRows);
+        if (canManageAll) {
+          setEvents(eventRows);
+        } else {
+          const visibleOrderIds = new Set(orderRows.map(order => order.id));
+          setEvents(eventRows.filter(event => visibleOrderIds.has(event.orderId)));
+        }
       } catch (eventError: any) {
         console.warn('Delivery lifecycle events unavailable', eventError);
         setEvents([]);
@@ -190,7 +260,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     } finally {
       if (!options?.silent) setIsLoading(false);
     }
-  }, [branch?.id, range.from, range.to]);
+  }, [branch?.id, canManageAll, range.from, range.to]);
 
   useEffect(() => {
     load();
@@ -266,6 +336,137 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
       avgBatchSize: batchCount ? Math.round((batchOrderCount / batchCount) * 10) / 10 : null
     };
   }, [internalDispatchOrders, pickupBatchSizes]);
+
+  const dispatchKpis = useMemo<KpiCardProps[]>(() => {
+    const assignedCount = statusCounts.get('assigned') || 0;
+    const pickedUpCount = statusCounts.get('picked_up') || 0;
+    const deliveredCount = statusCounts.get('delivered') || 0;
+
+    if (!canManageAll) {
+      return [
+        {
+          label: 'Dispatch total',
+          value: String(internalDispatchOrders.length),
+          sub: label,
+          tone: 'brand',
+          icon: <PackageCheck className="h-4 w-4" />
+        },
+        {
+          label: 'Assigned',
+          value: String(assignedCount),
+          sub: 'waiting pickup',
+          tone: 'blue',
+          icon: <Truck className="h-4 w-4" />
+        },
+        {
+          label: 'Picked up',
+          value: String(pickedUpCount),
+          sub: 'on road now',
+          tone: 'amber',
+          icon: <Route className="h-4 w-4" />
+        },
+        {
+          label: 'Delivered',
+          value: String(deliveredCount),
+          sub: 'completed',
+          tone: 'emerald',
+          icon: <CheckCircle2 className="h-4 w-4" />
+        },
+        {
+          label: 'Pending collect',
+          value: formatBhd(pendingCollectionValue),
+          sub: 'cash to confirm',
+          tone: 'rose',
+          icon: <Clock3 className="h-4 w-4" />
+        },
+        {
+          label: 'In motion value',
+          value: formatBhd(valueInMotion),
+          sub: 'assigned + picked up',
+          tone: 'slate',
+          icon: <Route className="h-4 w-4" />
+        }
+      ];
+    }
+
+    return [
+      {
+        label: 'Driver dispatch',
+        value: String(internalDispatchOrders.length),
+        sub: label,
+        tone: 'brand',
+        icon: <PackageCheck className="h-4 w-4" />
+      },
+      {
+        label: 'Actual delivery',
+        value: String(actualDispatchOrders.length),
+        tone: 'blue',
+        icon: <PackageCheck className="h-4 w-4" />
+      },
+      {
+        label: 'Internal transfer',
+        value: String(transferDispatchOrders.length),
+        tone: 'amber',
+        icon: <Route className="h-4 w-4" />
+      },
+      {
+        label: 'Assigned',
+        value: String(assignedCount),
+        tone: 'blue',
+        icon: <Truck className="h-4 w-4" />
+      },
+      {
+        label: 'Picked up',
+        value: String(pickedUpCount),
+        tone: 'amber',
+        icon: <Route className="h-4 w-4" />
+      },
+      {
+        label: 'Delivered',
+        value: String(deliveredCount),
+        tone: 'emerald',
+        icon: <CheckCircle2 className="h-4 w-4" />
+      },
+      {
+        label: 'Pending collect',
+        value: formatBhd(pendingCollectionValue),
+        tone: 'rose',
+        icon: <Clock3 className="h-4 w-4" />
+      },
+      {
+        label: 'In motion value',
+        value: formatBhd(valueInMotion),
+        tone: 'slate',
+        icon: <Clock3 className="h-4 w-4" />
+      },
+      {
+        label: 'Avg delivery',
+        value: formatDuration(timingSummary.avgDriverDelivery),
+        sub: 'pickup to delivered',
+        tone: 'slate',
+        icon: <Route className="h-4 w-4" />
+      },
+      {
+        label: 'Pickup runs',
+        value: String(timingSummary.batchCount),
+        sub: timingSummary.avgBatchSize ? `${timingSummary.avgBatchSize} orders/run avg` : 'awaiting batches',
+        tone: 'slate',
+        icon: <Truck className="h-4 w-4" />
+      }
+    ];
+  }, [
+    actualDispatchOrders.length,
+    canManageAll,
+    internalDispatchOrders.length,
+    label,
+    pendingCollectionValue,
+    statusCounts,
+    timingSummary.avgBatchSize,
+    timingSummary.avgDriverDelivery,
+    timingSummary.batchCount,
+    transferDispatchOrders.length,
+    valueInMotion
+  ]);
 
   const recentEvents = useMemo(() => events.slice(0, 8), [events]);
   const lifecycleUnavailable = !!eventErrorMessage;
@@ -448,17 +649,17 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 2xl:grid-cols-9">
-        <KpiCard label="Driver dispatch" value={String(internalDispatchOrders.length)} sub={label} icon={<PackageCheck className="h-4 w-4" />} />
-        <KpiCard label="Actual delivery" value={String(actualDispatchOrders.length)} icon={<PackageCheck className="h-4 w-4" />} />
-        <KpiCard label="Internal transfer" value={String(transferDispatchOrders.length)} icon={<Route className="h-4 w-4" />} />
-        <KpiCard label="Assigned" value={String(statusCounts.get('assigned') || 0)} icon={<Truck className="h-4 w-4" />} />
-        <KpiCard label="Picked up" value={String(statusCounts.get('picked_up') || 0)} icon={<Route className="h-4 w-4" />} />
-        <KpiCard label="Delivered" value={String(statusCounts.get('delivered') || 0)} icon={<CheckCircle2 className="h-4 w-4" />} />
-        <KpiCard label="Pending collect" value={formatBhd(pendingCollectionValue)} icon={<Clock3 className="h-4 w-4" />} />
-        <KpiCard label="In motion value" value={formatBhd(valueInMotion)} icon={<Clock3 className="h-4 w-4" />} />
-        <KpiCard label="Avg delivery" value={formatDuration(timingSummary.avgDriverDelivery)} sub="pickup to delivered" icon={<Route className="h-4 w-4" />} />
-        <KpiCard label="Pickup runs" value={String(timingSummary.batchCount)} sub={timingSummary.avgBatchSize ? `${timingSummary.avgBatchSize} orders/run avg` : 'awaiting batches'} icon={<Truck className="h-4 w-4" />} />
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
+        {dispatchKpis.map(kpi => (
+          <KpiCard
+            key={kpi.label}
+            label={kpi.label}
+            value={kpi.value}
+            sub={kpi.sub}
+            icon={kpi.icon}
+            tone={kpi.tone}
+          />
+        ))}
       </div>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -489,71 +690,34 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
           ) : internalDispatchOrders.length === 0 ? (
             <p className="py-12 text-center text-xs font-bold text-slate-400">No internal driver dispatch orders in this period.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="py-2 pr-3">Order</th>
-                    <th className="py-2 pr-3">Type</th>
-                    {!branch && <th className="py-2 pr-3">Branch</th>}
-                    <th className="py-2 pr-3">Driver</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2 pr-3">Timing</th>
-                    <th className="py-2 pr-3">Pickup run</th>
-                    <th className="py-2 pr-3">Last lifecycle time</th>
-                    {canTransition && <th className="py-2 text-right">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {internalDispatchOrders.map(order => {
-                    const canActOnOrder = canTransition
-                      && !lifecycleUnavailable
-                      && (canManageAll || isInsideBranchTransitionWindow(order));
-                    const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
-                    const canReturnOrder = canActOnOrder && isClosedOrder(order);
-                    const nextStatuses = nextStatusesFor(order.deliveryStatus);
-                    const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
-                    const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
-                    const totalFulfillment = minutesBetween(order.assignedAt || order.createdAt, order.deliveredAt);
-                    const batchSize = order.pickupBatchId ? pickupBatchSizes.get(order.pickupBatchId) || 1 : null;
-                    return (
-                      <tr key={order.id} className="hover:bg-slate-50/50">
-                        <td className="py-3 pr-3">
-                          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-brand">
+            <div className="space-y-3">
+              {internalDispatchOrders.map(order => {
+                const canActOnOrder = canTransition
+                  && !lifecycleUnavailable
+                  && (canManageAll || isInsideBranchTransitionWindow(order));
+                const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
+                const canReturnOrder = canActOnOrder && isClosedOrder(order);
+                const nextStatuses = nextStatusesFor(order.deliveryStatus);
+                const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
+                const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
+                const totalFulfillment = minutesBetween(order.assignedAt || order.createdAt, order.deliveredAt);
+                const batchSize = order.pickupBatchId ? pickupBatchSizes.get(order.pickupBatchId) || 1 : null;
+                const branchLabel = order.transferFromBranchName || order.branchName || 'Unknown branch';
+                const routeLabel = order.orderKind === 'internal_transfer'
+                  ? `${order.transferFromBranchName || order.branchName || 'Source'} -> ${order.transferToBranchName || 'Destination'}`
+                  : `${order.paymentType}${order.blockNumber ? ` - Block ${order.blockNumber}` : ''}`;
+
+                return (
+                  <article
+                    key={order.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                  >
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brand">
                             {deliveryOrderNumber(order)}
                           </p>
-                          <p className="text-xs font-black text-slate-900">
-                            {order.orderDate} - {order.orderKind === 'internal_transfer' ? 'Internal transfer' : formatBhd(order.valueBhd)}
-                          </p>
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                            {order.orderKind === 'internal_transfer'
-                              ? `${order.transferFromBranchName || order.branchName || 'Source'} -> ${order.transferToBranchName || 'Destination'}`
-                              : `${order.paymentType} ${order.blockNumber ? `- Block ${order.blockNumber}` : ''}`}
-                          </p>
-                          {order.orderKind !== 'internal_transfer' && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PAYMENT_COLLECTION_META[order.paymentCollectionStatus].className}`}>
-                                {PAYMENT_COLLECTION_META[order.paymentCollectionStatus].label}
-                              </span>
-                              {isPendingCollectionOrder(order) && (
-                                <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
-                                  collect {formatBhd(order.amountToCollectBhd)}
-                                </span>
-                              )}
-                              {order.cashHandedToDriverBhd > 0 && (
-                                <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-600">
-                                  driver cash {formatBhd(order.cashHandedToDriverBhd)}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {order.driverPaymentNote && (
-                            <p className="mt-1 max-w-[280px] truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
-                              {order.driverPaymentNote}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-3 pr-3">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${
                             order.orderKind === 'internal_transfer'
                               ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -561,72 +725,117 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                           }`}>
                             {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
                           </span>
-                        </td>
-                        {!branch && (
-                          <td className="py-3 pr-3 text-xs font-bold text-slate-500">
-                            {order.transferFromBranchName || order.branchName || 'Unknown branch'}
-                          </td>
+                          <StatusBadge status={order.deliveryStatus} />
+                        </div>
+                        <p className="mt-2 break-words text-sm font-black text-slate-950">{routeLabel}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">
+                          {order.orderDate}{!branch ? ` - ${branchLabel}` : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                        <div className="text-left xl:text-right">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Value</p>
+                          <p className="mt-1 text-lg font-black leading-none text-slate-950 tabular-nums">
+                            {formatBhd(order.valueBhd)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {order.orderKind !== 'internal_transfer' && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PAYMENT_COLLECTION_META[order.paymentCollectionStatus].className}`}>
+                          {PAYMENT_COLLECTION_META[order.paymentCollectionStatus].label}
+                        </span>
+                        {isPendingCollectionOrder(order) && (
+                          <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
+                            collect {formatBhd(order.amountToCollectBhd)}
+                          </span>
                         )}
-                        <td className="py-3 pr-3 text-xs font-bold text-slate-500">{order.driverName || 'Unassigned'}</td>
-                        <td className="py-3 pr-3"><StatusBadge status={order.deliveryStatus} /></td>
-                        <td className="py-3 pr-3 text-[10px] font-bold leading-5 text-slate-500">
-                          <p>Pickup wait: <span className="text-slate-800">{formatDuration(pickupWait)}</span></p>
-                          <p>Driver time: <span className="text-slate-800">{formatDuration(driverDelivery)}</span></p>
-                          <p>Total: <span className="text-slate-800">{formatDuration(totalFulfillment)}</span></p>
-                        </td>
-                        <td className="py-3 pr-3 text-[10px] font-bold leading-5 text-slate-500">
-                          {order.pickupBatchId ? (
-                            <>
-                              <p className="font-black text-slate-700">Run #{shortRunId(order.pickupBatchId)}</p>
-                              <p>{batchSize} order{batchSize === 1 ? '' : 's'} picked up together</p>
-                              {order.batchDeliverySequence ? <p>Stop {order.batchDeliverySequence}</p> : null}
-                            </>
+                        {order.cashHandedToDriverBhd > 0 && (
+                          <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                            driver cash {formatBhd(order.cashHandedToDriverBhd)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {order.driverPaymentNote && (
+                      <p className="mt-2 truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
+                        {order.driverPaymentNote}
+                      </p>
+                    )}
+
+                    <div className="mt-4 grid gap-x-5 gap-y-3 border-t border-slate-100 pt-3 sm:grid-cols-2 2xl:grid-cols-4">
+                      {!branch && (
+                        <DispatchMetaItem label="Branch">
+                          <span className="break-words">{branchLabel}</span>
+                        </DispatchMetaItem>
+                      )}
+                      <DispatchMetaItem label="Driver">
+                        <span className={order.driverName ? 'text-slate-900' : 'text-slate-300'}>
+                          {order.driverName || 'Unassigned'}
+                        </span>
+                      </DispatchMetaItem>
+                      <DispatchMetaItem label="Timing">
+                        <p>Pickup wait: <span className="text-slate-900">{formatDuration(pickupWait)}</span></p>
+                        <p>Driver time: <span className="text-slate-900">{formatDuration(driverDelivery)}</span></p>
+                        <p>Total: <span className="text-slate-900">{formatDuration(totalFulfillment)}</span></p>
+                      </DispatchMetaItem>
+                      <DispatchMetaItem label="Pickup run">
+                        {order.pickupBatchId ? (
+                          <>
+                            <p className="font-black text-slate-900">Run #{shortRunId(order.pickupBatchId)}</p>
+                            <p>{batchSize} order{batchSize === 1 ? '' : 's'} together</p>
+                            {order.batchDeliverySequence ? <p>Stop {order.batchDeliverySequence}</p> : null}
+                          </>
+                        ) : (
+                          <span className="text-slate-300">Not picked up</span>
+                        )}
+                      </DispatchMetaItem>
+                      <DispatchMetaItem label="Last update">
+                        <span>{lifecycleTimeFor(order) || '-'}</span>
+                      </DispatchMetaItem>
+                    </div>
+
+                    {canTransition && (
+                      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+                        {nextStatuses.length === 0 ? (
+                          canReturnOrder ? (
+                            <button
+                              type="button"
+                              disabled={savingOrderId === order.id}
+                              onClick={() => handleReturnOrder(order)}
+                              className="rounded-lg border border-brand/20 bg-brand/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {savingOrderId === order.id ? 'Saving' : 'Return'}
+                            </button>
                           ) : (
-                            <span className="text-slate-300">Not picked up</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-3 text-xs font-bold text-slate-500">{lifecycleTimeFor(order) || '-'}</td>
-                        {canTransition && (
-                          <td className="py-3 text-right">
-                            {nextStatuses.length === 0 ? (
-                              canReturnOrder ? (
-                                <button
-                                  type="button"
-                                  disabled={savingOrderId === order.id}
-                                  onClick={() => handleReturnOrder(order)}
-                                  className="rounded-lg border border-brand/20 bg-brand/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {savingOrderId === order.id ? 'Saving' : 'Return'}
-                                </button>
-                              ) : (
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Closed</span>
-                              )
-                            ) : (
-                              <div className="inline-flex flex-wrap justify-end gap-1">
-                                {nextStatuses.map(nextStatus => (
-                                  <button
-                                    key={nextStatus}
-                                    type="button"
-                                    disabled={!canAdvanceOrder || savingOrderId === order.id}
-                                    onClick={() => handleTransition(order, nextStatus)}
-                                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                                      nextStatus === 'cancelled'
-                                        ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
-                                        : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:text-brand'
-                                    }`}
-                                  >
-                                    {savingOrderId === order.id ? 'Saving' : nextStatus === 'cancelled' ? 'Customer cancel' : STATUS_META[nextStatus].label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </td>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Closed</span>
+                          )
+                        ) : (
+                          nextStatuses.map(nextStatus => (
+                            <button
+                              key={nextStatus}
+                              type="button"
+                              disabled={!canAdvanceOrder || savingOrderId === order.id}
+                              onClick={() => handleTransition(order, nextStatus)}
+                              className={`rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                                nextStatus === 'cancelled'
+                                  ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:text-brand'
+                              }`}
+                            >
+                              {savingOrderId === order.id ? 'Saving' : nextStatus === 'cancelled' ? 'Customer cancel' : STATUS_META[nextStatus].label}
+                            </button>
+                          ))
                         )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>

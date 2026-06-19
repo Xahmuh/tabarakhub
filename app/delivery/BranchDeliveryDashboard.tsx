@@ -48,7 +48,8 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
           deliveryService.orders.list({
             branchId: branch.id,
             dateFrom: range.from,
-            dateTo: range.to
+            dateTo: range.to,
+            orderKind: 'actual_delivery'
           }),
           deliveryService.paymentTypes.list(true).catch(error => {
             console.warn('Delivery payment types load failed', error);

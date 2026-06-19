@@ -45,7 +45,7 @@ const presetRange = (preset: CoveragePreset, from: string, to: string): { from: 
   return { from: from || today, to: to || today };
 };
 
-const PRESETS: Array<{ id: CoveragePreset; label: string }> = [
+const COVERAGE_PERIOD_PRESETS: Array<{ id: CoveragePreset; label: string }> = [
   { id: 'today', label: 'Today' },
   { id: '7d', label: 'Last 7 days' },
   { id: '30d', label: 'Last 30 days' },
@@ -426,7 +426,11 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     return { metrics, byBlock };
   }, [activeBranchProfiles, geometry, profileByBranch, summary]);
 
-  const handlePeriod = (p: CoveragePreset) => setPreset(p);
+  const handlePeriodChange = (nextPreset: CoveragePreset, from?: string, to?: string) => {
+    setPreset(nextPreset);
+    if (from !== undefined) setCustomFrom(from);
+    if (to !== undefined) setCustomTo(to);
+  };
 
   const downloadCoverage = () => {
     if (!summary) return;
@@ -457,14 +461,14 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   return (
     <div className="space-y-5">
       {/* Filters */}
-      <section className="operational-panel p-4 print:hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
-              {PRESETS.map(p => (
+              {COVERAGE_PERIOD_PRESETS.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => handlePeriod(p.id)}
+                  onClick={() => handlePeriodChange(p.id)}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${preset === p.id ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   {p.label}
@@ -498,7 +502,8 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+        </div>
+        <div className="flex items-center gap-2">
             {isModuleEnabled('excelExport') && (
               <button onClick={downloadCoverage} className="btn-secondary text-[10px] uppercase tracking-widest">
                 <FileDown className="h-3.5 w-3.5" /> Excel
@@ -509,7 +514,6 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
             </button>
           </div>
         </div>
-      </section>
 
       <div className="hidden print:block">
         <h1 className="text-xl font-black">Bahrain Block Coverage - {activeScopeLabel} - {range.from} to {range.to}</h1>
