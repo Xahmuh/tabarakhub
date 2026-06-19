@@ -42,6 +42,7 @@ const DEFAULT_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
   androidLatestBuild: 1,
   androidLatestVersion: '0.1.0',
   androidApkUrl: '',
+  targetCardEnabled: false,
   forceUpdateEnabled: false,
   forceUpdateTitle: 'Update required',
   forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
@@ -640,7 +641,7 @@ export const DeliverySettings: React.FC = () => {
       await Swal.fire({
         icon: 'success',
         title: 'Mobile app updated',
-        text: 'Driver app branding settings were saved.',
+        text: 'Driver app settings were saved.',
         timer: 1400,
         showConfirmButton: false
       });
@@ -1081,7 +1082,7 @@ export const DeliverySettings: React.FC = () => {
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Driver mobile app</h3>
               <p className="mt-1 max-w-2xl text-[11px] font-medium leading-5 text-slate-500">
-                Control the logos shown in the driver app login screen. Uploaded images are saved to Supabase Storage and become available to the app without rebuilding.
+                Control driver app logos, monthly target visibility, and APK update rules. Saved settings become available to the app without rebuilding.
               </p>
             </div>
             <button
@@ -1186,6 +1187,30 @@ export const DeliverySettings: React.FC = () => {
               <p className="mt-3 text-[10px] font-bold leading-5 text-slate-400">
                 Tip: leave a logo URL empty to keep using the bundled app fallback.
               </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 xl:col-span-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${mobileSettings.targetCardEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-700">Monthly target card</p>
+                    <p className="mt-1 max-w-2xl text-[11px] font-bold leading-5 text-slate-400">
+                      Show the driver target and incentive card in the mobile app only when monthly targets are active for drivers.
+                    </p>
+                  </div>
+                </div>
+                <label className={`inline-flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition ${mobileSettings.targetCardEnabled ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                  <input
+                    type="checkbox"
+                    checked={mobileSettings.targetCardEnabled}
+                    onChange={event => setMobileSettings(previous => ({ ...previous, targetCardEnabled: event.target.checked }))}
+                  />
+                  {mobileSettings.targetCardEnabled ? 'Target visible' : 'Target hidden'}
+                </label>
+              </div>
             </div>
 
             <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 xl:col-span-3">

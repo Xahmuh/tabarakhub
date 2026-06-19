@@ -6,6 +6,11 @@
     "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./src/assets/tabarak-logo.jpg",
+    "splash": {
+      "image": "./src/assets/driver-splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#050000"
+    },
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-router",

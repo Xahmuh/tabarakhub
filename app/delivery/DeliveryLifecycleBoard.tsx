@@ -90,6 +90,9 @@ const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStat
   return [];
 };
 
+const isClosedOrder = (order: DeliveryOrder) =>
+  order.deliveryStatus === 'delivered' || order.deliveryStatus === 'cancelled';
+
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
   order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes);
 
@@ -306,9 +309,87 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     return result.isConfirmed ? String(result.value) : null;
   };
 
+  const handleCustomerCancel = async (order: DeliveryOrder) => {
+    if (lifecycleUnavailable) {
+      await Swal.fire('Migration required', 'Apply the Phase 1 lifecycle migration before changing delivery lifecycle status.', 'warning');
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Customer cancelled this order?',
+      html: `This will remove <b>${deliveryOrderNumber(order)}</b> from Dispatch, Recording, and driver history.`,
+      input: 'text',
+      inputLabel: 'Reason or note',
+      inputPlaceholder: 'Example: customer cancelled before delivery',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Cancel and remove',
+      confirmButtonColor: '#B91c1c'
+    });
+    if (!result.isConfirmed) return;
+
+    const notes = result.value ? String(result.value).trim() : null;
+    setSavingOrderId(order.id);
+    try {
+      await deliveryService.lifecycle.cancelCustomerOrder({
+        orderId: order.id,
+        notes
+      });
+      await load();
+      await Swal.fire('Customer order cancelled', `${deliveryOrderNumber(order)} was removed from delivery records.`, 'success');
+    } catch (cancelError: any) {
+      console.error('Customer delivery cancellation failed', cancelError);
+      await Swal.fire('Cancel failed', cancelError?.message || 'Could not cancel and remove this delivery order.', 'error');
+    } finally {
+      setSavingOrderId(null);
+    }
+  };
+
+  const handleReturnOrder = async (order: DeliveryOrder) => {
+    if (lifecycleUnavailable) {
+      await Swal.fire('Migration required', 'Apply the return-order migration before reopening closed delivery orders.', 'warning');
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Return closed order?',
+      html: `This will reopen <b>${deliveryOrderNumber(order)}</b> so it can be cancelled or processed again.`,
+      input: 'text',
+      inputLabel: 'Return note',
+      inputPlaceholder: 'Example: customer requested cancellation after close',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Return order',
+      confirmButtonColor: '#B91c1c'
+    });
+    if (!result.isConfirmed) return;
+
+    const notes = result.value ? String(result.value).trim() : null;
+    setSavingOrderId(order.id);
+    try {
+      const event = await deliveryService.lifecycle.returnOrder({
+        orderId: order.id,
+        notes,
+        idempotencyKey: `${order.id}:return:${Date.now()}`
+      });
+      await load();
+      await Swal.fire('Order returned', `Delivery reopened as ${STATUS_META[event.newStatus].label.toLowerCase()}.`, 'success');
+    } catch (returnError: any) {
+      console.error('Delivery return failed', returnError);
+      await Swal.fire('Return failed', returnError?.message || 'Could not return this delivery order.', 'error');
+    } finally {
+      setSavingOrderId(null);
+    }
+  };
+
   const handleTransition = async (order: DeliveryOrder, nextStatus: DeliveryLifecycleStatus) => {
     if (lifecycleUnavailable) {
       await Swal.fire('Migration required', 'Apply the Phase 1 lifecycle migration before changing delivery lifecycle status.', 'warning');
+      return;
+    }
+
+    if (nextStatus === 'cancelled') {
+      await handleCustomerCancel(order);
       return;
     }
 
@@ -319,20 +400,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
       const selectedDriverId = await chooseDriver(order);
       if (!selectedDriverId) return;
       driverId = selectedDriverId;
-    }
-
-    if (nextStatus === 'cancelled') {
-      const result = await Swal.fire({
-        title: 'Cancel delivery lifecycle?',
-        input: 'text',
-        inputLabel: 'Reason or note',
-        inputPlaceholder: 'Example: customer cancelled',
-        showCancelButton: true,
-        confirmButtonText: 'Cancel delivery',
-        confirmButtonColor: '#B91c1c'
-      });
-      if (!result.isConfirmed) return;
-      notes = result.value ? String(result.value).trim() : null;
     }
 
     setSavingOrderId(order.id);
@@ -441,8 +508,9 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                   {internalDispatchOrders.map(order => {
                     const canActOnOrder = canTransition
                       && !lifecycleUnavailable
-                      && (canManageAll || isInsideBranchTransitionWindow(order))
-                      && !['delivered', 'cancelled'].includes(order.deliveryStatus);
+                      && (canManageAll || isInsideBranchTransitionWindow(order));
+                    const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
+                    const canReturnOrder = canActOnOrder && isClosedOrder(order);
                     const nextStatuses = nextStatusesFor(order.deliveryStatus);
                     const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
                     const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
@@ -521,18 +589,33 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                         {canTransition && (
                           <td className="py-3 text-right">
                             {nextStatuses.length === 0 ? (
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Closed</span>
+                              canReturnOrder ? (
+                                <button
+                                  type="button"
+                                  disabled={savingOrderId === order.id}
+                                  onClick={() => handleReturnOrder(order)}
+                                  className="rounded-lg border border-brand/20 bg-brand/5 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  {savingOrderId === order.id ? 'Saving' : 'Return'}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Closed</span>
+                              )
                             ) : (
                               <div className="inline-flex flex-wrap justify-end gap-1">
                                 {nextStatuses.map(nextStatus => (
                                   <button
                                     key={nextStatus}
                                     type="button"
-                                    disabled={!canActOnOrder || savingOrderId === order.id}
+                                    disabled={!canAdvanceOrder || savingOrderId === order.id}
                                     onClick={() => handleTransition(order, nextStatus)}
-                                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-brand/30 hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
+                                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                                      nextStatus === 'cancelled'
+                                        ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:text-brand'
+                                    }`}
                                   >
-                                    {savingOrderId === order.id ? 'Saving' : STATUS_META[nextStatus].label}
+                                    {savingOrderId === order.id ? 'Saving' : nextStatus === 'cancelled' ? 'Customer cancel' : STATUS_META[nextStatus].label}
                                   </button>
                                 ))}
                               </div>

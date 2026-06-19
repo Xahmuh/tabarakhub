@@ -36,6 +36,7 @@ const DEFAULT_DELIVERY_MOBILE_APP_SETTINGS: DeliveryMobileAppSettings = {
   androidLatestBuild: 1,
   androidLatestVersion: '0.1.0',
   androidApkUrl: '',
+  targetCardEnabled: false,
   forceUpdateEnabled: false,
   forceUpdateTitle: 'Update required',
   forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
@@ -358,6 +359,7 @@ const toMobileAppSettings = (row: any): DeliveryMobileAppSettings => ({
   androidLatestBuild: Number(row?.android_latest_build || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestBuild),
   androidLatestVersion: row?.android_latest_version || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestVersion,
   androidApkUrl: row?.android_apk_url || '',
+  targetCardEnabled: row?.target_card_enabled === true,
   forceUpdateEnabled: row?.force_update_enabled === true,
   forceUpdateTitle: row?.force_update_title || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateTitle,
   forceUpdateMessage: row?.force_update_message || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateMessage,
@@ -667,6 +669,27 @@ export const deliveryService = {
       });
       if (error) throw error;
       return toOrderEvent(data);
+    },
+
+    returnOrder: async (input: Omit<DeliveryOrderLifecycleInput, 'nextStatus' | 'driverId'>): Promise<DeliveryOrderEvent> => {
+      if (!input.orderId) throw new Error('Delivery order is required.');
+      const { data, error } = await supabaseClient.rpc('app_delivery_return_order' as any, {
+        p_order_id: input.orderId,
+        p_notes: input.notes?.trim() || null,
+        p_idempotency_key: input.idempotencyKey || null
+      });
+      if (error) throw error;
+      return toOrderEvent(data);
+    },
+
+    cancelCustomerOrder: async (input: Pick<DeliveryOrderLifecycleInput, 'orderId' | 'notes'>): Promise<boolean> => {
+      if (!input.orderId) throw new Error('Delivery order is required.');
+      const { error } = await supabaseClient.rpc('app_delivery_cancel_customer_order' as any, {
+        p_order_id: input.orderId,
+        p_notes: input.notes?.trim() || null
+      });
+      if (error) throw error;
+      return true;
     }
   },
 
@@ -1024,7 +1047,7 @@ export const deliveryService = {
     get: async (): Promise<DeliveryMobileAppSettings> => {
       const { data, error } = await supabaseClient
         .from('delivery_mobile_app_settings')
-        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
+        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, target_card_enabled, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
         .eq('id', 'global')
         .maybeSingle();
       if (error) {
@@ -1047,6 +1070,7 @@ export const deliveryService = {
         ),
         android_latest_version: settings.androidLatestVersion?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.androidLatestVersion,
         android_apk_url: settings.androidApkUrl?.trim() || '',
+        target_card_enabled: settings.targetCardEnabled === true,
         force_update_enabled: settings.forceUpdateEnabled === true,
         force_update_title: settings.forceUpdateTitle?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateTitle,
         force_update_message: settings.forceUpdateMessage?.trim() || DEFAULT_DELIVERY_MOBILE_APP_SETTINGS.forceUpdateMessage,
@@ -1056,7 +1080,7 @@ export const deliveryService = {
       const { data, error } = await supabaseClient
         .from('delivery_mobile_app_settings')
         .upsert(payload, { onConflict: 'id' })
-        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
+        .select('id, login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, target_card_enabled, force_update_enabled, force_update_title, force_update_message, updated_at, updated_by')
         .single();
       if (error) throw error;
       return toMobileAppSettings(data);

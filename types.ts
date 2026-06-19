@@ -624,6 +624,7 @@ export interface DeliveryMobileAppSettings {
   androidLatestBuild: number;
   androidLatestVersion: string;
   androidApkUrl: string;
+  targetCardEnabled: boolean;
   forceUpdateEnabled: boolean;
   forceUpdateTitle: string;
   forceUpdateMessage: string;

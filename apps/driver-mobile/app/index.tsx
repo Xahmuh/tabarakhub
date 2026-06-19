@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
+  ImageBackground,
   Linking,
   Modal,
   Platform,
@@ -22,6 +24,7 @@ import * as Location from 'expo-location';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import {
   currentAndroidBuild,
   driverApi,
@@ -61,6 +64,9 @@ import {
 
 const tabarakLogo = require('../src/assets/tabarak-logo.jpg');
 const hubFooterLogo = require('../src/assets/logo/hublogo.png');
+const deliveryOrderIcon = require('../src/assets/delivery-order-icon.png');
+const internalTransferIcon = require('../src/assets/internal-transfer-icon.png');
+const driverSplashImage = require('../src/assets/driver-splash.png');
 const driverAlarmSound = require('../src/assets/sounds/driver.mp3');
 const DEFAULT_FOOTER_CREDIT = 'Developed by Ahmed Elsherbini';
 const DEFAULT_MOBILE_SETTINGS: DriverMobileAppSettings = {
@@ -71,6 +77,7 @@ const DEFAULT_MOBILE_SETTINGS: DriverMobileAppSettings = {
   androidLatestBuild: 1,
   androidLatestVersion: '0.1.0',
   androidApkUrl: '',
+  targetCardEnabled: false,
   forceUpdateEnabled: false,
   forceUpdateTitle: 'Update required',
   forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
@@ -79,9 +86,11 @@ const DEFAULT_MOBILE_SETTINGS: DriverMobileAppSettings = {
 
 type ButtonTone = 'brand' | 'light' | 'danger' | 'success' | 'warning' | 'dark' | 'collected';
 type DashboardTab = 'home' | 'orders' | 'transfer' | 'history' | 'stats' | 'profile' | 'notifications' | 'dutyRecord';
+type OrdersStatusFilter = 'all' | Extract<DriverOrderStatus, 'assigned' | 'picked_up'>;
 type HistoryStatusFilter = 'all' | DriverHistoryStatusFilter;
 type HistoryOrderTypeFilter = 'delivery' | 'internal_transfer';
 type HistoryPeriodFilter = 'all' | 'today' | 'week' | 'month';
+type HistoryFilterPicker = 'type' | 'period' | 'status';
 type DriverCopy = ReturnType<typeof getDriverCopy>;
 
 const incentiveMoney = (value?: number | null) => `BHD ${Number(value || 0).toFixed(3)}`;
@@ -287,6 +296,13 @@ const activeRouteTitle = (count: number, copy: DriverCopy) =>
 const formatShiftHours = (minutes: number | null | undefined, copy: DriverCopy) =>
   `${(Math.max(0, Number(minutes || 0)) / 60).toFixed(1)}${copy.profile.hoursUnit}`;
 
+const formatShiftClock = (minutes: number | null | undefined) => {
+  const totalMinutes = Math.max(0, Math.floor(Number(minutes || 0)));
+  const hours = Math.floor(totalMinutes / 60);
+  const remainder = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+};
+
 const formatDistanceMeters = (meters: number) =>
   meters >= 1000 ? `${(meters / 1000).toFixed(1)}km` : `${Math.round(meters)}m`;
 
@@ -381,6 +397,26 @@ const shiftBranchStatus = (
     title: localizedDriverError(error, copy, text.unavailable),
     detail: text.recheck
   };
+};
+
+type ShiftBranchTone = 'neutral' | 'ready' | 'blocked';
+
+const ShiftBranchLocationIcon = ({ tone }: { tone: ShiftBranchTone }) => {
+  const markerColor = tone === 'ready' ? colors.success : tone === 'blocked' ? colors.danger : colors.brand;
+  const toneStyle = tone === 'ready'
+    ? styles.shiftLocationIcon_ready
+    : tone === 'blocked'
+      ? styles.shiftLocationIcon_blocked
+      : styles.shiftLocationIcon_neutral;
+
+  return (
+    <View style={[styles.shiftLocationIcon, toneStyle]}>
+      <View style={[styles.shiftLocationPin, { backgroundColor: markerColor }]}>
+        <View style={styles.shiftLocationPinDot} />
+      </View>
+      <View style={[styles.shiftLocationBase, { backgroundColor: markerColor }]} />
+    </View>
+  );
 };
 
 const toDateInput = (date: Date) => {
@@ -844,15 +880,79 @@ const Button = ({
 
 const Pill = ({
   label,
-  tone = 'neutral'
+  tone = 'neutral',
+  fullWidth = false
 }: {
   label: string;
   tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red';
+  fullWidth?: boolean;
 }) => (
-  <View style={[styles.pill, styles[`pill_${tone}`]]}>
-    <Text style={[styles.pillText, styles[`pillText_${tone}`]]}>{label}</Text>
+  <View style={[styles.pill, fullWidth && styles.pillFullWidth, styles[`pill_${tone}`]]}>
+    <Text style={[styles.pillText, fullWidth && styles.pillTextFullWidth, styles[`pillText_${tone}`]]}>{label}</Text>
   </View>
 );
+
+const SplashScreen = ({ onStart }: { onStart: () => void }) => {
+  const insets = useSafeAreaInsets();
+  const buttonPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(buttonPulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true
+        }),
+        Animated.timing(buttonPulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true
+        })
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [buttonPulse]);
+
+  const animatedButtonStyle: any = {
+    transform: [
+      {
+        translateY: buttonPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -4]
+        })
+      },
+      {
+        scale: buttonPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.035]
+        })
+      }
+    ]
+  };
+
+  return (
+    <ImageBackground source={driverSplashImage} style={styles.splashScreen} resizeMode="cover">
+      <View style={[styles.splashFooter, { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.lg) }]}>
+        <Animated.View style={[styles.splashButtonMotion, animatedButtonStyle]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Let's GO"
+            onPress={onStart}
+            style={({ pressed }) => [
+              styles.splashButton,
+              pressed && styles.buttonPressed
+            ]}
+          >
+            <Text style={styles.splashButtonText}>{"Let's GO"}</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </ImageBackground>
+  );
+};
 
 const TabButton = ({
   label,
@@ -922,71 +1022,37 @@ const FlatIcon = ({
   const stroke = color || (active ? colors.brand : colors.slate600);
   const accent = color || (active ? colors.brand : colors.slate400);
   const muted = active ? colors.brandSoft : colors.surfaceMuted;
+  const iconFill = color ? 'transparent' : active ? colors.brandSoft : 'transparent';
+  const strokeWidth = 2.1;
   const scale = size / 22;
 
   if (name === 'home') {
     return (
-      <View style={[styles.iconBox, { width: size, height: size }]}>
-        <View style={[
-          styles.homeRoof,
-          {
-            borderLeftWidth: 6 * scale,
-            borderRightWidth: 6 * scale,
-            borderBottomWidth: 7 * scale,
-            borderBottomColor: stroke,
-            top: 2 * scale
-          }
-        ]} />
-        <View style={[
-          styles.homeBody,
-          {
-            width: 14 * scale,
-            height: 11 * scale,
-            borderColor: stroke,
-            borderRadius: 3 * scale,
-            top: 9 * scale
-          }
-        ]} />
-      </View>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M3.5 10.7 12 3.5l8.5 7.2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M5.8 10.2v9.3h4.1v-5.2h4.2v5.2h4.1v-9.3" fill={iconFill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
     );
   }
 
   if (name === 'orders') {
     return (
-      <View style={[styles.iconBox, { width: size, height: size }]}>
-        <View style={[
-          styles.ordersPaper,
-          {
-            width: 15 * scale,
-            height: 18 * scale,
-            borderColor: stroke,
-            borderRadius: 4 * scale
-          }
-        ]}>
-          <View style={[styles.ordersLine, { width: 8 * scale, backgroundColor: stroke }]} />
-          <View style={[styles.ordersLine, { width: 10 * scale, backgroundColor: stroke }]} />
-          <View style={[styles.ordersDot, { backgroundColor: accent }]} />
-        </View>
-      </View>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="6" y="3.8" width="12" height="16.4" rx="3" fill={iconFill} stroke={stroke} strokeWidth={strokeWidth} />
+        <Path d="M9.2 8h5.6M9.2 11.4h5.6M9.2 14.8h3.8" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+        <Circle cx="17" cy="18" r="3.1" fill={color ? 'transparent' : active ? colors.brand : colors.surface} stroke={stroke} strokeWidth="1.7" />
+        <Path d="m15.8 18 0.9 0.9 1.7-1.9" stroke={color ? stroke : active ? colors.white : accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
     );
   }
 
   if (name === 'history') {
     return (
-      <View style={[styles.iconBox, { width: size, height: size }]}>
-        <View style={[
-          styles.historyCircle,
-          {
-            width: 18 * scale,
-            height: 18 * scale,
-            borderRadius: 9 * scale,
-            borderColor: stroke
-          }
-        ]}>
-          <View style={[styles.historyHandTall, { height: 6 * scale, backgroundColor: stroke }]} />
-          <View style={[styles.historyHandWide, { width: 5 * scale, backgroundColor: stroke }]} />
-        </View>
-      </View>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M5.1 7.8A8.2 8.2 0 1 1 4 12" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M4.9 4.7v3.1h3.1" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M12 7.7v4.9l3.2 1.9" stroke={accent} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
     );
   }
 
@@ -1034,46 +1100,21 @@ const FlatIcon = ({
 
   if (name === 'stats') {
     return (
-      <View style={[styles.iconBox, { width: size, height: size, flexDirection: 'row', alignItems: 'flex-end', gap: 3 * scale }]}>
-        {[8, 14, 18].map((height, index) => (
-          <View
-            key={height}
-            style={{
-              width: 4 * scale,
-              height: height * scale,
-              borderRadius: 2 * scale,
-              backgroundColor: index === 1 && active ? colors.brand : stroke,
-              opacity: index === 0 ? 0.55 : 1
-            }}
-          />
-        ))}
-      </View>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M4 20h16" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+        <Rect x="5.2" y="11" width="3.6" height="7" rx="1.2" fill={color ? 'transparent' : active ? colors.brandSoft : colors.surfaceMuted} stroke={stroke} strokeWidth="1.8" />
+        <Rect x="10.2" y="7" width="3.6" height="11" rx="1.2" fill={color ? 'transparent' : active ? colors.brand : colors.surfaceMuted} stroke={stroke} strokeWidth="1.8" />
+        <Rect x="15.2" y="4.5" width="3.6" height="13.5" rx="1.2" fill={color ? 'transparent' : active ? colors.brandSoft : colors.surfaceMuted} stroke={stroke} strokeWidth="1.8" />
+      </Svg>
     );
   }
 
   if (name === 'profile') {
     return (
-      <View style={[styles.iconBox, { width: size, height: size }]}>
-        <View style={[
-          styles.profileHead,
-          {
-            width: 8 * scale,
-            height: 8 * scale,
-            borderRadius: 4 * scale,
-            borderColor: stroke
-          }
-        ]} />
-        <View style={[
-          styles.profileShoulders,
-          {
-            width: 17 * scale,
-            height: 9 * scale,
-            borderRadius: 8 * scale,
-            borderColor: stroke,
-            backgroundColor: muted
-          }
-        ]} />
-      </View>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="8" r="3.8" fill={iconFill} stroke={stroke} strokeWidth={strokeWidth} />
+        <Path d="M4.8 20.2c0-4.3 3.1-6.7 7.2-6.7s7.2 2.4 7.2 6.7" fill={muted} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
     );
   }
 
@@ -1118,6 +1159,34 @@ const HeaderAction = ({
   </Pressable>
 );
 
+const driverInitials = (name?: string | null) => {
+  const parts = String(name || 'Driver').trim().split(/\s+/).filter(Boolean);
+  const initials = parts.slice(0, 2).map(part => part[0]?.toUpperCase()).join('');
+  return initials || 'D';
+};
+
+const HeaderAvatar = ({
+  name,
+  label,
+  onPress
+}: {
+  name?: string | null;
+  label: string;
+  onPress: () => void;
+}) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    onPress={onPress}
+    style={({ pressed }) => [
+      styles.headerAvatar,
+      pressed && styles.buttonPressed
+    ]}
+  >
+    <Text style={styles.headerAvatarText}>{driverInitials(name)}</Text>
+  </Pressable>
+);
+
 const HeaderBackButton = ({
   label,
   onPress
@@ -1158,7 +1227,9 @@ const BottomNavButton = ({
       pressed && styles.buttonPressed
     ]}
   >
-    <FlatIcon name={icon} active={active} size={21} />
+    <View style={[styles.bottomNavIconShell, active && styles.bottomNavIconShellActive]}>
+      <FlatIcon name={icon} active={active} size={22} />
+    </View>
     <Text style={[styles.bottomNavLabel, active && styles.bottomNavLabelActive]}>{label}</Text>
   </Pressable>
 );
@@ -1244,16 +1315,19 @@ const ForceUpdateScreen = ({
 };
 
 const LoginScreen = ({
+  onBack,
   onSignedIn,
   copy,
   isRtl,
   mobileSettings
 }: {
+  onBack: () => void;
   onSignedIn: () => void;
   copy: DriverCopy;
   isRtl: boolean;
   mobileSettings: DriverMobileAppSettings;
 }) => {
+  const insets = useSafeAreaInsets();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -1280,6 +1354,21 @@ const LoginScreen = ({
 
   return (
     <View style={styles.safe}>
+      <View style={[styles.loginBackWrap, { top: Math.max(spacing.md, insets.top + spacing.sm) }, isRtl && styles.loginBackWrapRtl]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy.common.back}
+          onPress={onBack}
+          style={({ pressed }) => [
+            styles.loginBackButton,
+            isRtl && styles.rtlRow,
+            pressed && styles.buttonPressed
+          ]}
+        >
+          <Text style={styles.loginBackChevron}>{isRtl ? '>' : '<'}</Text>
+          <Text style={[styles.loginBackText, isRtl && styles.rtlText]}>{copy.common.back}</Text>
+        </Pressable>
+      </View>
       <View style={styles.loginWrap}>
         <View style={styles.loginPanel}>
           <View style={styles.loginBrandStack}>
@@ -1390,6 +1479,50 @@ const StatTile = ({
   );
 };
 
+const DashboardStatCard = ({
+  label,
+  value,
+  hint,
+  tone = 'blue',
+  onPress
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  tone?: 'blue' | 'green' | 'amber' | 'red';
+  onPress?: () => void;
+}) => {
+  const content = (
+    <>
+      <Text style={styles.dashboardStatLabel}>{label}</Text>
+      <Text style={styles.dashboardStatValue}>{value}</Text>
+      <Text style={styles.dashboardStatHint}>{hint}</Text>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.dashboardStatCard,
+          styles[`dashboardStatCard_${tone}`],
+          pressed && styles.buttonPressed
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.dashboardStatCard, styles[`dashboardStatCard_${tone}`]]}>
+      {content}
+    </View>
+  );
+};
+
 type MonthlyTarget = NonNullable<DriverSessionPayload['monthlyTarget']>;
 
 const MonthlyTargetCard = ({
@@ -1464,21 +1597,78 @@ const MonthlyTargetCard = ({
   );
 };
 
-const InfoRow = ({ label, value, isRtl = false }: { label: string; value: string; isRtl?: boolean }) => (
-  <View style={[styles.infoRow, isRtl && styles.rtlRow]}>
-    <Text style={[styles.infoLabel, isRtl && styles.rtlText]}>{label}</Text>
-    <Text style={[styles.infoValue, isRtl && styles.rtlInfoValue]}>{value}</Text>
-  </View>
-);
+const InfoRow = ({
+  label,
+  value,
+  isRtl = false,
+  stacked = false,
+  selected = false,
+  onPress
+}: {
+  label: string;
+  value: string;
+  isRtl?: boolean;
+  stacked?: boolean;
+  selected?: boolean;
+  onPress?: () => void;
+}) => {
+  const content = (
+    <>
+    <Text
+      style={[styles.infoLabel, stacked && styles.infoLabelStacked, isRtl && styles.rtlText]}
+      numberOfLines={1}
+      adjustsFontSizeToFit={stacked}
+      minimumFontScale={0.75}
+    >
+      {label}
+    </Text>
+    <Text
+      style={[styles.infoValue, stacked && styles.infoValueStacked, isRtl && styles.rtlInfoValue]}
+      numberOfLines={stacked ? 2 : undefined}
+      adjustsFontSizeToFit={stacked}
+      minimumFontScale={0.7}
+    >
+      {value}
+    </Text>
+    </>
+  );
+
+  if (stacked && onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}`}
+        onPress={onPress}
+        style={state => [
+          styles.infoRow,
+          styles.infoRowStacked,
+          selected && styles.detailCellSelected,
+          ((state as any).hovered || state.pressed) && styles.detailCellHovered,
+          state.pressed && styles.detailCellPressed
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.infoRow, stacked && styles.infoRowStacked, selected && styles.detailCellSelected, isRtl && !stacked && styles.rtlRow]}>
+      {content}
+    </View>
+  );
+};
 
 const OrderRunTimer = ({
   order,
   copy,
-  isRtl
+  isRtl,
+  compact = false
 }: {
   order: DriverOrder;
   copy: DriverCopy;
   isRtl: boolean;
+  compact?: boolean;
 }) => {
   const isOnRoad = order.deliveryStatus === 'picked_up';
   const isWaitingPickup = order.deliveryStatus === 'assigned';
@@ -1486,6 +1676,27 @@ const OrderRunTimer = ({
   const nowMs = useElapsedClock(Boolean(startAt && (isOnRoad || isWaitingPickup)));
 
   if (!startAt || (!isOnRoad && !isWaitingPickup)) return null;
+  const label = isOnRoad ? copy.order.onRoadTimer : copy.order.waitingPickupTimer;
+  const hint = isOnRoad ? copy.order.sincePickup : copy.order.sinceAssignment;
+  const value = formatElapsedClock(startAt, nowMs);
+
+  if (compact) {
+    return (
+      <View style={[styles.runTimerCell, isOnRoad && styles.runTimerCellActive]}>
+        <View style={styles.runTimerCellTop}>
+          <View style={[styles.runTimerCellIcon, isOnRoad && styles.runTimerCellIconActive]}>
+            <FlatIcon name="timer" active={isOnRoad} size={12} color={isOnRoad ? colors.success : colors.warning} />
+          </View>
+          <Text style={[styles.runTimerCellLabel, isOnRoad && styles.runTimerCellLabelActive]} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+        <Text style={[styles.runTimerCellValue, isOnRoad && styles.runTimerCellValueActive]}>
+          {value}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.runTimerCard, isOnRoad && styles.runTimerCardActive, isRtl && styles.rtlRow]}>
@@ -1494,14 +1705,14 @@ const OrderRunTimer = ({
       </View>
       <View style={styles.runTimerCopy}>
         <Text style={[styles.runTimerLabel, isOnRoad && styles.runTimerLabelActive, isRtl && styles.rtlText]}>
-          {isOnRoad ? copy.order.onRoadTimer : copy.order.waitingPickupTimer}
+          {label}
         </Text>
         <Text style={[styles.runTimerHint, isRtl && styles.rtlText]}>
-          {isOnRoad ? copy.order.sincePickup : copy.order.sinceAssignment}
+          {hint}
         </Text>
       </View>
       <Text style={[styles.runTimerValue, isOnRoad && styles.runTimerValueActive, isRtl && styles.rtlInfoValue]}>
-        {formatElapsedClock(startAt, nowMs)}
+        {value}
       </Text>
     </View>
   );
@@ -1511,44 +1722,101 @@ const TimelineTile = ({
   label,
   value,
   isRtl = false,
-  wide = false
+  wide = false,
+  selected = false,
+  onPress
 }: {
   label: string;
   value: string;
   isRtl?: boolean;
   wide?: boolean;
-}) => (
-  <View style={[styles.timelineTile, wide && styles.timelineTileWide]}>
-    <Text style={[styles.timelineTileLabel, isRtl && styles.rtlText]}>{label}</Text>
-    <Text style={[styles.timelineTileValue, isRtl && styles.rtlInfoValue]} numberOfLines={1}>
+  selected?: boolean;
+  onPress?: () => void;
+}) => {
+  const content = (
+    <>
+    <Text
+      style={[styles.timelineTileLabel, isRtl && styles.rtlText]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.75}
+    >
+      {label}
+    </Text>
+    <Text
+      style={[styles.timelineTileValue, isRtl && styles.rtlInfoValue]}
+      numberOfLines={2}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+    >
       {value}
     </Text>
-  </View>
-);
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}`}
+        onPress={onPress}
+        style={state => [
+          styles.timelineTile,
+          wide && styles.timelineTileWide,
+          selected && styles.detailCellSelected,
+          ((state as any).hovered || state.pressed) && styles.detailCellHovered,
+          state.pressed && styles.detailCellPressed
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.timelineTile, wide && styles.timelineTileWide, selected && styles.detailCellSelected]}>
+      {content}
+    </View>
+  );
+};
 
 const OrderTimeline = ({
   order,
   copy,
   language,
-  isRtl
+  isRtl,
+  selectedCell,
+  onSelectCell
 }: {
   order: DriverOrder;
   copy: DriverCopy;
   language: DriverLanguage;
   isRtl: boolean;
+  selectedCell?: string | null;
+  onSelectCell?: (cell: string) => void;
 }) => (
   <View style={styles.timelineGrid}>
-    <TimelineTile label={copy.common.assigned} value={formatDateTime(order.assignedAt || order.createdAt, language, copy)} isRtl={isRtl} />
-    <TimelineTile label={copy.common.pickedUp} value={formatDateTime(order.pickedUpAt, language, copy)} isRtl={isRtl} />
-    <TimelineTile label={copy.common.delivered} value={formatDateTime(order.deliveredAt, language, copy)} isRtl={isRtl} />
-    {order.pickupBatchId ? (
-      <TimelineTile
-        label={copy.order.pickupRun}
-        value={`#${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` / ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`}
-        isRtl={isRtl}
-        wide
-      />
-    ) : null}
+    <TimelineTile
+      label={copy.common.assigned}
+      value={formatDateTime(order.assignedAt || order.createdAt, language, copy)}
+      isRtl={isRtl}
+      selected={selectedCell === 'timeline-assigned'}
+      onPress={onSelectCell ? () => onSelectCell('timeline-assigned') : undefined}
+    />
+    <TimelineTile
+      label={copy.common.pickedUp}
+      value={formatDateTime(order.pickedUpAt, language, copy)}
+      isRtl={isRtl}
+      selected={selectedCell === 'timeline-picked-up'}
+      onPress={onSelectCell ? () => onSelectCell('timeline-picked-up') : undefined}
+    />
+    <TimelineTile
+      label={copy.common.delivered}
+      value={formatDateTime(order.deliveredAt, language, copy)}
+      isRtl={isRtl}
+      selected={selectedCell === 'timeline-delivered'}
+      onPress={onSelectCell ? () => onSelectCell('timeline-delivered') : undefined}
+    />
   </View>
 );
 
@@ -1556,12 +1824,16 @@ const PaymentCollectionPanel = ({
   order,
   language,
   isRtl,
-  forceCollected = false
+  forceCollected = false,
+  onConfirmPayment,
+  confirmPaymentDisabled = false
 }: {
   order: DriverOrder;
   language: DriverLanguage;
   isRtl: boolean;
   forceCollected?: boolean;
+  onConfirmPayment?: (order: DriverOrder) => void;
+  confirmPaymentDisabled?: boolean;
 }) => {
   const text = paymentCollectionText(language);
   const hasCollectionDetails = order.amountToCollectBhd > 0
@@ -1589,6 +1861,16 @@ const PaymentCollectionPanel = ({
           {text.note}: {order.driverPaymentNote}
         </Text>
       ) : null}
+      {!isCollected && onConfirmPayment ? (
+        <View style={styles.paymentPanelAction}>
+          <Button
+            label={paymentCollectionActionText.confirmCollected}
+            tone="collected"
+            disabled={confirmPaymentDisabled}
+            onPress={() => onConfirmPayment(order)}
+          />
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -1604,9 +1886,6 @@ const OrderCard = ({
   onConfirmPayment,
   onCancel,
   paymentCollected = false,
-  selectable = false,
-  selected = false,
-  onToggleSelected,
   compact = false
 }: {
   order: DriverOrder;
@@ -1619,9 +1898,6 @@ const OrderCard = ({
   onConfirmPayment?: (order: DriverOrder) => void;
   onCancel?: (order: DriverOrder) => void;
   paymentCollected?: boolean;
-  selectable?: boolean;
-  selected?: boolean;
-  onToggleSelected?: (order: DriverOrder) => void;
   compact?: boolean;
 }) => {
   const canPickUp = order.deliveryStatus === 'assigned';
@@ -1633,83 +1909,126 @@ const OrderCard = ({
   const fromBranch = order.transferFromBranchName || order.branchName;
   const toBranch = order.transferToBranchName || copy.common.destinationPending;
   const typeLabel = orderTypeLabel(order, copy);
-  const assignmentSourceText = isTransfer
-    ? copy.order.createdByDriver
-    : order.pharmacistName || (order.blockNumber ? copy.order.recordedByPharmacy : copy.order.noBlockRequired);
+  const headerTitle = isTransfer ? copy.common.internalTransfer : routeLabel;
+  const headerMeta = orderDisplayNumber(order);
+  const headerIconSource = isTransfer ? internalTransferIcon : deliveryOrderIcon;
+  const orderByName = order.pharmacistName || copy.common.notRecorded;
+  const [selectedDetailCell, setSelectedDetailCell] = useState<string | null>(null);
 
   return (
-    <View style={[styles.orderCard, compact && styles.orderCardCompact]}>
-      <View style={[styles.orderTop, isRtl && styles.rtlRow]}>
-        {selectable && canPickUp && onToggleSelected ? (
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: selected }}
-            accessibilityLabel={formatCopy(copy.order.selectForBatch, { id: orderDisplayNumber(order) })}
-            onPress={() => onToggleSelected(order)}
-            style={[styles.pickupSelect, selected && styles.pickupSelectActive]}
-          >
-            <Text style={[styles.pickupSelectText, selected && styles.pickupSelectTextActive]}>
-              {selected ? '✓' : '+'}
-            </Text>
-          </Pressable>
-        ) : null}
+    <View style={[styles.orderCard, isTransfer && styles.transferOrderCard, compact && styles.orderCardCompact]}>
+      <View style={[styles.orderTop, isTransfer && styles.transferOrderTop, isRtl && styles.rtlRow]}>
+        <View style={[styles.orderIconFrame, isTransfer && styles.transferOrderIconFrame]}>
+          <Image
+            source={headerIconSource}
+            style={[styles.orderIconImage, isTransfer && styles.transferOrderIconImage]}
+            resizeMode="contain"
+          />
+        </View>
         <View style={styles.orderTitleWrap}>
-          <Text style={[styles.orderBranch, isRtl && styles.rtlText]}>{routeLabel}</Text>
-          <Text style={[styles.orderMeta, isRtl && styles.rtlText]}>{orderDisplayNumber(order)}</Text>
-          <Text style={[styles.orderTypeMeta, isRtl && styles.rtlText]}>{typeLabel}</Text>
+          <Text style={[styles.orderBranch, isTransfer && styles.transferOrderBranch, isRtl && styles.rtlText]}>{headerTitle}</Text>
+          <Text style={[styles.orderMeta, isTransfer && styles.transferOrderMeta, isRtl && styles.rtlText]}>{headerMeta}</Text>
+          {!isTransfer ? <Text style={[styles.orderTypeMeta, isRtl && styles.rtlText]}>{typeLabel}</Text> : null}
         </View>
-        <Pill
-          label={statusLabel(order.deliveryStatus, copy)}
-          tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
-        />
+        <View style={[styles.orderStatusStack, isRtl && styles.orderStatusStackRtl]}>
+          <Pill
+            label={statusLabel(order.deliveryStatus, copy)}
+            tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
+            fullWidth
+          />
+          <OrderRunTimer order={order} copy={copy} isRtl={isRtl} compact />
+        </View>
       </View>
 
-      {isTransfer ? (
-        <View style={[styles.orderKindRow, isRtl && styles.rtlRow]}>
-          <Text style={[styles.orderKindValue, isRtl && styles.rtlText]}>{copy.order.transferRoute}</Text>
-          <Text style={[styles.orderArea, isRtl && styles.rtlInfoValue]}>{copy.order.branchToBranch}</Text>
+      <View style={[styles.orderDetailsGrid, isRtl && styles.rtlRow]}>
+        <View style={[styles.orderDetailsCell, styles.blockPanel]}>
+          {isTransfer ? (
+            <>
+              <InfoRow
+                label={copy.order.fromBranch}
+                value={fromBranch}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'route-from'}
+                onPress={() => setSelectedDetailCell('route-from')}
+              />
+              <InfoRow
+                label={copy.order.toBranch}
+                value={toBranch}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'route-to'}
+                onPress={() => setSelectedDetailCell('route-to')}
+              />
+              <InfoRow
+                label={copy.sheet.type}
+                value={copy.order.createdByDriver}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'route-type'}
+                onPress={() => setSelectedDetailCell('route-type')}
+              />
+            </>
+          ) : (
+            <>
+              <InfoRow
+                label={copy.order.deliveryBlock}
+                value={order.blockNumber || copy.order.notEntered}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'delivery-block'}
+                onPress={() => setSelectedDetailCell('delivery-block')}
+              />
+              <InfoRow
+                label={copy.order.area}
+                value={order.areaName || order.governorate || copy.common.pending}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'delivery-area'}
+                onPress={() => setSelectedDetailCell('delivery-area')}
+              />
+              <InfoRow
+                label={copy.order.orderBy}
+                value={orderByName}
+                isRtl={isRtl}
+                stacked
+                selected={selectedDetailCell === 'delivery-order-by'}
+                onPress={() => setSelectedDetailCell('delivery-order-by')}
+              />
+            </>
+          )}
         </View>
-      ) : null}
-
-      <OrderRunTimer order={order} copy={copy} isRtl={isRtl} />
-
-      <View style={styles.blockPanel}>
-        {isTransfer ? (
-          <>
-            <InfoRow label={copy.order.fromBranch} value={fromBranch} isRtl={isRtl} />
-            <InfoRow label={copy.order.toBranch} value={toBranch} isRtl={isRtl} />
-          </>
-        ) : (
-          <>
-            <InfoRow label={copy.order.pharmacyBlock} value={order.blockNumber || copy.order.notEntered} isRtl={isRtl} />
-            <InfoRow label={copy.order.area} value={order.areaName || order.governorate || copy.common.pending} isRtl={isRtl} />
-          </>
-        )}
-        <Text style={[styles.blockSourceText, isRtl && styles.rtlText]}>{assignmentSourceText}</Text>
+        <View style={[styles.orderDetailsCell, styles.timelinePanel]}>
+          <OrderTimeline
+            order={order}
+            copy={copy}
+            language={language}
+            isRtl={isRtl}
+            selectedCell={selectedDetailCell}
+            onSelectCell={setSelectedDetailCell}
+          />
+        </View>
       </View>
 
-      <PaymentCollectionPanel order={order} language={language} isRtl={isRtl} forceCollected={paymentCollected} />
+      <PaymentCollectionPanel
+        order={order}
+        language={language}
+        isRtl={isRtl}
+        forceCollected={paymentCollected}
+        onConfirmPayment={canConfirmPayment && onConfirmPayment ? onConfirmPayment : undefined}
+        confirmPaymentDisabled={busy}
+      />
 
       {order.notes ? <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>{order.notes}</Text> : null}
 
-      <OrderTimeline order={order} copy={copy} language={language} isRtl={isRtl} />
-
-      {!isClosed && (onPickUp || onDeliver || onConfirmPayment || onCancel) ? (
+      {!isClosed && (onPickUp || onDeliver || onCancel) ? (
         <View style={styles.orderActions}>
           {canPickUp && onPickUp ? (
             <Button label={copy.order.pickedUpAction} tone="light" disabled={busy} onPress={() => onPickUp(order)} />
           ) : null}
-          {canConfirmPayment && onConfirmPayment ? (
-            <Button
-              label={paymentCollectionActionText.confirmCollected}
-              tone="collected"
-              disabled={busy}
-              onPress={() => onConfirmPayment(order)}
-            />
-          ) : null}
           {canDeliver && onDeliver ? (
             <Button
-              label={canConfirmPayment ? paymentCollectionActionText.deliveredAndCollected : copy.order.deliveredAction}
+              label={copy.order.deliveredAction}
               tone="success"
               disabled={busy}
               onPress={() => onDeliver(order)}
@@ -1721,6 +2040,131 @@ const OrderCard = ({
         </View>
       ) : null}
     </View>
+  );
+};
+
+const HistoryInfoChip = ({
+  label,
+  value,
+  isRtl
+}: {
+  label: string;
+  value: string;
+  isRtl: boolean;
+}) => (
+  <View style={styles.historyInfoChip}>
+    <Text
+      style={[styles.historyInfoLabel, isRtl && styles.rtlText]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.78}
+    >
+      {label}
+    </Text>
+    <Text
+      style={[styles.historyInfoValue, isRtl && styles.rtlInfoValue]}
+      numberOfLines={2}
+      adjustsFontSizeToFit
+      minimumFontScale={0.72}
+    >
+      {value}
+    </Text>
+  </View>
+);
+
+const HistoryFilterSelect = ({
+  label,
+  value,
+  isRtl,
+  onPress
+}: {
+  label: string;
+  value: string;
+  isRtl: boolean;
+  onPress: () => void;
+}) => (
+  <Pressable
+    accessibilityRole="button"
+    onPress={onPress}
+    style={({ pressed }) => [
+      styles.historyFilterSelect,
+      isRtl && styles.rtlRow,
+      pressed && styles.buttonPressed
+    ]}
+  >
+    <View style={styles.historyFilterSelectCopy}>
+      <Text style={[styles.historyFilterSelectLabel, isRtl && styles.rtlText]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text
+        style={[styles.historyFilterSelectValue, isRtl && styles.rtlText]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.72}
+      >
+        {value}
+      </Text>
+    </View>
+    <Text style={styles.historyFilterSelectChevron}>v</Text>
+  </Pressable>
+);
+
+const HistoryFilterPickerSheet = ({
+  visible,
+  title,
+  options,
+  copy,
+  isRtl,
+  onClose
+}: {
+  visible: boolean;
+  title: string;
+  options: Array<{ key: string; label: string; selected: boolean; onPress: () => void }>;
+  copy: DriverCopy;
+  isRtl: boolean;
+  onClose: () => void;
+}) => {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.sheet, styles.historyFilterSheet, { paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.md) }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={[styles.sheetEyebrow, isRtl && styles.rtlText]}>{copy.history.title}</Text>
+          <Text style={[styles.sheetTitle, isRtl && styles.rtlText]}>{title}</Text>
+
+          <View style={styles.historyPickerOptions}>
+            {options.map(option => (
+              <Pressable
+                key={option.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: option.selected }}
+                onPress={() => {
+                  option.onPress();
+                  onClose();
+                }}
+                style={({ pressed }) => [
+                  styles.historyPickerOption,
+                  option.selected && styles.historyPickerOptionActive,
+                  isRtl && styles.rtlRow,
+                  pressed && styles.buttonPressed
+                ]}
+              >
+                <Text style={[styles.historyPickerOptionText, option.selected && styles.historyPickerOptionTextActive, isRtl && styles.rtlText]}>
+                  {option.label}
+                </Text>
+                <View style={[styles.historyPickerRadio, option.selected && styles.historyPickerRadioActive]} />
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={[styles.sheetActions, isRtl && styles.rtlRow]}>
+            <Button label={copy.common.back} tone="light" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
@@ -1746,31 +2190,58 @@ const HistoryOrderStrip = ({
   const terminalLabel = order.deliveryStatus === 'cancelled' ? copy.common.cancelled : copy.common.delivered;
   const terminalTime = order.deliveryStatus === 'cancelled' ? order.cancelledAt : order.deliveredAt;
   const detailText = historyDetailText(language);
-  const pickupRunValue = order.pickupBatchId
-    ? ` | ${copy.order.pickupRun} #${shortId(order.pickupBatchId)}${order.batchDeliverySequence ? ` / ${copy.order.stop} ${order.batchDeliverySequence}` : ''}`
-    : '';
-  const routeDetail = isTransfer
-    ? `${copy.order.fromBranch}: ${fromBranch} | ${copy.order.toBranch}: ${toBranch}`
-    : `${copy.order.pharmacyBlock}: ${blockValue} | ${copy.order.area}: ${areaValue}`;
+  const stripTitle = isTransfer ? copy.common.internalTransfer : routeLabel;
+  const stripMeta = `${orderDisplayNumber(order)} | ${order.paymentType || orderTypeLabel(order, copy)}`;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${detailText.openDetails} ${orderDisplayNumber(order)}`}
       onPress={() => onPress(order)}
-      style={({ pressed }) => [styles.historyStrip, pressed && styles.historyStripPressed]}
+      style={({ pressed }) => [
+        styles.historyStrip,
+        isTransfer && styles.historyStripTransfer,
+        order.deliveryStatus === 'delivered' && styles.historyStripDelivered,
+        order.deliveryStatus === 'cancelled' && styles.historyStripCancelled,
+        pressed && styles.historyStripPressed
+      ]}
     >
       <View style={[styles.historyStripTop, isRtl && styles.rtlRow]}>
-        <View style={styles.historyStripTitleWrap}>
-          <Text style={[styles.historyStripTitle, isRtl && styles.rtlText]} numberOfLines={1}>{routeLabel}</Text>
-          <Text style={[styles.historyStripMeta, isRtl && styles.rtlText]} numberOfLines={2}>
-            {orderDisplayNumber(order)} | {orderTypeLabel(order, copy)} | {order.paymentType} | {routeDetail}{pickupRunValue}
-          </Text>
+        <View style={[styles.historyStripIconFrame, isTransfer && styles.historyStripIconFrameTransfer]}>
+          <Image
+            source={isTransfer ? internalTransferIcon : deliveryOrderIcon}
+            style={styles.historyStripIconImage}
+            resizeMode="contain"
+          />
         </View>
-        <Pill
-          label={statusLabel(order.deliveryStatus, copy)}
-          tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
-        />
+        <View style={styles.historyStripTitleWrap}>
+          <Text style={[styles.historyStripEyebrow, isRtl && styles.rtlText]} numberOfLines={1}>
+            {orderTypeLabel(order, copy)}
+          </Text>
+          <Text style={[styles.historyStripTitle, isRtl && styles.rtlText]} numberOfLines={2}>{stripTitle}</Text>
+          <Text style={[styles.historyStripMeta, isRtl && styles.rtlText]} numberOfLines={1}>{stripMeta}</Text>
+        </View>
+        <View style={styles.historyStripStatusWrap}>
+          <Pill
+            label={statusLabel(order.deliveryStatus, copy)}
+            tone={order.deliveryStatus === 'delivered' ? 'green' : order.deliveryStatus === 'cancelled' ? 'red' : 'blue'}
+          />
+          <Text style={styles.historyStripChevron}>{'>'}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.historyStripInfoGrid, isRtl && styles.rtlRow]}>
+        {isTransfer ? (
+          <>
+            <HistoryInfoChip label={copy.order.fromBranch} value={fromBranch} isRtl={isRtl} />
+            <HistoryInfoChip label={copy.order.toBranch} value={toBranch} isRtl={isRtl} />
+          </>
+        ) : (
+          <>
+            <HistoryInfoChip label={copy.order.deliveryBlock} value={blockValue} isRtl={isRtl} />
+            <HistoryInfoChip label={copy.order.area} value={areaValue} isRtl={isRtl} />
+          </>
+        )}
       </View>
 
       {order.notes ? (
@@ -2199,13 +2670,15 @@ const Dashboard = ({
   language,
   onLanguageChange,
   themeMode,
-  onThemeChange
+  onThemeChange,
+  mobileSettings
 }: {
   onSignedOut: () => void;
   language: DriverLanguage;
   onLanguageChange: (language: DriverLanguage) => void;
   themeMode: DriverThemeMode;
   onThemeChange: (themeMode: DriverThemeMode) => void;
+  mobileSettings: DriverMobileAppSettings;
 }) => {
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -2217,20 +2690,28 @@ const Dashboard = ({
   const previousIncomingOrderIdsRef = useRef<Set<string> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>('home');
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<OrdersStatusFilter>('all');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<HistoryOrderTypeFilter>('delivery');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>('all');
-  const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('all');
+  const [historyPeriodFilter, setHistoryPeriodFilter] = useState<HistoryPeriodFilter>('today');
+  const [historyFilterPicker, setHistoryFilterPicker] = useState<HistoryFilterPicker | null>(null);
   const [deliveryDraft, setDeliveryDraft] = useState<DriverOrder | null>(null);
   const [historyDetailOrder, setHistoryDetailOrder] = useState<DriverOrder | null>(null);
   const [recentHistoryOrders, setRecentHistoryOrders] = useState<DriverOrder[]>([]);
   const [paymentCollectedOrderIds, setPaymentCollectedOrderIds] = useState<Set<string>>(() => new Set());
-  const [selectedPickupOrderIds, setSelectedPickupOrderIds] = useState<Set<string>>(() => new Set());
+  const [focusedOrderId, setFocusedOrderId] = useState<string | null>(null);
   const [transferFromBranchId, setTransferFromBranchId] = useState('');
   const [transferToBranchId, setTransferToBranchId] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
   const [openTransferBranchDropdown, setOpenTransferBranchDropdown] = useState<'from' | 'to' | null>(null);
   const [dutyMonthFilter, setDutyMonthFilter] = useState(() => toMonthInput(new Date()));
   const [isExportingDuty, setIsExportingDuty] = useState(false);
+
+  const openOrdersTab = useCallback((statusFilter: OrdersStatusFilter = 'all') => {
+    setFocusedOrderId(null);
+    setOrdersStatusFilter(statusFilter);
+    setActiveTab('orders');
+  }, []);
 
   const sessionQuery = useQuery({
     queryKey: ['driver-session'],
@@ -2465,7 +2946,6 @@ const Dashboard = ({
       return pickupOrders.length;
     },
     onSuccess: async count => {
-      setSelectedPickupOrderIds(new Set());
       await refreshAll();
       if (count > 1) {
         Alert.alert(copy.errors.pickupStartedTitle, formatCopy(copy.errors.pickupStartedText, { count }));
@@ -2490,7 +2970,7 @@ const Dashboard = ({
     onSuccess: async () => {
       setTransferNotes('');
       await refreshAll();
-      setActiveTab('orders');
+      openOrdersTab('all');
       Alert.alert(copy.transfer.createdTitle, copy.transfer.createdText);
     },
     onError: (error: any) => Alert.alert(copy.transfer.failedTitle, localizedDriverError(error, copy, copy.transfer.failedFallback))
@@ -2527,10 +3007,18 @@ const Dashboard = ({
     () => orders.filter(order => order.deliveryStatus === 'assigned'),
     [orders]
   );
-  const selectedPickupOrders = useMemo(
-    () => incomingOrders.filter(order => selectedPickupOrderIds.has(order.id)),
-    [incomingOrders, selectedPickupOrderIds]
+  const visibleOrders = useMemo(
+    () => ordersStatusFilter === 'all'
+      ? orders
+      : orders.filter(order => order.deliveryStatus === ordersStatusFilter),
+    [orders, ordersStatusFilter]
   );
+  const displayOrders = useMemo(() => {
+    if (!focusedOrderId) return visibleOrders;
+    const focused = visibleOrders.find(order => order.id === focusedOrderId);
+    if (!focused) return visibleOrders;
+    return [focused, ...visibleOrders.filter(order => order.id !== focusedOrderId)];
+  }, [focusedOrderId, visibleOrders]);
   const activeShift = session?.activeShift;
   const monthlyTarget = session?.monthlyTarget;
   const isBusy = shiftMutation.isPending
@@ -2548,15 +3036,10 @@ const Dashboard = ({
     nearbyStartBranchQuery.error,
     language
   );
+  const shiftBranchTitle = nearbyStartBranch?.isWithinRadius
+    ? branchLabel(nearbyStartBranch, copy)
+    : shiftBranchInfo.title;
   const shiftButtonDisabled = isBusy || (!activeShift && !nearbyStartBranch?.isWithinRadius);
-
-  useEffect(() => {
-    const assignedIds = new Set(incomingOrders.map(order => order.id));
-    setSelectedPickupOrderIds(previous => {
-      const next = new Set([...previous].filter(orderId => assignedIds.has(orderId)));
-      return next.size === previous.size ? previous : next;
-    });
-  }, [incomingOrders]);
 
   useEffect(() => {
     if (transferBranches.length === 0) return;
@@ -2591,34 +3074,6 @@ const Dashboard = ({
       playDriverAlarm();
     }
   }, [incomingOrders, playDriverAlarm]);
-
-  const togglePickupSelection = (order: DriverOrder) => {
-    if (order.deliveryStatus !== 'assigned') return;
-    if (selectedPickupOrderIds.has(order.id)) {
-      setSelectedPickupOrderIds(previous => {
-        const next = new Set(previous);
-        next.delete(order.id);
-        return next;
-      });
-      return;
-    }
-
-    const selectedBranchId = selectedPickupOrders[0]?.branchId;
-    if (selectedBranchId && selectedBranchId !== order.branchId) {
-      Alert.alert(copy.errors.onePharmacyTitle, copy.errors.onePharmacyText);
-      return;
-    }
-
-    setSelectedPickupOrderIds(previous => new Set(previous).add(order.id));
-  };
-
-  const pickupSelectedOrders = () => {
-    if (selectedPickupOrders.length === 0) {
-      Alert.alert(copy.errors.noOrdersSelectedTitle, copy.errors.noOrdersSelectedText);
-      return;
-    }
-    pickupBatchMutation.mutate({ pickupOrders: selectedPickupOrders });
-  };
 
   const actionOrder = (order: DriverOrder, nextStatus: DriverOrderStatus) => {
     if (nextStatus === 'picked_up') {
@@ -2676,6 +3131,12 @@ const Dashboard = ({
     }
   };
 
+  const openOrderFromNotification = (order: DriverOrder) => {
+    setFocusedOrderId(order.id);
+    setOrdersStatusFilter(order.deliveryStatus === 'assigned' ? 'assigned' : order.deliveryStatus === 'picked_up' ? 'picked_up' : 'all');
+    setActiveTab('orders');
+  };
+
   const openHistoryFromStat = (
     typeFilter: HistoryOrderTypeFilter,
     statusFilter: HistoryStatusFilter = 'all',
@@ -2710,13 +3171,12 @@ const Dashboard = ({
 
   const renderHome = () => (
     <View style={styles.tabPane}>
-      <View style={styles.shiftCard}>
-        <View style={styles.commandCopy}>
-          <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{activeShift ? copy.home.onlineLabel : copy.home.offlineLabel}</Text>
-          <Text style={[styles.commandTitle, isRtl && styles.rtlText]}>{activeRouteTitle(orders.length, copy)}</Text>
-          <Text style={[styles.commandText, isRtl && styles.rtlText]}>
-            {activeShift ? copy.home.onlineText : copy.home.offlineText}
+      <View style={[styles.shiftCard, activeShift ? styles.shiftCardOnline : styles.shiftCardOffline]}>
+        <View style={[styles.shiftStatusBanner, activeShift ? styles.shiftStatusBannerOnline : styles.shiftStatusBannerOffline]}>
+          <Text style={[styles.shiftStatusLabel, activeShift ? styles.shiftStatusLabelOnline : styles.shiftStatusLabelOffline, isRtl && styles.rtlText]}>
+            {activeShift ? copy.home.onlineLabel : copy.home.offlineLabel}
           </Text>
+          <Text style={[styles.shiftStatusCount, isRtl && styles.rtlText]}>{activeRouteTitle(orders.length, copy)}</Text>
         </View>
         {!activeShift ? (
           <Pressable
@@ -2725,33 +3185,51 @@ const Dashboard = ({
             }}
             style={[styles.shiftBranchPanel, styles[`shiftBranchPanel_${shiftBranchInfo.tone}`]]}
           >
+            <ShiftBranchLocationIcon tone={shiftBranchInfo.tone} />
             <View style={styles.shiftBranchCopy}>
-              <Text style={[styles.shiftBranchLabel, isRtl && styles.rtlText]}>{shiftLocationCopy(language).label}</Text>
-              <Text style={[styles.shiftBranchTitle, isRtl && styles.rtlText]}>{shiftBranchInfo.title}</Text>
+              <Text style={[styles.shiftBranchTitle, isRtl && styles.rtlText]}>{shiftBranchTitle}</Text>
               <Text style={[styles.shiftBranchMeta, isRtl && styles.rtlText]}>{shiftBranchInfo.detail}</Text>
             </View>
-            <Text style={[styles.shiftBranchAction, isRtl && styles.rtlText]}>{shiftLocationCopy(language).recheck}</Text>
+            <View style={styles.shiftBranchActionPill}>
+              <Text style={[styles.shiftBranchAction, isRtl && styles.rtlText]}>{shiftLocationCopy(language).recheck}</Text>
+            </View>
           </Pressable>
         ) : null}
         <Button
           label={activeShift ? copy.common.endShift : copy.common.startShift}
-          tone={activeShift ? 'light' : 'brand'}
+          tone={activeShift ? 'success' : 'brand'}
           disabled={shiftButtonDisabled}
           onPress={() => shiftMutation.mutate(activeShift ? 'end' : 'start')}
         />
       </View>
 
-      <View style={styles.statsGrid}>
-        <StatTile label={copy.common.active} value={orders.length} hint={copy.home.assignedRoute} />
-        <StatTile label={copy.common.incoming} value={incomingOrders.length} hint={copy.home.readyToPickUp} tone={incomingOrders.length ? 'amber' : 'neutral'} />
-        <StatTile label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.deliveredToday} tone="green" />
-        <StatTile label={copy.common.transfers} value={session?.stats.internalTransferCount ?? 0} hint={copy.common.completedToday} tone="amber" />
-        <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.home.shiftTime} />
+      <View style={styles.dashboardStatsGrid}>
+        <DashboardStatCard label={copy.common.active} value={orders.length} hint={copy.home.assignedRoute} tone="blue" onPress={() => openOrdersTab('all')} />
+        <DashboardStatCard label={copy.common.incoming} value={incomingOrders.length} hint={copy.home.readyToPickUp} tone="amber" onPress={() => openOrdersTab('assigned')} />
+        <DashboardStatCard label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.deliveredToday} tone="green" onPress={() => openHistoryFromStat('delivery', 'delivered')} />
+        <DashboardStatCard label={copy.common.transfers} value={session?.stats.internalTransferCount ?? 0} hint={copy.common.completedToday} tone="red" onPress={() => openHistoryFromStat('internal_transfer', 'delivered')} />
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setActiveTab('dutyRecord')}
+        style={({ pressed }) => [styles.hoursWorkedCard, activeShift && styles.hoursWorkedCardActive, pressed && styles.buttonPressed]}
+      >
+        <View style={[styles.hoursWorkedIcon, activeShift && styles.hoursWorkedIconActive]}>
+          <FlatIcon name="timer" active={Boolean(activeShift)} size={20} color={activeShift ? colors.success : colors.warning} />
+        </View>
+        <View style={styles.hoursWorkedCopy}>
+          <Text style={[styles.hoursWorkedLabel, activeShift && styles.hoursWorkedLabelActive, isRtl && styles.rtlText]}>{copy.common.hours}</Text>
+          <Text style={[styles.hoursWorkedHint, isRtl && styles.rtlText]}>{copy.home.shiftTime}</Text>
+        </View>
+        <Text style={[styles.hoursWorkedValue, activeShift && styles.hoursWorkedValueActive, isRtl && styles.rtlInfoValue]}>
+          {formatShiftClock(session?.stats.totalWorkingMinutes)}
+        </Text>
+      </Pressable>
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, isRtl && styles.rtlText]}>{copy.home.nextOrder}</Text>
-        <Pressable onPress={() => setActiveTab('orders')}>
+        <Pressable onPress={() => openOrdersTab('all')}>
           <Text style={[styles.linkText, isRtl && styles.rtlText]}>{copy.home.viewAll}</Text>
         </Pressable>
       </View>
@@ -2795,39 +3273,42 @@ const Dashboard = ({
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, isRtl && styles.rtlText]}>{copy.orders.title}</Text>
         <View style={styles.sectionHeaderActions}>
-          {selectedPickupOrders.length > 0 ? (
-            <Pressable onPress={pickupSelectedOrders} disabled={isBusy}>
-              <Text style={[styles.linkText, isRtl && styles.rtlText]}>{copy.orders.pickUp} {selectedPickupOrders.length}</Text>
-            </Pressable>
-          ) : null}
           <Pressable onPress={syncQueue} disabled={isBusy}>
             <Text style={[styles.linkText, isRtl && styles.rtlText]}>{isSyncing ? copy.orders.syncing : copy.orders.syncQueue}</Text>
           </Pressable>
         </View>
       </View>
-      {incomingOrders.length > 1 ? (
-        <Text style={[styles.batchHint, isRtl && styles.rtlText]}>{copy.orders.batchHint}</Text>
-      ) : null}
+      <View style={styles.ordersFilterCard}>
+        <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
+          <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.statusFilter}</Text>
+          <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{visibleOrders.length} {copy.history.shown}</Text>
+        </View>
+        <View style={styles.filterRail}>
+          <FilterButton label={copy.history.all} active={ordersStatusFilter === 'all'} onPress={() => { setFocusedOrderId(null); setOrdersStatusFilter('all'); }} />
+          <FilterButton label={copy.common.incoming} active={ordersStatusFilter === 'assigned'} onPress={() => { setFocusedOrderId(null); setOrdersStatusFilter('assigned'); }} />
+          <FilterButton label={copy.common.pickedUp} active={ordersStatusFilter === 'picked_up'} onPress={() => { setFocusedOrderId(null); setOrdersStatusFilter('picked_up'); }} />
+        </View>
+      </View>
       {orders.length === 0 ? (
         <EmptyState title={copy.orders.clearTitle} text={copy.orders.clearText} isRtl={isRtl} />
+      ) : visibleOrders.length === 0 ? (
+        <EmptyState title={copy.orders.clearTitle} text={copy.orders.clearText} isRtl={isRtl} />
       ) : (
-        orders.map(order => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            copy={copy}
-            language={language}
-            isRtl={isRtl}
-            busy={isBusy}
-            onPickUp={nextOrder => actionOrder(nextOrder, 'picked_up')}
-            onDeliver={nextOrder => actionOrder(nextOrder, 'delivered')}
-            onConfirmPayment={confirmPaymentCollection}
-            onCancel={nextOrder => actionOrder(nextOrder, 'cancelled')}
-            paymentCollected={paymentCollectedOrderIds.has(order.id)}
-            selectable
-            selected={selectedPickupOrderIds.has(order.id)}
-            onToggleSelected={togglePickupSelection}
-          />
+        displayOrders.map(order => (
+          <View key={order.id} style={order.id === focusedOrderId ? styles.focusedOrderWrap : undefined}>
+            <OrderCard
+              order={order}
+              copy={copy}
+              language={language}
+              isRtl={isRtl}
+              busy={isBusy}
+              onPickUp={nextOrder => actionOrder(nextOrder, 'picked_up')}
+              onDeliver={nextOrder => actionOrder(nextOrder, 'delivered')}
+              onConfirmPayment={confirmPaymentCollection}
+              onCancel={nextOrder => actionOrder(nextOrder, 'cancelled')}
+              paymentCollected={paymentCollectedOrderIds.has(order.id)}
+            />
+          </View>
         ))
       )}
     </View>
@@ -2844,15 +3325,27 @@ const Dashboard = ({
       && !isBusy;
 
     return (
-      <View style={styles.tabPane}>
+      <View style={styles.transferScreen}>
         <View style={styles.transferHero}>
-          <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{copy.transfer.title}</Text>
-          <Text style={[styles.commandTitle, isRtl && styles.rtlText]}>{copy.transfer.createTitle}</Text>
-          <Text style={[styles.commandText, isRtl && styles.rtlText]}>{copy.transfer.text}</Text>
-          <View style={styles.transferSummary}>
-            <InfoRow label={copy.transfer.from} value={branchLabel(fromBranch, copy)} isRtl={isRtl} />
-            <InfoRow label={copy.transfer.to} value={branchLabel(toBranch, copy)} isRtl={isRtl} />
-            <InfoRow label={copy.common.duty} value={activeShift ? copy.common.online : copy.transfer.dutyStartFirst} isRtl={isRtl} />
+          <View style={[styles.transferHeroTop, isRtl && styles.rtlRow]}>
+            <View style={styles.transferHeroIcon}>
+              <Image source={internalTransferIcon} style={styles.transferHeroIconImage} resizeMode="contain" />
+            </View>
+            <View style={styles.transferHeroCopy}>
+              <Text style={[styles.transferEyebrow, isRtl && styles.rtlText]}>{copy.transfer.title}</Text>
+              <Text style={[styles.transferTitle, isRtl && styles.rtlText]}>{copy.transfer.createTitle}</Text>
+            </View>
+          </View>
+          <View style={[styles.transferHeroMetaRow, isRtl && styles.rtlRow]}>
+            <View style={[styles.transferHeroStatusChip, activeShift ? styles.transferHeroStatusChipOnline : styles.transferHeroStatusChipOffline, isRtl && styles.rtlRow]}>
+              <View style={[styles.transferHeroStatusDot, activeShift ? styles.transferHeroStatusDotOnline : styles.transferHeroStatusDotOffline]} />
+              <Text style={[styles.transferHeroStatusText, activeShift ? styles.transferHeroStatusTextOnline : styles.transferHeroStatusTextOffline]}>
+                {activeShift ? copy.common.online : copy.common.offline}
+              </Text>
+            </View>
+            <View style={styles.transferHeroTypeChip}>
+              <Text style={styles.transferHeroTypeText}>{copy.order.branchToBranch}</Text>
+            </View>
           </View>
         </View>
 
@@ -2867,31 +3360,53 @@ const Dashboard = ({
           <EmptyState title={copy.transfer.notEnoughTitle} text={copy.transfer.notEnoughText} isRtl={isRtl} />
         ) : (
           <View style={styles.transferForm}>
-            <BranchDropdown
-              label={copy.transfer.fromBranch}
-              branches={transferBranches}
-              value={transferFromBranchId}
-              onChange={branchId => {
-                setTransferFromBranchId(branchId);
-                setOpenTransferBranchDropdown(null);
-              }}
-              open={openTransferBranchDropdown === 'from'}
-              onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'from' ? null : 'from')}
-              isRtl={isRtl}
-            />
-            <BranchDropdown
-              label={copy.transfer.toBranch}
-              branches={transferBranches.filter(branch => branch.id !== transferFromBranchId)}
-              value={transferToBranchId}
-              onChange={branchId => {
-                setTransferToBranchId(branchId);
-                setOpenTransferBranchDropdown(null);
-              }}
-              open={openTransferBranchDropdown === 'to'}
-              onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'to' ? null : 'to')}
-              isRtl={isRtl}
-            />
-            <View style={styles.loginField}>
+            <View style={styles.transferRouteCard}>
+              <View style={[styles.transferRouteHeader, isRtl && styles.rtlRow]}>
+                <View style={styles.transferRouteTitleBlock}>
+                  <Text style={[styles.transferRouteLabel, isRtl && styles.rtlText]}>{copy.common.internalTransfer}</Text>
+                  <Text style={[styles.transferRouteHint, isRtl && styles.rtlText]}>{copy.transfer.selectBranches}</Text>
+                </View>
+                <View style={styles.transferRouteBadge}>
+                  <Text style={styles.transferRouteBadgeText} numberOfLines={1}>{copy.common.internalTransfer}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.transferRouteBody, isRtl && styles.rtlRow]}>
+                <View style={styles.transferRouteRail}>
+                  <View style={styles.transferRouteDot} />
+                  <View style={styles.transferRouteLine} />
+                  <View style={[styles.transferRouteDot, styles.transferRouteDotEnd]} />
+                </View>
+                <View style={styles.transferRouteFields}>
+                  <BranchDropdown
+                    label={copy.transfer.fromBranch}
+                    branches={transferBranches}
+                    value={transferFromBranchId}
+                    onChange={branchId => {
+                      setTransferFromBranchId(branchId);
+                      setOpenTransferBranchDropdown(null);
+                    }}
+                    open={openTransferBranchDropdown === 'from'}
+                    onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'from' ? null : 'from')}
+                    isRtl={isRtl}
+                  />
+                  <BranchDropdown
+                    label={copy.transfer.toBranch}
+                    branches={transferBranches.filter(branch => branch.id !== transferFromBranchId)}
+                    value={transferToBranchId}
+                    onChange={branchId => {
+                      setTransferToBranchId(branchId);
+                      setOpenTransferBranchDropdown(null);
+                    }}
+                    open={openTransferBranchDropdown === 'to'}
+                    onToggle={() => setOpenTransferBranchDropdown(previous => previous === 'to' ? null : 'to')}
+                    isRtl={isRtl}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.transferNotesCard}>
               <Text style={[styles.loginFieldLabel, isRtl && styles.rtlText]}>{copy.transfer.notes}</Text>
               <TextInput
                 value={transferNotes}
@@ -2922,148 +3437,157 @@ const Dashboard = ({
 
   const renderNotifications = () => (
     <View style={styles.tabPane}>
-      <View style={styles.notificationHero}>
-        <View style={styles.notificationHeroIcon}>
-          <FlatIcon name="alert" active size={28} color={colors.brand} />
-          {incomingOrders.length > 0 ? <View style={styles.notificationPulse} /> : null}
-        </View>
-        <View style={styles.notificationHeroCopy}>
-          <Text style={[styles.notificationEyebrow, isRtl && styles.rtlText]}>{copy.notifications.eyebrow}</Text>
-          <Text style={[styles.notificationTitle, isRtl && styles.rtlText]}>
-            {incomingOrders.length ? `${incomingOrders.length} ${copy.notifications.newAlerts}` : copy.notifications.noNewAlerts}
-          </Text>
-          <Text style={[styles.notificationText, isRtl && styles.rtlText]}>{copy.notifications.text}</Text>
-        </View>
-        <Button label={copy.notifications.playAlarm} tone="warning" disabled={orders.length === 0} onPress={playDriverAlarm} />
-      </View>
-
-      <View style={styles.statsGrid}>
-        <StatTile label={copy.common.incoming} value={incomingOrders.length} hint={copy.notifications.assignedNow} tone={incomingOrders.length ? 'amber' : 'green'} />
-        <StatTile label={copy.notifications.activeRoute} value={orders.length} hint={copy.notifications.activeRouteHint} />
-      </View>
-
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, isRtl && styles.rtlText]}>{copy.notifications.allComingOrders}</Text>
+        <View>
+          <Text style={[styles.sectionTitle, isRtl && styles.rtlText]}>{copy.header.notifications}</Text>
+          <Text style={[styles.notificationListHint, isRtl && styles.rtlText]}>
+            {orders.length ? `${incomingOrders.length} ${copy.common.incoming} / ${orders.length} ${copy.common.active}` : copy.notifications.noNewAlerts}
+          </Text>
+        </View>
         <View style={styles.sectionHeaderActions}>
-          {selectedPickupOrders.length > 0 ? (
-            <Pressable onPress={pickupSelectedOrders} disabled={isBusy}>
-              <Text style={[styles.linkText, isRtl && styles.rtlText]}>{copy.orders.pickUp} {selectedPickupOrders.length}</Text>
-            </Pressable>
-          ) : null}
           <Pressable onPress={refreshAll}>
             <Text style={[styles.linkText, isRtl && styles.rtlText]}>{copy.common.refresh}</Text>
           </Pressable>
         </View>
       </View>
-      {incomingOrders.length > 1 ? (
-        <Text style={[styles.batchHint, isRtl && styles.rtlText]}>{copy.notifications.batchHint}</Text>
-      ) : null}
 
       {orders.length === 0 ? (
         <EmptyState title={copy.notifications.emptyTitle} text={copy.notifications.emptyText} isRtl={isRtl} />
       ) : (
         orders.map(order => (
-          <View key={order.id} style={styles.notificationOrderWrap}>
-            <View style={[styles.notificationOrderHeader, isRtl && styles.rtlRow]}>
-              <View>
-                <Text style={[styles.notificationOrderLabel, isRtl && styles.rtlText]}>
+          <Pressable
+            key={order.id}
+            accessibilityRole="button"
+            onPress={() => openOrderFromNotification(order)}
+            style={({ pressed }) => [
+              styles.notificationStrip,
+              order.orderKind === 'internal_transfer' && styles.notificationStripTransfer,
+              order.deliveryStatus === 'assigned' ? styles.notificationStripIncoming : styles.notificationStripActive,
+              pressed && styles.buttonPressed
+            ]}
+          >
+            <View style={[
+              styles.notificationStripIcon,
+              order.orderKind === 'internal_transfer' && styles.notificationStripIconTransfer,
+              order.deliveryStatus === 'assigned' ? styles.notificationStripIconIncoming : styles.notificationStripIconActive
+            ]}>
+              <Image
+                source={order.orderKind === 'internal_transfer' ? internalTransferIcon : deliveryOrderIcon}
+                style={styles.notificationStripImage}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.notificationStripCopy}>
+              <View style={[styles.notificationStripTop, isRtl && styles.rtlRow]}>
+                <Text
+                  style={[
+                    styles.notificationOrderLabel,
+                    order.orderKind === 'internal_transfer' && styles.notificationOrderLabelTransfer,
+                    isRtl && styles.rtlText
+                  ]}
+                  numberOfLines={2}
+                >
                   {order.deliveryStatus === 'assigned'
                     ? formatCopy(copy.notifications.newOrderFrom, { route: orderRouteLabel(order, copy) })
                     : formatCopy(copy.notifications.inProgress, { route: orderRouteLabel(order, copy) })}
                 </Text>
+                <View style={[
+                  styles.notificationStripStatus,
+                  order.deliveryStatus === 'assigned' ? styles.notificationStripStatusIncoming : styles.notificationStripStatusActive
+                ]}>
+                  <Text style={[
+                    styles.notificationStripStatusText,
+                    order.deliveryStatus === 'assigned' ? styles.notificationStripStatusTextIncoming : styles.notificationStripStatusTextActive
+                  ]}>
+                    {order.deliveryStatus === 'assigned' ? copy.notifications.alarmReady : copy.notifications.routeActive}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.notificationStripMetaRow, isRtl && styles.rtlRow]}>
                 <Text style={[styles.notificationOrderTime, isRtl && styles.rtlText]}>
                   {formatDateTime(order.assignedAt || order.createdAt, language, copy)}
                 </Text>
+                <Text style={[styles.notificationStripHint, isRtl && styles.rtlText]}>
+                  {order.orderKind === 'internal_transfer' ? copy.common.internalTransfer : copy.common.actualDelivery}
+                </Text>
               </View>
-              <Pill
-                label={order.deliveryStatus === 'assigned' ? copy.notifications.alarmReady : copy.notifications.routeActive}
-                tone={order.deliveryStatus === 'assigned' ? 'amber' : 'blue'}
-              />
             </View>
-            <OrderCard
-              order={order}
-              copy={copy}
-              language={language}
-              isRtl={isRtl}
-              busy={isBusy}
-              onPickUp={nextOrder => actionOrder(nextOrder, 'picked_up')}
-              onDeliver={nextOrder => actionOrder(nextOrder, 'delivered')}
-              onConfirmPayment={confirmPaymentCollection}
-              onCancel={nextOrder => actionOrder(nextOrder, 'cancelled')}
-              paymentCollected={paymentCollectedOrderIds.has(order.id)}
-              selectable
-              selected={selectedPickupOrderIds.has(order.id)}
-              onToggleSelected={togglePickupSelection}
-              compact
-            />
-          </View>
+            <Text style={styles.notificationStripChevron}>{'>'}</Text>
+          </Pressable>
         ))
       )}
     </View>
   );
 
-  const renderHistory = () => (
+  const renderHistory = () => {
+    const historyTypeFilterLabel = historyTypeFilter === 'delivery' ? copy.history.deliveryOrders : copy.history.internalTransfers;
+    const historyPeriodFilterLabel = historyPeriodFilter === 'all'
+      ? copy.history.allTime
+      : historyPeriodFilter === 'today'
+        ? copy.history.today
+        : historyPeriodFilter === 'week'
+          ? copy.history.last7Days
+          : copy.history.thisMonth;
+    const historyStatusFilterLabel = historyStatusFilter === 'all'
+      ? copy.history.all
+      : historyStatusFilter === 'picked_up'
+        ? copy.history.pickedUp
+        : historyStatusFilter === 'delivered'
+          ? copy.history.delivered
+          : copy.history.cancelled;
+    const historyTypeOptions = [
+      { key: 'delivery', label: copy.history.deliveryOrders, selected: historyTypeFilter === 'delivery', onPress: () => setHistoryTypeFilter('delivery' as HistoryOrderTypeFilter) },
+      { key: 'internal_transfer', label: copy.history.internalTransfers, selected: historyTypeFilter === 'internal_transfer', onPress: () => setHistoryTypeFilter('internal_transfer' as HistoryOrderTypeFilter) }
+    ];
+    const historyPeriodOptions = [
+      { key: 'all', label: copy.history.allTime, selected: historyPeriodFilter === 'all', onPress: () => setHistoryPeriodFilter('all' as HistoryPeriodFilter) },
+      { key: 'today', label: copy.history.today, selected: historyPeriodFilter === 'today', onPress: () => setHistoryPeriodFilter('today' as HistoryPeriodFilter) },
+      { key: 'week', label: copy.history.last7Days, selected: historyPeriodFilter === 'week', onPress: () => setHistoryPeriodFilter('week' as HistoryPeriodFilter) },
+      { key: 'month', label: copy.history.thisMonth, selected: historyPeriodFilter === 'month', onPress: () => setHistoryPeriodFilter('month' as HistoryPeriodFilter) }
+    ];
+    const historyStatusOptions = [
+      { key: 'all', label: copy.history.all, selected: historyStatusFilter === 'all', onPress: () => setHistoryStatusFilter('all' as HistoryStatusFilter) },
+      { key: 'picked_up', label: copy.history.pickedUp, selected: historyStatusFilter === 'picked_up', onPress: () => setHistoryStatusFilter('picked_up' as HistoryStatusFilter) },
+      { key: 'delivered', label: copy.history.delivered, selected: historyStatusFilter === 'delivered', onPress: () => setHistoryStatusFilter('delivered' as HistoryStatusFilter) },
+      { key: 'cancelled', label: copy.history.cancelled, selected: historyStatusFilter === 'cancelled', onPress: () => setHistoryStatusFilter('cancelled' as HistoryStatusFilter) }
+    ];
+    const historyPickerOptions = historyFilterPicker === 'type'
+      ? historyTypeOptions
+      : historyFilterPicker === 'period'
+        ? historyPeriodOptions
+        : historyStatusOptions;
+    const historyPickerTitle = historyFilterPicker === 'type'
+      ? copy.history.typeFilter
+      : historyFilterPicker === 'period'
+        ? copy.history.periodFilter
+        : copy.history.statusFilter;
+
+    return (
     <View style={styles.tabPane}>
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, isRtl && styles.rtlText]}>{copy.history.title}</Text>
         <Pill label={`${history.length} ${copy.history.shown}`} tone="neutral" />
       </View>
 
-      <View style={styles.historyFilterCard}>
-        <View style={styles.historyFilterSection}>
-          <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
-            <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.typeFilter}</Text>
-            <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.history.typeHint}</Text>
-          </View>
-          <View style={[styles.historyTypeSwitch, isRtl && styles.rtlRow]}>
-            <Pressable
-              onPress={() => setHistoryTypeFilter('delivery')}
-              style={[styles.historyTypeButton, historyTypeFilter === 'delivery' && styles.historyTypeButtonActive]}
-            >
-              <Text style={[styles.historyTypeLabel, historyTypeFilter === 'delivery' && styles.historyTypeLabelActive, isRtl && styles.rtlText]}>
-                {copy.history.deliveryOrders}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setHistoryTypeFilter('internal_transfer')}
-              style={[styles.historyTypeButton, historyTypeFilter === 'internal_transfer' && styles.historyTypeButtonActive]}
-            >
-              <Text style={[styles.historyTypeLabel, historyTypeFilter === 'internal_transfer' && styles.historyTypeLabelActive, isRtl && styles.rtlText]}>
-                {copy.history.internalTransfers}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.historyFilterDivider} />
-
-        <View style={styles.historyFilterSection}>
-          <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
-            <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.periodFilter}</Text>
-            <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.history.timeFirstHint}</Text>
-          </View>
-          <View style={styles.filterRail}>
-            <FilterButton label={copy.history.allTime} active={historyPeriodFilter === 'all'} onPress={() => setHistoryPeriodFilter('all')} />
-            <FilterButton label={copy.history.today} active={historyPeriodFilter === 'today'} onPress={() => setHistoryPeriodFilter('today')} />
-            <FilterButton label={copy.history.last7Days} active={historyPeriodFilter === 'week'} onPress={() => setHistoryPeriodFilter('week')} />
-            <FilterButton label={copy.history.thisMonth} active={historyPeriodFilter === 'month'} onPress={() => setHistoryPeriodFilter('month')} />
-          </View>
-        </View>
-
-        <View style={styles.historyFilterDivider} />
-
-        <View style={styles.historyFilterSection}>
-          <View style={[styles.filterSectionHeader, !isWideLayout && styles.filterSectionHeaderCompact]}>
-            <Text style={[styles.filterGroupLabel, isRtl && styles.rtlText]}>{copy.history.statusFilter}</Text>
-            <Text style={[styles.filterHint, isRtl && styles.rtlText]}>{copy.history.statusHint}</Text>
-          </View>
-          <View style={styles.filterRail}>
-            <FilterButton label={copy.history.all} active={historyStatusFilter === 'all'} onPress={() => setHistoryStatusFilter('all')} />
-            <FilterButton label={copy.history.pickedUp} active={historyStatusFilter === 'picked_up'} onPress={() => setHistoryStatusFilter('picked_up')} />
-            <FilterButton label={copy.history.delivered} active={historyStatusFilter === 'delivered'} onPress={() => setHistoryStatusFilter('delivered')} />
-            <FilterButton label={copy.history.cancelled} active={historyStatusFilter === 'cancelled'} onPress={() => setHistoryStatusFilter('cancelled')} />
-          </View>
-        </View>
+      <View style={[styles.historyFilterCard, isRtl && styles.rtlRow]}>
+        <HistoryFilterSelect
+          label={copy.history.typeFilter}
+          value={historyTypeFilterLabel}
+          isRtl={isRtl}
+          onPress={() => setHistoryFilterPicker('type')}
+        />
+        <HistoryFilterSelect
+          label={copy.history.periodFilter}
+          value={historyPeriodFilterLabel}
+          isRtl={isRtl}
+          onPress={() => setHistoryFilterPicker('period')}
+        />
+        <HistoryFilterSelect
+          label={copy.history.statusFilter}
+          value={historyStatusFilterLabel}
+          isRtl={isRtl}
+          onPress={() => setHistoryFilterPicker('status')}
+        />
       </View>
 
       {historyQuery.isLoading ? (
@@ -3090,30 +3614,39 @@ const Dashboard = ({
           ))}
         </View>
       )}
+
+      <HistoryFilterPickerSheet
+        visible={historyFilterPicker !== null}
+        title={historyPickerTitle}
+        options={historyPickerOptions}
+        copy={copy}
+        isRtl={isRtl}
+        onClose={() => setHistoryFilterPicker(null)}
+      />
     </View>
-  );
+    );
+  };
 
   const renderDutyRecord = () => (
     <View style={styles.tabPane}>
       <View style={styles.dutyHero}>
-        <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{copy.profile.monthlyArchive}</Text>
-        <Text style={[styles.commandTitle, isRtl && styles.rtlText]}>{formatMonth(`${dutyMonthFilter}-01`, language, copy)}</Text>
-        <Text style={[styles.commandText, isRtl && styles.rtlText]}>{copy.profile.archiveHint}</Text>
-        <View style={[styles.dutyExportActions, isRtl && styles.rtlRow]}>
-          <Button
-            label={copy.profile.exportExcel}
-            tone="light"
-            disabled={isExportingDuty || dutyRecords.length === 0}
-            onPress={() => exportDutyRecords('excel')}
-          />
-          <Button
-            label={copy.profile.exportPdf}
-            tone="dark"
-            disabled={isExportingDuty || dutyRecords.length === 0}
-            onPress={() => exportDutyRecords('pdf')}
-          />
+        <View style={[styles.dutyHeroHeader, isRtl && styles.rtlRow]}>
+          <View style={styles.dutyHeroCopy}>
+            <Text style={[styles.commandLabel, isRtl && styles.rtlText]}>{copy.profile.monthlyArchive}</Text>
+            <Text style={[styles.dutyHeroMonth, isRtl && styles.rtlText]}>{formatMonth(`${dutyMonthFilter}-01`, language, copy)}</Text>
+            <Text style={[styles.dutyHeroMeta, isRtl && styles.rtlText]}>
+              {dutySummary.days} {copy.profile.dutyDays} - {formatShiftHours(dutySummary.minutes, copy)} - {dutySummary.orders} {copy.profile.orderCount}
+            </Text>
+          </View>
+          <View style={styles.dutyHeroAction}>
+            <Button
+              label={copy.profile.exportPdf}
+              tone="dark"
+              disabled={isExportingDuty || dutyRecords.length === 0}
+              onPress={() => exportDutyRecords('pdf')}
+            />
+          </View>
         </View>
-        <Text style={[styles.dutyExportHint, isRtl && styles.rtlText]}>{copy.profile.excelHint}</Text>
       </View>
 
       <View style={styles.historyFilterCard}>
@@ -3183,7 +3716,9 @@ const Dashboard = ({
 
   const renderStats = () => (
     <View style={styles.tabPane}>
-      <MonthlyTargetCard target={monthlyTarget} copy={copy} language={language} isRtl={isRtl} />
+      {mobileSettings.targetCardEnabled ? (
+        <MonthlyTargetCard target={monthlyTarget} copy={copy} language={language} isRtl={isRtl} />
+      ) : null}
       <View style={styles.statsGrid}>
         <StatTile label={copy.stats.delivered} value={session?.stats.deliveredCount ?? 0} hint={copy.stats.today} tone="green" onPress={() => openHistoryFromStat('delivery', 'delivered')} />
         <StatTile label={copy.common.actual} value={session?.stats.actualDeliveryCount ?? 0} hint={copy.common.actualDelivery} onPress={() => openHistoryFromStat('delivery', 'delivered')} />
@@ -3191,7 +3726,7 @@ const Dashboard = ({
         <StatTile label={copy.stats.pickedUp} value={session?.stats.pickedUpCount ?? 0} hint={copy.stats.today} onPress={() => openHistoryFromStat('delivery', 'picked_up')} />
         <StatTile label={copy.common.cancelled} value={session?.stats.cancelledCount ?? 0} hint={copy.stats.today} tone="red" onPress={() => openHistoryFromStat('delivery', 'cancelled')} />
         <StatTile label={copy.stats.historyRows} value={history.length} hint={copy.stats.loadedOrders} onPress={() => setActiveTab('history')} />
-        <StatTile label={copy.stats.assigned} value={session?.stats.assignedCount ?? 0} hint={copy.stats.today} onPress={() => setActiveTab('orders')} />
+        <StatTile label={copy.stats.assigned} value={session?.stats.assignedCount ?? 0} hint={copy.stats.today} onPress={() => openOrdersTab('assigned')} />
         <StatTile label={copy.common.hours} value={formatShiftHours(session?.stats.totalWorkingMinutes, copy)} hint={copy.stats.today} onPress={() => setActiveTab('dutyRecord')} />
       </View>
       <View style={styles.performanceCard}>
@@ -3301,20 +3836,19 @@ const Dashboard = ({
         ) : (
           <>
             <View style={styles.headerCopy}>
-              <Text style={[styles.eyebrow, isRtl && styles.rtlText]}>{copy.header.driverMobile}</Text>
-              <Text style={[styles.title, isRtl && styles.rtlText]}>{session?.driver.name || copy.header.driver}</Text>
-              <Text style={[styles.subTitle, isRtl && styles.rtlText]}>
+              <Text style={[styles.driverHeaderName, isRtl && styles.rtlText]}>{session?.driver.name || copy.header.driver}</Text>
+              <Text style={[styles.driverHeaderMeta, isRtl && styles.rtlText]}>
                 {session?.driver.driverCode || copy.header.deliveryRoute} - {activeShift ? copy.common.online : copy.common.offline}
               </Text>
             </View>
             <View style={[styles.headerActions, isRtl && styles.rtlRow]}>
-              <HeaderAction icon="profile" label={copy.header.openProfile} onPress={() => setActiveTab('profile')} />
               <HeaderAction
                 icon="alert"
                 label={copy.header.notifications}
                 hasBadge={orders.length > 0}
                 onPress={openNotifications}
               />
+              <HeaderAvatar name={session?.driver.name} label={copy.header.openProfile} onPress={() => setActiveTab('profile')} />
             </View>
           </>
         )}
@@ -3340,7 +3874,7 @@ const Dashboard = ({
 
         <View style={styles.hidden}>
           <TabButton label={copy.header.home} active={activeTab === 'home'} onPress={() => setActiveTab('home')} />
-          <TabButton label={copy.header.orders} active={activeTab === 'orders'} onPress={() => setActiveTab('orders')} />
+          <TabButton label={copy.header.orders} active={activeTab === 'orders'} onPress={() => openOrdersTab('all')} />
           <TabButton label={copy.header.transfer} active={activeTab === 'transfer'} onPress={() => setActiveTab('transfer')} />
           <TabButton label={copy.header.history} active={activeTab === 'history'} onPress={() => setActiveTab('history')} />
           <TabButton label={copy.header.stats} active={activeTab === 'stats'} onPress={() => setActiveTab('stats')} />
@@ -3367,7 +3901,7 @@ const Dashboard = ({
               accessibilityRole="tab"
               accessibilityState={{ selected: activeTab === 'orders' }}
               accessibilityLabel={copy.header.orders}
-              onPress={() => setActiveTab('orders')}
+              onPress={() => openOrdersTab('all')}
               style={({ pressed }) => [
                 styles.ordersFab,
                 activeTab === 'orders' && styles.ordersFabActive,
@@ -3412,6 +3946,7 @@ export default function DriverApp() {
   const [mobileSettingsLoaded, setMobileSettingsLoaded] = useState(false);
   const [mobileSettingsRefreshing, setMobileSettingsRefreshing] = useState(false);
   const [languageLoaded, setLanguageLoaded] = useState(false);
+  const [splashAccepted, setSplashAccepted] = useState(false);
   const copy = useMemo(() => getDriverCopy(language), [language]);
   const isRtl = isRtlLanguage(language);
 
@@ -3499,6 +4034,10 @@ export default function DriverApp() {
     );
   }
 
+  if (!splashAccepted) {
+    return <SplashScreen onStart={() => setSplashAccepted(true)} />;
+  }
+
   if (session === undefined) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -3517,10 +4056,12 @@ export default function DriverApp() {
         onLanguageChange={changeLanguage}
         themeMode={themeMode}
         onThemeChange={changeTheme}
+        mobileSettings={mobileSettings}
       />
     )
     : (
       <LoginScreen
+        onBack={() => setSplashAccepted(false)}
         onSignedIn={() => supabase.auth.getSession().then(({ data }) => setSession(data.session))}
         copy={copy}
         isRtl={isRtl}
@@ -3533,6 +4074,40 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.page
+  },
+  splashScreen: {
+    flex: 1,
+    backgroundColor: '#050000',
+    justifyContent: 'flex-end'
+  },
+  splashFooter: {
+    width: '100%',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)'
+  },
+  splashButtonMotion: {
+    width: '100%',
+    maxWidth: 360
+  },
+  splashButton: {
+    width: '100%',
+    minHeight: 58,
+    borderRadius: radius.pill,
+    backgroundColor: colors.danger,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.brand
+  },
+  splashButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
   },
   rtlRow: {
     flexDirection: 'row-reverse'
@@ -3651,6 +4226,39 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.xl,
     backgroundColor: colors.page
   },
+  loginBackWrap: {
+    position: 'absolute',
+    left: spacing.lg,
+    zIndex: 10
+  },
+  loginBackWrapRtl: {
+    left: undefined,
+    right: spacing.lg
+  },
+  loginBackButton: {
+    minHeight: 42,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  loginBackChevron: {
+    color: colors.brand,
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 18
+  },
+  loginBackText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
   loginHero: {
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -3692,14 +4300,10 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 28,
-    gap: spacing.lg,
-    ...shadows.card
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    gap: spacing.lg
   },
   loginPanelHeader: {
     alignItems: 'center',
@@ -3720,7 +4324,7 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   loginForm: {
     gap: spacing.md,
-    paddingTop: spacing.xs
+    paddingTop: spacing.sm
   },
   loginField: {
     gap: 7
@@ -4072,7 +4676,20 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     alignItems: 'flex-start'
   },
   headerCopy: {
-    flex: 1
+    flex: 1,
+    minWidth: 0
+  },
+  driverHeaderName: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 0
+  },
+  driverHeaderMeta: {
+    marginTop: 5,
+    color: colors.slate600,
+    fontSize: 13,
+    fontWeight: '800'
   },
   headerActions: {
     flexDirection: 'row',
@@ -4088,6 +4705,21 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  headerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  headerAvatarText: {
+    color: colors.brand,
+    fontSize: 15,
+    fontWeight: '900'
   },
   headerActionBadge: {
     position: 'absolute',
@@ -4183,6 +4815,18 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     justifyContent: 'center',
     gap: 4
   },
+  bottomNavIconShell: {
+    width: 36,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  bottomNavIconShellActive: {
+    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder
+  },
   bottomNavLabel: {
     color: colors.muted,
     fontSize: 10,
@@ -4235,6 +4879,44 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.md,
     ...shadows.card
   },
+  shiftCardOnline: {
+    borderColor: colors.successBorder
+  },
+  shiftCardOffline: {
+    borderColor: colors.dangerBorder
+  },
+  shiftStatusBanner: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: 5
+  },
+  shiftStatusBannerOnline: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  shiftStatusBannerOffline: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft
+  },
+  shiftStatusLabel: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase'
+  },
+  shiftStatusLabelOnline: {
+    color: colors.success
+  },
+  shiftStatusLabelOffline: {
+    color: colors.danger
+  },
+  shiftStatusCount: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: '900'
+  },
   commandCopy: {
     gap: 6
   },
@@ -4256,11 +4938,11 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   shiftBranchPanel: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.md
+    gap: 10
   },
   shiftBranchPanel_neutral: {
     borderColor: colors.border,
@@ -4276,6 +4958,7 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   shiftBranchCopy: {
     flex: 1,
+    minWidth: 0,
     gap: 4
   },
   shiftBranchLabel: {
@@ -4284,17 +4967,71 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   },
   shiftBranchTitle: {
     color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900'
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0.2
   },
   shiftBranchMeta: {
     color: colors.muted,
     fontSize: 11,
     fontWeight: '800'
   },
+  shiftLocationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  shiftLocationIcon_neutral: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
+  shiftLocationIcon_ready: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  shiftLocationIcon_blocked: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft
+  },
+  shiftLocationPin: {
+    width: 22,
+    height: 22,
+    borderRadius: 12,
+    borderBottomRightRadius: 5,
+    transform: [{ rotate: '45deg' }],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -2
+  },
+  shiftLocationPinDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white
+  },
+  shiftLocationBase: {
+    position: 'absolute',
+    bottom: 8,
+    width: 24,
+    height: 5,
+    borderRadius: radius.pill,
+    opacity: 0.22
+  },
+  shiftBranchActionPill: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
   shiftBranchAction: {
     color: colors.brand,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase'
   },
@@ -4302,6 +5039,119 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10
+  },
+  dashboardStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  dashboardStatCard: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 122,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    justifyContent: 'space-between',
+    ...shadows.card
+  },
+  dashboardStatCard_blue: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
+  dashboardStatCard_green: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  dashboardStatCard_amber: {
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft
+  },
+  dashboardStatCard_red: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft
+  },
+  dashboardStatLabel: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase'
+  },
+  dashboardStatValue: {
+    color: colors.ink,
+    fontSize: 30,
+    fontWeight: '900',
+    lineHeight: 36
+  },
+  dashboardStatHint: {
+    color: colors.slate700,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17
+  },
+  hoursWorkedCard: {
+    minHeight: 74,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    ...shadows.card
+  },
+  hoursWorkedCardActive: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  hoursWorkedIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  hoursWorkedIconActive: {
+    borderColor: colors.successBorder
+  },
+  hoursWorkedCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  hoursWorkedLabel: {
+    color: colors.warning,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
+  },
+  hoursWorkedLabelActive: {
+    color: colors.success
+  },
+  hoursWorkedHint: {
+    marginTop: 2,
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  hoursWorkedValue: {
+    color: colors.warning,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    fontVariant: ['tabular-nums']
+  },
+  hoursWorkedValueActive: {
+    color: colors.success
   },
   statTile: {
     flexGrow: 1,
@@ -4460,13 +5310,6 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     justifyContent: 'flex-end',
     gap: spacing.md
   },
-  batchHint: {
-    marginTop: -6,
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 18
-  },
   sectionTitle: {
     color: colors.ink,
     ...typography.sectionTitle
@@ -4480,14 +5323,210 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   historyFilterCard: {
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.infoBorder,
     backgroundColor: colors.surface,
-    padding: spacing.md,
-    gap: spacing.md,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 7,
     ...shadows.card
   },
-  historyFilterSection: {
+  historyFilterSelect: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 58,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6
+  },
+  historyFilterSelectCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyFilterSelectLabel: {
+    color: colors.info,
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    lineHeight: 10,
+    textTransform: 'uppercase'
+  },
+  historyFilterSelectValue: {
+    marginTop: 5,
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 15
+  },
+  historyFilterSelectChevron: {
+    color: colors.slate400,
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 12,
+    flexShrink: 0
+  },
+  historyFilterSheet: {
+    maxHeight: '72%'
+  },
+  historyPickerOptions: {
+    gap: 8,
+    marginTop: spacing.sm
+  },
+  historyPickerOption: {
+    minHeight: 52,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  historyPickerOptionActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft
+  },
+  historyPickerOptionText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  historyPickerOptionTextActive: {
+    color: colors.brand
+  },
+  historyPickerRadio: {
+    width: 14,
+    height: 14,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.slate300,
+    flexShrink: 0
+  },
+  historyPickerRadioActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brand
+  },
+  ordersFilterCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.md,
     gap: spacing.sm
+  },
+  historyFilterSection: {
+    gap: 7
+  },
+  historyFilterSingleLine: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 2
+  },
+  historyFilterSingleLineRtl: {
+    flexDirection: 'row-reverse',
+    paddingRight: 0,
+    paddingLeft: 2
+  },
+  historyFilterInlineGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flexShrink: 0
+  },
+  historyFilterInlineLabel: {
+    color: colors.info,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase'
+  },
+  historyFilterInlineButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0
+  },
+  historyFilterVerticalDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.borderSoft,
+    flexShrink: 0
+  },
+  historyFilterHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  historyFilterHeaderCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  historyFilterEyebrow: {
+    color: colors.info,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    lineHeight: 11,
+    textTransform: 'uppercase'
+  },
+  historyFilterTitle: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 20
+  },
+  historyFilterBody: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start'
+  },
+  historyFilterBodyCompact: {
+    flexDirection: 'column'
+  },
+  historyCompactFilterGroup: {
+    flex: 1,
+    minWidth: 0,
+    gap: 7
+  },
+  historyFilterPanel: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    padding: 9,
+    gap: 8
+  },
+  historyFilterPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  historyFilterPanelHint: {
+    flex: 1,
+    color: colors.slate600,
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
+    textAlign: 'right'
   },
   filterSectionHeader: {
     flexDirection: 'row',
@@ -4514,33 +5553,49 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   filterRail: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm
+    gap: 7
   },
   historyTypeSwitch: {
     flexDirection: 'row',
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     backgroundColor: colors.surfaceMuted,
-    padding: 4,
-    gap: 4
+    padding: 5,
+    gap: 5
+  },
+  historyTypeSwitchInline: {
+    minWidth: 265,
+    flexShrink: 0
   },
   historyTypeButton: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 36,
     borderRadius: radius.lg,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
+    gap: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 7
   },
   historyTypeButtonActive: {
     backgroundColor: colors.brand,
     ...shadows.brand
   },
+  historyTypeIconDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.slate300,
+    flexShrink: 0
+  },
+  historyTypeIconDotActive: {
+    backgroundColor: colors.white
+  },
   historyTypeLabel: {
     color: colors.muted,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
     textAlign: 'center',
     textTransform: 'uppercase'
@@ -4553,12 +5608,13 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     ...typography.micro
   },
   filterButton: {
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSoft,
     backgroundColor: colors.surface,
-    paddingHorizontal: 13,
-    paddingVertical: 9
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 34
   },
   filterButtonActive: {
     borderColor: colors.brand,
@@ -4574,7 +5630,7 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     color: colors.brand
   },
   historyList: {
-    gap: spacing.md
+    gap: 10
   },
   historyListWide: {
     flexDirection: 'row',
@@ -4588,14 +5644,24 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     flexGrow: 1
   },
   historyStrip: {
-    minHeight: 104,
+    minHeight: 132,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.infoBorder,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    gap: 8
+    padding: 10,
+    gap: 9,
+    ...shadows.card
+  },
+  historyStripTransfer: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
+  historyStripDelivered: {
+    borderColor: colors.successBorder
+  },
+  historyStripCancelled: {
+    borderColor: colors.dangerBorder
   },
   historyStripPressed: {
     opacity: 0.78
@@ -4604,55 +5670,132 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: spacing.sm
+    gap: 9
+  },
+  historyStripIconFrame: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  historyStripIconFrameTransfer: {
+    borderColor: colors.infoBorder
+  },
+  historyStripIconImage: {
+    width: 34,
+    height: 34
   },
   historyStripTitleWrap: {
     flex: 1,
     minWidth: 0
   },
+  historyStripEyebrow: {
+    color: colors.info,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    lineHeight: 11,
+    textTransform: 'uppercase'
+  },
   historyStripTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900'
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 18
   },
   historyStripMeta: {
-    marginTop: 3,
+    marginTop: 2,
     color: colors.muted,
     fontSize: 10,
     fontWeight: '800',
-    lineHeight: 14,
+    lineHeight: 13,
     textTransform: 'uppercase'
   },
-  historyStripNotes: {
-    marginTop: -2,
-    color: colors.slate600,
+  historyStripStatusWrap: {
+    alignItems: 'flex-end',
+    gap: 6,
+    flexShrink: 0
+  },
+  historyStripChevron: {
+    color: colors.slate400,
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 17
+  },
+  historyStripInfoGrid: {
+    flexDirection: 'row',
+    gap: 7
+  },
+  historyInfoChip: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6
+  },
+  historyInfoLabel: {
+    color: colors.muted,
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    lineHeight: 10,
+    textTransform: 'uppercase'
+  },
+  historyInfoValue: {
+    marginTop: 3,
+    color: colors.ink,
     fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 14
+  },
+  historyStripNotes: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    color: colors.slate600,
+    fontSize: 10,
     fontWeight: '800',
-    lineHeight: 15
+    lineHeight: 13
   },
   historyStripTimeline: {
     flexDirection: 'row',
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
-    paddingTop: 8
+    gap: 7
   },
   historyTimeCell: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    minHeight: 50,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6
   },
   historyTimeLabel: {
     color: colors.slate400,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.5,
+    lineHeight: 10,
     textTransform: 'uppercase'
   },
   historyTimeValue: {
-    marginTop: 2,
+    marginTop: 3,
     color: colors.ink,
-    fontSize: 11,
-    fontWeight: '900'
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 13
   },
   historyDetailSheet: {
     maxHeight: '86%'
@@ -4763,6 +5906,17 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.md,
     ...shadows.card
   },
+  focusedOrderWrap: {
+    borderRadius: radius.xl,
+    borderWidth: 2,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+    padding: 3
+  },
+  transferOrderCard: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
   orderCardCompact: {
     padding: 14
   },
@@ -4772,35 +5926,57 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10
   },
-  orderTitleWrap: {
-    flex: 1
+  orderStatusStack: {
+    width: 104,
+    alignItems: 'flex-end',
+    gap: 6,
+    flexShrink: 0
   },
-  pickupSelect: {
-    width: 34,
-    height: 34,
+  orderStatusStackRtl: {
+    alignItems: 'flex-start'
+  },
+  transferOrderTop: {
+    alignItems: 'center'
+  },
+  orderTitleWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  orderIconFrame: {
+    width: 50,
+    height: 50,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.white,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    overflow: 'hidden'
   },
-  pickupSelectActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brand
+  transferOrderIconFrame: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.xl,
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.surface
   },
-  pickupSelectText: {
-    color: colors.muted,
-    fontSize: 18,
-    fontWeight: '900'
+  orderIconImage: {
+    width: 44,
+    height: 44
   },
-  pickupSelectTextActive: {
-    color: colors.white
+  transferOrderIconImage: {
+    width: 42,
+    height: 42
   },
   orderBranch: {
     color: colors.ink,
     fontSize: 17,
     fontWeight: '900'
+  },
+  transferOrderBranch: {
+    color: colors.ink,
+    fontSize: 19,
+    lineHeight: 23
   },
   orderMeta: {
     marginTop: 4,
@@ -4808,6 +5984,11 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase'
+  },
+  transferOrderMeta: {
+    color: colors.info,
+    fontSize: 12,
+    letterSpacing: 0.5
   },
   orderTypeMeta: {
     marginTop: 2,
@@ -4892,12 +6073,80 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   runTimerValueActive: {
     color: colors.success
   },
+  runTimerCell: {
+    width: '100%',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    alignItems: 'center'
+  },
+  runTimerCellTop: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4
+  },
+  runTimerCellIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  runTimerCellIconActive: {
+    borderColor: colors.successBorder
+  },
+  runTimerCellActive: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  runTimerCellLabel: {
+    flexShrink: 1,
+    color: colors.warning,
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase'
+  },
+  runTimerCellLabelActive: {
+    color: colors.success
+  },
+  runTimerCellValue: {
+    marginTop: 2,
+    color: colors.warning,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums']
+  },
+  runTimerCellValueActive: {
+    color: colors.success
+  },
+  orderDetailsGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm
+  },
+  orderDetailsCell: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0
+  },
   blockPanel: {
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.borderSoft,
     backgroundColor: colors.surfaceMuted,
-    padding: spacing.md,
+    padding: spacing.sm,
     gap: spacing.sm
   },
   blockStatusRow: {
@@ -4909,6 +6158,16 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     color: colors.brand,
     fontSize: 13,
     fontWeight: '800'
+  },
+  transferSourceText: {
+    color: colors.info
+  },
+  timelinePanel: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.sm
   },
   paymentPanel: {
     borderRadius: radius.lg,
@@ -4932,6 +6191,9 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   paymentPanelTitleCollected: {
     color: colors.success
   },
+  paymentPanelAction: {
+    marginTop: 2
+  },
   paymentNote: {
     borderRadius: radius.md,
     backgroundColor: colors.surface,
@@ -4944,11 +6206,35 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   paymentNoteCollected: {
     color: colors.success
   },
+  detailCellHovered: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
+  detailCellPressed: {
+    opacity: 0.82
+  },
+  detailCellSelected: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12
+  },
+  infoRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    gap: 3,
+    height: 60,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6
   },
   infoLabel: {
     color: colors.muted,
@@ -4956,12 +6242,24 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase'
   },
+  infoLabelStacked: {
+    fontSize: 9,
+    letterSpacing: 0.6,
+    lineHeight: 11
+  },
   infoValue: {
     flex: 1,
     color: colors.ink,
     fontSize: 12,
     fontWeight: '900',
     textAlign: 'right'
+  },
+  infoValueStacked: {
+    flex: 0,
+    width: '100%',
+    textAlign: 'left',
+    fontSize: 11,
+    lineHeight: 14
   },
   orderNotes: {
     borderRadius: radius.md,
@@ -4973,20 +6271,16 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     lineHeight: 18
   },
   timelineGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm
+    gap: 7
   },
   timelineTile: {
-    flexGrow: 1,
-    flexBasis: '31%',
-    minWidth: 96,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.borderSoft,
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 9
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    height: 60
   },
   timelineTileWide: {
     flexBasis: '100%'
@@ -4996,13 +6290,15 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.7,
+    lineHeight: 11,
     textTransform: 'uppercase'
   },
   timelineTileValue: {
     marginTop: 4,
     color: colors.ink,
-    fontSize: 12,
-    fontWeight: '900'
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 14
   },
   orderActions: {
     flexDirection: 'row',
@@ -5014,6 +6310,10 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6
+  },
+  pillFullWidth: {
+    width: '100%',
+    alignItems: 'center'
   },
   pill_neutral: {
     borderColor: colors.border,
@@ -5039,6 +6339,9 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase'
+  },
+  pillTextFullWidth: {
+    textAlign: 'center'
   },
   pillText_neutral: {
     color: colors.muted
@@ -5148,45 +6451,226 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm
   },
+  transferScreen: {
+    gap: spacing.md
+  },
   transferHero: {
     borderRadius: radius.lg,
     borderWidth: 1,
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadows.card
+  },
+  transferHeroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md
+  },
+  transferHeroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  transferHeroIconImage: {
+    width: 42,
+    height: 42
+  },
+  transferHeroCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  transferEyebrow: {
+    color: colors.info,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase'
+  },
+  transferTitle: {
+    marginTop: 3,
+    color: colors.ink,
+    fontSize: 21,
+    fontWeight: '900',
+    lineHeight: 25
+  },
+  transferHeroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm
+  },
+  transferHeroStatusChip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  transferHeroStatusChipOnline: {
+    borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft
+  },
+  transferHeroStatusChipOffline: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerSoft
+  },
+  transferHeroStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: radius.pill
+  },
+  transferHeroStatusDotOnline: {
+    backgroundColor: colors.success
+  },
+  transferHeroStatusDotOffline: {
+    backgroundColor: colors.danger
+  },
+  transferHeroStatusText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase'
+  },
+  transferHeroStatusTextOnline: {
+    color: colors.success
+  },
+  transferHeroStatusTextOffline: {
+    color: colors.danger
+  },
+  transferHeroTypeChip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  transferHeroTypeText: {
+    color: colors.info,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase'
+  },
+  transferSubtitle: {
+    marginTop: 4,
+    color: colors.slate700,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17
+  },
+  transferRouteCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: spacing.lg,
+    padding: spacing.md,
     gap: spacing.md,
     ...shadows.card
   },
-  transferSummary: {
-    borderRadius: radius.lg,
+  transferRouteHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md
+  },
+  transferRouteTitleBlock: {
+    flex: 1,
+    minWidth: 0
+  },
+  transferRouteLabel: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '900'
+  },
+  transferRouteHint: {
+    marginTop: 3,
+    color: colors.slate700,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  transferRouteBadge: {
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.borderSoft,
-    backgroundColor: colors.surfaceMuted,
-    padding: spacing.md,
-    gap: spacing.sm
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexShrink: 1,
+    maxWidth: '48%'
+  },
+  transferRouteBadgeText: {
+    color: colors.info,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase'
+  },
+  transferRouteBody: {
+    flexDirection: 'row',
+    gap: spacing.md
+  },
+  transferRouteRail: {
+    width: 18,
+    alignItems: 'center',
+    paddingTop: 38,
+    paddingBottom: 38
+  },
+  transferRouteDot: {
+    width: 12,
+    height: 12,
+    borderRadius: radius.pill,
+    borderWidth: 3,
+    borderColor: colors.info,
+    backgroundColor: colors.surface
+  },
+  transferRouteDotEnd: {
+    borderColor: colors.success
+  },
+  transferRouteLine: {
+    flex: 1,
+    width: 2,
+    minHeight: 52,
+    backgroundColor: colors.infoBorder
+  },
+  transferRouteFields: {
+    flex: 1,
+    gap: spacing.md,
+    minWidth: 0
   },
   transferForm: {
+    gap: spacing.md
+  },
+  transferNotesCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
     ...shadows.card
   },
   branchDropdownWrap: {
-    gap: spacing.sm
+    gap: 6
   },
   branchDropdownLabel: {
     color: colors.muted,
     ...typography.micro
   },
   branchDropdownTrigger: {
-    minHeight: 76,
+    minHeight: 68,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.borderSoft,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -5248,21 +6732,36 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
   dutyHero: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.brand,
+    borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
     ...shadows.card
   },
-  dutyExportActions: {
+  dutyHeroHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md
   },
-  dutyExportHint: {
+  dutyHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5
+  },
+  dutyHeroMonth: {
+    color: colors.ink,
+    fontSize: 21,
+    fontWeight: '900'
+  },
+  dutyHeroMeta: {
     color: colors.muted,
     fontSize: 11,
-    fontWeight: '800'
+    fontWeight: '800',
+    lineHeight: 16
+  },
+  dutyHeroAction: {
+    flexShrink: 0
   },
   dutyRecordCard: {
     borderRadius: radius.lg,
@@ -5333,6 +6832,114 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20
   },
+  notificationListHint: {
+    marginTop: 4,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  notificationStrip: {
+    minHeight: 94,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    ...shadows.card
+  },
+  notificationStripTransfer: {
+    backgroundColor: colors.infoSoft
+  },
+  notificationStripIncoming: {
+    borderColor: colors.warningBorder
+  },
+  notificationStripActive: {
+    borderColor: colors.infoBorder
+  },
+  notificationStripIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  notificationStripImage: {
+    width: 42,
+    height: 42
+  },
+  notificationStripIconIncoming: {
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.surface
+  },
+  notificationStripIconActive: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.surface
+  },
+  notificationStripIconTransfer: {
+    borderColor: colors.infoBorder
+  },
+  notificationStripCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4
+  },
+  notificationStripTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm
+  },
+  notificationStripStatus: {
+    flexShrink: 0,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5
+  },
+  notificationStripStatusIncoming: {
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningSoft
+  },
+  notificationStripStatusActive: {
+    borderColor: colors.infoBorder,
+    backgroundColor: colors.infoSoft
+  },
+  notificationStripStatusText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase'
+  },
+  notificationStripStatusTextIncoming: {
+    color: colors.warning
+  },
+  notificationStripStatusTextActive: {
+    color: colors.info
+  },
+  notificationStripMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  notificationStripHint: {
+    color: colors.info,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase'
+  },
+  notificationStripChevron: {
+    color: colors.muted,
+    fontSize: 18,
+    fontWeight: '900'
+  },
+  notificationOrderLabelTransfer: {
+    color: colors.info
+  },
   notificationOrderWrap: {
     gap: spacing.sm
   },
@@ -5348,6 +6955,8 @@ const createDriverStyles = (colors: DriverColors) => StyleSheet.create({
     gap: spacing.md
   },
   notificationOrderLabel: {
+    flex: 1,
+    minWidth: 0,
     color: colors.warning,
     fontSize: 13,
     fontWeight: '900',

@@ -116,6 +116,7 @@ export type DriverMobileAppSettings = {
   androidLatestBuild: number;
   androidLatestVersion: string;
   androidApkUrl: string;
+  targetCardEnabled: boolean;
   forceUpdateEnabled: boolean;
   forceUpdateTitle: string;
   forceUpdateMessage: string;
@@ -264,6 +265,7 @@ const defaultMobileAppSettings: DriverMobileAppSettings = {
   androidLatestBuild: 1,
   androidLatestVersion: '0.1.0',
   androidApkUrl: '',
+  targetCardEnabled: false,
   forceUpdateEnabled: false,
   forceUpdateTitle: 'Update required',
   forceUpdateMessage: 'A new driver app version is available. Please install the latest APK to continue.',
@@ -278,6 +280,7 @@ const mapMobileAppSettings = (row: any): DriverMobileAppSettings => ({
   androidLatestBuild: Number(row?.android_latest_build || defaultMobileAppSettings.androidLatestBuild),
   androidLatestVersion: row?.android_latest_version || defaultMobileAppSettings.androidLatestVersion,
   androidApkUrl: row?.android_apk_url || defaultMobileAppSettings.androidApkUrl,
+  targetCardEnabled: row?.target_card_enabled === true,
   forceUpdateEnabled: row?.force_update_enabled === true,
   forceUpdateTitle: row?.force_update_title || defaultMobileAppSettings.forceUpdateTitle,
   forceUpdateMessage: row?.force_update_message || defaultMobileAppSettings.forceUpdateMessage,
@@ -318,7 +321,7 @@ export const driverApi = {
   mobileAppSettings: async (): Promise<DriverMobileAppSettings> => {
     const { data, error } = await supabase
       .from('delivery_mobile_app_settings')
-      .select('login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, force_update_enabled, force_update_title, force_update_message, updated_at')
+      .select('login_logo_url, footer_logo_url, footer_credit, android_minimum_build, android_latest_build, android_latest_version, android_apk_url, target_card_enabled, force_update_enabled, force_update_title, force_update_message, updated_at')
       .eq('id', 'global')
       .maybeSingle();
     if (error) {
