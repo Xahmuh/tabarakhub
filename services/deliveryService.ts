@@ -281,6 +281,12 @@ const toOrder = (row: any): DeliveryOrder => ({
   driverPaymentNote: row.driver_payment_note || null,
   driverPaymentCollectedAt: row.driver_payment_collected_at || null,
   driverPaymentCollectedAmountBhd: Number(row.driver_payment_collected_amount_bhd || 0),
+  driverReconciliationExpectedBhd: Number(row.driver_reconciliation_expected_bhd || 0),
+  driverReconciliationReturnedBhd: Number(row.driver_reconciliation_returned_bhd || 0),
+  driverReconciliationVarianceBhd: Number(row.driver_reconciliation_variance_bhd || 0),
+  driverReconciledAt: row.driver_reconciled_at || null,
+  driverReconciledBy: row.driver_reconciled_by || null,
+  driverReconciliationNote: row.driver_reconciliation_note || null,
   orderKind: toOrderKind(row.order_kind),
   pharmacistId: row.pharmacist_id,
   pharmacistName: row.pharmacist_name || row.pharmacist?.name || null,
@@ -595,11 +601,17 @@ export const deliveryService = {
       return true;
     },
 
-    reconcilePayment: async (id: string, collectedAmountBhd?: number | null): Promise<DeliveryOrder> => {
+    reconcilePayment: async (
+      id: string,
+      collectedAmountBhd?: number | null,
+      driverReturnedBhd?: number | null,
+      notes?: string | null
+    ): Promise<DeliveryOrder> => {
       const { data: orderId, error: reconcileError } = await supabaseClient.rpc('app_delivery_reconcile_payment' as any, {
         p_order_id: id,
         p_collected_amount_bhd: collectedAmountBhd ?? null,
-        p_notes: null
+        p_notes: notes ?? null,
+        p_driver_returned_bhd: driverReturnedBhd ?? null
       });
       if (reconcileError) throw reconcileError;
 

@@ -135,8 +135,6 @@ const createTemplateWorkbook = async () => {
   return new ExcelJS.Workbook();
 };
 
-const safeSheetName = (value: string) => value.replace(/[*?:/\\[\]]/g, ' ').slice(0, 31);
-
 const styleTemplateHeader = (row: any) => {
   row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   row.height = 22;
@@ -145,28 +143,6 @@ const styleTemplateHeader = (row: any) => {
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
     cell.border = { bottom: { style: 'thin', color: { argb: 'FF7F1D1D' } } };
   });
-};
-
-const styleReferenceHeader = (row: any) => {
-  row.font = { bold: true, color: { argb: 'FF0F172A' } };
-  row.eachCell((cell: any) => {
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
-  });
-};
-
-const addReferenceSheet = (
-  workbook: any,
-  name: string,
-  columns: Array<{ header: string; key: string; width: number }>,
-  rows: Array<Record<string, string | number | boolean | null | undefined>>
-) => {
-  const sheet = workbook.addWorksheet(safeSheetName(name));
-  sheet.columns = columns;
-  styleReferenceHeader(sheet.getRow(1));
-  rows.forEach(row => sheet.addRow(row));
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
-  return sheet;
 };
 
 const buildDisplayValue = (...parts: Array<string | undefined | null>) =>
@@ -188,7 +164,7 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
   const templateDate = new Date();
   const templateDateKey = `${templateDate.getFullYear()}-${String(templateDate.getMonth() + 1).padStart(2, '0')}-${String(templateDate.getDate()).padStart(2, '0')}`;
 
-  const ordersSheet = workbook.addWorksheet('Delivery Orders Template');
+  const ordersSheet = workbook.addWorksheet('Order Form');
   ordersSheet.columns = [
     { header: 'order_date', key: 'order_date', width: 16 },
     { header: 'value_bhd', key: 'value_bhd', width: 14 },
@@ -239,95 +215,6 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
     });
   });
 
-  const rulesSheet = workbook.addWorksheet('Import Rules');
-  rulesSheet.columns = [
-    { header: 'Field', key: 'field', width: 20 },
-    { header: 'Required', key: 'required', width: 14 },
-    { header: 'How to fill', key: 'details', width: 82 }
-  ];
-  styleReferenceHeader(rulesSheet.getRow(1));
-  rulesSheet.addRows([
-    { field: 'order_date', required: 'Yes', details: 'Use yyyy-mm-dd, or an Excel date. Example: 2026-06-17.' },
-    { field: 'value_bhd', required: 'Yes', details: 'Numeric BHD amount. Use decimals only, without currency text. Example: 2.950.' },
-    { field: 'payment_type', required: 'Yes', details: `Use payment code or label from Payment Types sheet. Active now: ${activePaymentTypes.map(type => type.code).join(', ') || 'No active payment types loaded'}.` },
-    { field: 'block_number', required: 'Usually', details: 'Required for payment types that need block coverage. You can use area_name only if it uniquely matches one block.' },
-    { field: 'area_name', required: 'Optional', details: 'Optional helper. If block_number is blank and area matches exactly one block, the system can resolve it.' },
-    { field: 'pharmacist', required: 'Yes', details: 'Use pharmacist code, exact name, or ID from Pharmacists sheet. Must be assigned to this branch.' },
-    { field: 'driver', required: 'Yes except Talabat', details: 'Use driver code, exact name, or ID from Drivers sheet. Leave blank for Talabat orders.' },
-    { field: 'notes', required: 'No', details: 'Optional remark for audit or operations.' },
-    { field: 'file size', required: 'Limit', details: 'Upload file must be .xlsx or .csv and 5MB or smaller.' },
-    { field: 'do not edit headers', required: 'Important', details: `Keep the first row headers exactly as: ${DELIVERY_ORDER_IMPORT_TEMPLATE_HEADERS.join(', ')}.` }
-  ]);
-
-  addReferenceSheet(
-    workbook,
-    'Payment Types',
-    [
-      { header: 'code', key: 'code', width: 18 },
-      { header: 'label', key: 'label', width: 24 },
-      { header: 'requires_block', key: 'requires_block', width: 18 },
-      { header: 'active', key: 'active', width: 12 }
-    ],
-    activePaymentTypes.map(type => ({
-      code: type.code,
-      label: type.label,
-      requires_block: type.requiresBlock ? 'YES' : 'NO',
-      active: type.isActive ? 'YES' : 'NO'
-    }))
-  );
-
-  addReferenceSheet(
-    workbook,
-    'Pharmacists',
-    [
-      { header: 'code', key: 'code', width: 18 },
-      { header: 'name', key: 'name', width: 32 },
-      { header: 'value_to_use', key: 'value', width: 42 }
-    ],
-    context.pharmacists.map(pharmacist => ({
-      code: pharmacist.code || '',
-      name: pharmacist.name,
-      value: buildDisplayValue(pharmacist.code, pharmacist.name) || pharmacist.name
-    }))
-  );
-
-  addReferenceSheet(
-    workbook,
-    'Drivers',
-    [
-      { header: 'code', key: 'code', width: 18 },
-      { header: 'name', key: 'name', width: 32 },
-      { header: 'value_to_use', key: 'value', width: 42 },
-      { header: 'active', key: 'active', width: 12 }
-    ],
-    context.drivers.map(driver => ({
-      code: driver.driverCode || '',
-      name: driver.name,
-      value: buildDisplayValue(driver.driverCode, driver.name) || driver.name,
-      active: driver.isActive ? 'YES' : 'NO'
-    }))
-  );
-
-  addReferenceSheet(
-    workbook,
-    'Blocks',
-    [
-      { header: 'block_number', key: 'block_number', width: 18 },
-      { header: 'area_name', key: 'area_name', width: 32 },
-      { header: 'governorate', key: 'governorate', width: 18 }
-    ],
-    context.blocks.map(block => ({
-      block_number: block.blockNumber,
-      area_name: block.areaName,
-      governorate: block.governorate
-    }))
-  );
-
-  const paymentListFormula = `'Payment Types'!$A$2:$A$${Math.max(activePaymentTypes.length + 1, 2)}`;
-  const pharmacistListFormula = `'Pharmacists'!$C$2:$C$${Math.max(context.pharmacists.length + 1, 2)}`;
-  const driverListFormula = `'Drivers'!$C$2:$C$${Math.max(context.drivers.length + 1, 2)}`;
-  const blockListFormula = `'Blocks'!$A$2:$A$${Math.max(context.blocks.length + 1, 2)}`;
-
   for (let rowNumber = 2; rowNumber <= 250; rowNumber++) {
     ordersSheet.getCell(`A${rowNumber}`).dataValidation = {
       type: 'date',
@@ -346,26 +233,6 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
       showErrorMessage: true,
       errorTitle: 'Invalid value',
       error: 'Order value must be greater than zero.'
-    };
-    ordersSheet.getCell(`C${rowNumber}`).dataValidation = {
-      type: 'list',
-      formulae: [paymentListFormula],
-      allowBlank: false
-    };
-    ordersSheet.getCell(`D${rowNumber}`).dataValidation = {
-      type: 'list',
-      formulae: [blockListFormula],
-      allowBlank: true
-    };
-    ordersSheet.getCell(`F${rowNumber}`).dataValidation = {
-      type: 'list',
-      formulae: [pharmacistListFormula],
-      allowBlank: false
-    };
-    ordersSheet.getCell(`G${rowNumber}`).dataValidation = {
-      type: 'list',
-      formulae: [driverListFormula],
-      allowBlank: true
     };
   }
 

@@ -1,14 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileDown, Printer, Package, Wallet, MessageCircle, Globe2 } from 'lucide-react';
+import { FileDown, Printer, Package, Wallet, ShoppingBag } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { Branch, DeliveryOrder, DeliveryPaymentTypeConfig } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
-import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
+import { PeriodPreset, formatBhd, getPresetRange, periodLabel, sumValue, todayKey } from './utils';
 import { exportOrdersToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { getDeliveryPaymentLabel, isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import Swal from 'sweetalert2';
 
-type ViewMode = 'combined' | 'direct' | 'external';
+type ViewMode = 'all' | 'normal' | 'talabat';
+
+const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
+const isTalabatOrder = (order: DeliveryOrder) => isTalabatDeliveryPayment(order.paymentType);
+const paymentBadgeClass = (order: DeliveryOrder) =>
+  isTalabatOrder(order)
+    ? 'border-orange-200 bg-orange-50 text-orange-700'
+    : 'border-brand/10 bg-brand/5 text-brand';
 
 const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -34,7 +42,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [view, setView] = useState<ViewMode>('combined');
+  const [view, setView] = useState<ViewMode>('all');
 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
@@ -69,13 +77,10 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
     return () => { cancelled = true; };
   }, [branch.id, range.from, range.to]);
 
-  const direct = useMemo(() => orders.filter(order => isDirectOrder(order, paymentTypes)), [orders, paymentTypes]);
-  const external = useMemo(
-    () => orders.filter(order => order.orderKind !== 'internal_transfer' && !isDirectOrder(order, paymentTypes)),
-    [orders, paymentTypes]
-  );
+  const talabatOrders = useMemo(() => orders.filter(isTalabatOrder), [orders]);
+  const normalOrders = useMemo(() => orders.filter(order => !isTalabatOrder(order)), [orders]);
 
-  const visibleOrders = view === 'combined' ? orders : view === 'direct' ? direct : external;
+  const visibleOrders = view === 'all' ? orders : view === 'talabat' ? talabatOrders : normalOrders;
 
   const handlePeriodChange = (p: PeriodPreset, from?: string, to?: string) => {
     setPreset(p);
@@ -135,16 +140,16 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
         <KpiCard label="Total orders" value={String(orders.length)} sub={label} icon={<Package className="h-4 w-4" />} />
         <KpiCard label="Total value" value={formatBhd(sumValue(orders))} icon={<Wallet className="h-4 w-4" />} />
         <KpiCard
-          label="WhatsApp / Direct"
-          value={String(direct.length)}
-          sub={formatBhd(sumValue(direct))}
-          icon={<MessageCircle className="h-4 w-4" />}
+          label="Normal"
+          value={String(normalOrders.length)}
+          sub={formatBhd(sumValue(normalOrders))}
+          icon={<Package className="h-4 w-4" />}
         />
         <KpiCard
-          label="External / no-block"
-          value={String(external.length)}
-          sub={formatBhd(sumValue(external))}
-          icon={<Globe2 className="h-4 w-4" />}
+          label="Talabat"
+          value={String(talabatOrders.length)}
+          sub={formatBhd(sumValue(talabatOrders))}
+          icon={<ShoppingBag className="h-4 w-4" />}
         />
       </div>
 
@@ -152,9 +157,9 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
           <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
             {([
-              { id: 'combined', label: 'Combined' },
-              { id: 'direct', label: 'WhatsApp / Direct' },
-              { id: 'external', label: 'External / no-block' }
+              { id: 'all', label: 'All' },
+              { id: 'normal', label: 'Normal' },
+              { id: 'talabat', label: 'Talabat' }
             ] as Array<{ id: ViewMode; label: string }>).map(v => (
               <button
                 key={v.id}
@@ -181,7 +186,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <th className="py-2 pr-3">Date</th>
+                  <th className="py-2 pr-3">Order / date</th>
                   <th className="py-2 pr-3 text-right">Value (BHD)</th>
                   <th className="py-2 px-3">Payment</th>
                   <th className="py-2 pr-3">Pharmacist</th>
@@ -194,9 +199,16 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
               <tbody className="divide-y divide-slate-50">
                 {visibleOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50/50">
-                    <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.orderDate}</td>
+                    <td className="py-2 pr-3 text-xs font-bold text-slate-400">
+                      <span className="block font-black text-brand">{deliveryOrderNumber(order)}</span>
+                      <span className="block text-slate-600">{order.orderDate}</span>
+                    </td>
                     <td className="py-2 pr-3 text-right font-black text-slate-900 tabular-nums">{order.valueBhd.toFixed(3)}</td>
-                    <td className="py-2 px-3 text-xs font-black text-slate-600">{order.paymentType}</td>
+                    <td className="py-2 px-3">
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadgeClass(order)}`}>
+                        {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
+                      </span>
+                    </td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.pharmacistName || '—'}</td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.driverName || '—'}</td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.blockNumber || '—'}</td>

@@ -112,7 +112,7 @@ const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) 
   const meta = STATUS_META[status];
   const Icon = meta.icon;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${meta.className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${meta.className}`}>
       <Icon className="h-3 w-3" /> {meta.label}
     </span>
   );
@@ -188,8 +188,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, icon, tone = 'slat
 
 const DispatchMetaItem: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="min-w-0">
-    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-    <div className="mt-1 text-xs font-bold leading-5 text-slate-700">{children}</div>
+    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+    <div className="mt-0.5 text-[11px] font-bold leading-4 text-slate-700">{children}</div>
   </div>
 );
 
@@ -690,7 +690,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
           ) : internalDispatchOrders.length === 0 ? (
             <p className="py-12 text-center text-xs font-bold text-slate-400">No internal driver dispatch orders in this period.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {internalDispatchOrders.map(order => {
                 const canActOnOrder = canTransition
                   && !lifecycleUnavailable
@@ -710,15 +710,15 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                 return (
                   <article
                     key={order.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                    className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-brand/30 hover:bg-slate-50/40 hover:shadow-md"
                   >
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brand">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-brand">
                             {deliveryOrderNumber(order)}
                           </p>
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                             order.orderKind === 'internal_transfer'
                               ? 'border-amber-200 bg-amber-50 text-amber-700'
                               : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -727,16 +727,16 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                           </span>
                           <StatusBadge status={order.deliveryStatus} />
                         </div>
-                        <p className="mt-2 break-words text-sm font-black text-slate-950">{routeLabel}</p>
-                        <p className="mt-1 text-xs font-bold text-slate-500">
+                        <p className="mt-1 break-words text-[13px] font-black leading-5 text-slate-950">{routeLabel}</p>
+                        <p className="mt-0.5 text-[11px] font-bold text-slate-500">
                           {order.orderDate}{!branch ? ` - ${branchLabel}` : ''}
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                        <div className="text-left xl:text-right">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Value</p>
-                          <p className="mt-1 text-lg font-black leading-none text-slate-950 tabular-nums">
+                      <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:justify-end">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left lg:text-right">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Value</p>
+                          <p className="mt-0.5 text-base font-black leading-none text-slate-950 tabular-nums">
                             {formatBhd(order.valueBhd)}
                           </p>
                         </div>
@@ -744,30 +744,30 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                     </div>
 
                     {order.orderKind !== 'internal_transfer' && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
+                      <div className="mt-2 flex flex-wrap gap-1.5">
                         <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PAYMENT_COLLECTION_META[order.paymentCollectionStatus].className}`}>
                           {PAYMENT_COLLECTION_META[order.paymentCollectionStatus].label}
                         </span>
                         {isPendingCollectionOrder(order) && (
                           <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
-                            collect {formatBhd(order.amountToCollectBhd)}
+                            COD {formatBhd(order.amountToCollectBhd)}
                           </span>
                         )}
                         {order.cashHandedToDriverBhd > 0 && (
                           <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-600">
-                            driver cash {formatBhd(order.cashHandedToDriverBhd)}
+                            driver change {formatBhd(order.cashHandedToDriverBhd)}
                           </span>
                         )}
                       </div>
                     )}
 
                     {order.driverPaymentNote && (
-                      <p className="mt-2 truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
+                      <p className="mt-1.5 truncate text-[10px] font-semibold text-red-600" title={order.driverPaymentNote}>
                         {order.driverPaymentNote}
                       </p>
                     )}
 
-                    <div className="mt-4 grid gap-x-5 gap-y-3 border-t border-slate-100 pt-3 sm:grid-cols-2 2xl:grid-cols-4">
+                    <div className="mt-2 grid gap-x-3 gap-y-2 rounded-lg border border-slate-100 bg-slate-50/70 p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                       {!branch && (
                         <DispatchMetaItem label="Branch">
                           <span className="break-words">{branchLabel}</span>
@@ -800,14 +800,14 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                     </div>
 
                     {canTransition && (
-                      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+                      <div className="mt-2 flex flex-wrap justify-end gap-1.5 border-t border-slate-100 pt-2">
                         {nextStatuses.length === 0 ? (
                           canReturnOrder ? (
                             <button
                               type="button"
                               disabled={savingOrderId === order.id}
                               onClick={() => handleReturnOrder(order)}
-                              className="rounded-lg border border-brand/20 bg-brand/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded-lg border border-brand/20 bg-brand/5 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {savingOrderId === order.id ? 'Saving' : 'Return'}
                             </button>
@@ -821,7 +821,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                               type="button"
                               disabled={!canAdvanceOrder || savingOrderId === order.id}
                               onClick={() => handleTransition(order, nextStatus)}
-                              className={`rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                              className={`rounded-lg border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
                                 nextStatus === 'cancelled'
                                   ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
                                   : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:text-brand'

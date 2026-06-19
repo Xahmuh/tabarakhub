@@ -660,6 +660,12 @@ export interface DeliveryOrder {
   driverPaymentNote?: string | null;
   driverPaymentCollectedAt?: string | null;
   driverPaymentCollectedAmountBhd: number;
+  driverReconciliationExpectedBhd: number;
+  driverReconciliationReturnedBhd: number;
+  driverReconciliationVarianceBhd: number;
+  driverReconciledAt?: string | null;
+  driverReconciledBy?: string | null;
+  driverReconciliationNote?: string | null;
   orderKind: DeliveryOrderKind;
   pharmacistId?: string | null;
   pharmacistName?: string | null;

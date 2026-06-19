@@ -3,7 +3,7 @@
     "name": "Tabarak Driver",
     "slug": "tabarak-driver",
     "scheme": "tabarakdriver",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "orientation": "portrait",
     "icon": "./src/assets/tabarak-logo.jpg",
     "splash": {
@@ -36,7 +36,7 @@
     },
     "android": {
       "package": "com.tabarakpharmacy.driver",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
