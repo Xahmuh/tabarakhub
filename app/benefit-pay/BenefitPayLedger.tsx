@@ -3,10 +3,10 @@ import Swal from 'sweetalert2';
 import {
   ArrowUpRight,
   Banknote,
-  CalendarDays,
   Clock,
   FileDown,
   Landmark,
+  LayoutDashboard,
   Loader2,
   Lock,
   Pencil,
@@ -220,8 +220,13 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     acc.total += row.valueBhd;
     acc.count += 1;
     acc[row.transferType] += row.valueBhd;
-    if (row.source === 'delivery') acc.delivery += row.valueBhd;
-    else acc.manual += row.valueBhd;
+    if (row.source === 'delivery') {
+      acc.delivery += row.valueBhd;
+      acc.deliveryCount += 1;
+    } else {
+      acc.manual += row.valueBhd;
+      acc.manualCount += 1;
+    }
     return acc;
   }, {
     AFS: 0,
@@ -229,6 +234,8 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     IBAN: 0,
     manual: 0,
     delivery: 0,
+    manualCount: 0,
+    deliveryCount: 0,
     total: 0,
     count: 0
   }), [transfers]);
@@ -243,30 +250,6 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
       || byTime(a, b);
     return [...transfers].sort(sortMode === 'branch' ? byBranch : byTime);
   }, [sortMode, transfers]);
-  const timeSortedTransfers = useMemo(() => [...transfers].sort((a, b) =>
-    b.transferDate.localeCompare(a.transferDate)
-    || b.transferTime.localeCompare(a.transferTime)
-    || b.serialNumber.localeCompare(a.serialNumber)
-  ), [transfers]);
-  const topBranch = useMemo(() => {
-    type BranchTotal = { label: string; total: number; count: number };
-    const byBranch = transfers.reduce<Map<string, BranchTotal>>((acc, row) => {
-      const key = row.branchId;
-      const existing = acc.get(key) || {
-        label: [row.branchCode, row.branchName].filter(Boolean).join(' - ') || 'Unknown branch',
-        total: 0,
-        count: 0
-      };
-      existing.total += row.valueBhd;
-      existing.count += 1;
-      acc.set(key, existing);
-      return acc;
-    }, new Map<string, { label: string; total: number; count: number }>());
-    const branchTotals: BranchTotal[] = [];
-    byBranch.forEach(total => branchTotals.push(total));
-    return branchTotals.sort((a, b) => b.total - a.total)[0] || null;
-  }, [transfers]);
-  const lastTransfer = timeSortedTransfers[0] || null;
   const totalTransferPages = Math.max(1, Math.ceil(transfers.length / LEDGER_PAGE_SIZE));
   const currentRecordsPage = Math.min(recordsPage, totalTransferPages);
   const paginatedTransfers = useMemo(() => {
@@ -565,6 +548,15 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
             >
               <ReceiptText className="h-3.5 w-3.5" /> Record
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 py-2 text-xs font-bold transition-all ${
+                activeTab === 'dashboard' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" /> Branch Dashboard
+            </button>
           </div>
         )}
 
@@ -758,19 +750,21 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
         </section>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onChange={handlePeriodChange} />
-        <div className="flex items-center gap-2">
-          {isModuleEnabled('excelExport') && (
-            <button type="button" onClick={handleExcel} className="btn-secondary text-[10px] uppercase tracking-widest">
-              <FileDown className="h-3.5 w-3.5" /> Excel
+      {activeTab === 'dashboard' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+          <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onChange={handlePeriodChange} />
+          <div className="flex items-center gap-2">
+            {isModuleEnabled('excelExport') && (
+              <button type="button" onClick={handleExcel} className="btn-secondary text-[10px] uppercase tracking-widest">
+                <FileDown className="h-3.5 w-3.5" /> Excel
+              </button>
+            )}
+            <button type="button" onClick={handlePrint} className="btn-secondary text-[10px] uppercase tracking-widest">
+              <Printer className="h-3.5 w-3.5" /> PDF
             </button>
-          )}
-          <button type="button" onClick={handlePrint} className="btn-secondary text-[10px] uppercase tracking-widest">
-            <Printer className="h-3.5 w-3.5" /> PDF
-          </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {activeTab === 'dashboard' && (
         <section className="operational-panel p-4 print:hidden">
@@ -860,63 +854,11 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
       )}
 
       {activeTab === 'dashboard' && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.55fr)]">
-          <div className="rounded-xl border border-brand/10 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Benefit Pay total</p>
-                <p className="mt-3 text-[clamp(2rem,3vw,3.1rem)] font-black leading-none tracking-tight text-slate-950 tabular-nums">
-                  {formatBhd(totals.total)} BHD
-                </p>
-                <p className="mt-2 text-xs font-bold text-slate-500">{periodLabel(preset, range.from, range.to)} / {recordsScopeLabel}</p>
-              </div>
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                <Banknote className="h-5 w-5" />
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Transfers</p>
-                <p className="mt-1 text-lg font-black text-slate-950 tabular-nums">{totals.count}</p>
-              </div>
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">In-store</p>
-                <p className="mt-1 text-lg font-black text-emerald-950 tabular-nums">{formatBhd(totals.manual)}</p>
-              </div>
-              <div className="rounded-lg border border-brand/10 bg-brand/5 px-3 py-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-brand">Delivery</p>
-                <p className="mt-1 text-lg font-black text-slate-950 tabular-nums">{formatBhd(totals.delivery)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <KpiCard label="AFS" value={`${formatBhd(totals.AFS)} BHD`} icon={<Landmark className="h-4 w-4" />} tone="blue" />
-            <KpiCard label="Credimax" value={`${formatBhd(totals.CREDIMAX)} BHD`} icon={<WalletCards className="h-4 w-4" />} tone="violet" />
-            <KpiCard label="IBAN" value={`${formatBhd(totals.IBAN)} BHD`} icon={<CalendarDays className="h-4 w-4" />} tone="emerald" />
-            <KpiCard
-              label="Top branch"
-              value={topBranch ? `${formatBhd(topBranch.total)} BHD` : '-'}
-              sub={topBranch ? topBranch.label : 'No branch data'}
-              icon={<Landmark className="h-4 w-4" />}
-              tone="brand"
-            />
-            <KpiCard
-              label="Last transfer"
-              value={lastTransfer ? lastTransfer.transferTime : '-'}
-              sub={lastTransfer ? `${lastTransfer.branchCode || 'Branch'} / ${formatTransferDate(lastTransfer.transferDate)}` : 'No records'}
-              icon={<Clock className="h-4 w-4" />}
-              tone="slate"
-            />
-            <KpiCard
-              label="Records shown"
-              value={String(sortedTransfers.length)}
-              sub={sortMode === 'branch' ? 'Sorted by branch' : 'Sorted by latest time'}
-              icon={<ReceiptText className="h-4 w-4" />}
-              tone="slate"
-            />
-          </div>
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <KpiCard label="Total transfers" value={String(totals.count)} sub={periodLabel(preset, range.from, range.to)} icon={<ReceiptText className="h-4 w-4" />} tone="slate" />
+          <KpiCard label="Total value" value={`${formatBhd(totals.total)} BHD`} icon={<Banknote className="h-4 w-4" />} tone="brand" />
+          <KpiCard label="In-store" value={String(totals.manualCount)} sub={`${formatBhd(totals.manual)} BHD`} icon={<Landmark className="h-4 w-4" />} tone="emerald" />
+          <KpiCard label="Delivery BP" value={String(totals.deliveryCount)} sub={`${formatBhd(totals.delivery)} BHD`} icon={<WalletCards className="h-4 w-4" />} tone="blue" />
         </section>
       )}
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
+  BellRing,
   BookOpenCheck,
   CheckCircle2,
   ChevronRight,
@@ -31,6 +32,7 @@ import type { LucideIcon } from 'lucide-react';
 
 export type ModuleHelpKey =
   | 'command-center'
+  | 'owner-dashboard'
   | 'pos'
   | 'dashboard'
   | 'spin-win'
@@ -47,7 +49,9 @@ export type ModuleHelpKey =
   | 'feedback-admin'
   | 'employee-contributions'
   | 'block-analyzer'
-  | 'delivery';
+  | 'delivery'
+  | 'benefit-pay-ledger'
+  | 'notifications';
 
 type ModuleHelpTab = 'overview' | 'workflow' | 'features' | 'checks';
 
@@ -75,6 +79,20 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
       'Update task status and comments so the event trail stays clear for managers.'
     ],
     tip: 'Suggested actions are not persisted until a real task is created.'
+  },
+  'owner-dashboard': {
+    title: 'Owner Dashboard',
+    eyebrow: 'Owner read-only module',
+    summary: 'Read performance, delivery traceability, map zones, driver KPIs, and pharmacy KPIs without editing operational data.',
+    icon: ShieldCheck,
+    features: ['Overview KPIs', 'Delivery map', 'Traceability', 'Driver KPIs', 'Pharmacy KPIs', 'Read-only controls'],
+    steps: [
+      'Start from Overview to understand total orders, value, delivery mix, and period performance.',
+      'Open Delivery Map to review branch zones, blocks, and geographic service patterns.',
+      'Use Traceability to inspect order lifecycle, delivery status, and branch-level movement.',
+      'Review Drivers and Pharmacies tabs for operational KPI comparison without changing records.'
+    ],
+    tip: 'Owner access should stay read-only; any create, edit, delete, or settings action belongs to admin/branch workflows.'
   },
   pos: {
     title: 'Lost Sales & Shortage Log',
@@ -303,16 +321,44 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
   delivery: {
     title: 'Delivery Recording & Traceability',
     eyebrow: 'Delivery module',
-    summary: 'Record delivery orders, manage delivery references, and analyze service coverage.',
+    summary: 'Record delivery orders, follow dispatch lifecycle, manage payment collection, and trace branch delivery performance.',
     icon: Truck,
-    features: ['New delivery orders', 'Drivers', 'Areas', 'Supervisors', 'Coverage map', 'Profitability', 'Exports'],
+    features: ['Order recording', 'Branch dashboard', 'Dispatch lifecycle', 'Payment collection', 'Block/area validation', 'Coverage map', 'Profitability', 'Exports'],
     steps: [
-      'Branch users record each delivery order with driver, pharmacist, value, and block.',
-      'Managers maintain drivers, areas, supervisors, and block-to-area references first.',
-      'Use coverage analytics to compare branches, blocks, governorates, and service zones.',
-      'Export filtered data only after checking branch/date filters.'
+      'Use Record to enter the invoice, payment type, collection status, pharmacist, driver, and block or area.',
+      'Open Branch Dashboard to review today, yesterday, week, month, or custom branch delivery activity.',
+      'Use Dispatch to follow status changes from assigned to picked up, delivered, cancelled, or transfer states.',
+      'Use Coverage and analytics views to compare blocks, areas, branches, driver activity, and profitability.'
     ],
-    tip: 'When block references are maintained, area detection becomes faster and more consistent.'
+    tip: 'For Benefit Pay delivery orders, confirm the BP received time so the record syncs to Benefit Pay Recording & Traceability.'
+  },
+  'benefit-pay-ledger': {
+    title: 'Benefit Pay Recording & Traceability',
+    eyebrow: 'Finance module',
+    summary: 'Record branch Benefit Pay transfers, audit delivery BP auto-sync, and export daily or filtered BP reports.',
+    icon: WalletCards,
+    features: ['BP transfer recording', 'Branch dashboard', 'Daily sequence numbers', 'Pharmacist lock', 'Delivery BP links', 'Excel export', 'PDF report'],
+    steps: [
+      'Use Record to enter manual branch Benefit Pay transfers with date, value, pharmacist, type, and 24-hour transfer time.',
+      'Open Branch Dashboard to review BP totals, in-store receipts, and delivery-linked BP records for the selected period.',
+      'Use source filters to separate in-store Benefit Pay entries from orders synced from Delivery Recording.',
+      'Export Excel or PDF from Branch Dashboard only after confirming branch, date range, type, and source filters.'
+    ],
+    tip: 'Do not duplicate a Benefit Pay delivery order manually; open the linked record from Delivery or Benefit Pay traceability instead.'
+  },
+  notifications: {
+    title: 'Delivery Notifications',
+    eyebrow: 'Delivery alert module',
+    summary: 'Review incoming assigned delivery orders and keep branch/driver handoff signals visible.',
+    icon: BellRing,
+    features: ['Incoming order alerts', 'Unread count', 'Branch context', 'Order links', 'Alarm-ready flow'],
+    steps: [
+      'Open Notifications when the bell shows unread delivery activity.',
+      'Review the assigned order, branch name, and current delivery context before acting.',
+      'Open the related delivery workflow when the order needs recording, pickup, or dispatch follow-up.',
+      'Clear or revisit alerts only after confirming the order status in the operational module.'
+    ],
+    tip: 'Notifications are an alert layer; the source of truth remains Delivery Recording, Dispatch, and driver lifecycle data.'
   }
 };
 
