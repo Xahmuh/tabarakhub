@@ -20,6 +20,7 @@ import { BlockGeometryDataset, calculateDistanceKm, classifyDistanceZone, getBlo
 import { exportBreakdownToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { formatBhd } from './utils';
+import { runAfterNextPaint } from '../../utils/uiPerformance';
 
 type CoverageSection = 'overview' | 'matrix' | 'governorate' | 'catchment' | 'campaign' | 'overlap' | 'capacity' | 'expansion' | 'quality';
 
@@ -434,7 +435,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
 
   const downloadCoverage = () => {
     if (!summary) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       summary.blocks.map(b => ({
         block: b.blockNumber,
         area: b.areaName || (b.unresolved ? 'Unresolved' : ''),
@@ -455,7 +456,11 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
       ],
       `Bahrain Block Coverage - ${activeScopeLabel} - ${range.from} to ${range.to}`,
       `Delivery_Coverage_${activeScopeLabel.replace(/[^a-z0-9]+/gi, '_')}_${range.from}_${range.to}`
-    ).catch(e => console.error(e));
+    )).catch(e => console.error(e));
+  };
+
+  const handlePrint = () => {
+    runAfterNextPaint(printReport).catch(e => console.error(e));
   };
 
   return (
@@ -509,7 +514,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                 <FileDown className="h-3.5 w-3.5" /> Excel
               </button>
             )}
-            <button onClick={printReport} className="btn-secondary text-[10px] uppercase tracking-widest">
+            <button onClick={handlePrint} className="btn-secondary text-[10px] uppercase tracking-widest">
               <Printer className="h-3.5 w-3.5" /> PDF
             </button>
           </div>

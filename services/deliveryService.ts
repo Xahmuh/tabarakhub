@@ -154,6 +154,21 @@ const toPaymentCollectionStatus = (value: string | null | undefined): DeliveryPa
     ? value as DeliveryPaymentCollectionStatus
     : 'paid';
 
+const isBenefitPayPayment = (paymentType: string | null | undefined) =>
+  normalizeDeliveryPaymentCode(paymentType) === 'BP';
+
+const normalizeBenefitPayReceivedTime = (
+  paymentType: string | null | undefined,
+  value: string | null | undefined
+) => {
+  if (!isBenefitPayPayment(paymentType)) return null;
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(text);
+  if (!match) throw new Error('Benefit Pay received time must use HH:mm format.');
+  return `${match[1]}:${match[2]}`;
+};
+
 const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryOrderInput> => {
   const branchId = input.branchId?.trim();
   const orderDate = input.orderDate?.trim();
@@ -162,6 +177,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
   const usesExternalChannel = !paymentTypeConfig.requiresBlock;
   const valueBhd = Number(input.valueBhd);
   const blockNumber = input.blockNumber?.trim() || null;
+  const benefitPayReceivedTime = normalizeBenefitPayReceivedTime(paymentType, input.benefitPayReceivedTime);
   const paymentCollectionStatus = usesExternalChannel ? 'paid' : toPaymentCollectionStatus(input.paymentCollectionStatus);
   let amountReceivedBhd = input.amountReceivedBhd === null || input.amountReceivedBhd === undefined
     ? paymentCollectionStatus === 'paid' ? valueBhd : 0
@@ -197,6 +213,7 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
     paymentCollectionStatus,
     amountReceivedBhd: roundBhd(amountReceivedBhd),
     cashHandedToDriverBhd: roundBhd(cashHandedToDriverBhd),
+    benefitPayReceivedTime,
     driverPaymentNote,
     pharmacistId: input.pharmacistId || null,
     pharmacistName: input.pharmacistName?.trim() || null,
@@ -278,6 +295,7 @@ const toOrder = (row: any): DeliveryOrder => ({
   amountReceivedBhd: Number(row.amount_received_bhd ?? row.value_bhd ?? 0),
   amountToCollectBhd: Number(row.amount_to_collect_bhd || 0),
   cashHandedToDriverBhd: Number(row.cash_handed_to_driver_bhd || 0),
+  benefitPayReceivedTime: row.benefit_pay_received_time || null,
   driverPaymentNote: row.driver_payment_note || null,
   driverPaymentCollectedAt: row.driver_payment_collected_at || null,
   driverPaymentCollectedAmountBhd: Number(row.driver_payment_collected_amount_bhd || 0),
@@ -465,7 +483,8 @@ export const deliveryService = {
           p_payment_collection_status: normalized.paymentCollectionStatus || 'paid',
           p_amount_received_bhd: normalized.amountReceivedBhd ?? null,
           p_cash_handed_to_driver_bhd: normalized.cashHandedToDriverBhd ?? 0,
-          p_driver_payment_note: normalized.driverPaymentNote || null
+          p_driver_payment_note: normalized.driverPaymentNote || null,
+          p_benefit_pay_received_time: normalized.benefitPayReceivedTime || null
         });
         if (assignError) throw assignError;
 
@@ -486,6 +505,7 @@ export const deliveryService = {
         payment_collection_status: normalized.paymentCollectionStatus || 'paid',
         amount_received_bhd: normalized.amountReceivedBhd ?? normalized.valueBhd,
         cash_handed_to_driver_bhd: normalized.cashHandedToDriverBhd ?? 0,
+        benefit_pay_received_time: normalized.benefitPayReceivedTime || null,
         driver_payment_note: normalized.driverPaymentNote || null,
         order_kind: normalized.orderKind || 'actual_delivery',
         pharmacist_id: normalized.pharmacistId || null,
@@ -538,6 +558,7 @@ export const deliveryService = {
           payload.payment_collection_status = 'paid';
           payload.cash_handed_to_driver_bhd = 0;
           payload.driver_payment_note = null;
+          payload.benefit_pay_received_time = null;
         }
       }
       if (input.pharmacistId !== undefined) payload.pharmacist_id = input.pharmacistId;
@@ -565,6 +586,12 @@ export const deliveryService = {
         }
         payload.cash_handed_to_driver_bhd = roundBhd(cashHandedToDriverBhd);
       }
+      if (input.benefitPayReceivedTime !== undefined) {
+        payload.benefit_pay_received_time = normalizeBenefitPayReceivedTime(
+          payload.payment_type || input.paymentType || 'BP',
+          input.benefitPayReceivedTime
+        );
+      }
       if (input.driverPaymentNote !== undefined) payload.driver_payment_note = input.driverPaymentNote?.trim() || null;
       if (payload.payment_type) {
         const paymentTypeConfig = await resolvePaymentType(payload.payment_type);
@@ -574,6 +601,10 @@ export const deliveryService = {
           payload.payment_collection_status = 'paid';
           payload.cash_handed_to_driver_bhd = 0;
           payload.driver_payment_note = null;
+          payload.benefit_pay_received_time = null;
+        }
+        if (!isBenefitPayPayment(paymentTypeConfig.code)) {
+          payload.benefit_pay_received_time = null;
         }
       }
 

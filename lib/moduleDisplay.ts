@@ -22,6 +22,7 @@ export const DEFAULT_MODULE_DISPLAY_ITEMS: ModuleDisplayItemSetting[] = [
   { key: 'feedback-admin', order: 150, badge: 'Analytics', badgeStyle: 'hidden' },
   { key: 'employee-contributions', order: 160, badge: 'Ideas', badgeStyle: 'hidden' },
   { key: 'delivery', order: 170, badge: 'new module', badgeStyle: 'red' },
+  { key: 'benefit-pay-ledger', order: 172, badge: 'Finance', badgeStyle: 'hidden' },
   { key: 'command-center', order: 175, badge: 'new module', badgeStyle: 'red' },
   { key: 'block-analyzer', order: 180, badge: 'Analytics', badgeStyle: 'hidden' }
 ];
@@ -42,10 +43,11 @@ export const MODULE_DISPLAY_LABELS: Record<string, string> = {
   'system-settings': 'System Settings',
   'access-control': 'Access Control',
   'spin-win': 'Spin & Win',
-  'feedback-form': 'QC Insights',
+  'feedback-form': 'QA Insights',
   'feedback-admin': 'Feedback Admin',
   'employee-contributions': 'Team Contributions',
   delivery: 'Delivery Recording & Traceability',
+  'benefit-pay-ledger': 'Benefit Pay Ledger',
   'block-analyzer': 'BH Block Analyzer',
   'command-center': 'Daily Command Center'
 };

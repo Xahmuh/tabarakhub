@@ -17,3 +17,4 @@ export * from './deliveryCleanExportService';
 export * from './ownerTraceabilityCleanService';
 export * from './deliveryCoverageService';
 export * from './branchLoginApprovalService';
+export * from './benefitPayService';

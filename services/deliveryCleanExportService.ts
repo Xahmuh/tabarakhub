@@ -23,6 +23,7 @@ export interface DeliveryOrderCleanExportRow {
   deliveryStatus: string | null;
   valueBhd: number | null;
   paymentType: string | null;
+  benefitPayReceivedTime: string | null;
   blockNumber: string | null;
   areaName: string | null;
   governorate: string | null;
@@ -60,6 +61,7 @@ interface DeliveryOrderCleanExportDbRow {
   delivery_status: string | null;
   value_bhd: number | string | null;
   payment_type: string | null;
+  benefit_pay_received_time: string | null;
   block_number: string | null;
   area_name: string | null;
   governorate: string | null;
@@ -96,6 +98,7 @@ const CLEAN_EXPORT_SELECT = `
   delivery_status,
   value_bhd,
   payment_type,
+  benefit_pay_received_time,
   block_number,
   area_name,
   governorate,
@@ -160,6 +163,7 @@ const toCleanExportRow = (row: DeliveryOrderCleanExportDbRow): DeliveryOrderClea
   deliveryStatus: row.delivery_status,
   valueBhd: toNumberOrNull(row.value_bhd),
   paymentType: row.payment_type,
+  benefitPayReceivedTime: row.benefit_pay_received_time,
   blockNumber: row.block_number,
   areaName: row.area_name,
   governorate: row.governorate,
@@ -344,6 +348,7 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
       branchName: row.branchName,
       valueBhd: row.valueBhd === null ? null : roundBhd(row.valueBhd),
       paymentType: row.paymentType,
+      benefitPayReceivedTime: row.benefitPayReceivedTime ? row.benefitPayReceivedTime.slice(0, 5) : '',
       blockNumber: row.blockNumber,
       areaName: row.areaName,
       governorate: row.governorate,
@@ -364,6 +369,7 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
       { key: 'branchName', label: 'Branch', width: 24 },
       { key: 'valueBhd', label: 'Value (BHD)', numFmt: '0.000', width: 14 },
       { key: 'paymentType', label: 'Payment', width: 18 },
+      { key: 'benefitPayReceivedTime', label: 'BP received time', width: 18 },
       { key: 'blockNumber', label: 'Block', width: 12 },
       { key: 'areaName', label: 'Area', width: 24 },
       { key: 'governorate', label: 'Governorate', width: 16 },

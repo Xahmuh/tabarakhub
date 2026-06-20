@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { 
-  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
+  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, ReceiptText, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
 import { AuthState, MaintenanceSettings } from '../../types';
 import { Footer } from '../shared';
@@ -379,7 +379,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     {
       key: 'feedback-form',
       visible: !isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
-      title: 'QC Insights',
+      title: 'QA Insights',
       description: 'Submit anonymous quality feedback and suggestions.',
       icon: <MessageSquareText className="h-5 w-5" />,
       onClick: () => handleTabChange('feedback-form'),
@@ -389,7 +389,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'feedback-admin',
-      visible: isModuleEnabled('qualityFeedback') && isManager && checkPermission('quality_feedback'),
+      visible: isModuleEnabled('qualityFeedback') && checkPermission('feedback_admin', 'edit'),
       title: 'Feedback Admin',
       description: 'Analyze quality metrics and review anonymous feedback.',
       icon: <PieChart className="h-5 w-5" />,
@@ -423,6 +423,19 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       badge: 'new module',
       badgeStyle: 'red',
       tone: 'feature'
+    },
+    {
+      key: 'benefit-pay-ledger',
+      visible: role !== 'owner' && isModuleEnabled('benefitPayLedger') && checkPermission('benefit_pay_ledger'),
+      title: role === 'branch' ? 'Benefit Pay Recording & Traceability' : 'Benefit Pay Ledger',
+      description: role === 'branch'
+        ? 'Record Benefit Pay receipts and export your daily BP sheet.'
+        : 'Track branch Benefit Pay transfers and delivery BP auto-sync.',
+      icon: <ReceiptText className="h-5 w-5" />,
+      onClick: () => handleTabChange('benefit-pay-ledger'),
+      isPending,
+      badge: 'Finance',
+      tone: 'finance'
     },
     {
       key: 'block-analyzer',

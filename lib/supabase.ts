@@ -8,6 +8,7 @@ import { financeService } from '../services/financeService';
 import { codexService } from '../services/codexService';
 import { systemSettingsService } from '../services/systemSettingsService';
 import { deliveryService } from '../services/deliveryService';
+import { benefitPayService } from '../services/benefitPayService';
 import { branchLoginApprovalService } from '../services/branchLoginApprovalService';
 import { supabaseClient } from './supabaseClient';
 export { supabaseClient } from './supabaseClient';
@@ -32,5 +33,6 @@ export const supabase = {
   codex: codexService,
   systemSettings: systemSettingsService,
   delivery: deliveryService,
+  benefitPay: benefitPayService,
   branchLoginApprovals: branchLoginApprovalService
 };

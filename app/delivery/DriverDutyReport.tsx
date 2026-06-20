@@ -5,6 +5,7 @@ import { DeliveryDriver, DeliveryDriverDutyReportRow } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
 import { toDateKey } from './utils';
 import { exportDriverDutyToExcel, printDriverDutyReport } from './exports';
+import { runAfterNextPaint } from '../../utils/uiPerformance';
 
 interface DriverDutyReportProps {
   selfOnly?: boolean;
@@ -306,7 +307,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
     setIsExportingExcel(true);
     setErrorMessage(null);
     try {
-      await exportDriverDutyToExcel(rows, exportTitle, exportFileName);
+      await runAfterNextPaint(() => exportDriverDutyToExcel(rows, exportTitle, exportFileName));
     } catch (error: any) {
       console.error('Driver duty Excel export failed', error);
       setErrorMessage(error?.message || 'Could not export driver duty Excel file.');
@@ -315,7 +316,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
     }
   };
 
-  const handlePdfPrint = () => {
+  const handlePdfPrint = async () => {
     if (rows.length === 0) {
       setErrorMessage('No driver duty activity is available to print for this period.');
       return;
@@ -323,7 +324,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
     setIsPrintingPdf(true);
     setErrorMessage(null);
     try {
-      printDriverDutyReport(rows, exportTitle, exportFileName);
+      await runAfterNextPaint(() => printDriverDutyReport(rows, exportTitle, exportFileName));
     } catch (error: any) {
       console.error('Driver duty PDF print failed', error);
       setErrorMessage(error?.message || 'Could not open driver duty PDF report.');

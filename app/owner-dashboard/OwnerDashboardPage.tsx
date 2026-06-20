@@ -47,6 +47,7 @@ import {
   ownerDashboardService
 } from './ownerDashboardService';
 import { buildOwnerZoneAnalysis, ownerGeometryStats, ownerMapBlocksWithGeometry } from './ownerZoneAnalysis';
+import { runAfterNextPaint } from '../../utils/uiPerformance';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const OWNER_DASHBOARD_LANGUAGE_KEY = 'tabarak-owner-dashboard-language';
@@ -721,7 +722,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
 
   const exportTraceability = () => {
     if (!bundle) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       bundle.traceabilityRows.map(order => ({
         id: order.id,
         orderDate: order.orderDate || '',
@@ -762,12 +763,12 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       ],
       `${copy.sections.traceability} - ${rangeLabel}`,
       `Owner_Delivery_Traceability_Clean_${range.from}_${range.to}`
-    ).catch(console.error);
+    )).catch(console.error);
   };
 
   const exportOverview = () => {
     if (!bundle) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       [
         { metric: copy.overview.orders, value: bundle.overview.totalOrders, note: rangeLabel },
         { metric: copy.overview.deliveryValue, value: Number(bundle.overview.totalValueBhd.toFixed(3)), note: copy.common.selectedRange },
@@ -788,12 +789,12 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       ],
       `${copy.sections.overview} - ${rangeLabel}`,
       `Owner_Overview_${range.from}_${range.to}`
-    ).catch(console.error);
+    )).catch(console.error);
   };
 
   const exportBlocks = () => {
     if (!bundle) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       bundle.coverage.summary.blocks.map(block => {
         const zone = zoneAnalysis.byBlock.get(block.blockNumber);
         return {
@@ -823,12 +824,12 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       ],
       `${copy.sections.map} - ${rangeLabel}`,
       `Owner_Block_KPIs_${range.from}_${range.to}`
-    ).catch(console.error);
+    )).catch(console.error);
   };
 
   const exportDrivers = () => {
     if (!bundle) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       bundle.driverKpis.map(row => ({
         driver: row.driverName,
         code: row.driverCode || '',
@@ -851,12 +852,12 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       ],
       `${copy.sections.drivers} - ${rangeLabel}`,
       `Owner_Driver_KPIs_${range.from}_${range.to}`
-    ).catch(console.error);
+    )).catch(console.error);
   };
 
   const exportBranches = () => {
     if (!bundle) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       bundle.branchKpis.map(row => ({
         branch: `${row.branchCode} - ${row.branchName}`,
         deliveryOrders: row.deliveryOrders,
@@ -887,7 +888,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       ],
       `${copy.sections.pharmacies} - ${rangeLabel}`,
       `Owner_Pharmacy_KPIs_${range.from}_${range.to}`
-    ).catch(console.error);
+    )).catch(console.error);
   };
 
   return (
@@ -980,7 +981,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
             {exportEnabled && section === 'traceability' && <button onClick={exportTraceability} className="btn-secondary text-[10px] uppercase tracking-widest"><FileDown className="h-3.5 w-3.5" /> {copy.actions.traceExcel}</button>}
             {exportEnabled && section === 'drivers' && <button onClick={exportDrivers} className="btn-secondary text-[10px] uppercase tracking-widest"><FileDown className="h-3.5 w-3.5" /> {copy.actions.driverExcel}</button>}
             {exportEnabled && section === 'pharmacies' && <button onClick={exportBranches} className="btn-secondary text-[10px] uppercase tracking-widest"><FileDown className="h-3.5 w-3.5" /> {copy.actions.branchExcel}</button>}
-            <button onClick={printReport} className="btn-secondary text-[10px] uppercase tracking-widest"><Printer className="h-3.5 w-3.5" /> {copy.actions.pdfPrint}</button>
+            <button onClick={() => runAfterNextPaint(printReport).catch(console.error)} className="btn-secondary text-[10px] uppercase tracking-widest"><Printer className="h-3.5 w-3.5" /> {copy.actions.pdfPrint}</button>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">

@@ -92,12 +92,12 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   ];
 
   return (
-    <ProtectedRoute roles={['admin', 'manager', 'owner', 'ceo']} userRole={userRole}>
+    <ProtectedRoute roles={['admin', 'manager', 'owner', 'ceo', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver']} userRole={userRole}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Quality Feedback Admin</h2>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Feedback Admin</h2>
             <p className="text-slate-500 font-medium mt-1">Manage questionnaire and monitor satisfaction metrics.</p>
           </div>
           

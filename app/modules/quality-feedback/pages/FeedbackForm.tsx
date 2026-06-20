@@ -287,8 +287,8 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Anonymous QC</p>
-                <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">QC Insights</h1>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Anonymous QA</p>
+                <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">QA Insights</h1>
               </div>
             </div>
 
@@ -339,7 +339,7 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
                   <CurrentStepIcon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">QC Insights</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">QA Insights</p>
                   <h1 className="text-lg font-black tracking-tight text-slate-950">{currentStepMeta.label}</h1>
                 </div>
               </div>
@@ -366,7 +366,7 @@ export const FeedbackForm: React.FC<Props> = ({ onBack }) => {
                     Anonymous workspace pulse
                   </p>
                   <h2 className="mt-5 max-w-2xl text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
-                    QC Insights Survey
+                    QA Insights Survey
                   </h2>
                   <p className="mt-4 max-w-2xl text-base font-bold leading-8 text-slate-500">
                     Share direct feedback about the teams and systems that affect daily branch work. The survey is short, anonymous, and built around practical improvement.

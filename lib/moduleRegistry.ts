@@ -11,8 +11,10 @@ export type AccessFeatureId =
   | 'cash_tracker'
   | 'corporate_codex'
   | 'quality_feedback'
+  | 'feedback_admin'
   | 'employee_contributions'
   | 'delivery'
+  | 'benefit_pay_ledger'
   | 'products'
   | 'block_analyzer'
   | 'settings';
@@ -34,9 +36,11 @@ export const ACCESS_FEATURES: AccessFeature[] = [
   { id: 'cash_flow', label: 'Cash Flow Planner', module: 'cashFlow', description: 'Liquidity planning and cash flow forecast.' },
   { id: 'cash_tracker', label: 'Branch Cash Tracker', module: 'cashTracker', description: 'Daily branch cash difference tracking.' },
   { id: 'corporate_codex', label: 'Corporate Codex', module: 'corporateCodex', description: 'Policies, circulars, and operating protocols.' },
-  { id: 'quality_feedback', label: 'Quality Feedback', module: 'qualityFeedback', description: 'Anonymous feedback form and quality analytics.' },
+  { id: 'quality_feedback', label: 'QA Insights', module: 'qualityFeedback', description: 'Controls access to the QA Insights submission form.' },
+  { id: 'feedback_admin', label: 'Feedback Admin', module: 'qualityFeedback', description: 'Admin-only by default; non-admin roles need Edit / Full Control to review QA answers and analytics.' },
   { id: 'employee_contributions', label: 'Team Contributions', module: 'employeeContributions', description: 'Employee-submitted tools, projects, and knowledge.' },
   { id: 'delivery', label: 'Delivery Recording & Traceability', module: 'delivery', description: 'None disables the module, Read keeps dashboards and block coverage visible, Edit allows delivery activity recording.' },
+  { id: 'benefit_pay_ledger', label: 'Benefit Pay Ledger', module: 'benefitPayLedger', description: 'None disables the module, Read shows BP dashboard, Edit allows manual BP transfer recording.' },
   { id: 'products', label: 'Product Catalogue', module: 'products', description: 'Product catalogue and item management.' },
   { id: 'block_analyzer', label: 'BH Block Analyzer', description: 'Block coverage and population analysis.' },
   { id: 'settings', label: 'Admin Control', module: 'settings', description: 'Controls System Settings and Access Control modules.' }

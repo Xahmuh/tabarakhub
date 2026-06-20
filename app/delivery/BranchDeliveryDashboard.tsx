@@ -8,11 +8,28 @@ import { exportOrdersToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { getDeliveryPaymentLabel, isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import Swal from 'sweetalert2';
+import { runAfterNextPaint } from '../../utils/uiPerformance';
 
 type ViewMode = 'all' | 'normal' | 'talabat';
 
 const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 const isTalabatOrder = (order: DeliveryOrder) => isTalabatDeliveryPayment(order.paymentType);
+const bahrainTodayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bahrain' });
+const canDeleteRecordedOrder = (order: DeliveryOrder) => {
+  const status = order.deliveryStatus || 'recorded';
+  const isRecordingDelete =
+    ['recorded', 'assigned'].includes(status)
+    && !order.pickedUpAt
+    && !order.deliveredAt
+    && !order.cancelledAt;
+  const isTodayCancelledDelete =
+    status === 'cancelled'
+    && order.orderDate === bahrainTodayKey()
+    && !order.deliveredAt
+    && Boolean(order.cancelledAt);
+
+  return isRecordingDelete || isTodayCancelledDelete;
+};
 const paymentBadgeClass = (order: DeliveryOrder) =>
   isTalabatOrder(order)
     ? 'border-orange-200 bg-orange-50 text-orange-700'
@@ -89,14 +106,27 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   };
 
   const handleExcel = () => {
-    exportOrdersToExcel(
+    runAfterNextPaint(() => exportOrdersToExcel(
       visibleOrders.map(o => ({ ...o, branchName: o.branchName || branch.name })),
       `${branch.name} — Delivery Orders — ${label}`,
       `Delivery_${branch.code}_${range.from}_${range.to}`
-    ).catch(err => console.error(err));
+    )).catch(err => console.error(err));
+  };
+
+  const handlePrint = () => {
+    runAfterNextPaint(printReport).catch(err => console.error(err));
   };
 
   const handleDelete = async (order: DeliveryOrder) => {
+    if (!canDeleteRecordedOrder(order)) {
+      Swal.fire(
+        'Delete unavailable',
+        'This order is already active, picked up, delivered, or outside the allowed delete window. Use Dispatch actions instead.',
+        'info'
+      );
+      return;
+    }
+
     const confirm = await Swal.fire({
       title: 'Delete recorded invoice?',
       text: `Delete this recorded invoice (${order.valueBhd.toFixed(3)} BHD) from recording and dispatch?`,
@@ -124,7 +154,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
               <FileDown className="h-3.5 w-3.5" /> Excel
             </button>
           )}
-          <button onClick={printReport} className="btn-secondary text-[10px] uppercase tracking-widest">
+          <button onClick={handlePrint} className="btn-secondary text-[10px] uppercase tracking-widest">
             <Printer className="h-3.5 w-3.5" /> PDF
           </button>
         </div>
@@ -226,9 +256,11 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                             </button>
                           )}
-                          <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Cancel invoice" aria-label="Cancel invoice">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                          </button>
+                          {canDeleteRecordedOrder(order) && (
+                            <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Delete recording" aria-label="Delete recording">
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}

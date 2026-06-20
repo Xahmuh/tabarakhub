@@ -245,7 +245,7 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
     tip: 'After permission changes, validate with the intended role before treating access as final.'
   },
   'feedback-form': {
-    title: 'Quality Feedback',
+    title: 'QA Insights',
     eyebrow: 'Feedback module',
     summary: 'Submit structured quality feedback and suggestions through the staff-facing form.',
     icon: MessageSquareText,

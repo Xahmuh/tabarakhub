@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Pharmacist, AuthState, Branch, BranchLoginApproval, MaintenanceSettings } from './types';
+import { Pharmacist, AuthState, Branch, BranchLoginApproval, BenefitPayTransfer, DeliveryOrder, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
 import { buildPermissionChecker, isManagerRole } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
@@ -10,12 +10,12 @@ import { spinWinService } from './services/spinWin';
 import { getSystemSettingsErrorMessage } from './services/systemSettingsService';
 import { branchLoginApprovalService } from './services/branchLoginApprovalService';
 import { deliveryNotificationService } from './services/deliveryNotificationService';
-import { 
-  LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage, 
+import {
+  LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage,
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, DeliveryNotificationsPage, OwnerDashboardPage
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, BenefitPayLedger, DeliveryNotificationsPage, OwnerDashboardPage
 } from './app/index';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
@@ -27,11 +27,61 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery' | 'notifications';
+type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'notifications';
+type DeliveryFocusTarget = { orderId: string; orderDate?: string | null; branchId?: string | null };
+type BenefitPayFocusTarget = { deliveryOrderId: string; transferDate?: string | null; branchId?: string | null };
+const APP_TABS: AppTab[] = [
+  'command-center',
+  'owner-dashboard',
+  'pos',
+  'dashboard',
+  'selector',
+  'spin-win',
+  'hr',
+  'hr-manager',
+  'workforce',
+  'cash-flow',
+  'cash-tracker',
+  'corporate-codex',
+  'settings',
+  'system-settings',
+  'access-control',
+  'feedback-form',
+  'feedback-admin',
+  'employee-contributions',
+  'block-analyzer',
+  'delivery',
+  'benefit-pay-ledger',
+  'notifications'
+];
+const ACTIVE_TAB_STORAGE_KEY = 'tabarak_active_tab';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
 const SPIN_RETURN_TTL_MS = 45 * 60 * 1000;
 const BRANCH_LOGIN_APPROVAL_REQUEST_KEY = 'tabarak_branch_login_approval_request';
+
+const isAppTab = (value: string | null): value is AppTab =>
+  !!value && APP_TABS.includes(value as AppTab);
+
+const getStoredActiveTab = (): AppTab | null => {
+  try {
+    const savedTab = sessionStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    return isAppTab(savedTab) ? savedTab : null;
+  } catch {
+    return null;
+  }
+};
+
+const storeActiveTab = (tab: AppTab | null) => {
+  try {
+    if (tab) sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+    else sessionStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+  } catch {
+    // Storage is only used to restore the current module after refresh.
+  }
+};
+
+const clearStoredActiveTab = () => storeActiveTab(null);
 
 const getRecoverableSpinToken = () => {
   try {
@@ -150,6 +200,8 @@ const App: React.FC = () => {
   const [activePOSBranch, setActivePOSBranch] = useState<Branch | null>(null);
   const [deliveryNotificationUnreadCount, setDeliveryNotificationUnreadCount] = useState(0);
   const [hasDeliveryNotificationAlert, setHasDeliveryNotificationAlert] = useState(false);
+  const [deliveryFocusTarget, setDeliveryFocusTarget] = useState<DeliveryFocusTarget | null>(null);
+  const [benefitPayFocusTarget, setBenefitPayFocusTarget] = useState<BenefitPayFocusTarget | null>(null);
   const [isCustomerFlow] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('token') || params.has('node') || params.has('branch');
@@ -162,59 +214,75 @@ const App: React.FC = () => {
     return isModuleEnabled('branchDashboard');
   };
 
-  const canUseFeature = (feature: string, minimum: 'read' | 'edit' = 'read', role = authState.user?.role) =>
-    buildPermissionChecker(role, authState.permissions, authState.rolePermissions)(feature, minimum);
+  const canUseFeature = (
+    feature: string,
+    minimum: 'read' | 'edit' = 'read',
+    role = authState.user?.role,
+    permissionState: Pick<AuthState, 'permissions' | 'rolePermissions'> = authState
+  ) =>
+    buildPermissionChecker(role, permissionState.permissions, permissionState.rolePermissions)(feature, minimum);
   const canReceiveDeliveryNotifications = !!authState.user && isModuleEnabled('delivery') && canUseFeature('delivery', 'read');
   const shouldShowPOSGuideline = () => maintenanceSettings?.posGuidelineEnabled !== false;
   const isBranchLoginApprovalRequired = maintenanceSettings?.branchLoginApprovalRequired !== false;
 
-  const isTabEnabled = (tab: AppTab | null, role = authState.user?.role) => {
+  const isTabEnabled = (
+    tab: AppTab | null,
+    role = authState.user?.role,
+    permissionState: Pick<AuthState, 'permissions' | 'rolePermissions'> = authState
+  ) => {
     if (!tab || tab === 'selector') return true;
     if (role === 'owner' && tab !== 'owner-dashboard') return false;
     switch (tab) {
       case 'command-center':
-        return canUseFeature('command_center', 'read', role);
+        return canUseFeature('command_center', 'read', role, permissionState);
       case 'owner-dashboard':
         return role === 'owner';
       case 'pos':
-        return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role) || canUseFeature('shortages', 'edit', role));
+        return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role, permissionState) || canUseFeature('shortages', 'edit', role, permissionState));
       case 'dashboard':
-        return isDashboardEnabledForRole(role) && (canUseFeature('lost_sales', 'read', role) || canUseFeature('shortages', 'read', role));
+        return isDashboardEnabledForRole(role) && (canUseFeature('lost_sales', 'read', role, permissionState) || canUseFeature('shortages', 'read', role, permissionState));
       case 'spin-win':
-        return isModuleEnabled('spinWin') && canUseFeature('spin_win', 'read', role);
+        return isModuleEnabled('spinWin') && canUseFeature('spin_win', 'read', role, permissionState);
       case 'hr':
       case 'hr-manager':
-        return isModuleEnabled('hr') && canUseFeature('hr_requests', 'read', role);
+        return isModuleEnabled('hr') && canUseFeature('hr_requests', 'read', role, permissionState);
       case 'workforce':
-        return isModuleEnabled('hr') && isModuleEnabled('workforce') && canUseFeature('workforce', 'read', role);
+        return isModuleEnabled('hr') && isModuleEnabled('workforce') && canUseFeature('workforce', 'read', role, permissionState);
       case 'cash-flow':
-        return isModuleEnabled('cashFlow') && canUseFeature('cash_flow', 'read', role);
+        return isModuleEnabled('cashFlow') && canUseFeature('cash_flow', 'read', role, permissionState);
       case 'cash-tracker':
-        return isModuleEnabled('cashTracker') && canUseFeature('cash_tracker', 'read', role);
+        return isModuleEnabled('cashTracker') && canUseFeature('cash_tracker', 'read', role, permissionState);
       case 'corporate-codex':
-        return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role);
+        return isModuleEnabled('corporateCodex') && canUseFeature('corporate_codex', 'read', role, permissionState);
       case 'settings':
       case 'system-settings':
       case 'access-control':
         return isModuleEnabled('settings') && (
-          (isManagerRole(role) && canUseFeature('settings', 'edit', role))
+          (isManagerRole(role) && canUseFeature('settings', 'edit', role, permissionState))
           || role === 'admin'
         );
       case 'feedback-form':
-        return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role);
+        return isModuleEnabled('qualityFeedback') && canUseFeature('quality_feedback', 'read', role, permissionState);
       case 'feedback-admin':
-        return isModuleEnabled('qualityFeedback') && isManagerRole(role) && canUseFeature('quality_feedback', 'read', role);
+        return isModuleEnabled('qualityFeedback') && canUseFeature('feedback_admin', 'edit', role, permissionState);
       case 'employee-contributions':
-        return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role);
+        return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role, permissionState);
       case 'block-analyzer':
-        return isManagerRole(role) && canUseFeature('block_analyzer', 'read', role);
+        return isManagerRole(role) && canUseFeature('block_analyzer', 'read', role, permissionState);
       case 'delivery':
-        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
+        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role, permissionState);
+      case 'benefit-pay-ledger':
+        return isModuleEnabled('benefitPayLedger') && canUseFeature('benefit_pay_ledger', 'read', role, permissionState);
       case 'notifications':
-        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role);
+        return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role, permissionState);
       default:
         return true;
     }
+  };
+
+  const getRestorableActiveTab = (state: AuthState): AppTab => {
+    const savedTab = getStoredActiveTab();
+    return savedTab && isTabEnabled(savedTab, state.user?.role, state) ? savedTab : 'selector';
   };
 
   const playDeliveryNotificationSound = useCallback(() => {
@@ -230,7 +298,7 @@ const App: React.FC = () => {
   const handleTabChange = (tab: AppTab | null) => {
     if (!isTabEnabled(tab)) {
       setActiveTab('selector');
-      sessionStorage.setItem('tabarak_active_tab', 'selector');
+      storeActiveTab('selector');
       return;
     }
     if (tab !== 'pos') {
@@ -244,9 +312,9 @@ const App: React.FC = () => {
       if (shouldShowPOSGuideline()) setShowPOSGuideline(true);
     }
     if (tab) {
-      sessionStorage.setItem('tabarak_active_tab', tab);
+      storeActiveTab(tab);
     } else {
-      sessionStorage.removeItem('tabarak_active_tab');
+      clearStoredActiveTab();
     }
     startTransition(() => {
       setActiveTab(tab);
@@ -291,10 +359,12 @@ const App: React.FC = () => {
     setIsMaintenanceAdminLoginOpen(false);
 
     if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(user.role) && isModuleEnabled('settings')) {
-      sessionStorage.setItem('tabarak_active_tab', 'system-settings');
+      storeActiveTab('system-settings');
       startTransition(() => setActiveTab('system-settings'));
     } else {
-      handleTabChange('selector');
+      const restoredTab = getRestorableActiveTab(newState);
+      storeActiveTab(restoredTab);
+      startTransition(() => setActiveTab(restoredTab));
     }
   }, [maintenanceSettings]);
 
@@ -567,12 +637,9 @@ const App: React.FC = () => {
             }
           }
           setAuthState(currentSession);
-          const savedTab = sessionStorage.getItem('tabarak_active_tab') as AppTab | null;
-          if (savedTab && isTabEnabled(savedTab, currentSession.user?.role)) {
-            setActiveTab(savedTab);
-          } else {
-            setActiveTab('selector');
-          }
+          const restoredTab = getRestorableActiveTab(currentSession);
+          storeActiveTab(restoredTab);
+          setActiveTab(restoredTab);
         }
       } catch (err) {
         console.error("Initialization error:", err);
@@ -619,16 +686,35 @@ const App: React.FC = () => {
   const handleSelectPharmacist = (pharmacist: Pharmacist) => {
     const newState = { ...authState, pharmacist };
     setAuthState(newState);
-    const savedTab = sessionStorage.getItem('tabarak_active_tab');
-    if (savedTab && savedTab !== 'selector') {
-      startTransition(() => setActiveTab(savedTab as any));
+    const savedTab = getStoredActiveTab();
+    if (savedTab && savedTab !== 'selector' && isTabEnabled(savedTab, newState.user?.role, newState)) {
+      startTransition(() => setActiveTab(savedTab));
     } else {
       handleTabChange('selector');
     }
   };
 
+  const handleOpenBenefitPayFromDelivery = (order: DeliveryOrder) => {
+    setBenefitPayFocusTarget({
+      deliveryOrderId: order.id,
+      transferDate: order.orderDate,
+      branchId: order.branchId
+    });
+    handleTabChange('benefit-pay-ledger');
+  };
+
+  const handleOpenDeliveryFromBenefitPay = (transfer: BenefitPayTransfer) => {
+    if (!transfer.deliveryOrderId) return;
+    setDeliveryFocusTarget({
+      orderId: transfer.deliveryOrderId,
+      orderDate: transfer.transferDate,
+      branchId: transfer.branchId
+    });
+    handleTabChange('delivery');
+  };
+
   const logout = async () => {
-    sessionStorage.removeItem('tabarak_active_tab');
+    clearStoredActiveTab();
     storeBranchLoginApprovalRequest(null);
     await supabase.auth.signOut();
     setAuthState({ user: null, pharmacist: null, permissions: [] });
@@ -777,7 +863,7 @@ const App: React.FC = () => {
           setActivePOSBranch(operatingBranch || authState.user);
           setShowPharmacistSelector(false);
           if (shouldShowPOSGuideline()) setShowPOSGuideline(true);
-          sessionStorage.setItem('tabarak_active_tab', 'pos');
+          storeActiveTab('pos');
           startTransition(() => setActiveTab('pos'));
         }}
         onLogout={() => {
@@ -899,15 +985,15 @@ const App: React.FC = () => {
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (
-          <QualityFeedbackAdmin 
-            userRole={authState.user?.role} 
-            onBack={() => handleTabChange('selector')} 
+          <QualityFeedbackAdmin
+            userRole={authState.user?.role}
+            onBack={() => handleTabChange('selector')}
           />
         ) : activeTab === 'employee-contributions' ? (
-          <EmployeeContributionsPage 
-            userRole={authState.user?.role} 
+          <EmployeeContributionsPage
+            userRole={authState.user?.role}
             branchCode={authState.user?.code}
-            onBack={() => handleTabChange('selector')} 
+            onBack={() => handleTabChange('selector')}
           />
         ) : activeTab === 'block-analyzer' ? (
           <BlockCoverageAnalyzer onBack={() => handleTabChange('selector')} />
@@ -916,6 +1002,18 @@ const App: React.FC = () => {
             user={authState.user!}
             onBack={() => handleTabChange('selector')}
             checkPermission={checkPermission}
+            focusTarget={deliveryFocusTarget}
+            onFocusConsumed={() => setDeliveryFocusTarget(null)}
+            onOpenBenefitPayTransfer={handleOpenBenefitPayFromDelivery}
+          />
+        ) : activeTab === 'benefit-pay-ledger' ? (
+          <BenefitPayLedger
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+            focusTarget={benefitPayFocusTarget}
+            onFocusConsumed={() => setBenefitPayFocusTarget(null)}
+            onOpenDeliveryOrder={handleOpenDeliveryFromBenefitPay}
           />
         ) : activeTab === 'notifications' ? (
           <DeliveryNotificationsPage

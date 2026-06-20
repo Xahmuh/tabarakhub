@@ -20,6 +20,7 @@ export const DELIVERY_ORDER_IMPORT_TEMPLATE_HEADERS = [
   'order_date',
   'value_bhd',
   'payment_type',
+  'benefit_pay_received_time',
   'block_number',
   'area_name',
   'pharmacist',
@@ -31,6 +32,7 @@ type DeliveryImportField =
   | 'orderDate'
   | 'valueBhd'
   | 'paymentType'
+  | 'benefitPayReceivedTime'
   | 'blockNumber'
   | 'areaName'
   | 'pharmacist'
@@ -81,6 +83,7 @@ const FIELD_ALIASES: Record<DeliveryImportField, string[]> = {
   orderDate: ['order_date', 'order date', 'date', 'invoice date', 'delivery date'],
   valueBhd: ['value_bhd', 'value bhd', 'value (bhd)', 'order value', 'invoice value', 'amount', 'value', 'total'],
   paymentType: ['payment_type', 'payment type', 'payment', 'payment method', 'method', 'pay type'],
+  benefitPayReceivedTime: ['benefit_pay_received_time', 'benefit pay received time', 'bp received time', 'bp time', 'benefit time'],
   blockNumber: ['block_number', 'block number', 'block no', 'block no.', 'block', 'block/area'],
   areaName: ['area_name', 'area name', 'area', 'block area'],
   pharmacist: ['pharmacist', 'pharmacist name', 'pharmacist code', 'pharmacist_code', 'pharmacist id'],
@@ -169,6 +172,7 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
     { header: 'order_date', key: 'order_date', width: 16 },
     { header: 'value_bhd', key: 'value_bhd', width: 14 },
     { header: 'payment_type', key: 'payment_type', width: 18 },
+    { header: 'benefit_pay_received_time', key: 'benefit_pay_received_time', width: 24 },
     { header: 'block_number', key: 'block_number', width: 18 },
     { header: 'area_name', key: 'area_name', width: 24 },
     { header: 'pharmacist', key: 'pharmacist', width: 32 },
@@ -181,6 +185,7 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
     order_date: templateDateKey,
     value_bhd: 2.950,
     payment_type: defaultPayment?.code || 'CASH',
+    benefit_pay_received_time: defaultPayment?.code === 'BP' ? '10:30' : '',
     block_number: sampleBlock?.blockNumber || '332',
     area_name: sampleBlock?.areaName || '',
     pharmacist: samplePharmacist ? buildDisplayValue(samplePharmacist.code, samplePharmacist.name) : 'Use pharmacist code or exact name',
@@ -188,11 +193,26 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
     notes: 'Example row - replace or delete'
   });
 
+  if (activePaymentTypes.some(type => normalizeDeliveryPaymentCode(type.code) === 'BP')) {
+    ordersSheet.addRow({
+      order_date: templateDateKey,
+      value_bhd: 4.250,
+      payment_type: 'BP',
+      benefit_pay_received_time: '10:30',
+      block_number: sampleBlock?.blockNumber || '332',
+      area_name: sampleBlock?.areaName || '',
+      pharmacist: samplePharmacist ? buildDisplayValue(samplePharmacist.code, samplePharmacist.name) : 'Use pharmacist code or exact name',
+      driver: sampleDriver ? buildDisplayValue(sampleDriver.driverCode, sampleDriver.name) : 'Use driver code or exact name',
+      notes: 'Benefit Pay example - use HH:mm when transfer is received'
+    });
+  }
+
   if (activePaymentTypes.some(type => isTalabatDeliveryPayment(type.code))) {
     ordersSheet.addRow({
       order_date: templateDateKey,
       value_bhd: 1.500,
       payment_type: 'TALABAT',
+      benefit_pay_received_time: '',
       block_number: '',
       area_name: '',
       pharmacist: samplePharmacist ? buildDisplayValue(samplePharmacist.code, samplePharmacist.name) : 'Use pharmacist code or exact name',
@@ -208,6 +228,7 @@ export const generateDeliveryOrderTemplate = async (context: DeliveryOrderTempla
   ordersSheet.views = [{ state: 'frozen', ySplit: 1 }];
   ordersSheet.getColumn('value_bhd').numFmt = '0.000';
   ordersSheet.getColumn('order_date').numFmt = 'yyyy-mm-dd';
+  ordersSheet.getColumn('benefit_pay_received_time').numFmt = 'hh:mm';
   ordersSheet.eachRow((row: any, rowNumber: number) => {
     if (rowNumber === 1) return;
     row.eachCell((cell: any) => {
@@ -450,6 +471,34 @@ const parseValueBhd = (value: unknown) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
+const parseBenefitPayReceivedTime = (value: unknown) => {
+  if (value instanceof Date) {
+    return { time: `${pad2(value.getHours())}:${pad2(value.getMinutes())}`, error: null };
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1) {
+    const totalMinutes = Math.round(value * 24 * 60) % (24 * 60);
+    return { time: `${pad2(Math.floor(totalMinutes / 60))}:${pad2(totalMinutes % 60)}`, error: null };
+  }
+
+  const text = toText(value);
+  if (!text) return { time: null, error: null };
+
+  const match = /^(\d{1,2}):([0-5]\d)(?::[0-5]\d)?\s*([ap]m)?$/i.exec(text);
+  if (!match) return { time: null, error: 'Benefit Pay received time must use HH:mm format.' };
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return { time: null, error: 'Benefit Pay received time has an invalid hour.' };
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+  }
+  if (hour < 0 || hour > 23) return { time: null, error: 'Benefit Pay received time has an invalid hour.' };
+  return { time: `${pad2(hour)}:${pad2(minute)}`, error: null };
+};
+
 const parsePaymentType = (value: unknown, paymentTypes?: DeliveryPaymentTypeConfig[]): DeliveryPaymentType | null => {
   const normalized = normalizeLookup(value).replace(/\s+/g, '');
   if (!normalized) return null;
@@ -571,6 +620,7 @@ export const parseDeliveryOrderUpload = async (
     const orderDate = parseDateKey(getFieldValue(row, 'orderDate'));
     const valueBhd = parseValueBhd(getFieldValue(row, 'valueBhd'));
     const paymentType = parsePaymentType(getFieldValue(row, 'paymentType'), context.paymentTypes);
+    const benefitPayTime = parseBenefitPayReceivedTime(getFieldValue(row, 'benefitPayReceivedTime'));
 
     if (!orderDate) {
       errors.push({ row: row.rowNumber, message: 'Missing or invalid order date.' });
@@ -582,6 +632,10 @@ export const parseDeliveryOrderUpload = async (
     }
     if (!paymentType) {
       errors.push({ row: row.rowNumber, message: 'Missing or invalid payment type. Use a configured payment type such as BP, CASH, CARD, TALABAT, or INSURANCE.' });
+      return;
+    }
+    if (benefitPayTime.error) {
+      errors.push({ row: row.rowNumber, message: benefitPayTime.error });
       return;
     }
 
@@ -619,6 +673,7 @@ export const parseDeliveryOrderUpload = async (
         orderDate,
         valueBhd,
         paymentType,
+        benefitPayReceivedTime: normalizeDeliveryPaymentCode(paymentType) === 'BP' ? benefitPayTime.time : null,
         pharmacistId: pharmacist.id,
         pharmacistName: pharmacist.name,
         driverId: isTalabatOrder ? null : driver.id,

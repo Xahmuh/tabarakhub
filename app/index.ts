@@ -18,5 +18,6 @@ export { FeedbackForm } from './modules/quality-feedback/pages/FeedbackForm';
 export { AdminDashboard as QualityFeedbackAdmin } from './modules/quality-feedback/pages/AdminDashboard';
 export * from './employee-contributions';
 export * from './delivery';
+export * from './benefit-pay';
 export * from './notifications';
 export * from './owner-dashboard';

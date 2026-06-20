@@ -657,6 +657,7 @@ export interface DeliveryOrder {
   amountReceivedBhd: number;
   amountToCollectBhd: number;
   cashHandedToDriverBhd: number;
+  benefitPayReceivedTime?: string | null;
   driverPaymentNote?: string | null;
   driverPaymentCollectedAt?: string | null;
   driverPaymentCollectedAmountBhd: number;
@@ -703,6 +704,7 @@ export interface DeliveryOrderInput {
   paymentCollectionStatus?: DeliveryPaymentCollectionStatus;
   amountReceivedBhd?: number | null;
   cashHandedToDriverBhd?: number | null;
+  benefitPayReceivedTime?: string | null;
   driverPaymentNote?: string | null;
   orderKind?: DeliveryOrderKind;
   pharmacistId?: string | null;
@@ -739,6 +741,42 @@ export interface DeliveryOrderEvent {
   idempotencyKey?: string | null;
   metadata?: Record<string, unknown>;
   createdAt: string;
+}
+
+export type BenefitPayTransferType = 'AFS' | 'CREDIMAX' | 'IBAN';
+export type BenefitPayTransferSource = 'manual' | 'delivery';
+
+export interface BenefitPayTransfer {
+  id: string;
+  serialNumber: string;
+  sequenceNo: number;
+  branchId: string;
+  branchCode?: string | null;
+  branchName?: string | null;
+  transferDate: string;
+  pharmacistId?: string | null;
+  pharmacistName?: string | null;
+  transferType: BenefitPayTransferType;
+  valueBhd: number;
+  transferTime: string;
+  source: BenefitPayTransferSource;
+  deliveryOrderId?: string | null;
+  deliveryOrderNumber?: string | null;
+  notes?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedBy?: string | null;
+  updatedAt: string;
+}
+
+export interface BenefitPayTransferInput {
+  branchId: string;
+  transferDate: string;
+  pharmacistId: string;
+  transferType: BenefitPayTransferType;
+  valueBhd: number;
+  transferTime: string;
+  notes?: string | null;
 }
 
 export interface DeliveryNotificationPayload {

@@ -91,7 +91,10 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
 
     if (!isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {
         enabledModuleCount += 1;
-        if (isManager || isOwner) enabledModuleCount += 1;
+    }
+
+    if (isModuleEnabled('qualityFeedback') && checkPermission('feedback_admin', 'edit')) {
+        enabledModuleCount += 1;
     }
 
     if (!isOwner && isModuleEnabled('employeeContributions') && checkPermission('employee_contributions')) {

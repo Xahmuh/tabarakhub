@@ -18,9 +18,19 @@ interface DeliveryHubProps {
   user: Branch;
   onBack: () => void;
   checkPermission: (feature: string, minimum?: 'edit' | 'read') => boolean;
+  focusTarget?: { orderId: string; orderDate?: string | null; branchId?: string | null } | null;
+  onFocusConsumed?: () => void;
+  onOpenBenefitPayTransfer?: (order: DeliveryOrder) => void;
 }
 
-export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPermission }) => {
+export const DeliveryHub: React.FC<DeliveryHubProps> = ({
+  user,
+  onBack,
+  checkPermission,
+  focusTarget,
+  onFocusConsumed,
+  onOpenBenefitPayTransfer
+}) => {
   const role: Role = user.role;
   const isManager = isManagerRole(role);
   const isOwner = role === 'owner';
@@ -48,6 +58,12 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
   const visibleTabs = tabs.filter(t => t.visible);
   const [activeTab, setActiveTab] = useState<HubTab>(visibleTabs[0]?.id || 'dashboard');
   const [orderToEdit, setOrderToEdit] = useState<DeliveryOrder | null>(null);
+
+  React.useEffect(() => {
+    if (!focusTarget?.orderId) return;
+    if (canRecord) setActiveTab('record');
+    else if (canReadDelivery && !isDriver) setActiveTab('dispatch');
+  }, [canReadDelivery, canRecord, focusTarget?.orderId, isDriver]);
 
   return (
     <div className="space-y-6 page-enter">
@@ -83,7 +99,17 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
       )}
 
       {activeTab === 'record' && canRecord && (
-        <BranchRecordingPage branch={user} canEdit={canRecord} isManager={isManager} orderToEdit={orderToEdit} onEditDone={() => setOrderToEdit(null)} />
+        <BranchRecordingPage
+          branch={user}
+          canEdit={canRecord}
+          isManager={isManager}
+          orderToEdit={orderToEdit}
+          onEditDone={() => setOrderToEdit(null)}
+          focusOrderId={focusTarget?.orderId || null}
+          focusOrderDate={focusTarget?.orderDate || null}
+          onFocusConsumed={onFocusConsumed}
+          onOpenBenefitPayTransfer={onOpenBenefitPayTransfer}
+        />
       )}
       {activeTab === 'dashboard' && isBranch && canReadDelivery && (
         <BranchDeliveryDashboard branch={user} canEdit={canRecord} onEdit={canRecord ? (order) => {
@@ -96,6 +122,10 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({ user, onBack, checkPer
           branch={isBranch ? user : null}
           canTransition={canTransitionLifecycle}
           canManageAll={canManageDelivery}
+          focusOrderId={focusTarget?.orderId || null}
+          focusOrderDate={focusTarget?.orderDate || null}
+          onFocusConsumed={onFocusConsumed}
+          onOpenBenefitPayTransfer={onOpenBenefitPayTransfer}
         />
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (

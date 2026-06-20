@@ -831,14 +831,14 @@ export const AccessControlSection: React.FC<{
                     title: MODULE_DISPLAY_LABELS['feedback-form'],
                     visible: !isOwner && isModuleEnabled('qualityFeedback') && hasAccess(role, 'quality_feedback'),
                     access: getDefault(role, 'quality_feedback'),
-                    reason: 'Needs Quality Feedback access.'
+                    reason: 'Needs QA Insights access.'
                 },
                 {
                     key: 'feedback-admin',
                     title: MODULE_DISPLAY_LABELS['feedback-admin'],
-                    visible: isModuleEnabled('qualityFeedback') && isManager && hasAccess(role, 'quality_feedback'),
-                    access: getDefault(role, 'quality_feedback'),
-                    reason: 'Admin quality analytics.'
+                    visible: isModuleEnabled('qualityFeedback') && hasAccess(role, 'feedback_admin', 'edit'),
+                    access: getDefault(role, 'feedback_admin'),
+                    reason: 'Admin-only by default; non-admin roles need Edit / Full Control for QA response analytics.'
                 },
                 {
                     key: 'employee-contributions',
@@ -853,6 +853,13 @@ export const AccessControlSection: React.FC<{
                     visible: !isOwner && isModuleEnabled('delivery') && hasAccess(role, 'delivery'),
                     access: getDefault(role, 'delivery'),
                     reason: 'None disables delivery, Read shows overview/map, Edit allows delivery recording.'
+                },
+                {
+                    key: 'benefit-pay-ledger',
+                    title: MODULE_DISPLAY_LABELS['benefit-pay-ledger'],
+                    visible: !isOwner && isModuleEnabled('benefitPayLedger') && hasAccess(role, 'benefit_pay_ledger'),
+                    access: getDefault(role, 'benefit_pay_ledger'),
+                    reason: 'None disables BP Ledger, Read shows dashboard, Edit allows manual BP transfer recording.'
                 },
                 {
                     key: 'block-analyzer',

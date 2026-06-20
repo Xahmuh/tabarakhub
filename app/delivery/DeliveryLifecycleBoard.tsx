@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowUpRight,
   CheckCircle2,
   Clock3,
   PackageCheck,
@@ -99,6 +100,8 @@ const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPayme
 const isPendingCollectionOrder = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
 
+const isBenefitPayOrder = (order: DeliveryOrder) => order.paymentType === 'BP';
+
 const isCollectionConfirmedByDriver = (order: DeliveryOrder) =>
   isPendingCollectionOrder(order)
   && (Boolean(order.driverPaymentCollectedAt) || order.driverPaymentCollectedAmountBhd > 0);
@@ -107,6 +110,8 @@ const collectionValueBadgeClass = (order: DeliveryOrder) =>
   isCollectionConfirmedByDriver(order)
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-red-200 bg-red-50 text-red-700';
+
+const benefitPayTraceIconClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 
 const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) => {
   const meta = STATUS_META[status];
@@ -197,9 +202,21 @@ interface DeliveryLifecycleBoardProps {
   branch?: Branch | null;
   canTransition: boolean;
   canManageAll: boolean;
+  focusOrderId?: string | null;
+  focusOrderDate?: string | null;
+  onFocusConsumed?: () => void;
+  onOpenBenefitPayTransfer?: (order: DeliveryOrder) => void;
 }
 
-export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ branch, canTransition, canManageAll }) => {
+export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
+  branch,
+  canTransition,
+  canManageAll,
+  focusOrderId,
+  focusOrderDate,
+  onFocusConsumed,
+  onOpenBenefitPayTransfer
+}) => {
   const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
@@ -210,6 +227,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [eventErrorMessage, setEventErrorMessage] = useState<string | null>(null);
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
@@ -269,6 +287,17 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     }, 10000);
     return () => window.clearInterval(intervalId);
   }, [load]);
+
+  useEffect(() => {
+    if (!focusOrderId) return;
+    setHighlightedOrderId(focusOrderId);
+    if (focusOrderDate) {
+      setPreset('custom');
+      setCustomFrom(focusOrderDate);
+      setCustomTo(focusOrderDate);
+    }
+    onFocusConsumed?.();
+  }, [focusOrderDate, focusOrderId, onFocusConsumed]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<DeliveryLifecycleStatus, number>();
@@ -622,6 +651,21 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
     }
   };
 
+  const handleOpenBenefitPayTrace = async (order: DeliveryOrder) => {
+    if (!isBenefitPayOrder(order)) return;
+    if (!order.benefitPayReceivedTime) {
+      await Swal.fire({
+        title: 'Benefit Pay trace pending',
+        text: 'Add or confirm the Benefit Pay received time first. The order will then appear automatically in Benefit Pay Recording & Traceability.',
+        icon: 'info',
+        confirmButtonText: 'Got it',
+        confirmButtonColor: '#B91c1c'
+      });
+      return;
+    }
+    onOpenBenefitPayTransfer?.(order);
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -706,11 +750,14 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                 const routeLabel = order.orderKind === 'internal_transfer'
                   ? `${order.transferFromBranchName || order.branchName || 'Source'} -> ${order.transferToBranchName || 'Destination'}`
                   : `${order.paymentType}${order.blockNumber ? ` - Block ${order.blockNumber}` : ''}`;
+                const isHighlightedOrder = highlightedOrderId === order.id;
 
                 return (
                   <article
                     key={order.id}
-                    className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-brand/30 hover:bg-slate-50/40 hover:shadow-md"
+                    className={`rounded-lg border bg-white p-3 shadow-sm transition hover:border-brand/30 hover:bg-slate-50/40 hover:shadow-md ${
+                      isHighlightedOrder ? 'border-brand/30 ring-2 ring-brand/20' : 'border-slate-200'
+                    }`}
                   >
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
@@ -718,6 +765,17 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({ 
                           <p className="text-[10px] font-black uppercase tracking-widest text-brand">
                             {deliveryOrderNumber(order)}
                           </p>
+                          {isBenefitPayOrder(order) && onOpenBenefitPayTransfer && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenBenefitPayTrace(order)}
+                              className={benefitPayTraceIconClass}
+                              title="Open Benefit Pay trace"
+                              aria-label="Open Benefit Pay trace"
+                            >
+                              <ArrowUpRight className="h-3 w-3" />
+                            </button>
+                          )}
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                             order.orderKind === 'internal_transfer'
                               ? 'border-amber-200 bg-amber-50 text-amber-700'

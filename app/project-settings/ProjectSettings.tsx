@@ -33,7 +33,8 @@ import {
     MapPinned,
     LayoutGrid,
     UploadCloud,
-    Image as ImageIcon
+    Image as ImageIcon,
+    PieChart
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission } from '../../types';
@@ -58,6 +59,7 @@ const FEATURE_ICON_MAP: Partial<Record<AccessFeatureId, React.ElementType>> = {
     cash_tracker: Briefcase,
     corporate_codex: BookOpen,
     quality_feedback: MessageCircle,
+    feedback_admin: PieChart,
     employee_contributions: Activity,
     delivery: ShoppingCart,
     products: Store,

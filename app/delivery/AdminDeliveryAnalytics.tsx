@@ -16,6 +16,7 @@ import {
   deliveryCleanExportService,
   exportDeliveryOrderCleanRowsToExcel
 } from '../../services/deliveryCleanExportService';
+import { runAfterNextPaint } from '../../utils/uiPerformance';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -246,7 +247,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
 
   const downloadDrilldown = () => {
     if (!drilldownGov || !drilldown) return;
-    exportBreakdownToExcel(
+    runAfterNextPaint(() => exportBreakdownToExcel(
       [
         ...drilldown.areas.map(a => ({ level: 'Area', name: a.name, orders: a.orders, value: Number(a.value.toFixed(3)) })),
         ...drilldown.blocks.map(b => ({ level: 'Block', name: b.name, orders: b.orders, value: Number(b.value.toFixed(3)) }))
@@ -259,7 +260,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       ],
       `${drilldownGov} governorate breakdown — ${label}`,
       `Delivery_${drilldownGov}_breakdown_${range.from}_${range.to}`
-    ).catch(e => console.error(e));
+    )).catch(e => console.error(e));
   };
 
   const downloadOrders = async () => {
@@ -279,18 +280,22 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       if (!parity.matches) {
         throw new Error(`Clean export parity failed: ${parity.differences.join('; ')}`);
       }
-      await exportDeliveryOrderCleanRowsToExcel(
+      await runAfterNextPaint(() => exportDeliveryOrderCleanRowsToExcel(
         cleanRows,
         `Delivery Orders - Clean Export - ${label}`,
         `Delivery_Clean_All_${range.from}_${range.to}`,
         parity
-      );
+      ));
     } catch (error: any) {
       console.error('Clean delivery order export failed', error);
       setExportErrorMessage(error?.message || 'Could not export clean delivery orders.');
     } finally {
       setIsExportingCleanOrders(false);
     }
+  };
+
+  const handlePrint = () => {
+    runAfterNextPaint(printReport).catch(error => console.error(error));
   };
 
   return (
@@ -309,7 +314,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                 <FileDown className="h-3.5 w-3.5" /> {isExportingCleanOrders ? 'Exporting' : 'Excel'}
               </button>
             )}
-            <button onClick={printReport} className="btn-secondary text-[10px] uppercase tracking-widest">
+            <button onClick={handlePrint} className="btn-secondary text-[10px] uppercase tracking-widest">
               <Printer className="h-3.5 w-3.5" /> PDF
             </button>
           </div>
