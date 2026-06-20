@@ -323,12 +323,21 @@ const PaymentSummary: React.FC<{
   }
 
   const [primaryDetailItem, ...secondaryDetailItems] = detailItems;
+  const paymentLabel = getDeliveryPaymentLabel(order.paymentType, paymentTypes);
+  const isTalabatPayment = isTalabatDeliveryPayment(order.paymentType);
 
   return (
     <div className="max-w-full">
       <div className="flex min-w-0 items-center gap-1">
-        <span className="mr-1 min-w-0 truncate text-[11px] font-black leading-5 text-slate-900" title={getDeliveryPaymentLabel(order.paymentType, paymentTypes)}>
-          {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
+        <span
+          className={
+            isTalabatPayment
+              ? 'mr-1 inline-flex min-h-[22px] max-w-full items-center truncate rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700'
+              : 'mr-1 min-w-0 truncate text-[11px] font-black leading-5 text-slate-900'
+          }
+          title={paymentLabel}
+        >
+          {paymentLabel}
         </span>
         {primaryDetailItem && (
           <span
