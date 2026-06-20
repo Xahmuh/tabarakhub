@@ -9,8 +9,10 @@ import { isModuleEnabled } from '../../config/clientConfig';
 import { getDeliveryPaymentLabel, isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import Swal from 'sweetalert2';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
+import { PaginationControls } from '../shared';
 
 type ViewMode = 'all' | 'normal' | 'talabat';
+const DELIVERY_DASHBOARD_PAGE_SIZE = 20;
 
 const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 const isTalabatOrder = (order: DeliveryOrder) => isTalabatDeliveryPayment(order.paymentType);
@@ -60,6 +62,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('all');
+  const [recordsPage, setRecordsPage] = useState(1);
 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
@@ -97,7 +100,24 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   const talabatOrders = useMemo(() => orders.filter(isTalabatOrder), [orders]);
   const normalOrders = useMemo(() => orders.filter(order => !isTalabatOrder(order)), [orders]);
 
-  const visibleOrders = view === 'all' ? orders : view === 'talabat' ? talabatOrders : normalOrders;
+  const visibleOrders = useMemo(
+    () => view === 'all' ? orders : view === 'talabat' ? talabatOrders : normalOrders,
+    [normalOrders, orders, talabatOrders, view]
+  );
+  const totalOrderPages = Math.max(1, Math.ceil(visibleOrders.length / DELIVERY_DASHBOARD_PAGE_SIZE));
+  const currentRecordsPage = Math.min(recordsPage, totalOrderPages);
+  const paginatedVisibleOrders = useMemo(() => {
+    const start = (currentRecordsPage - 1) * DELIVERY_DASHBOARD_PAGE_SIZE;
+    return visibleOrders.slice(start, start + DELIVERY_DASHBOARD_PAGE_SIZE);
+  }, [currentRecordsPage, visibleOrders]);
+
+  useEffect(() => {
+    setRecordsPage(1);
+  }, [branch.id, range.from, range.to, view]);
+
+  useEffect(() => {
+    if (recordsPage > totalOrderPages) setRecordsPage(totalOrderPages);
+  }, [recordsPage, totalOrderPages]);
 
   const handlePeriodChange = (p: PeriodPreset, from?: string, to?: string) => {
     setPreset(p);
@@ -212,8 +232,9 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
         ) : visibleOrders.length === 0 ? (
           <p className="py-10 text-center text-xs font-bold text-slate-400">No delivery orders in this period.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <th className="py-2 pr-3">Order / date</th>
@@ -227,7 +248,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {visibleOrders.map(order => (
+                {paginatedVisibleOrders.map(order => (
                   <tr key={order.id} className="hover:bg-slate-50/50">
                     <td className="py-2 pr-3 text-xs font-bold text-slate-400">
                       <span className="block font-black text-brand">{deliveryOrderNumber(order)}</span>
@@ -267,8 +288,16 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            <PaginationControls
+              currentPage={currentRecordsPage}
+              totalItems={visibleOrders.length}
+              pageSize={DELIVERY_DASHBOARD_PAGE_SIZE}
+              onPageChange={setRecordsPage}
+              itemLabel="orders"
+            />
+          </>
         )}
       </section>
     </div>

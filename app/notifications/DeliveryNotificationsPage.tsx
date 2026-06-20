@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BellRing, Check, CheckCheck, Clock3, Inbox, MapPin, RefreshCcw, Truck } from 'lucide-react';
 import { DeliveryNotification } from '../../types';
 import { deliveryNotificationService } from '../../services/deliveryNotificationService';
-import { BackToModulesButton } from '../shared';
+import { BackToModulesButton, PaginationControls } from '../shared';
+
+const NOTIFICATIONS_PAGE_SIZE = 20;
 
 interface DeliveryNotificationsPageProps {
   onBack: () => void;
@@ -112,6 +114,7 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
   const [isSaving, setIsSaving] = useState(false);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [notificationsPage, setNotificationsPage] = useState(1);
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -134,6 +137,21 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
   useEffect(() => {
     void loadNotifications();
   }, [loadNotifications]);
+
+  const totalNotificationPages = Math.max(1, Math.ceil(notifications.length / NOTIFICATIONS_PAGE_SIZE));
+  const currentNotificationsPage = Math.min(notificationsPage, totalNotificationPages);
+  const paginatedNotifications = useMemo(() => {
+    const start = (currentNotificationsPage - 1) * NOTIFICATIONS_PAGE_SIZE;
+    return notifications.slice(start, start + NOTIFICATIONS_PAGE_SIZE);
+  }, [currentNotificationsPage, notifications]);
+
+  useEffect(() => {
+    setNotificationsPage(1);
+  }, [showUnreadOnly]);
+
+  useEffect(() => {
+    if (notificationsPage > totalNotificationPages) setNotificationsPage(totalNotificationPages);
+  }, [notificationsPage, totalNotificationPages]);
 
   useEffect(() => {
     const handleNewNotification = () => {
@@ -280,7 +298,7 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
             </p>
           </div>
         ) : (
-          notifications.map(notification => (
+          paginatedNotifications.map(notification => (
             <NotificationStrip
               key={notification.id}
               notification={notification}
@@ -290,6 +308,15 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
           ))
         )}
       </div>
+      {!isLoading && notifications.length > 0 && (
+        <PaginationControls
+          currentPage={currentNotificationsPage}
+          totalItems={notifications.length}
+          pageSize={NOTIFICATIONS_PAGE_SIZE}
+          onPageChange={setNotificationsPage}
+          itemLabel="notifications"
+        />
+      )}
     </section>
   );
 };
