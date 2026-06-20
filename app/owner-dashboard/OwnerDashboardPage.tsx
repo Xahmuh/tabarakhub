@@ -892,7 +892,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
   };
 
   return (
-    <div className="space-y-5 page-enter" dir={copy.direction} lang={language}>
+    <div className="space-y-5 page-enter" dir={copy.direction} {...{ lang: language }}>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5 md:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -915,7 +915,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                 <button
                   type="button"
                   onClick={() => setLanguage('en')}
-                  aria-pressed={language === 'en'}
+                  {...{ 'aria-pressed': language === 'en' }}
                   className={classNames('rounded-md px-2 py-1 transition', language === 'en' ? 'bg-white text-brand shadow-sm' : 'hover:text-slate-700')}
                 >
                   EN
@@ -923,7 +923,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
                 <button
                   type="button"
                   onClick={() => setLanguage('ar')}
-                  aria-pressed={language === 'ar'}
+                  {...{ 'aria-pressed': language === 'ar' }}
                   className={classNames('rounded-md px-2 py-1 transition', language === 'ar' ? 'bg-white text-brand shadow-sm' : 'hover:text-slate-700')}
                 >
                   عربي

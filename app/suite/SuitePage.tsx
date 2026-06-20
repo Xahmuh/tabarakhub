@@ -527,7 +527,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
         <div className="mt-10 text-center">
           <button
             onClick={logout}
-            className="btn-secondary mx-auto text-xs"
+            className="group mx-auto inline-flex items-center justify-center gap-2 rounded-full bg-brand px-4 py-2.5 text-xs font-black uppercase tracking-[0.08em] text-white shadow-sm shadow-brand/20 ring-1 ring-brand/10 transition-all hover:-translate-y-0.5 hover:bg-brand-hover hover:shadow-md hover:shadow-brand/25 active:translate-y-0 active:bg-brand focus:outline-none focus:ring-4 focus:ring-brand/15"
           >
             <LogOut className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             <span>Sign Out</span>
