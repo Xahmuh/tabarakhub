@@ -120,8 +120,17 @@ const deliveryBlockAreaLabel = (order: DeliveryOrder, paymentTypes?: DeliveryPay
   return `${block} / ${order.areaName?.trim() || 'Unknown area'}`;
 };
 
+const talabatChannelLabel = 'by Talabat';
+const talabatChannelBadgeClass = 'inline-flex min-h-[22px] items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700';
+
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
-  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? 'External channel' : order.driverName || '-';
+  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? talabatChannelLabel : order.driverName || '-';
+
+const TalabatChannelBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <span className={`${talabatChannelBadgeClass} ${className}`.trim()} title={talabatChannelLabel}>
+    {talabatChannelLabel}
+  </span>
+);
 
 const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 const currentTimeValue = () => new Date().toLocaleTimeString('en-GB', {
@@ -1555,7 +1564,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               {isBlockExemptPayment ? (
                 <div className={`${collectionPanelCompactClass} border-orange-100 bg-orange-50/60`}>
                   <p className={`${collectionMessageBaseClass} border-orange-100 text-orange-700`}>
-                    External channels stay out of internal driver collection.
+                    By Talabat - handled outside internal driver collection.
                   </p>
                 </div>
               ) : paymentCollectionStatus === 'paid' ? (
@@ -1720,7 +1729,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 onChange={setDriverId}
                 disabled={isBlockExemptPayment || isDriverLocked}
                 allowClear={!isBlockExemptPayment && !isDriverLocked}
-                placeholder={isBlockExemptPayment ? 'External channel handles this order' : 'Select driver'}
+                placeholder={isBlockExemptPayment ? 'by Talabat' : 'Select driver'}
               />
               {isBlockExemptPayment ? (
                 <p className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
@@ -2031,7 +2040,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         <span className="block break-words leading-5" title={order.pharmacistName || '-'}>{order.pharmacistName || '-'}</span>
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top font-bold text-slate-600">
-                        <span className="block break-words leading-5" title={driverDisplayName(order, paymentTypes)}>{driverDisplayName(order, paymentTypes)}</span>
+                        {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? (
+                          <TalabatChannelBadge />
+                        ) : (
+                          <span className="block break-words leading-5" title={driverDisplayName(order, paymentTypes)}>{driverDisplayName(order, paymentTypes)}</span>
+                        )}
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top text-xs font-bold text-slate-500">
                         <span className="block break-words leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
@@ -2139,7 +2152,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
                     {order.driverName && <span>🛵 {order.driverName}</span>}
-                    {!order.driverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <span>External channel</span>}
+                    {!order.driverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
                     )}
