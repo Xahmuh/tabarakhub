@@ -781,6 +781,7 @@ export interface BenefitPayTransferInput {
 
 export interface DeliveryNotificationPayload {
   orderId?: string | null;
+  orderNumber?: string | null;
   orderDate?: string | null;
   orderKind?: DeliveryOrderKind | string | null;
   paymentType?: string | null;

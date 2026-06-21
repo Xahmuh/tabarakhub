@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BellRing, Check, CheckCheck, Clock3, Inbox, MapPin, RefreshCcw, Truck } from 'lucide-react';
+import { BellRing, Check, CheckCheck, Clock3, ExternalLink, Inbox, MapPin, RefreshCcw, Truck } from 'lucide-react';
 import { DeliveryNotification } from '../../types';
 import { deliveryNotificationService } from '../../services/deliveryNotificationService';
 import { BackToModulesButton, PaginationControls } from '../shared';
@@ -9,6 +9,7 @@ const NOTIFICATIONS_PAGE_SIZE = 20;
 interface DeliveryNotificationsPageProps {
   onBack: () => void;
   onUnreadCountChange?: (count: number) => void;
+  onOpenDeliveryOrder?: (notification: DeliveryNotification) => void;
 }
 
 const formatDateTime = (value?: string | null) => {
@@ -35,16 +36,31 @@ const getLocationLabel = (notification: DeliveryNotification) => {
 const NotificationStrip: React.FC<{
   notification: DeliveryNotification;
   onMarkRead: (id: string) => void;
+  onOpenOrder?: (notification: DeliveryNotification) => void;
   isSaving: boolean;
-}> = ({ notification, onMarkRead, isSaving }) => {
+}> = ({ notification, onMarkRead, onOpenOrder, isSaving }) => {
   const deliveredAt = notification.payload.deliveredAt || notification.createdAt;
   const branchLabel = notification.branchName || notification.branchCode || 'Branch';
   const driverLabel = notification.driverName || notification.driverCode || 'Driver';
+  const isInteractive = Boolean(onOpenOrder);
+  const openOrder = () => onOpenOrder?.(notification);
 
   return (
-    <article className={`grid gap-4 border-b border-slate-100 p-4 transition-colors last:border-b-0 md:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)_auto] md:items-center ${
+    <article
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onClick={openOrder}
+      onKeyDown={(event) => {
+        if (!isInteractive) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openOrder();
+        }
+      }}
+      className={`grid gap-4 border-b border-slate-100 p-4 transition-colors last:border-b-0 md:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)_auto] md:items-center ${
       notification.isRead ? 'bg-white' : 'bg-brand/5'
-    }`}>
+    } ${isInteractive ? 'cursor-pointer hover:bg-brand/5 focus:outline-none focus:ring-2 focus:ring-brand/20' : ''}`}
+    >
       <div className="flex min-w-0 gap-3">
         <div className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
           notification.isRead ? 'bg-slate-100 text-slate-500' : 'bg-brand text-white shadow-sm shadow-brand/20'
@@ -70,6 +86,12 @@ const NotificationStrip: React.FC<{
               <MapPin className="h-3.5 w-3.5" />
               {getLocationLabel(notification)}
             </span>
+            {notification.payload.orderNumber && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                <ExternalLink className="h-3.5 w-3.5" />
+                {notification.payload.orderNumber}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -94,7 +116,10 @@ const NotificationStrip: React.FC<{
         ) : (
           <button
             type="button"
-            onClick={() => onMarkRead(notification.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMarkRead(notification.id);
+            }}
             disabled={isSaving}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white shadow-sm transition-all hover:bg-brand active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -107,7 +132,7 @@ const NotificationStrip: React.FC<{
   );
 };
 
-export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps> = ({ onBack, onUnreadCountChange }) => {
+export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps> = ({ onBack, onUnreadCountChange, onOpenDeliveryOrder }) => {
   const [notifications, setNotifications] = useState<DeliveryNotification[]>([]);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -199,6 +224,22 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleOpenOrder = async (notification: DeliveryNotification) => {
+    if (!notification.isRead) {
+      setIsSaving(true);
+      try {
+        await deliveryNotificationService.markRead(notification.id, true);
+        const nextUnreadCount = await deliveryNotificationService.getUnreadCount();
+        onUnreadCountChange?.(nextUnreadCount);
+      } catch (openError) {
+        console.error('Delivery notification open mark-read failed:', openError);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+    onOpenDeliveryOrder?.(notification);
   };
 
   return (
@@ -303,6 +344,7 @@ export const DeliveryNotificationsPage: React.FC<DeliveryNotificationsPageProps>
               key={notification.id}
               notification={notification}
               onMarkRead={handleMarkRead}
+              onOpenOrder={onOpenDeliveryOrder ? handleOpenOrder : undefined}
               isSaving={isSaving}
             />
           ))

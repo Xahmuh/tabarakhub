@@ -5,7 +5,8 @@ import { DeliveryNotification, DeliveryNotificationPayload } from '../types';
 const NOTIFICATION_SELECT = `
   *,
   branch:branches!delivery_notifications_branch_id_fkey(code, name),
-  driver:delivery_drivers(name, driver_code)
+  driver:delivery_drivers(name, driver_code),
+  order:delivery_orders!delivery_notifications_order_id_fkey(order_number, order_date)
 `;
 
 interface DeliveryNotificationListOptions {
@@ -19,6 +20,11 @@ const toPayload = (value: unknown): DeliveryNotificationPayload => (
 
 const toNotification = (row: any): DeliveryNotification => {
   const payload = toPayload(row.payload);
+  const orderNumber = row.order?.order_number || payload.orderNumber || null;
+  const orderLabel = orderNumber || (row.order_id ? `#${String(row.order_id).slice(0, 8)}` : 'the order');
+  const body = row.body
+    ? String(row.body).replace(/order\s+#?[0-9a-f]{8}\b/i, `order ${orderLabel}`)
+    : `${row.driver?.name || payload.driverName || row.driver?.driver_code || payload.driverCode || 'Driver'} delivered order ${orderLabel}.`;
   return {
     id: row.id,
     notificationType: row.notification_type || 'delivery_delivered',
@@ -31,8 +37,13 @@ const toNotification = (row: any): DeliveryNotification => {
     driverName: row.driver?.name || payload.driverName || null,
     driverCode: row.driver?.driver_code || payload.driverCode || null,
     title: row.title || 'Delivery completed',
-    body: row.body || 'A driver marked an order as delivered.',
-    payload,
+    body,
+    payload: {
+      ...payload,
+      orderId: payload.orderId || row.order_id || null,
+      orderNumber,
+      orderDate: payload.orderDate || row.order?.order_date || null
+    },
     isRead: !!row.is_read,
     readAt: row.read_at || null,
     readBy: row.read_by || null,

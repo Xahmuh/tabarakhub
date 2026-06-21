@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Pharmacist, AuthState, Branch, BranchLoginApproval, BenefitPayTransfer, DeliveryOrder, MaintenanceSettings } from './types';
+import { Pharmacist, AuthState, Branch, BranchLoginApproval, BenefitPayTransfer, DeliveryNotification, DeliveryOrder, MaintenanceSettings } from './types';
 import { supabase } from './lib/supabase';
 import { buildPermissionChecker, isManagerRole } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
@@ -713,6 +713,15 @@ const App: React.FC = () => {
     handleTabChange('delivery');
   };
 
+  const handleOpenDeliveryFromNotification = (notification: DeliveryNotification) => {
+    setDeliveryFocusTarget({
+      orderId: notification.orderId,
+      orderDate: notification.payload.orderDate || null,
+      branchId: notification.branchId || notification.payload.branchId || null
+    });
+    handleTabChange('delivery');
+  };
+
   const logout = async () => {
     clearStoredActiveTab();
     storeBranchLoginApprovalRequest(null);
@@ -1019,6 +1028,7 @@ const App: React.FC = () => {
           <DeliveryNotificationsPage
             onBack={() => handleTabChange('selector')}
             onUnreadCountChange={setDeliveryNotificationUnreadCount}
+            onOpenDeliveryOrder={handleOpenDeliveryFromNotification}
           />
         ) : (
 
