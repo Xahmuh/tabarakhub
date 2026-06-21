@@ -121,10 +121,12 @@ const deliveryBlockAreaLabel = (order: DeliveryOrder, paymentTypes?: DeliveryPay
 };
 
 const talabatChannelLabel = 'by Talabat';
-const talabatChannelBadgeClass = 'inline-flex min-h-[22px] items-center justify-center rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700';
+const talabatChannelBadgeClass = 'inline-flex min-h-[22px] items-center justify-center whitespace-nowrap rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700';
+
+const firstDriverName = (name?: string | null) => name?.trim().split(/\s+/)[0] || '-';
 
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
-  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? talabatChannelLabel : order.driverName || '-';
+  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? talabatChannelLabel : firstDriverName(order.driverName);
 
 const TalabatChannelBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
   <span className={`${talabatChannelBadgeClass} ${className}`.trim()} title={talabatChannelLabel}>
@@ -2151,7 +2153,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
-                    {order.driverName && <span>🛵 {order.driverName}</span>}
+                    {order.driverName && <span title={order.driverName}>🛵 {firstDriverName(order.driverName)}</span>}
                     {!order.driverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
