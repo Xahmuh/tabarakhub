@@ -17,6 +17,14 @@ type KpiRow = {
   value: number;
 };
 
+type DeliveryOrderExportColumn = {
+  header: string;
+  width?: number;
+  numFmt?: string;
+  keepWhenEmpty?: boolean;
+  value: (order: DeliveryOrder) => string | number;
+};
+
 const styleHeader = (row: Row) => {
   row.font = { bold: true };
   row.eachCell(cell => {
@@ -34,6 +42,10 @@ const escapeHtml = (value: unknown) => String(value ?? '')
 
 const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 const formatTimeValue = (value?: string | null) => value ? value.slice(0, 5) : '';
+const hasExportValue = (value: string | number | null | undefined) => {
+  if (typeof value === 'number') return Number.isFinite(value);
+  return String(value ?? '').trim().length > 0;
+};
 
 const formatDutyDateTime = (value?: string | null) => {
   if (!value) return '';
@@ -140,13 +152,14 @@ const addKpiSheet = (
   sheet.getRow(1).font = { bold: true, size: 14 };
   sheet.addRow([]);
 
-  const columns = secondaryLabel
+  const includeSecondary = Boolean(secondaryLabel && rows.some(row => hasExportValue(row.secondary)));
+  const columns = includeSecondary
     ? ['Rank', entityLabel, secondaryLabel, 'Orders', 'Total Value (BHD)']
     : ['Rank', entityLabel, 'Orders', 'Total Value (BHD)'];
   styleHeader(sheet.addRow(columns));
 
   rows.forEach((row, index) => {
-    const values = secondaryLabel
+    const values = includeSecondary
       ? [index + 1, row.label, row.secondary || '', row.orders, Number(row.value.toFixed(3))]
       : [index + 1, row.label, row.orders, Number(row.value.toFixed(3))];
     sheet.addRow(values);
@@ -159,15 +172,35 @@ const addKpiSheet = (
   const totalValue = rows.reduce((acc, row) => acc + row.value, 0);
   const totalOrders = rows.reduce((acc, row) => acc + row.orders, 0);
   sheet.addRow([]);
-  const totalRow = secondaryLabel
+  const totalRow = includeSecondary
     ? sheet.addRow(['TOTAL', '', '', totalOrders, Number(totalValue.toFixed(3))])
     : sheet.addRow(['TOTAL', '', totalOrders, Number(totalValue.toFixed(3))]);
   totalRow.font = { bold: true };
 
   sheet.columns.forEach(col => { col.width = 22; });
   sheet.getColumn(1).width = 10;
-  sheet.getColumn(secondaryLabel ? 5 : 4).numFmt = '0.000';
+  sheet.getColumn(includeSecondary ? 5 : 4).numFmt = '0.000';
 };
+
+const deliveryOrderExportColumns: DeliveryOrderExportColumn[] = [
+  { header: 'Order #', keepWhenEmpty: true, value: order => deliveryOrderNumber(order) },
+  { header: 'Date', keepWhenEmpty: true, value: order => order.orderDate },
+  { header: 'Type', keepWhenEmpty: true, value: order => order.orderKind === 'internal_transfer' ? 'Internal transfer' : 'Actual delivery' },
+  { header: 'Branch', keepWhenEmpty: true, value: order => order.branchName || '' },
+  { header: 'From Branch', value: order => order.transferFromBranchName || '' },
+  { header: 'To Branch', value: order => order.transferToBranchName || '' },
+  { header: 'Value (BHD)', width: 16, numFmt: '0.000', keepWhenEmpty: true, value: order => Number(order.valueBhd.toFixed(3)) },
+  { header: 'Payment', keepWhenEmpty: true, value: order => order.paymentType },
+  { header: 'BP received time', width: 18, value: order => formatTimeValue(order.benefitPayReceivedTime) },
+  { header: 'Pharmacist', value: order => order.pharmacistName || '' },
+  { header: 'Driver ID', value: order => order.driverCode || '' },
+  { header: 'Driver', value: order => order.driverName || '' },
+  { header: 'Block', value: order => order.blockNumber || '' },
+  { header: 'Area', value: order => order.areaName || '' },
+  { header: 'Governorate', value: order => order.governorate || '' },
+  { header: 'Outside Governorate', value: order => order.isOutsideGovernorate ? 'YES' : '' },
+  { header: 'Notes', value: order => order.notes || '' }
+];
 
 const addDeliveryOrdersSheet = (
   workbook: Workbook,
@@ -181,40 +214,35 @@ const addDeliveryOrdersSheet = (
   sheet.getRow(1).font = { bold: true, size: 14 };
   sheet.addRow([]);
 
-  const header = sheet.addRow([
-    'Order #', 'Date', 'Type', 'Branch', 'From Branch', 'To Branch', 'Value (BHD)', 'Payment', 'BP received time', 'Pharmacist', 'Driver ID', 'Driver', 'Block', 'Area', 'Governorate', 'Outside Governorate', 'Notes'
-  ]);
+  const activeColumns = orders.length === 0
+    ? deliveryOrderExportColumns.filter(column => column.keepWhenEmpty)
+    : deliveryOrderExportColumns.filter(column => orders.some(order => hasExportValue(column.value(order))));
+
+  const header = sheet.addRow(activeColumns.map(column => column.header));
   styleHeader(header);
 
   orders.forEach(order => {
-    sheet.addRow([
-      deliveryOrderNumber(order),
-      order.orderDate,
-      order.orderKind === 'internal_transfer' ? 'Internal transfer' : 'Actual delivery',
-      order.branchName || '',
-      order.transferFromBranchName || '',
-      order.transferToBranchName || '',
-      Number(order.valueBhd.toFixed(3)),
-      order.paymentType,
-      formatTimeValue(order.benefitPayReceivedTime),
-      order.pharmacistName || '',
-      order.driverCode || '',
-      order.driverName || '',
-      order.blockNumber || '',
-      order.areaName || '',
-      order.governorate || '',
-      order.isOutsideGovernorate ? 'YES' : '',
-      order.notes || ''
-    ]);
+    sheet.addRow(activeColumns.map(column => column.value(order)));
   });
 
   sheet.columns.forEach(col => { col.width = 16; });
-  sheet.getColumn(7).numFmt = '0.000';
-  sheet.getColumn(9).width = 18;
+  activeColumns.forEach((column, index) => {
+    const sheetColumn = sheet.getColumn(index + 1);
+    if (column.width) sheetColumn.width = column.width;
+    if (column.numFmt) sheetColumn.numFmt = column.numFmt;
+  });
 
-  const totalRow = sheet.addRow([
-    'TOTAL', '', '', '', '', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
-  ]);
+  const totalValues = Array(activeColumns.length).fill('');
+  if (totalValues.length > 0) totalValues[0] = 'TOTAL';
+  const valueColumnIndex = activeColumns.findIndex(column => column.header === 'Value (BHD)');
+  if (valueColumnIndex >= 0) {
+    totalValues[valueColumnIndex] = Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3));
+    const countColumnIndex = Math.min(valueColumnIndex + 1, totalValues.length - 1);
+    if (countColumnIndex !== valueColumnIndex) {
+      totalValues[countColumnIndex] = `${orders.length} orders`;
+    }
+  }
+  const totalRow = sheet.addRow(totalValues);
   totalRow.font = { bold: true };
 
   return sheet;
