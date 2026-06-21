@@ -1,5 +1,6 @@
 import type { Row, Workbook } from 'exceljs';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import { DeliveryDriverDutyReportRow, DeliveryOrder } from '../../types';
 
 const assertExcelEnabled = () => {
@@ -168,18 +169,13 @@ const addKpiSheet = (
   sheet.getColumn(secondaryLabel ? 5 : 4).numFmt = '0.000';
 };
 
-export const exportOrdersToExcel = async (
-  orders: DeliveryOrder[],
+const addDeliveryOrdersSheet = (
+  workbook: Workbook,
+  sheetName: string,
   title: string,
-  fileName: string
+  orders: DeliveryOrder[]
 ) => {
-  assertExcelEnabled();
-  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
-    import('exceljs'),
-    import('file-saver'),
-  ]);
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Delivery Orders');
+  const sheet = workbook.addWorksheet(sheetName);
 
   sheet.addRow([title]);
   sheet.getRow(1).font = { bold: true, size: 14 };
@@ -220,6 +216,27 @@ export const exportOrdersToExcel = async (
     'TOTAL', '', '', '', '', '', Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3)), `${orders.length} orders`
   ]);
   totalRow.font = { bold: true };
+
+  return sheet;
+};
+
+export const exportOrdersToExcel = async (
+  orders: DeliveryOrder[],
+  title: string,
+  fileName: string
+) => {
+  assertExcelEnabled();
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
+  const workbook = new ExcelJS.Workbook();
+  const normalOrders = orders.filter(order => !isTalabatDeliveryPayment(order.paymentType));
+  const talabatOrders = orders.filter(order => isTalabatDeliveryPayment(order.paymentType));
+
+  addDeliveryOrdersSheet(workbook, 'Delivery Orders', title, orders);
+  addDeliveryOrdersSheet(workbook, 'Normal Delivery', `${title} - Normal Delivery`, normalOrders);
+  addDeliveryOrdersSheet(workbook, 'Talabat Delivery', `${title} - Talabat Delivery`, talabatOrders);
 
   addKpiSheet(
     workbook,
