@@ -20,6 +20,7 @@ import { ActionQueueItem, ActionQueueStatus, CommandCenterSeverity, CommandCente
 import { isManagerRole } from '../../lib/access';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { BranchCoverageMapWidget } from './BranchCoverageMapWidget';
+import { formatBhdWithCurrency } from '../../utils/money';
 
 interface DailyCommandCenterProps {
   user: Branch | null;
@@ -110,7 +111,7 @@ const CommandMetric: React.FC<{
 
 type YesterdayExportType = 'lost-sales' | 'shortages' | 'pack';
 
-const formatBhd = (value: number) => `${Number(value || 0).toFixed(3)} BHD`;
+const formatBhd = (value: number) => formatBhdWithCurrency(value);
 const formatCount = (value: number) => new Intl.NumberFormat().format(Number(value || 0));
 
 export const DailyCommandCenter: React.FC<DailyCommandCenterProps> = ({ user, onNavigate }) => {

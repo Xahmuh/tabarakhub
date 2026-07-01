@@ -23,6 +23,7 @@ import {
   normalizeDeliveryPaymentLabel
 } from '../lib/deliveryPaymentTypes';
 import { generateUUID } from '../utils/uuid';
+import { truncateBhd } from '../utils/money';
 
 const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
 const PAYMENT_COLLECTION_STATUSES: DeliveryPaymentCollectionStatus[] = ['paid', 'collect_on_delivery', 'partial'];
@@ -147,7 +148,7 @@ const resolvePaymentType = async (paymentType: string | null | undefined) => {
   return config;
 };
 
-const roundBhd = (value: number) => Math.round(value * 1000) / 1000;
+const normalizeBhd = (value: number) => truncateBhd(value);
 
 const toPaymentCollectionStatus = (value: string | null | undefined): DeliveryPaymentCollectionStatus =>
   PAYMENT_COLLECTION_STATUSES.includes(value as DeliveryPaymentCollectionStatus)
@@ -208,11 +209,11 @@ const normalizeOrderInput = async (input: DeliveryOrderInput): Promise<DeliveryO
     ...input,
     branchId,
     orderDate,
-    valueBhd: roundBhd(valueBhd),
+    valueBhd: normalizeBhd(valueBhd),
     paymentType,
     paymentCollectionStatus,
-    amountReceivedBhd: roundBhd(amountReceivedBhd),
-    cashHandedToDriverBhd: roundBhd(cashHandedToDriverBhd),
+    amountReceivedBhd: normalizeBhd(amountReceivedBhd),
+    cashHandedToDriverBhd: normalizeBhd(cashHandedToDriverBhd),
     benefitPayReceivedTime,
     driverPaymentNote,
     pharmacistId: input.pharmacistId || null,
@@ -547,7 +548,7 @@ export const deliveryService = {
       if (input.valueBhd !== undefined) {
         const valueBhd = Number(input.valueBhd);
         if (!Number.isFinite(valueBhd) || valueBhd <= 0) throw new Error('Order value must be greater than zero.');
-        payload.value_bhd = valueBhd;
+        payload.value_bhd = normalizeBhd(valueBhd);
       }
       if (input.paymentType !== undefined) {
         const paymentTypeConfig = await resolvePaymentType(input.paymentType);
@@ -577,14 +578,14 @@ export const deliveryService = {
         if (!Number.isFinite(amountReceivedBhd) || amountReceivedBhd < 0) {
           throw new Error('Received amount must be zero or greater.');
         }
-        payload.amount_received_bhd = roundBhd(amountReceivedBhd);
+        payload.amount_received_bhd = normalizeBhd(amountReceivedBhd);
       }
       if (input.cashHandedToDriverBhd !== undefined) {
         const cashHandedToDriverBhd = Number(input.cashHandedToDriverBhd || 0);
         if (!Number.isFinite(cashHandedToDriverBhd) || cashHandedToDriverBhd < 0) {
           throw new Error('Cash handed to driver must be zero or greater.');
         }
-        payload.cash_handed_to_driver_bhd = roundBhd(cashHandedToDriverBhd);
+        payload.cash_handed_to_driver_bhd = normalizeBhd(cashHandedToDriverBhd);
       }
       if (input.benefitPayReceivedTime !== undefined) {
         payload.benefit_pay_received_time = normalizeBenefitPayReceivedTime(

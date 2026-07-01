@@ -8,6 +8,7 @@ import { Product } from '../../types';
 import Swal from 'sweetalert2';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { formatVatLabel, getPriceIncludingVat } from '../../utils/vat';
+import { formatBhdAmount } from '../../utils/money';
 
 const escapeUploadHtml = (value: string) => value.replace(/[&<>"']/g, char => ({
     '&': '&amp;',
@@ -468,14 +469,14 @@ export const ProductManagementSection: React.FC = () => {
                                         {product.category && <span className="px-2 py-1 bg-slate-100 rounded-md">{product.category}</span>}
                                     </td>
                                     <td className="p-4 text-sm text-slate-600">{product.agent}</td>
-                                    <td className="p-4 text-right font-mono font-bold text-slate-800">{product.defaultPrice?.toFixed(3)} BHD</td>
+                                    <td className="p-4 text-right font-mono font-bold text-slate-800">{formatBhdAmount(product.defaultPrice)} BHD</td>
                                     <td className="p-4 text-center">
                                         <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${product.vatEnabled ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                                             {formatVatLabel(product.vatEnabled, product.vatRate)}
                                         </span>
                                     </td>
                                     <td className="p-4 text-right font-mono font-bold text-slate-600">
-                                        {getPriceIncludingVat(product.defaultPrice || 0, product.vatEnabled, product.vatRate).toFixed(3)} BHD
+                                        {formatBhdAmount(getPriceIncludingVat(product.defaultPrice || 0, product.vatEnabled, product.vatRate))} BHD
                                     </td>
                                     <td className="p-4 text-center">
                                         {product.isManual ? (

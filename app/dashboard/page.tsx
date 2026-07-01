@@ -56,6 +56,14 @@ import { mapBranchName } from '../../utils/excelUtils';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { isManagerRole } from '../../lib/access';
 
+const roundLostSalesTrackerValue = (value: number) =>
+  Math.round((Number(value) || 0) * 10) / 10;
+
+const formatLostSalesTrackerValue = (value: number) =>
+  roundLostSalesTrackerValue(value).toFixed(1);
+
+const LOST_SALES_TRACKER_NUM_FMT = '0.0';
+
 const createExcelWorkbook = async () => {
   if (!isModuleEnabled('excelExport')) {
     throw new Error('Excel export is disabled for this client deployment');
@@ -1189,8 +1197,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         { header: 'Time', key: 'timestamp', width: 14 },
         { header: 'Branch', key: 'branch_name', width: 25 },
         { header: 'Qty', key: 'quantity', width: 10 },
-        { header: 'Price (BHD)', key: 'unit_price', width: 18, style: { numFmt: '0.000' } },
-        { header: 'Total (BHD)', key: 'total_value', width: 18, style: { numFmt: '0.000' } },
+        { header: 'Price (BHD)', key: 'unit_price', width: 18, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
+        { header: 'Total (BHD)', key: 'total_value', width: 18, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
         { header: 'Category', key: 'category', width: 20 },
         { header: 'Agent Code / Name', key: 'agent_name', width: 25 },
         { header: 'Alternative Given', key: 'alternative_given', width: 20 },
@@ -1208,8 +1216,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
           timestamp: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
           branch_name: mapBranchName(s.branch_name || 'Unknown'),
           quantity: s.quantity,
-          unit_price: Number(s.unit_price || 0),
-          total_value: Number(s.total_value || 0),
+          unit_price: roundLostSalesTrackerValue(Number(s.unit_price || 0)),
+          total_value: roundLostSalesTrackerValue(Number(s.total_value || 0)),
           category: s.category || 'General',
           agent_name: s.agent_name || 'N/A',
           alternative_given: s.alternative_given ? 'Yes' : 'No',
@@ -1220,7 +1228,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       });
 
       const totalLoss = viewData.reduce((acc: number, s: any) => acc + Number(s.total_value || 0), 0);
-      const sumRow = worksheet.addRow({ internal_code: 'TOTAL AGGREGATE LOSS', total_value: totalLoss });
+      const sumRow = worksheet.addRow({ internal_code: 'TOTAL AGGREGATE LOSS', total_value: roundLostSalesTrackerValue(totalLoss) });
       const labelCell = sumRow.getCell(1);
       const valueCell = sumRow.getCell(8);
       [labelCell, valueCell].forEach(c => {
@@ -1236,7 +1244,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         { header: 'Agent Name', key: 'agent_name', width: 30 },
         { header: 'Category', key: 'category', width: 20 },
         { header: 'Total Qty Lost', key: 'quantity', width: 15 },
-        { header: 'Total Value (BHD)', key: 'total_value', width: 20, style: { numFmt: '0.000' } },
+        { header: 'Total Value (BHD)', key: 'total_value', width: 20, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
       ];
 
       const productAggregation: Record<string, {
@@ -1271,7 +1279,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
             agent_name: stats.agent_name,
             category: stats.category,
             quantity: stats.quantity,
-            total_value: stats.total_value
+            total_value: roundLostSalesTrackerValue(stats.total_value)
           });
         });
 
@@ -1283,7 +1291,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       agentSheet.columns = [
         { header: 'Agent Name', key: 'agentName', width: 40 },
         { header: 'Units Lost', key: 'itemsCount', width: 15 },
-        { header: 'Total Value (BHD)', key: 'totalValue', width: 20, style: { numFmt: '0.000' } },
+        { header: 'Total Value (BHD)', key: 'totalValue', width: 20, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
       ];
       const agentStats: Record<string, { count: number; value: number }> = {};
       viewData.forEach((s: any) => {
@@ -1293,7 +1301,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         agentStats[agent].value += Number(s.total_value || 0);
       });
       Object.entries(agentStats).sort((a, b) => b[1].value - a[1].value).forEach(([name, stats]) => {
-        agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: stats.value });
+        agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: roundLostSalesTrackerValue(stats.value) });
       });
       styleWorksheetHeader(agentSheet);
 
@@ -1315,7 +1323,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       Object.entries(branchStats)
         .sort((a, b) => b[1].value - a[1].value)
         .forEach(([name, stats], idx) => {
-          rankingSheet.addRow([idx + 1, name, stats.count, stats.value.toFixed(3)]);
+          const row = rankingSheet.addRow([idx + 1, name, stats.count, roundLostSalesTrackerValue(stats.value)]);
+          row.getCell(4).numFmt = LOST_SALES_TRACKER_NUM_FMT;
         });
 
       rankingSheet.addRow([]); // Gap
@@ -1336,7 +1345,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       Object.values(pharmaStats)
         .sort((a, b) => b.count - a.count)
         .forEach((p, idx) => {
-          rankingSheet.addRow([idx + 1, p.name, p.branch, p.count, p.value.toFixed(3)]);
+          const row = rankingSheet.addRow([idx + 1, p.name, p.branch, p.count, roundLostSalesTrackerValue(p.value)]);
+          row.getCell(5).numFmt = LOST_SALES_TRACKER_NUM_FMT;
         });
 
       rankingSheet.columns.forEach(col => col.width = 25);
@@ -1513,8 +1523,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         { header: 'Time', key: 'timestamp', width: 14 },
         { header: 'Branch', key: 'branch_name', width: 25 },
         { header: 'Qty', key: 'quantity', width: 10 },
-        { header: 'Price (BHD)', key: 'unit_price', width: 18, style: { numFmt: '0.000' } },
-        { header: 'Total (BHD)', key: 'total_value', width: 18, style: { numFmt: '0.000' } },
+        { header: 'Price (BHD)', key: 'unit_price', width: 18, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
+        { header: 'Total (BHD)', key: 'total_value', width: 18, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
         { header: 'Category', key: 'category', width: 20 },
         { header: 'Agent Code / Name', key: 'agent_name', width: 25 },
         { header: 'Alternative Given', key: 'alternative_given', width: 20 },
@@ -1533,8 +1543,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
             timestamp: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
             branch_name: mapBranchName(s.branch_name || 'Unknown'),
             quantity: s.quantity,
-            unit_price: Number(s.unit_price || 0),
-            total_value: Number(s.total_value || 0),
+            unit_price: roundLostSalesTrackerValue(Number(s.unit_price || 0)),
+            total_value: roundLostSalesTrackerValue(Number(s.total_value || 0)),
             category: s.category || 'General',
             agent_name: s.agent_name || 'N/A',
             alternative_given: s.alternative_given ? 'Yes' : 'No',
@@ -1545,7 +1555,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         });
 
         const totalLoss = salesData.reduce((acc: number, s: any) => acc + Number(s.total_value || 0), 0);
-        const sumRow = lostSalesSheet.addRow({ internal_code: 'TOTAL AGGREGATE LOSS', total_value: totalLoss });
+        const sumRow = lostSalesSheet.addRow({ internal_code: 'TOTAL AGGREGATE LOSS', total_value: roundLostSalesTrackerValue(totalLoss) });
         const labelCell = sumRow.getCell(1);
         const valueCell = sumRow.getCell(8);
         [labelCell, valueCell].forEach(c => {
@@ -1561,7 +1571,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       agentSheet.columns = [
         { header: 'Agent Name', key: 'agentName', width: 40 },
         { header: 'Units Lost', key: 'itemsCount', width: 15 },
-        { header: 'Total Value (BHD)', key: 'totalValue', width: 20, style: { numFmt: '0.000' } },
+        { header: 'Total Value (BHD)', key: 'totalValue', width: 20, style: { numFmt: LOST_SALES_TRACKER_NUM_FMT } },
       ];
       const agentStats: Record<string, { count: number; value: number }> = {};
       if (salesData) {
@@ -1573,7 +1583,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
         });
       }
       Object.entries(agentStats).sort((a, b) => b[1].value - a[1].value).forEach(([name, stats]) => {
-        agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: stats.value });
+        agentSheet.addRow({ agentName: name, itemsCount: stats.count, totalValue: roundLostSalesTrackerValue(stats.value) });
       });
       styleWorksheetHeader(agentSheet);
 
@@ -1634,7 +1644,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       Object.entries(combinedBranchStats)
         .sort((a, b) => (b[1].salesVal + b[1].shortageCount) - (a[1].salesVal + a[1].shortageCount)) // Sort by combined weight
         .forEach(([name, stats], idx) => {
-          rankingSheet.addRow([idx + 1, name, stats.salesVal.toFixed(3), stats.shortageCount]);
+          const row = rankingSheet.addRow([idx + 1, name, roundLostSalesTrackerValue(stats.salesVal), stats.shortageCount]);
+          row.getCell(3).numFmt = LOST_SALES_TRACKER_NUM_FMT;
         });
 
       rankingSheet.addRow([]); // Gap
@@ -2229,7 +2240,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/35">Recovered value</p>
                                 <div className="mt-1 flex items-end justify-end gap-1">
                                   <span className="pb-1 text-[10px] font-black text-emerald-300">BHD</span>
-                                  <span className="text-2xl font-black tracking-tighter tabular-nums">{aggregateMetrics.recoveryRevenue.toFixed(3)}</span>
+                                  <span className="text-2xl font-black tracking-tighter tabular-nums">{formatLostSalesTrackerValue(aggregateMetrics.recoveryRevenue)}</span>
                                 </div>
                                 <p className="mt-1 text-[10px] font-bold text-white/35">{aggregateMetrics.recoveryValueShare.toFixed(1)}% of exposure value</p>
                               </div>
@@ -2375,7 +2386,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                               <div className="mt-5 flex items-end justify-between gap-3">
                                 <div>
                                   <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">Exposure value</p>
-                                  <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">BHD {aggregateMetrics.noRecoveryRevenue.toFixed(3)}</p>
+                                  <p className="mt-1 text-xl font-black tracking-tighter text-slate-950 tabular-nums">BHD {formatLostSalesTrackerValue(aggregateMetrics.noRecoveryRevenue)}</p>
                                 </div>
                                 <div className="rounded-xl bg-red-100 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
                                   {aggregateMetrics.noRecoveryPercentage.toFixed(1)}%
@@ -2529,7 +2540,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                               <span className="px-3 py-1 bg-slate-100 rounded-lg text-slate-600 text-[10px] tabular-nums font-black">{s.quantity} Units</span>
                             </td>
                             <td className="py-4 text-right text-slate-900 pr-4 tabular-nums w-40">
-                              {s.totalValue.toFixed(3)} <span className="text-[9px] text-slate-300">BHD</span>
+                              {formatLostSalesTrackerValue(s.totalValue)} <span className="text-[9px] text-slate-300">BHD</span>
                             </td>
                             <td className="py-4 text-center w-40">
                               <span className={`inline-flex items-center justify-center gap-2 rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${statusMeta.className}`}>
@@ -3401,7 +3412,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                                     </div>
                                     <div className="rounded-xl bg-white border border-slate-100 px-3 py-2">
                                       <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.12em]">Avg Case</p>
-                                      <p className="text-sm font-black text-slate-900 tabular-nums">{item.averageValue.toFixed(3)}</p>
+                                      <p className="text-sm font-black text-slate-900 tabular-nums">{formatLostSalesTrackerValue(item.averageValue)}</p>
                                     </div>
                                   </div>
                                   <div className="mt-4">
@@ -3418,7 +3429,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
                               <div className="lg:text-right lg:min-w-[150px]">
                                 <p className="text-[9px] font-black text-brand uppercase tracking-[0.16em] mb-1">BHD Impact</p>
-                                <p className="text-2xl md:text-3xl font-black text-slate-900 tabular-nums leading-none">{item.total.toFixed(3)}</p>
+                                <p className="text-2xl md:text-3xl font-black text-slate-900 tabular-nums leading-none">{formatLostSalesTrackerValue(item.total)}</p>
                                 <p className="mt-2 text-[9px] font-bold text-slate-400 uppercase tracking-[0.12em]">
                                   Filter: {lossDriverFilterOptions.find(option => option.id === lossDriverFilter)?.label || 'Priority'}
                                 </p>
@@ -3487,7 +3498,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                   </div>
                 </div>
                 <div className="p-4 md:p-6 overflow-x-auto custom-scrollbar">
-                  <DailyPerformanceCalendar sales={sales} />
+                  <DailyPerformanceCalendar sales={sales} valueFormatter={formatLostSalesTrackerValue} />
                 </div>
               </section>
 
@@ -3512,8 +3523,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
                     <div className="grid w-full grid-cols-2 gap-3 xl:max-w-2xl xl:grid-cols-4">
                       {[
-                        { label: 'Last close', value: operationalTrendSummary.lastValue.toFixed(3), prefix: 'BHD', tone: 'text-white' },
-                        { label: 'Change', value: `${operationalTrendSummary.delta >= 0 ? '+' : ''}${operationalTrendSummary.deltaAbs.toFixed(3)}`, prefix: 'BHD', tone: operationalTrendSummary.delta > 0 ? 'text-red-300' : operationalTrendSummary.delta < 0 ? 'text-emerald-300' : 'text-sky-300' },
+                        { label: 'Last close', value: formatLostSalesTrackerValue(operationalTrendSummary.lastValue), prefix: 'BHD', tone: 'text-white' },
+                        { label: 'Change', value: `${operationalTrendSummary.delta >= 0 ? '+' : ''}${formatLostSalesTrackerValue(operationalTrendSummary.deltaAbs)}`, prefix: 'BHD', tone: operationalTrendSummary.delta > 0 ? 'text-red-300' : operationalTrendSummary.delta < 0 ? 'text-emerald-300' : 'text-sky-300' },
                         { label: 'Volume', value: String(operationalTrendSummary.totalSessions), prefix: 'CX', tone: 'text-amber-200' },
                         { label: 'Days', value: String(operationalTrendSummary.dayCount), prefix: 'D', tone: 'text-slate-200' },
                       ].map(item => (
@@ -3556,7 +3567,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                     </div>
 
                     <div className="rounded-[1.75rem] border border-white/10 bg-slate-900/60 p-2 shadow-inner shadow-black/30 md:p-4">
-                      <OperationalTrendChart data={performanceTrend} />
+                      <OperationalTrendChart data={performanceTrend} valueFormatter={formatLostSalesTrackerValue} />
                     </div>
                   </div>
 
@@ -3568,10 +3579,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
                     <div className="space-y-3">
                       {[
-                        { label: 'Total exposure', value: `BHD ${operationalTrendSummary.totalImpact.toFixed(3)}`, icon: <BarChart3 size={16} />, color: 'text-white' },
-                        { label: 'Average per customer', value: `BHD ${operationalTrendSummary.averageImpact.toFixed(3)}`, icon: <Activity size={16} />, color: 'text-slate-200' },
-                        { label: 'Peak session', value: `${operationalTrendSummary.peakDay?.name || 'No data'} · BHD ${(operationalTrendSummary.peakDay?.value || 0).toFixed(3)}`, icon: <ArrowUpRight size={16} />, color: 'text-red-200' },
-                        { label: 'Lowest session', value: `${operationalTrendSummary.lowDay?.name || 'No data'} · BHD ${(operationalTrendSummary.lowDay?.value || 0).toFixed(3)}`, icon: <TrendingDown size={16} />, color: 'text-emerald-200' },
+                        { label: 'Total exposure', value: `BHD ${formatLostSalesTrackerValue(operationalTrendSummary.totalImpact)}`, icon: <BarChart3 size={16} />, color: 'text-white' },
+                        { label: 'Average per customer', value: `BHD ${formatLostSalesTrackerValue(operationalTrendSummary.averageImpact)}`, icon: <Activity size={16} />, color: 'text-slate-200' },
+                        { label: 'Peak session', value: `${operationalTrendSummary.peakDay?.name || 'No data'} · BHD ${formatLostSalesTrackerValue(operationalTrendSummary.peakDay?.value || 0)}`, icon: <ArrowUpRight size={16} />, color: 'text-red-200' },
+                        { label: 'Lowest session', value: `${operationalTrendSummary.lowDay?.name || 'No data'} · BHD ${formatLostSalesTrackerValue(operationalTrendSummary.lowDay?.value || 0)}`, icon: <TrendingDown size={16} />, color: 'text-emerald-200' },
                       ].map(item => (
                         <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                           <div className="flex items-center justify-between gap-3">

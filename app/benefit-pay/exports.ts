@@ -1,6 +1,7 @@
 import type { Row } from 'exceljs';
 import { isModuleEnabled } from '../../config/clientConfig';
 import type { BenefitPayTransfer, BenefitPayTransferType } from '../../types';
+import { formatBhdAmount, truncateBhd } from '../../utils/money';
 
 export type BenefitPayExportSortMode = 'time' | 'branch';
 
@@ -46,7 +47,7 @@ const displayDate = (dateKey: string) => {
   return `${Number(day)}/${Number(month)}/${year}`;
 };
 
-const formatBhd = (value: number) => Number(value || 0).toFixed(3);
+const formatBhd = (value: number) => formatBhdAmount(value);
 
 const sourceLabel = (row: BenefitPayTransfer) =>
   row.source === 'delivery' ? `Delivery ${row.deliveryOrderNumber || ''}`.trim() : 'In-store';
@@ -158,7 +159,7 @@ const addLedgerSheet = (
       ...(options.includeBranch ? [branchLabel(row)] : []),
       row.serialNumber,
       displayDate(row.transferDate),
-      ...visibleTransferTypes.map(type => row.transferType === type ? Number(row.valueBhd.toFixed(3)) : ''),
+      ...visibleTransferTypes.map(type => row.transferType === type ? truncateBhd(row.valueBhd) : ''),
       row.transferTime,
       row.pharmacistName || '',
       sourceLabel(row)
@@ -184,10 +185,10 @@ const addLedgerSheet = (
     ...(options.includeBranch ? [''] : []),
     '',
     '',
-    ...visibleTransferTypes.map(type => Number(totals[type].toFixed(3))),
+    ...visibleTransferTypes.map(type => truncateBhd(totals[type])),
     '',
     `${totals.count} transfers`,
-    Number(totals.total.toFixed(3))
+    truncateBhd(totals.total)
   ]);
   totalRow.font = { bold: true };
   totalRow.eachCell(cell => {
@@ -249,12 +250,12 @@ const addSummarySheet = (workbook: any, rows: BenefitPayTransfer[], title: strin
       first.branchCode || '-',
       first.branchName || '-',
       totals.count,
-      Number(totals.AFS.toFixed(3)),
-      Number(totals.CREDIMAX.toFixed(3)),
-      Number(totals.IBAN.toFixed(3)),
-      Number(totals.manual.toFixed(3)),
-      Number(totals.delivery.toFixed(3)),
-      Number(totals.total.toFixed(3))
+      truncateBhd(totals.AFS),
+      truncateBhd(totals.CREDIMAX),
+      truncateBhd(totals.IBAN),
+      truncateBhd(totals.manual),
+      truncateBhd(totals.delivery),
+      truncateBhd(totals.total)
     ]);
   });
 
@@ -263,12 +264,12 @@ const addSummarySheet = (workbook: any, rows: BenefitPayTransfer[], title: strin
     'TOTAL',
     '',
     grandTotals.count,
-    Number(grandTotals.AFS.toFixed(3)),
-    Number(grandTotals.CREDIMAX.toFixed(3)),
-    Number(grandTotals.IBAN.toFixed(3)),
-    Number(grandTotals.manual.toFixed(3)),
-    Number(grandTotals.delivery.toFixed(3)),
-    Number(grandTotals.total.toFixed(3))
+    truncateBhd(grandTotals.AFS),
+    truncateBhd(grandTotals.CREDIMAX),
+    truncateBhd(grandTotals.IBAN),
+    truncateBhd(grandTotals.manual),
+    truncateBhd(grandTotals.delivery),
+    truncateBhd(grandTotals.total)
   ]);
   totalRow.font = { bold: true };
   totalRow.eachCell(cell => {

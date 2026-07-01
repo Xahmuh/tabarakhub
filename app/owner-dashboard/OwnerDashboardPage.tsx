@@ -30,6 +30,7 @@ import { exportBreakdownToExcel, printReport } from '../delivery/exports';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey } from '../delivery/utils';
 import { deliveryService } from '../../services/deliveryService';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { formatBhdAmount, truncateBhd } from '../../utils/money';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
   isDeliveryPaymentBlockExempt,
@@ -479,7 +480,7 @@ const formatStatusLabel = (status: string, copy: OwnerDashboardCopy) =>
   (copy.statusLabels as Record<string, string>)[status] || status.replace(/_/g, ' ');
 
 const formatBhdForLanguage = (value: number, language: OwnerDashboardLanguage) =>
-  language === 'ar' ? `${Number(value || 0).toFixed(3)} د.ب` : formatBhd(value);
+  language === 'ar' ? `${formatBhdAmount(value)} د.ب` : formatBhd(value);
 
 const KpiCard: React.FC<{
   label: string;
@@ -729,7 +730,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
         branch: formatTraceabilityBranch(order),
         orderKind: order.orderKind,
         status: order.deliveryStatus,
-        value: Number(order.valueBhd.toFixed(3)),
+        value: truncateBhd(order.valueBhd),
         payment: order.paymentType,
         block: order.blockNumber || '',
         area: order.areaName || '',
@@ -771,13 +772,13 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
     runAfterNextPaint(() => exportBreakdownToExcel(
       [
         { metric: copy.overview.orders, value: bundle.overview.totalOrders, note: rangeLabel },
-        { metric: copy.overview.deliveryValue, value: Number(bundle.overview.totalValueBhd.toFixed(3)), note: copy.common.selectedRange },
+        { metric: copy.overview.deliveryValue, value: truncateBhd(bundle.overview.totalValueBhd), note: copy.common.selectedRange },
         { metric: copy.overview.direct, value: bundle.overview.directOrders, note: 'WhatsApp / non-Talabat' },
         { metric: copy.overview.talabat, value: bundle.overview.talabatOrders, note: copy.common.noBlockByDesign },
         { metric: copy.overview.knownBlocks, value: Number(bundle.overview.knownBlockRate.toFixed(1)), note: copy.common.directOrders },
         { metric: copy.overview.unknownBlocks, value: Number(bundle.overview.unknownBlockRate.toFixed(1)), note: copy.common.dataQuality },
         { metric: copy.overview.outsideGov, value: Number(bundle.overview.outsideGovernorateRate.toFixed(1)), note: copy.common.directOrders },
-        { metric: copy.overview.totalLostSales, value: Number(bundle.overview.lostSalesValueBhd.toFixed(3)), note: copy.common.selectedRange },
+        { metric: copy.overview.totalLostSales, value: truncateBhd(bundle.overview.lostSalesValueBhd), note: copy.common.selectedRange },
         { metric: copy.overview.lostCustomers, value: bundle.overview.lostCustomers, note: copy.overview.lostItemRequests },
         { metric: copy.overview.noRecovery, value: bundle.overview.noRecoveryLostSales, note: copy.overview.noRecoverySub },
         { metric: copy.today.shortages, value: bundle.overview.criticalShortages, note: copy.overview.shortageRiskSub }
@@ -834,10 +835,10 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
         driver: row.driverName,
         code: row.driverCode || '',
         orders: row.orders,
-        value: Number(row.totalValueBhd.toFixed(3)),
+        value: truncateBhd(row.totalValueBhd),
         ordersPerDay: Number(row.ordersPerDay.toFixed(2)),
-        costPerOrder: row.costPerOrderBhd == null ? '' : Number(row.costPerOrderBhd.toFixed(3)),
-        estimatedNet: row.estimatedNetBhd == null ? '' : Number(row.estimatedNetBhd.toFixed(3)),
+        costPerOrder: row.costPerOrderBhd == null ? '' : truncateBhd(row.costPerOrderBhd),
+        estimatedNet: row.estimatedNetBhd == null ? '' : truncateBhd(row.estimatedNetBhd),
         classification: row.classification
       })),
       [
@@ -861,11 +862,11 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       bundle.branchKpis.map(row => ({
         branch: `${row.branchCode} - ${row.branchName}`,
         deliveryOrders: row.deliveryOrders,
-        deliveryValue: Number(row.deliveryValueBhd.toFixed(3)),
+        deliveryValue: truncateBhd(row.deliveryValueBhd),
         uniqueBlocks: row.uniqueBlocks,
         unknownBlockRate: Number(row.unknownBlockRate.toFixed(1)),
         outsideGovernorateRate: Number(row.outsideGovernorateRate.toFixed(1)),
-        lostSalesValue: Number(row.lostSalesValueBhd.toFixed(3)),
+        lostSalesValue: truncateBhd(row.lostSalesValueBhd),
         noRecoveryRate: Number(row.noRecoveryRate.toFixed(1)),
         shortageCount: row.shortageCount,
         criticalShortageCount: row.criticalShortageCount,

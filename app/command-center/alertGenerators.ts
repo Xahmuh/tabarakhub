@@ -1,5 +1,6 @@
 import { ActualRevenue, Branch, CashDifference, CashFlowSettings, Cheque, ExpectedRevenue, Expense, HRRequest, LostSale, Shortage } from '../../types';
 import { calculateForecast } from '../../utils/cashFlowUtils';
+import { formatBhdWithCurrency } from '../../utils/money';
 import {
   ActionQueueItem,
   BranchHealthScore,
@@ -67,7 +68,7 @@ const severityPenalty: Record<CommandCenterSeverity, number> = {
   low: 5
 };
 
-const formatAmount = (amount: number) => `${Math.abs(amount).toFixed(3)} BHD`;
+const formatAmount = (amount: number) => formatBhdWithCurrency(Math.abs(amount));
 
 const ageInDays = (timestamp?: string) => {
   if (!timestamp) return 0;

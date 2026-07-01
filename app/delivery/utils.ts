@@ -1,6 +1,7 @@
 import { DeliveryOrder } from '../../types';
 import { DeliveryPaymentTypeConfig } from '../../types';
 import { isDirectDeliveryOrder } from '../../lib/deliveryPaymentTypes';
+import { formatBhdWithCurrency } from '../../utils/money';
 
 export type PeriodPreset = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
@@ -40,7 +41,7 @@ export const getPresetRange = (preset: PeriodPreset, customFrom?: string, custom
   }
 };
 
-export const formatBhd = (value: number) => `${Number(value || 0).toFixed(3)} BHD`;
+export const formatBhd = (value: number) => formatBhdWithCurrency(value);
 
 export const periodLabel = (preset: PeriodPreset, from: string, to: string) => {
   if (preset === 'today') return `Today (${from})`;

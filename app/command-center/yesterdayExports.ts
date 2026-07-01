@@ -3,6 +3,7 @@ import { supabaseClient } from '../../lib/supabaseClient';
 import { Branch } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
 import { isManagerRole } from '../../lib/access';
+import { formatBhdAmount } from '../../utils/money';
 
 type ExportScope = {
   branchId: string | null;
@@ -324,7 +325,7 @@ const addSummarySheet = (
     { metric: 'Date', value: yesterday.date },
     { metric: 'Lost sales records', value: lostSalesRows.length },
     { metric: 'Lost sales units', value: lostSalesRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0) },
-    { metric: 'Lost sales value (BHD)', value: lostSalesRows.reduce((sum, row) => sum + Number(row.total_value || 0), 0).toFixed(3) },
+    { metric: 'Lost sales value (BHD)', value: formatBhdAmount(lostSalesRows.reduce((sum, row) => sum + Number(row.total_value || 0), 0)) },
     { metric: 'Shortage reports', value: shortageRows.length },
     { metric: 'Critical shortages', value: shortageRows.filter(row => row.status === 'Critical').length },
     { metric: 'Out of stock', value: shortageRows.filter(row => row.status === 'Out of Stock').length }

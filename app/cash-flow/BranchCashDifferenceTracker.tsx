@@ -24,6 +24,7 @@ import { supabase } from '../../lib/supabase';
 import { CashDifference, Role, DifferenceStatus, DifferenceType, Branch } from '../../types';
 import Swal from 'sweetalert2';
 import { isManagerRole } from '../../lib/access';
+import { formatBhdAmount } from '../../utils/money';
 
 interface BranchCashDifferenceTrackerProps {
     branchId?: string;
@@ -454,9 +455,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
             d.date,
             d.branchName || '',
             d.pharmacistName,
-            d.systemCash.toFixed(3),
-            d.actualCash.toFixed(3),
-            d.difference.toFixed(3),
+            formatBhdAmount(d.systemCash),
+            formatBhdAmount(d.actualCash),
+            formatBhdAmount(d.difference),
             d.differenceType,
             d.status,
             d.hasInvoices ? `YES (${d.invoiceReference || ''})` : 'NO',
@@ -778,7 +779,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                     <div className="mb-4">
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Financial Impact</p>
                                         <p className={`text-lg font-black ${log.differenceType === 'Shortage' ? 'text-orange-400' : 'text-emerald-400'}`}>
-                                            {log.differenceType === 'Shortage' ? '-' : '+'}{Math.abs(log.difference).toFixed(3)} BHD
+                                            {log.differenceType === 'Shortage' ? '-' : '+'}{formatBhdAmount(Math.abs(log.difference))} BHD
                                         </p>
                                     </div>
                                     <div className="flex items-center space-x-2">
@@ -909,9 +910,9 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                         d.date,
                                                         d.branchName || '',
                                                         d.pharmacistName,
-                                                        d.systemCash.toFixed(3),
-                                                        d.actualCash.toFixed(3),
-                                                        d.difference.toFixed(3),
+                                                        formatBhdAmount(d.systemCash),
+                                                        formatBhdAmount(d.actualCash),
+                                                        formatBhdAmount(d.difference),
                                                         d.differenceType,
                                                         d.status,
                                                         d.hasInvoices ? `YES (${d.invoiceReference || ''})` : 'NO',
@@ -988,7 +989,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                                 </td>
                                                                 <td className="px-8 py-4 text-right">
                                                                     <div className="text-xs font-black text-slate-900">
-                                                                        {d.systemCash.toFixed(3)} BHD
+                                                                        {formatBhdAmount(d.systemCash)} BHD
                                                                     </div>
                                                                     <div className="text-[8px] font-bold text-slate-400 mt-0.5">
                                                                         System
@@ -996,7 +997,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                                 </td>
                                                                 <td className="px-8 py-4 text-right">
                                                                     <div className="text-xs font-black text-slate-900">
-                                                                        {d.actualCash.toFixed(3)} BHD
+                                                                        {formatBhdAmount(d.actualCash)} BHD
                                                                     </div>
                                                                     <div className="text-[8px] font-bold text-slate-400 mt-0.5">
                                                                         In Drawer
@@ -1004,7 +1005,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                                                                 </td>
                                                                 <td className="px-8 py-4 text-right">
                                                                     <div className={`text-xs font-black ${d.differenceType === 'Shortage' ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                                        {d.differenceType === 'Shortage' ? '-' : '+'}{Math.abs(d.difference).toFixed(3)} BHD
+                                                                        {d.differenceType === 'Shortage' ? '-' : '+'}{formatBhdAmount(Math.abs(d.difference))} BHD
                                                                     </div>
                                                                     <div className="text-[8px] font-bold text-slate-400 mt-0.5">
                                                                         {d.differenceType}

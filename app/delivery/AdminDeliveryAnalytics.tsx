@@ -17,6 +17,7 @@ import {
   exportDeliveryOrderCleanRowsToExcel
 } from '../../services/deliveryCleanExportService';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
+import { truncateBhd } from '../../utils/money';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -249,8 +250,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     if (!drilldownGov || !drilldown) return;
     runAfterNextPaint(() => exportBreakdownToExcel(
       [
-        ...drilldown.areas.map(a => ({ level: 'Area', name: a.name, orders: a.orders, value: Number(a.value.toFixed(3)) })),
-        ...drilldown.blocks.map(b => ({ level: 'Block', name: b.name, orders: b.orders, value: Number(b.value.toFixed(3)) }))
+        ...drilldown.areas.map(a => ({ level: 'Area', name: a.name, orders: a.orders, value: truncateBhd(a.value) })),
+        ...drilldown.blocks.map(b => ({ level: 'Block', name: b.name, orders: b.orders, value: truncateBhd(b.value) }))
       ],
       [
         { key: 'level', label: 'Level' },

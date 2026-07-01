@@ -2,6 +2,7 @@ import type { Row, Workbook } from 'exceljs';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import { DeliveryDriverDutyReportRow, DeliveryOrder } from '../../types';
+import { truncateBhd } from '../../utils/money';
 
 const assertExcelEnabled = () => {
   if (!isModuleEnabled('excelExport')) {
@@ -160,8 +161,8 @@ const addKpiSheet = (
 
   rows.forEach((row, index) => {
     const values = includeSecondary
-      ? [index + 1, row.label, row.secondary || '', row.orders, Number(row.value.toFixed(3))]
-      : [index + 1, row.label, row.orders, Number(row.value.toFixed(3))];
+      ? [index + 1, row.label, row.secondary || '', row.orders, truncateBhd(row.value)]
+      : [index + 1, row.label, row.orders, truncateBhd(row.value)];
     sheet.addRow(values);
   });
 
@@ -173,8 +174,8 @@ const addKpiSheet = (
   const totalOrders = rows.reduce((acc, row) => acc + row.orders, 0);
   sheet.addRow([]);
   const totalRow = includeSecondary
-    ? sheet.addRow(['TOTAL', '', '', totalOrders, Number(totalValue.toFixed(3))])
-    : sheet.addRow(['TOTAL', '', totalOrders, Number(totalValue.toFixed(3))]);
+    ? sheet.addRow(['TOTAL', '', '', totalOrders, truncateBhd(totalValue)])
+    : sheet.addRow(['TOTAL', '', totalOrders, truncateBhd(totalValue)]);
   totalRow.font = { bold: true };
 
   sheet.columns.forEach(col => { col.width = 22; });
@@ -189,7 +190,7 @@ const deliveryOrderExportColumns: DeliveryOrderExportColumn[] = [
   { header: 'Branch', keepWhenEmpty: true, value: order => order.branchName || '' },
   { header: 'From Branch', value: order => order.transferFromBranchName || '' },
   { header: 'To Branch', value: order => order.transferToBranchName || '' },
-  { header: 'Value (BHD)', width: 16, numFmt: '0.000', keepWhenEmpty: true, value: order => Number(order.valueBhd.toFixed(3)) },
+  { header: 'Value (BHD)', width: 16, numFmt: '0.000', keepWhenEmpty: true, value: order => truncateBhd(order.valueBhd) },
   { header: 'Payment', keepWhenEmpty: true, value: order => order.paymentType },
   { header: 'BP received time', width: 18, value: order => formatTimeValue(order.benefitPayReceivedTime) },
   { header: 'Pharmacist', value: order => order.pharmacistName || '' },
@@ -236,7 +237,7 @@ const addDeliveryOrdersSheet = (
   if (totalValues.length > 0) totalValues[0] = 'TOTAL';
   const valueColumnIndex = activeColumns.findIndex(column => column.header === 'Value (BHD)');
   if (valueColumnIndex >= 0) {
-    totalValues[valueColumnIndex] = Number(orders.reduce((a, o) => a + o.valueBhd, 0).toFixed(3));
+    totalValues[valueColumnIndex] = truncateBhd(orders.reduce((a, o) => a + o.valueBhd, 0));
     const countColumnIndex = Math.min(valueColumnIndex + 1, totalValues.length - 1);
     if (countColumnIndex !== valueColumnIndex) {
       totalValues[countColumnIndex] = `${orders.length} orders`;

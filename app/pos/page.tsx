@@ -33,6 +33,7 @@ import { Product, LostSale, Branch, Pharmacist, Shortage } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/calculations';
 import { getPriceIncludingVat } from '../../utils/vat';
+import { formatBhdAmount } from '../../utils/money';
 import { isManagerRole } from '../../lib/access';
 
 interface POSPageProps {
@@ -490,7 +491,7 @@ export const POSPage: React.FC<POSPageProps> = ({ branch, pharmacist, permission
                 <div className="text-center space-y-3">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">TOTAL LOSS ESTIMATE</p>
                   <div className="relative inline-block">
-                    <p className="text-5xl font-black text-slate-900 tracking-tighter leading-none tabular-nums">{grandTotal.toFixed(3)}</p>
+                    <p className="text-5xl font-black text-slate-900 tracking-tighter leading-none tabular-nums">{formatBhdAmount(grandTotal)}</p>
                     <p className="text-[9px] font-bold text-red-600 uppercase tracking-widest absolute -bottom-5 left-0 right-0">BAHRAINI DINARS</p>
                   </div>
                 </div>

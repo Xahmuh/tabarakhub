@@ -1,3 +1,5 @@
+import { truncateBhd } from './money';
+
 export const BAHRAIN_VAT_RATE = 0.1;
 
 export const getProductVatRate = (vatEnabled?: boolean, vatRate?: number | null) =>
@@ -5,7 +7,7 @@ export const getProductVatRate = (vatEnabled?: boolean, vatRate?: number | null)
 
 export const getPriceIncludingVat = (priceExVat: number, vatEnabled?: boolean, vatRate?: number | null) => {
   const rate = getProductVatRate(vatEnabled, vatRate);
-  return Number((Number(priceExVat || 0) * (1 + rate)).toFixed(3));
+  return truncateBhd(Number(priceExVat || 0) * (1 + rate));
 };
 
 export const formatVatLabel = (vatEnabled?: boolean, vatRate?: number | null) =>

@@ -4,8 +4,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, Brush, ComposedChart, Line, ReferenceLine
 } from 'recharts';
+import { formatBhdAmount } from '../../utils/money';
 
 const COLORS = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444'];
+type ChartValueFormatter = (value: number) => string;
 
 const ChartWrapper: React.FC<{
   children: React.ReactNode;
@@ -28,7 +30,7 @@ const ChartWrapper: React.FC<{
     </div>
   );
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label, valueFormatter = formatBhdAmount }: any) => {
   if (active && payload && payload.length) {
     const uniquePayload = payload.filter((entry: any, index: number, items: any[]) => {
       const entryKey = entry.dataKey ?? entry.name;
@@ -55,7 +57,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{displayName}</p>
                 </div>
                 <p className="text-sm font-black text-white tabular-nums tracking-tighter">
-                  {entry.name === 'value' ? entry.value.toFixed(3) : entry.value}
+                  {entry.name === 'value' ? valueFormatter(entry.value) : entry.value}
                 </p>
               </div>
             );
@@ -139,7 +141,10 @@ export const ShortageTrendChart: React.FC<{ data: any[] }> = ({ data }) => (
   </ChartWrapper>
 );
 
-export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => {
+export const OperationalTrendChart: React.FC<{ data: any[]; valueFormatter?: ChartValueFormatter }> = ({
+  data,
+  valueFormatter = formatBhdAmount
+}) => {
   if (!data.length) {
     return (
       <div className="flex min-h-[380px] w-full items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950">
@@ -192,7 +197,7 @@ export const OperationalTrendChart: React.FC<{ data: any[] }> = ({ data }) => {
           tickLine={false}
         />
         <Tooltip
-          content={<CustomTooltip />}
+          content={<CustomTooltip valueFormatter={valueFormatter} />}
           cursor={{ stroke: trendColor, strokeWidth: 1.5, strokeDasharray: '4 6' }}
         />
         {averageValue > 0 && (

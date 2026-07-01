@@ -6,6 +6,7 @@ import {
   DeliveryPaymentType,
   Governorate
 } from '../types';
+import { truncateBhd } from '../utils/money';
 
 export interface OwnerTraceabilityCleanFilters {
   branchId?: string | null;
@@ -169,7 +170,7 @@ export const listOwnerTraceabilityCleanRows = async (
   return rows.map(toCleanRow);
 };
 
-const roundBhd = (value: number) => Number(value.toFixed(3));
+const normalizeBhd = (value: number) => truncateBhd(value);
 
 const normalizeBucket = (value?: string | null) => value || 'UNKNOWN';
 
@@ -178,7 +179,7 @@ const addCount = (map: Record<string, number>, key: string) => {
 };
 
 const addValue = (map: Record<string, number>, key: string, value: number) => {
-  map[key] = roundBhd((map[key] || 0) + value);
+  map[key] = normalizeBhd((map[key] || 0) + value);
 };
 
 const normalizedJson = (value: Record<string, number>) =>

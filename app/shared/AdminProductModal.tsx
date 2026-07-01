@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { Product } from '../../types';
 import { BAHRAIN_VAT_RATE, getPriceIncludingVat } from '../../utils/vat';
+import { formatBhdAmount } from '../../utils/money';
 
 interface AdminProductModalProps {
     isOpen: boolean;
@@ -119,7 +120,7 @@ export const AdminProductModal: React.FC<AdminProductModalProps> = ({ isOpen, pr
                                     />
                                 </div>
                                 <p className="text-xs text-slate-400">
-                                    Inc. VAT: {getPriceIncludingVat(Number(formData.defaultPrice || 0), !!formData.vatEnabled, formData.vatRate).toFixed(3)} BHD
+                                    Inc. VAT: {formatBhdAmount(getPriceIncludingVat(Number(formData.defaultPrice || 0), !!formData.vatEnabled, formData.vatRate))} BHD
                                 </p>
                             </div>
 

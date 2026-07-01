@@ -3,6 +3,9 @@ import { LostSale, Branch } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { ChevronDown, ChevronRight, User, AlertCircle, TrendingUp, Users, ShoppingBag, ChevronLeft } from 'lucide-react';
 
+const formatLostSalesTrackerValue = (value: number) =>
+    (Math.round((Number(value) || 0) * 10) / 10).toFixed(1);
+
 interface PharmacistActivityProps {
     sales: LostSale[];
     branches: Branch[];
@@ -286,7 +289,7 @@ export const PharmacistActivitySection: React.FC<PharmacistActivityProps> = ({ s
                                                             </td>
                                                             <td className="p-5 text-center">
                                                                 <span className="font-black text-slate-900 text-sm bg-red-50 px-3 py-1 rounded-lg border border-red-100 group-hover:border-red-200 transition-colors">
-                                                                    {p.totalRevenue.toFixed(3)} BHD
+                                                                    {formatLostSalesTrackerValue(p.totalRevenue)} BHD
                                                                 </span>
                                                             </td>
                                                             <td className="p-5 text-center">
@@ -332,7 +335,7 @@ export const PharmacistActivitySection: React.FC<PharmacistActivityProps> = ({ s
                                                                                                     {prod.qty}
                                                                                                 </td>
                                                                                                 <td className="p-3 text-right pr-5 text-[10px] font-black text-slate-900 tabular-nums">
-                                                                                                    {prod.value.toFixed(3)}
+                                                                                                    {formatLostSalesTrackerValue(prod.value)}
                                                                                                 </td>
                                                                                             </tr>
                                                                                         ));

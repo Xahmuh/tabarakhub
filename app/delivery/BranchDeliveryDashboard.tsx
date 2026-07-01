@@ -10,6 +10,7 @@ import { getDeliveryPaymentLabel, isTalabatDeliveryPayment } from '../../lib/del
 import Swal from 'sweetalert2';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { PaginationControls } from '../shared';
+import { formatBhdAmount } from '../../utils/money';
 
 type ViewMode = 'all' | 'normal' | 'talabat';
 const DELIVERY_DASHBOARD_PAGE_SIZE = 20;
@@ -149,7 +150,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
 
     const confirm = await Swal.fire({
       title: 'Delete recorded invoice?',
-      text: `Delete this recorded invoice (${order.valueBhd.toFixed(3)} BHD) from recording and dispatch?`,
+      text: `Delete this recorded invoice (${formatBhd(order.valueBhd)}) from recording and dispatch?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Delete recording',
@@ -254,7 +255,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                       <span className="block font-black text-brand">{deliveryOrderNumber(order)}</span>
                       <span className="block text-slate-600">{order.orderDate}</span>
                     </td>
-                    <td className="py-2 pr-3 text-right font-black text-slate-900 tabular-nums">{order.valueBhd.toFixed(3)}</td>
+                    <td className="py-2 pr-3 text-right font-black text-slate-900 tabular-nums">{formatBhdAmount(order.valueBhd)}</td>
                     <td className="py-2 px-3">
                       <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadgeClass(order)}`}>
                         {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}

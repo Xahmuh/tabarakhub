@@ -32,6 +32,7 @@ import { BackToModulesButton, PaginationControls, TIME_24H_PATTERN, TimeInput24 
 import { SearchableSelect } from '../delivery/components/SearchableSelect';
 import { PeriodFilter } from '../delivery/components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey } from '../delivery/utils';
+import { formatBhdAmount } from '../../utils/money';
 import {
   benefitPayExportFileName,
   benefitPayConsolidatedExportFileName,
@@ -454,7 +455,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     setTransferDate(row.transferDate);
     setPharmacistId(row.pharmacistId || null);
     setTransferType(row.transferType);
-    setValue(row.valueBhd.toFixed(3));
+    setValue(formatBhdAmount(row.valueBhd));
     setTransferTime(row.transferTime || currentTimeValue());
     setNotes(row.notes || '');
   };
@@ -920,7 +921,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
                           {row.transferType}
                         </span>
                       </td>
-                      <td className="py-2 pr-3 text-right font-black text-slate-950 tabular-nums">{row.valueBhd.toFixed(3)}</td>
+                      <td className="py-2 pr-3 text-right font-black text-slate-950 tabular-nums">{formatBhdAmount(row.valueBhd)}</td>
                       <td className="py-2 pr-3 text-xs font-bold text-slate-500">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 text-slate-300" /> {row.transferTime}

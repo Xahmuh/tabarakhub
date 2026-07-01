@@ -3,6 +3,7 @@ import { LostSale, Product, Role, Shortage } from '../types';
 import { isUUID, generateUUID } from '../utils/uuid';
 import { isDemoMode } from '../config/clientConfig';
 import { BAHRAIN_VAT_RATE } from '../utils/vat';
+import { truncateBhd } from '../utils/money';
 
 const SALES_KEY = 'tabarak_offline_sales';
 const PRODUCTS_KEY = 'tabarak_offline_products';
@@ -138,6 +139,15 @@ const applyKeysetCursor = (query: any, cursor: { timestamp: string; id: string }
 const normalizeSearchText = (value?: string | null) =>
   (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
+const escapeRegexText = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildWildcardMatcher = (query: string) => {
+  const parts = query.split('%').map(part => part.trim()).filter(Boolean);
+  if (parts.length <= 1) return null;
+  return new RegExp(parts.map(escapeRegexText).join('.*'), 'i');
+};
+
 const mapProductRow = (p: any): Product => ({
   id: p.id,
   name: p.name,
@@ -152,27 +162,75 @@ const mapProductRow = (p: any): Product => ({
   createdByBranch: p.created_by_branch
 });
 
-const isCodeSearchQuery = (query: string) => /\d/.test(query);
-
-const productSearchRank = (product: Product, query: string, includeCodeMatches: boolean) => {
+const productSearchRank = (product: Product, query: string) => {
   const name = normalizeSearchText(product.name);
   const internalCode = normalizeSearchText(product.internalCode);
   const internationalCode = normalizeSearchText(product.internationalCode);
+  const wildcardMatcher = buildWildcardMatcher(query);
+  const fieldRank = (value: string, exactRank: number, prefixRank: number, containsRank: number) => {
+    if (!value) return Number.POSITIVE_INFINITY;
+    if (value === query) return exactRank;
+    if (value.startsWith(query)) return prefixRank;
+    if (value.includes(query)) return containsRank;
+    if (wildcardMatcher?.test(value)) return containsRank + 1;
+    return Number.POSITIVE_INFINITY;
+  };
 
-  if (name.startsWith(query)) return 0;
-  if (includeCodeMatches && internalCode.startsWith(query)) return 1;
-  if (includeCodeMatches && internationalCode.startsWith(query)) return 2;
-  return Number.POSITIVE_INFINITY;
+  return Math.min(
+    fieldRank(name, 0, 1, 4),
+    fieldRank(internalCode, 2, 3, 5),
+    fieldRank(internationalCode, 2, 3, 5)
+  );
 };
 
-const sortPrefixProductMatches = (products: Product[], query: string, includeCodeMatches: boolean) =>
+const sortSmartProductMatches = (products: Product[], query: string) =>
   products
-    .filter(product => productSearchRank(product, query, includeCodeMatches) !== Number.POSITIVE_INFINITY)
+    .filter(product => productSearchRank(product, query) !== Number.POSITIVE_INFINITY)
     .sort((a, b) => {
-      const rankDifference = productSearchRank(a, query, includeCodeMatches) - productSearchRank(b, query, includeCodeMatches);
+      const rankDifference = productSearchRank(a, query) - productSearchRank(b, query);
       if (rankDifference !== 0) return rankDifference;
       return a.name.localeCompare(b.name);
     });
+
+type ProductSearchField = 'name' | 'internal_code' | 'international_code';
+
+const PRODUCT_SEARCH_FIELDS: ProductSearchField[] = ['name', 'internal_code', 'international_code'];
+
+const productSearchPatterns = (query: string) => {
+  const patterns = new Set<string>();
+  patterns.add(query);
+  patterns.add(`${query}%`);
+  patterns.add(`%${query}%`);
+  return [...patterns].filter(pattern => pattern.replace(/%/g, '').length > 0);
+};
+
+const searchRemoteProducts = async (query: string) => {
+  const results = await Promise.all(
+    PRODUCT_SEARCH_FIELDS.flatMap(field =>
+      productSearchPatterns(query).map(pattern =>
+        supabaseClient
+          .from('products')
+          .select('*')
+          .ilike(field, pattern)
+          .order('name')
+          .limit(120)
+      )
+    )
+  );
+
+  const failedResult = results.find(result => result.error);
+  if (failedResult?.error) throw failedResult.error;
+
+  const matches = new Map<string, Product>();
+  results.forEach(result => {
+    (result.data || []).forEach(row => {
+      const product = mapProductRow(row);
+      matches.set(product.id, product);
+    });
+  });
+
+  return sortSmartProductMatches([...matches.values()], query).slice(0, 20);
+};
 
 const fetchBranchScopedRows = async (
   tableName: 'lost_sales' | 'shortages',
@@ -268,26 +326,15 @@ export const saleService = {
       const q = normalizeSearchText(query);
       if (!q) return [];
       try {
-        const prefixPattern = `${q}%`;
-        const includeCodeMatches = isCodeSearchQuery(q);
-        const filters = [`name.ilike.${prefixPattern}`];
-        if (includeCodeMatches) {
-          filters.push(`internal_code.ilike.${prefixPattern}`, `international_code.ilike.${prefixPattern}`);
-        }
-        const { data } = await supabaseClient
-          .from('products')
-          .select('*')
-          .or(filters.join(','))
-          .order('name')
-          .limit(40);
-        if (data && data.length > 0) return sortPrefixProductMatches(data.map(mapProductRow), q, includeCodeMatches).slice(0, 20);
+        const remoteMatches = await searchRemoteProducts(q);
+        if (remoteMatches.length > 0) return remoteMatches;
         if (!isDemoMode) return [];
         throw new Error("No remote results");
       } catch (e) {
         throwUnlessDemoMode(e);
         const localProducts = readDemoArray<Product>(PRODUCTS_KEY);
         const allLocal = [...localProducts];
-        return sortPrefixProductMatches(allLocal, q, isCodeSearchQuery(q)).slice(0, 20);
+        return sortSmartProductMatches(allLocal, q).slice(0, 20);
       }
     },
     create: async (product: Omit<Product, 'id'>) => {
@@ -388,7 +435,7 @@ export const saleService = {
         lost_date: now.toISOString().split('T')[0],
         lost_hour: now.getHours(),
         timestamp: (sale as any).timestamp || now.toISOString(),
-        total_value: Number((Number(sale.unitPrice || 0) * Number(sale.quantity || 1)).toFixed(3)),
+        total_value: truncateBhd(Number(sale.unitPrice || 0) * Number(sale.quantity || 1)),
         notes: sale.notes || null,
         alternative_given: !!sale.alternativeGiven,
         internal_transfer: !!sale.internalTransfer,

@@ -1,13 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowUpRight, Plus, ShieldAlert } from 'lucide-react';
 import { LostSale } from '../../types';
-import { formatCurrency } from '../../utils/calculations';
+import { formatBhdAmount } from '../../utils/money';
 
 interface DailyPerformanceCalendarProps {
   sales: LostSale[];
+  valueFormatter?: (value: number) => string;
 }
 
-export const DailyPerformanceCalendar: React.FC<DailyPerformanceCalendarProps> = ({ sales }) => {
+export const DailyPerformanceCalendar: React.FC<DailyPerformanceCalendarProps> = ({
+  sales,
+  valueFormatter = formatBhdAmount
+}) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const daysInMonth = useMemo(() => {
@@ -118,7 +122,7 @@ export const DailyPerformanceCalendar: React.FC<DailyPerformanceCalendarProps> =
                   {total > 0 ? (
                     <div className="animate-in fade-in slide-in-from-bottom-2">
                       <p className="text-base font-black text-brand tracking-tight leading-none mb-1.5">
-                        {total.toFixed(3)}
+                        {valueFormatter(total)}
                       </p>
                       <p className="text-[8px] font-black uppercase tracking-[0.2em] leading-none" style={{ color: '#1f161b' }}>BHD VALUE</p>
                     </div>

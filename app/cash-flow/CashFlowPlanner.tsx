@@ -34,6 +34,7 @@ import {
 } from '../../types';
 import { BackToModulesButton } from '../shared';
 import { calculateForecast, getSmartSuggestions } from '../../utils/cashFlowUtils';
+import { formatBhdAmount } from '../../utils/money';
 import {
     LineChart,
     Line,
@@ -549,11 +550,11 @@ const DashboardView: React.FC<{
                                     <div className="space-y-1">
                                         <div className="flex justify-between text-[7px] font-bold">
                                             <span>09:00</span>
-                                            <span className={day.morningBalance < 0 ? 'text-red-400' : 'text-emerald-400'}>{(day.morningBalance / 1000).toFixed(3)}k BHD</span>
+                                            <span className={day.morningBalance < 0 ? 'text-red-400' : 'text-emerald-400'}>{formatBhdAmount(day.morningBalance / 1000)}k BHD</span>
                                         </div>
                                         <div className="flex justify-between text-[7px] font-bold">
                                             <span>13:00</span>
-                                            <span className={day.afternoonBalance < 0 ? 'text-red-400' : 'text-emerald-400'}>{(day.afternoonBalance / 1000).toFixed(3)}k BHD</span>
+                                            <span className={day.afternoonBalance < 0 ? 'text-red-400' : 'text-emerald-400'}>{formatBhdAmount(day.afternoonBalance / 1000)}k BHD</span>
                                         </div>
                                     </div>
                                 </div>

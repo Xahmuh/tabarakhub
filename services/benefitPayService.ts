@@ -4,6 +4,7 @@ import {
   BenefitPayTransferInput,
   BenefitPayTransferType
 } from '../types';
+import { truncateBhd } from '../utils/money';
 
 const TRANSFER_TYPES: BenefitPayTransferType[] = ['AFS', 'CREDIMAX', 'IBAN'];
 
@@ -39,7 +40,7 @@ const normalizeTime = (value: string) => {
   return `${match[1]}:${match[2]}`;
 };
 
-const roundBhd = (value: number) => Math.round(value * 1000) / 1000;
+const normalizeBhd = (value: number) => truncateBhd(value);
 
 const toTransfer = (row: any): BenefitPayTransfer => ({
   id: row.id,
@@ -148,7 +149,7 @@ export const benefitPayService = {
         pharmacist_id: pharmacistId,
         pharmacist_name: pharmacistName,
         transfer_type: transferType,
-        value_bhd: roundBhd(valueBhd),
+        value_bhd: normalizeBhd(valueBhd),
         transfer_time: transferTime,
         source: 'manual',
         notes: input.notes?.trim() || null,
@@ -189,7 +190,7 @@ export const benefitPayService = {
         pharmacist_id: pharmacistId,
         pharmacist_name: pharmacistName,
         transfer_type: transferType,
-        value_bhd: roundBhd(valueBhd),
+        value_bhd: normalizeBhd(valueBhd),
         transfer_time: transferTime,
         notes: input.notes?.trim() || null,
         updated_by: session.session?.user?.id || null

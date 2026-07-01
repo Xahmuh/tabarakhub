@@ -2,6 +2,7 @@ import type { Row, Worksheet } from 'exceljs';
 import { isModuleEnabled } from '../config/clientConfig';
 import { supabaseClient } from '../lib/supabaseClient';
 import { DeliveryOrder, Governorate } from '../types';
+import { truncateBhd } from '../utils/money';
 
 export interface DeliveryCleanExportFilters {
   branchId?: string | null;
@@ -120,7 +121,7 @@ const assertExcelEnabled = () => {
   }
 };
 
-const roundBhd = (value: number) => Number(value.toFixed(3));
+const normalizeBhd = (value: number) => truncateBhd(value);
 
 const normalizeBucket = (value?: string | null) => value || 'UNKNOWN';
 
@@ -129,7 +130,7 @@ const addCount = (map: Record<string, number>, key: string) => {
 };
 
 const addValue = (map: Record<string, number>, key: string, value: number) => {
-  map[key] = roundBhd((map[key] || 0) + value);
+  map[key] = normalizeBhd((map[key] || 0) + value);
 };
 
 const normalizedJson = (value: Record<string, number>) =>
@@ -346,7 +347,7 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
       deliveryStatus: row.deliveryStatus,
       branchCode: row.branchCode,
       branchName: row.branchName,
-      valueBhd: row.valueBhd === null ? null : roundBhd(row.valueBhd),
+      valueBhd: row.valueBhd === null ? null : normalizeBhd(row.valueBhd),
       paymentType: row.paymentType,
       benefitPayReceivedTime: row.benefitPayReceivedTime ? row.benefitPayReceivedTime.slice(0, 5) : '',
       blockNumber: row.blockNumber,
@@ -390,7 +391,7 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
     '',
     '',
     `${rows.length} orders`,
-    roundBhd(rows.reduce((total, row) => total + (row.valueBhd || 0), 0))
+    normalizeBhd(rows.reduce((total, row) => total + (row.valueBhd || 0), 0))
   ]);
   totalRow.font = { bold: true };
 

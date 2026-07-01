@@ -24,6 +24,7 @@ import {
   isSupportedDeliveryOrderImportFile,
   parseDeliveryOrderUpload
 } from '../../utils/deliveryImportUtils';
+import { formatBhdAmount, truncateBhd } from '../../utils/money';
 import { formatTimeInput24, PaginationControls, TIME_24H_PATTERN, TimeInput24 } from '../shared';
 
 const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
@@ -73,17 +74,17 @@ const collectionValueBadgeClass = (order: DeliveryOrder) =>
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-red-200 bg-red-50 text-red-700';
 
-const roundBhdValue = (value: number) => Math.round((Number(value) || 0) * 1000) / 1000;
+const normalizeBhdValue = (value: number) => truncateBhd(Number(value) || 0);
 
 const expectedDriverReturnBhd = (order: DeliveryOrder) =>
-  roundBhdValue(order.amountToCollectBhd + order.cashHandedToDriverBhd);
+  normalizeBhdValue(order.amountToCollectBhd + order.cashHandedToDriverBhd);
 
 const isFinalReconciliationPending = (order: DeliveryOrder) =>
   isPaymentCollectionPending(order) || (order.cashHandedToDriverBhd > 0 && !order.driverReconciledAt);
 
 const driverCashReconciliationBadge = (order: DeliveryOrder) => {
   if (order.driverReconciledAt) {
-    const variance = roundBhdValue(order.driverReconciliationVarianceBhd);
+    const variance = normalizeBhdValue(order.driverReconciliationVarianceBhd);
     if (variance < 0) {
       return {
         label: `Short ${formatBhd(Math.abs(variance))}`,
@@ -811,11 +812,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     setOrderDate(order.orderDate);
     setHistoryFrom(order.orderDate);
     setHistoryTo(order.orderDate);
-    setValue(order.valueBhd.toFixed(3));
+    setValue(formatBhdAmount(order.valueBhd));
     setPaymentType(order.paymentType);
     setPaymentCollectionStatus(nextPaymentCollectionStatus);
-    setAmountReceived(nextPaymentCollectionStatus === 'partial' ? order.amountReceivedBhd.toFixed(3) : '');
-    setCashHandedToDriver(order.cashHandedToDriverBhd > 0 ? order.cashHandedToDriverBhd.toFixed(3) : '');
+    setAmountReceived(nextPaymentCollectionStatus === 'partial' ? formatBhdAmount(order.amountReceivedBhd) : '');
+    setCashHandedToDriver(order.cashHandedToDriverBhd > 0 ? formatBhdAmount(order.cashHandedToDriverBhd) : '');
     setBenefitPayReceivedTime(normalizeDeliveryPaymentCode(order.paymentType) === 'BP' ? (order.benefitPayReceivedTime || '').slice(0, 5) : '');
     setDriverPaymentNote(order.driverPaymentNote || '');
     setPharmacistId(order.pharmacistId || null);
@@ -1023,9 +1024,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const handleReconcilePayment = async (order: DeliveryOrder) => {
     if (!isFinalReconciliationPending(order) || reconcilingOrderIds.has(order.id)) return;
 
-    const expectedCollection = roundBhdValue(order.amountToCollectBhd);
-    const changeFloat = roundBhdValue(order.cashHandedToDriverBhd);
-    const expectedReturn = roundBhdValue(expectedCollection + changeFloat);
+    const expectedCollection = normalizeBhdValue(order.amountToCollectBhd);
+    const changeFloat = normalizeBhdValue(order.cashHandedToDriverBhd);
+    const expectedReturn = normalizeBhdValue(expectedCollection + changeFloat);
     const confirm = await Swal.fire({
       title: 'Settle driver cash',
       html: `
@@ -1049,7 +1050,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
             </div>
           </div>
           <label for="driver-returned-bhd" class="mt-4 block text-[10px] font-black uppercase tracking-widest text-slate-400">Actual settled by driver</label>
-          <input id="driver-returned-bhd" type="number" inputmode="decimal" min="0" step="0.001" value="${expectedReturn.toFixed(3)}" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-black text-slate-950 tabular-nums outline-none transition focus:border-red-300 focus:bg-white" />
+          <input id="driver-returned-bhd" type="number" inputmode="decimal" min="0" step="0.001" value="${formatBhdAmount(expectedReturn)}" class="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-base font-black text-slate-950 tabular-nums outline-none transition focus:border-red-300 focus:bg-white" />
           <label for="driver-reconcile-note" class="mt-3 block text-[10px] font-black uppercase tracking-widest text-slate-400">Note</label>
           <textarea id="driver-reconcile-note" rows="2" placeholder="Optional settlement note" class="mt-1 min-h-[72px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 outline-none transition placeholder:text-slate-300 focus:border-red-300 focus:bg-white"></textarea>
         </div>
@@ -1071,7 +1072,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       preConfirm: () => {
         const input = document.getElementById('driver-returned-bhd') as HTMLInputElement | null;
         const noteInput = document.getElementById('driver-reconcile-note') as HTMLTextAreaElement | null;
-        const returnedAmount = roundBhdValue(Number(input?.value));
+        const returnedAmount = normalizeBhdValue(Number(input?.value));
         if (!Number.isFinite(returnedAmount) || returnedAmount < 0) {
           Swal.showValidationMessage('Enter a valid settled amount.');
           return false;
@@ -1104,7 +1105,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         next.delete(order.id);
         return next;
       });
-      const variance = roundBhdValue(reconciliation.returnedAmountBhd - expectedReturn);
+      const variance = normalizeBhdValue(reconciliation.returnedAmountBhd - expectedReturn);
       const varianceCopy = variance === 0
         ? `Driver cash settled for ${formatBhd(reconciliation.returnedAmountBhd)}.`
         : `Driver return saved with ${variance > 0 ? 'overage' : 'shortage'} of ${formatBhd(Math.abs(variance))}.`;
@@ -2055,7 +2056,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         )}
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-2 pr-3 text-center align-top">
-                        <span className="font-black text-slate-900 tabular-nums">{order.valueBhd.toFixed(3)}</span>
+                        <span className="font-black text-slate-900 tabular-nums">{formatBhdAmount(order.valueBhd)}</span>
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-3 pr-2 text-center align-top">
                         <div className="flex justify-center">
