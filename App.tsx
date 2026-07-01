@@ -15,7 +15,7 @@ import {
   HRRequestsSection, WorkforcePage, SuitePage,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, DeliveryHub, BenefitPayLedger, DeliveryNotificationsPage, OwnerDashboardPage
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, WorkflowTodoPage, DeliveryHub, BenefitPayLedger, DeliveryNotificationsPage, OwnerDashboardPage
 } from './app/index';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
@@ -27,7 +27,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'notifications';
+type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'workflow-todo' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'notifications';
 type DeliveryFocusTarget = { orderId: string; orderDate?: string | null; branchId?: string | null };
 type BenefitPayFocusTarget = { deliveryOrderId: string; transferDate?: string | null; branchId?: string | null };
 const APP_TABS: AppTab[] = [
@@ -49,6 +49,7 @@ const APP_TABS: AppTab[] = [
   'feedback-form',
   'feedback-admin',
   'employee-contributions',
+  'workflow-todo',
   'block-analyzer',
   'delivery',
   'benefit-pay-ledger',
@@ -267,6 +268,8 @@ const App: React.FC = () => {
         return isModuleEnabled('qualityFeedback') && canUseFeature('feedback_admin', 'edit', role, permissionState);
       case 'employee-contributions':
         return isModuleEnabled('employeeContributions') && canUseFeature('employee_contributions', 'read', role, permissionState);
+      case 'workflow-todo':
+        return isModuleEnabled('workflowTodo') && canUseFeature('workflow_todo', 'read', role, permissionState);
       case 'block-analyzer':
         return isManagerRole(role) && canUseFeature('block_analyzer', 'read', role, permissionState);
       case 'delivery':
@@ -1003,6 +1006,12 @@ const App: React.FC = () => {
             userRole={authState.user?.role}
             branchCode={authState.user?.code}
             onBack={() => handleTabChange('selector')}
+          />
+        ) : activeTab === 'workflow-todo' ? (
+          <WorkflowTodoPage
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
           />
         ) : activeTab === 'block-analyzer' ? (
           <BlockCoverageAnalyzer onBack={() => handleTabChange('selector')} />

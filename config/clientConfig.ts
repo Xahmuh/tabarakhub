@@ -13,6 +13,7 @@ export type ClientModuleKey =
   | 'cashTracker'
   | 'corporateCodex'
   | 'employeeContributions'
+  | 'workflowTodo'
   | 'settings'
   | 'workforce'
   | 'delivery'
@@ -76,6 +77,7 @@ export const clientConfig: ClientConfig = {
     cashTracker: readBoolean('VITE_MODULE_CASH_TRACKER'),
     corporateCodex: readBoolean('VITE_MODULE_CORPORATE_CODEX'),
     employeeContributions: readBoolean('VITE_MODULE_EMPLOYEE_CONTRIBUTIONS'),
+    workflowTodo: readBoolean('VITE_MODULE_WORKFLOW_TODO'),
     settings: readBoolean('VITE_MODULE_SETTINGS'),
     workforce: readBoolean('VITE_MODULE_WORKFORCE'),
     delivery: readBoolean('VITE_MODULE_DELIVERY'),

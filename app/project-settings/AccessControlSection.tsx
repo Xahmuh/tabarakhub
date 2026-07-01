@@ -848,6 +848,13 @@ export const AccessControlSection: React.FC<{
                     reason: 'Needs Team Contributions access.'
                 },
                 {
+                    key: 'workflow-todo',
+                    title: MODULE_DISPLAY_LABELS['workflow-todo'],
+                    visible: !isOwner && isModuleEnabled('workflowTodo') && hasAccess(role, 'workflow_todo'),
+                    access: getDefault(role, 'workflow_todo'),
+                    reason: 'Needs Workflow & Todo access for branch tasks, personal todos, and approvals.'
+                },
+                {
                     key: 'delivery',
                     title: MODULE_DISPLAY_LABELS.delivery,
                     visible: !isOwner && isModuleEnabled('delivery') && hasAccess(role, 'delivery'),

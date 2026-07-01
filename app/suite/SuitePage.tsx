@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { 
-  BarChart3, BookOpenCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, ReceiptText, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
+  BarChart3, BookOpenCheck, ClipboardCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, ReceiptText, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
 } from 'lucide-react';
 import { AuthState, MaintenanceSettings } from '../../types';
 import { Footer } from '../shared';
@@ -409,6 +409,19 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       badge: 'Ideas',
       cta: 'Open hub',
       tone: 'knowledge'
+    },
+    {
+      key: 'workflow-todo',
+      visible: !isOwner && isModuleEnabled('workflowTodo') && checkPermission('workflow_todo'),
+      title: 'Workflow & Todo',
+      description: 'Assign branch tasks, track personal todos, review submissions, and follow recurring work.',
+      icon: <ClipboardCheck className="h-5 w-5" />,
+      onClick: () => handleTabChange('workflow-todo'),
+      isPending,
+      badge: 'new module',
+      badgeStyle: 'red',
+      cta: 'Open workflow',
+      tone: 'feature'
     },
     {
       key: 'delivery',

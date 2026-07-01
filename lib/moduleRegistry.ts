@@ -13,6 +13,7 @@ export type AccessFeatureId =
   | 'quality_feedback'
   | 'feedback_admin'
   | 'employee_contributions'
+  | 'workflow_todo'
   | 'delivery'
   | 'benefit_pay_ledger'
   | 'products'
@@ -39,6 +40,7 @@ export const ACCESS_FEATURES: AccessFeature[] = [
   { id: 'quality_feedback', label: 'QA Insights', module: 'qualityFeedback', description: 'Controls access to the QA Insights submission form.' },
   { id: 'feedback_admin', label: 'Feedback Admin', module: 'qualityFeedback', description: 'Admin-only by default; non-admin roles need Edit / Full Control to review QA answers and analytics.' },
   { id: 'employee_contributions', label: 'Team Contributions', module: 'employeeContributions', description: 'Employee-submitted tools, projects, and knowledge.' },
+  { id: 'workflow_todo', label: 'Workflow & Todo', module: 'workflowTodo', description: 'Branch workflow tasks, personal todos, approvals, and recurring task follow-up.' },
   { id: 'delivery', label: 'Delivery Recording & Traceability', module: 'delivery', description: 'None disables the module, Read keeps dashboards and block coverage visible, Edit allows delivery activity recording.' },
   { id: 'benefit_pay_ledger', label: 'Benefit Pay Ledger', module: 'benefitPayLedger', description: 'None disables the module, Read shows BP dashboard, Edit allows manual BP transfer recording.' },
   { id: 'products', label: 'Product Catalogue', module: 'products', description: 'Product catalogue and item management.' },

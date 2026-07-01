@@ -30,6 +30,7 @@ export const demoClientConfig: ClientConfig = {
     cashTracker: true,
     corporateCodex: true,
     employeeContributions: true,
+    workflowTodo: true,
     settings: true,
     workforce: true,
     delivery: true,
