@@ -223,8 +223,8 @@ const MAP_ZOOM_MAX = 3;
 const MAP_ZOOM_STEP = 0.25;
 
 const clampMapZoom = value => Math.min(MAP_ZOOM_MAX, Math.max(MAP_ZOOM_MIN, Number(value.toFixed(2))));
-const zoomTransform = zoom => (
-  `translate(${ANALYZER_MAP_W / 2} ${ANALYZER_MAP_H / 2}) scale(${zoom}) translate(${-ANALYZER_MAP_W / 2} ${-ANALYZER_MAP_H / 2})`
+const zoomTransform = (zoom, pan = { x: 0, y: 0 }) => (
+  `translate(${pan.x} ${pan.y}) translate(${ANALYZER_MAP_W / 2} ${ANALYZER_MAP_H / 2}) scale(${zoom}) translate(${-ANALYZER_MAP_W / 2} ${-ANALYZER_MAP_H / 2})`
 );
 
 const buildCoverageIndex = (coverageData, pharmacyMap = {}, areaNames = {}) => {
@@ -412,6 +412,16 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
   const [hoveredBlock, setHoveredBlock] = useState("");
   const [selectedBlock, setSelectedBlock] = useState("");
   const [mapZoom, setMapZoom] = useState(1);
+  const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
+  const [isMapDragging, setIsMapDragging] = useState(false);
+  const mapViewportRef = useRef(null);
+  const mapDragRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    startPan: { x: 0, y: 0 },
+    didDrag: false
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -454,6 +464,45 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
     adjustMapZoom(event.deltaY < 0 ? 0.15 : -0.15);
   }, [adjustMapZoom]);
 
+  const beginMapDrag = useCallback((clientX, clientY) => {
+    setIsMapDragging(true);
+    mapDragRef.current = {
+      active: true,
+      startX: clientX,
+      startY: clientY,
+      startPan: mapPan,
+      didDrag: false
+    };
+  }, [mapPan]);
+
+  const moveMapDrag = useCallback((clientX, clientY) => {
+    const drag = mapDragRef.current;
+    if (!drag.active || !mapViewportRef.current) return;
+    const rect = mapViewportRef.current.getBoundingClientRect();
+    const dx = (clientX - drag.startX) * (ANALYZER_MAP_W / Math.max(rect.width, 1));
+    const dy = (clientY - drag.startY) * (ANALYZER_MAP_H / Math.max(rect.height, 1));
+    if (Math.abs(clientX - drag.startX) > 3 || Math.abs(clientY - drag.startY) > 3) {
+      drag.didDrag = true;
+    }
+    setMapPan({
+      x: drag.startPan.x + dx,
+      y: drag.startPan.y + dy
+    });
+  }, []);
+
+  const endMapDrag = useCallback(() => {
+    setIsMapDragging(false);
+    mapDragRef.current.active = false;
+    window.setTimeout(() => {
+      mapDragRef.current.didDrag = false;
+    }, 0);
+  }, []);
+
+  const resetMapView = useCallback(() => {
+    setMapZoom(1);
+    setMapPan({ x: 0, y: 0 });
+  }, []);
+
   const activePath = useMemo(() => {
     const selected = selectedBlock || hoveredBlock;
     if (selected) return paths.find(path => path.blockNumber === selected) || null;
@@ -474,6 +523,7 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
       <div className="px-4 sm:px-5 py-4 border-b border-gray-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div>
           <h3 className="font-bold text-gray-900 text-sm">Bahrain Block Map</h3>
+          <p className="text-[11px] font-semibold text-blue-500 mt-1">Drag to pan · scroll to zoom · click a block for details</p>
           <p className="text-xs text-gray-400 mt-1">
             Pharmacy coverage by block{activeGov !== "all" ? ` · ${activeGov} Governorate` : ""}
           </p>
@@ -504,8 +554,29 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 p-4 sm:p-5">
           <div
-            className="relative min-h-[420px] rounded-xl border border-gray-100 bg-slate-50 overflow-hidden"
+            ref={mapViewportRef}
+            className={`relative min-h-[420px] rounded-xl border border-gray-100 bg-slate-50 overflow-hidden select-none ${
+              isMapDragging ? "cursor-grabbing" : "cursor-grab"
+            }`}
             onWheel={handleMapWheel}
+            onMouseDown={(event) => {
+              if (event.button !== 0) return;
+              beginMapDrag(event.clientX, event.clientY);
+            }}
+            onMouseMove={(event) => moveMapDrag(event.clientX, event.clientY)}
+            onMouseUp={endMapDrag}
+            onMouseLeave={endMapDrag}
+            onTouchStart={(event) => {
+              const touch = event.touches[0];
+              if (touch) beginMapDrag(touch.clientX, touch.clientY);
+            }}
+            onTouchMove={(event) => {
+              const touch = event.touches[0];
+              if (!touch) return;
+              event.preventDefault();
+              moveMapDrag(touch.clientX, touch.clientY);
+            }}
+            onTouchEnd={endMapDrag}
           >
             <svg
               viewBox={`0 0 ${ANALYZER_MAP_W} ${ANALYZER_MAP_H}`}
@@ -514,7 +585,7 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
               className="h-[420px] sm:h-[520px] w-full"
             >
               <rect width={ANALYZER_MAP_W} height={ANALYZER_MAP_H} fill="#f8fafc" />
-              <g transform={zoomTransform(mapZoom)}>
+              <g transform={zoomTransform(mapZoom, mapPan)}>
                 <g>
                 {paths.map(path => {
                   const tone = blockMapTone(path.info);
@@ -531,10 +602,13 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
                       strokeWidth={isSelected ? 2.4 : isHighlighted ? 1.8 : 0.65}
                       vectorEffect="non-scaling-stroke"
                       className="transition-colors duration-150"
-                      style={{ cursor:"pointer" }}
+                      style={{ cursor: isMapDragging ? "grabbing" : "pointer" }}
                       onMouseEnter={() => setHoveredBlock(path.blockNumber)}
                       onMouseLeave={() => setHoveredBlock("")}
-                      onClick={() => setSelectedBlock(current => current === path.blockNumber ? "" : path.blockNumber)}
+                      onClick={() => {
+                        if (mapDragRef.current.didDrag) return;
+                        setSelectedBlock(current => current === path.blockNumber ? "" : path.blockNumber);
+                      }}
                     >
                       <title>
                         {`Block ${path.blockNumber}${path.info?.area ? ` · ${path.info.area}` : ""} · ${tone.label}`}
@@ -566,7 +640,11 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
               )}
               </g>
             </svg>
-            <div className="absolute right-3 top-3 rounded-xl border border-white/80 bg-white/95 p-1 shadow-sm backdrop-blur">
+            <div
+              className="absolute right-3 top-3 rounded-xl border border-white/80 bg-white/95 p-1 shadow-sm backdrop-blur"
+              onMouseDown={event => event.stopPropagation()}
+              onTouchStart={event => event.stopPropagation()}
+            >
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -579,10 +657,10 @@ function BahrainAnalyzerMap({ activeGov, highlightedBlock }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMapZoom(1)}
+                  onClick={resetMapView}
                   className="h-8 min-w-[54px] rounded-lg border border-gray-200 px-2 text-[11px] font-black text-gray-600 hover:bg-gray-50"
                 >
-                  {Math.round(mapZoom * 100)}%
+                  Reset
                 </button>
                 <button
                   type="button"
