@@ -1,6 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { BackToModulesButton } from '../shared';
-import { loadBahrainBlockGeometry } from '../delivery/bahrainBlockGeometry';
+import { branchService } from '../../services/branchService';
+import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
+import { deliveryService } from '../../services/deliveryService';
+import { getBlockGovernorate, loadBahrainBlockGeometry } from '../delivery/bahrainBlockGeometry';
+import { LEGACY_BLOCK_AREA_NAMES, LEGACY_BLOCK_PHARMACY_MAP, LEGACY_COVERAGE_DATA } from './legacyCoverageData';
 
 const DataContext = createContext();
 
@@ -15,11 +19,6 @@ const POP_DATA = {
   South:    { total:323970, bahraini:127729, non_bahraini:196241, males:211168, females:112802 },
 };
 const TOTAL_POP = 1577059;
-
-// Analyzer data starts empty. Admin-entered data is stored in browser storage
-// until this module is migrated to a database-backed admin source.
-const EMPTY_AREA_NAMES = {};
-const EMPTY_PHARMACY_MAP = {};
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const GOVS = ["Capital","Muharraq","North","South"];
@@ -43,6 +42,21 @@ const pctBg    = p => p===100?"#ecfdf5":p>=70?"#d1fae5":p>=50?"#fffbeb":p>=25?"#
 const COVERAGE_STORAGE_KEY = 'BCA_ADMIN_COVERAGE_DATA';
 const PHARMACY_STORAGE_KEY = 'BCA_ADMIN_PHARMACY_MAP';
 const AREA_STORAGE_KEY = 'BCA_ADMIN_AREA_NAMES';
+const MANUAL_COVERAGE_STORAGE_KEY = 'BCA_MANUAL_COVERAGE_DATA';
+const MANUAL_PHARMACY_STORAGE_KEY = 'BCA_MANUAL_PHARMACY_MAP';
+const MANUAL_AREA_STORAGE_KEY = 'BCA_MANUAL_AREA_NAMES';
+
+const LEGACY_SOURCE_STATS = {
+  pharmacies: Object.values(LEGACY_BLOCK_PHARMACY_MAP).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0),
+  pharmacyBlocks: Object.keys(LEGACY_BLOCK_PHARMACY_MAP).length,
+  areaBlocks: Object.keys(LEGACY_BLOCK_AREA_NAMES).length,
+  zones: Object.values(LEGACY_COVERAGE_DATA).reduce((sum, zones) => sum + Object.keys(zones || {}).length, 0)
+};
+
+const countPharmacies = (map = {}) => Object.values(map).reduce(
+  (sum, items) => sum + (Array.isArray(items) ? items.length : 0),
+  0
+);
 
 const normalizeCoverageData = (value) => {
   const normalized = JSON.parse(JSON.stringify(EMPTY_COVERAGE_DATA));
@@ -67,6 +81,112 @@ const normalizeCoverageData = (value) => {
   });
 
   return normalized;
+};
+
+const normalizeAnalyzerGovernorate = (value) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw.includes("capital")) return "Capital";
+  if (raw.includes("muharraq")) return "Muharraq";
+  if (raw.includes("northern") || raw === "north" || raw.includes("north ")) return "North";
+  if (raw.includes("southern") || raw === "south" || raw.includes("south ")) return "South";
+  return "Capital";
+};
+
+const addUniqueBlock = (items, value) => {
+  const key = String(value || "").trim();
+  if (!key || items.some(item => String(item).trim() === key)) return;
+  items.push(key);
+};
+
+const recomputeCoveragePercentages = (coverageData) => {
+  GOVS.forEach(gov => {
+    Object.values(coverageData[gov] || {}).forEach(data => {
+      const covered = Array.isArray(data.covered) ? data.covered : [];
+      const gaps = Array.isArray(data.gaps) ? data.gaps : [];
+      data.total = Math.max(Number(data.total) || 0, new Set([...covered, ...gaps].map(block => String(block))).size);
+      data.coverage_pct = data.total ? Math.round((covered.length / data.total) * 100) : 0;
+    });
+  });
+  return coverageData;
+};
+
+const mergeCoverageData = (base, extra) => {
+  const merged = normalizeCoverageData(base);
+  const normalizedExtra = normalizeCoverageData(extra);
+  GOVS.forEach(gov => {
+    Object.entries(normalizedExtra[gov] || {}).forEach(([zone, data]) => {
+      if (!merged[gov][zone]) merged[gov][zone] = { total: 0, covered: [], gaps: [], coverage_pct: 0 };
+      const target = merged[gov][zone];
+      (data.covered || []).forEach(block => addUniqueBlock(target.covered, block));
+      (data.gaps || []).forEach(block => {
+        if (!target.covered.some(coveredBlock => String(coveredBlock) === String(block))) addUniqueBlock(target.gaps, block);
+      });
+    });
+  });
+  return recomputeCoveragePercentages(merged);
+};
+
+const mergePharmacyMap = (base, extra) => {
+  const merged = { ...(base || {}) };
+  Object.entries(extra || {}).forEach(([block, pharmacies]) => {
+    const target = Array.isArray(merged[block]) ? [...merged[block]] : [];
+    (Array.isArray(pharmacies) ? pharmacies : []).forEach(pharmacy => {
+      const name = String(pharmacy?.name || "").trim();
+      if (!name || target.some(item => String(item?.name || "").trim().toLowerCase() === name.toLowerCase())) return;
+      target.push(pharmacy);
+    });
+    merged[block] = target;
+  });
+  return merged;
+};
+
+const buildDbCoverageData = ({ branches, profiles, blocks, geometry }) => {
+  const coverageData = normalizeCoverageData(EMPTY_COVERAGE_DATA);
+  const pharmacyMap = {};
+  const areaNames = {};
+  const blocksByNumber = new Map((blocks || []).map(block => [String(block.blockNumber || "").trim(), block]));
+  const branchesById = new Map((branches || []).map(branch => [branch.id, branch]));
+  const profilesByBranchId = new Set((profiles || []).map(profile => profile.branchId));
+  const missingProfileBranches = (branches || []).filter(branch => !profilesByBranchId.has(branch.id));
+
+  (profiles || []).forEach(profile => {
+    const blockNumber = String(profile.originBlockNumber || "").trim();
+    if (!blockNumber) return;
+
+    const branch = branchesById.get(profile.branchId);
+    const directoryBlock = blocksByNumber.get(blockNumber);
+    const governorate = normalizeAnalyzerGovernorate(
+      directoryBlock?.governorate || getBlockGovernorate(geometry, blockNumber)
+    );
+    const area = directoryBlock?.areaName || profile.branchName || branch?.name || "Registered branches";
+    const zone = area || "Registered branches";
+    const branchName = profile.branchName || branch?.name || profile.branchCode || branch?.code || "Registered branch";
+    const branchCode = profile.branchCode || branch?.code || "";
+
+    if (!coverageData[governorate][zone]) {
+      coverageData[governorate][zone] = { total: 0, covered: [], gaps: [], coverage_pct: 0 };
+    }
+
+    addUniqueBlock(coverageData[governorate][zone].covered, blockNumber);
+    areaNames[blockNumber] = area;
+    pharmacyMap[blockNumber] = pharmacyMap[blockNumber] || [];
+    pharmacyMap[blockNumber].push({
+      name: branchCode ? `${branchCode} - ${branchName}` : branchName,
+      group: branchName,
+      type: profile.isDeliveryEnabled === false ? "Delivery disabled branch" : "Pharmacy",
+      area
+    });
+  });
+
+  return {
+    coverageData: recomputeCoveragePercentages(coverageData),
+    pharmacyMap,
+    areaNames,
+    branchCount: branches?.length || 0,
+    profileCount: profiles?.length || 0,
+    mappedBlockCount: Object.keys(pharmacyMap).length,
+    missingProfileCount: missingProfileBranches.length
+  };
 };
 
 const parseStoredJson = (key, fallback) => {
@@ -1756,7 +1876,10 @@ const AddPharmacyModal = ({ isOpen, onClose, onSave, coverageData }) => {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] p-4">
       <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
-        <h2 className="text-xl font-bold mb-4">Link Pharmacy to Block</h2>
+        <h2 className="text-xl font-bold mb-2">Link Pharmacy or Branch to Block</h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Manual entries are saved as a separate local layer and appear immediately in maps, search, coverage, and Excel export.
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1796,12 +1919,12 @@ const AddPharmacyModal = ({ isOpen, onClose, onSave, coverageData }) => {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Pharmacy Name *</label>
-            <input required type="text" className="w-full border rounded-lg p-2" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Al-Dawaa Pharmacy" />
+              <label className="block text-sm font-medium mb-1">Name *</label>
+            <input required type="text" className="w-full border rounded-lg p-2" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Al-Dawaa Pharmacy or New Branch" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Group Name</label>
+              <label className="block text-sm font-medium mb-1">Group / Chain</label>
               <input type="text" className="w-full border rounded-lg p-2" value={group} onChange={e => setGroup(e.target.value)} placeholder="Defaults to Name" />
             </div>
             <div>
@@ -1809,12 +1932,13 @@ const AddPharmacyModal = ({ isOpen, onClose, onSave, coverageData }) => {
               <select className="w-full border rounded-lg p-2 bg-white" value={type} onChange={e => setType(e.target.value)}>
                 <option>Pharmacy</option>
                 <option>Hospital Pharmacy</option>
+                <option>Branch</option>
               </select>
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-6">
             <button type="button" onClick={onClose} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">Save Link</button>
+            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">Save Manual Link</button>
           </div>
         </form>
       </div>
@@ -1825,13 +1949,37 @@ const AddPharmacyModal = ({ isOpen, onClose, onSave, coverageData }) => {
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export function BlockCoverageAnalyzer({ onBack }) {
   const [coverageData, setCoverageData] = useState(() => {
-    return normalizeCoverageData(parseStoredJson(COVERAGE_STORAGE_KEY, EMPTY_COVERAGE_DATA));
+    const storedCoverageData = parseStoredJson(COVERAGE_STORAGE_KEY, null);
+    const manualCoverageData = parseStoredJson(MANUAL_COVERAGE_STORAGE_KEY, null);
+    return mergeCoverageData(
+      mergeCoverageData(LEGACY_COVERAGE_DATA, storedCoverageData || EMPTY_COVERAGE_DATA),
+      manualCoverageData || EMPTY_COVERAGE_DATA
+    );
   });
   const [pharmacyMap, setPharmacyMap] = useState(() => {
-    return parseStoredJson(PHARMACY_STORAGE_KEY, JSON.parse(JSON.stringify(EMPTY_PHARMACY_MAP)));
+    const storedPharmacyMap = parseStoredJson(PHARMACY_STORAGE_KEY, null);
+    const manualPharmacyMap = parseStoredJson(MANUAL_PHARMACY_STORAGE_KEY, null);
+    return mergePharmacyMap(
+      mergePharmacyMap(LEGACY_BLOCK_PHARMACY_MAP, storedPharmacyMap || {}),
+      manualPharmacyMap || {}
+    );
   });
   const [areaNames, setAreaNames] = useState(() => {
-    return parseStoredJson(AREA_STORAGE_KEY, JSON.parse(JSON.stringify(EMPTY_AREA_NAMES)));
+    const storedAreaNames = parseStoredJson(AREA_STORAGE_KEY, null);
+    const manualAreaNames = parseStoredJson(MANUAL_AREA_STORAGE_KEY, null);
+    return {
+      ...JSON.parse(JSON.stringify(LEGACY_BLOCK_AREA_NAMES)),
+      ...(storedAreaNames || {}),
+      ...(manualAreaNames || {})
+    };
+  });
+  const [dbSyncStatus, setDbSyncStatus] = useState({
+    state: "loading",
+    branchCount: 0,
+    profileCount: 0,
+    mappedBlockCount: 0,
+    missingProfileCount: 0,
+    error: ""
   });
 
   const [activeGov,    setActiveGov]    = useState("all");
@@ -1841,16 +1989,68 @@ export function BlockCoverageAnalyzer({ onBack }) {
   const [searchHL,     setSearchHL]     = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    setDbSyncStatus(status => ({ ...status, state: "loading", error: "" }));
+
+    Promise.all([
+      branchService.list(),
+      branchDeliveryProfileService.listBranchDeliveryProfiles(),
+      deliveryService.blocks.list(true).catch(() => []),
+      loadBahrainBlockGeometry()
+    ])
+      .then(([branches, profiles, blocks, geometry]) => {
+        if (cancelled) return;
+        const dbData = buildDbCoverageData({
+          branches: (branches || []).filter(branch => branch.role === "branch"),
+          profiles,
+          blocks,
+          geometry
+        });
+
+        setCoverageData(current => mergeCoverageData(dbData.coverageData, current));
+        setPharmacyMap(current => mergePharmacyMap(dbData.pharmacyMap, current));
+        setAreaNames(current => ({ ...(current || {}), ...dbData.areaNames }));
+        setDbSyncStatus({
+          state: "ready",
+          branchCount: dbData.branchCount,
+          profileCount: dbData.profileCount,
+          mappedBlockCount: dbData.mappedBlockCount,
+          missingProfileCount: dbData.missingProfileCount,
+          error: ""
+        });
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setDbSyncStatus(status => ({
+          ...status,
+          state: "error",
+          error: error?.message || "Could not load branch coverage data from database."
+        }));
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
   const handleAddPharmacy = (data) => {
     const { gov, zone, block, area, name, group, type } = data;
     const numBlock = parseInt(block);
-    
-    const newPharmacyMap = { ...pharmacyMap };
-    if (!newPharmacyMap[numBlock]) newPharmacyMap[numBlock] = [];
-    newPharmacyMap[numBlock].push({ name, group, type, area });
-    
+    const blockKey = String(numBlock);
+    const manualEntry = {
+      name,
+      group,
+      type,
+      area,
+      source: "Manual"
+    };
+
+    const newPharmacyMap = {
+      ...pharmacyMap,
+      [blockKey]: [...(pharmacyMap[blockKey] || []), manualEntry]
+    };
+
     const newAreaNames = { ...areaNames };
-    if (area) newAreaNames[numBlock] = area;
+    if (area) newAreaNames[blockKey] = area;
 
     const newCoverageData = JSON.parse(JSON.stringify(coverageData));
     if (!newCoverageData[gov]) newCoverageData[gov] = {};
@@ -1874,9 +2074,33 @@ export function BlockCoverageAnalyzer({ onBack }) {
     setAreaNames(newAreaNames);
     setCoverageData(newCoverageData);
 
-    localStorage.setItem(PHARMACY_STORAGE_KEY, JSON.stringify(newPharmacyMap));
-    localStorage.setItem(AREA_STORAGE_KEY, JSON.stringify(newAreaNames));
-    localStorage.setItem(COVERAGE_STORAGE_KEY, JSON.stringify(newCoverageData));
+    const manualPharmacyMap = parseStoredJson(MANUAL_PHARMACY_STORAGE_KEY, {});
+    manualPharmacyMap[blockKey] = [...(manualPharmacyMap[blockKey] || []), manualEntry];
+
+    const manualAreaNames = parseStoredJson(MANUAL_AREA_STORAGE_KEY, {});
+    if (area) manualAreaNames[blockKey] = area;
+
+    const manualCoverageData = normalizeCoverageData(parseStoredJson(MANUAL_COVERAGE_STORAGE_KEY, EMPTY_COVERAGE_DATA));
+    if (!manualCoverageData[gov]) manualCoverageData[gov] = {};
+    if (!manualCoverageData[gov][zone]) {
+      manualCoverageData[gov][zone] = { total: 0, covered: [], gaps: [], coverage_pct: 0 };
+    }
+    const manualZoneData = manualCoverageData[gov][zone];
+    manualZoneData.covered = Array.isArray(manualZoneData.covered) ? manualZoneData.covered : [];
+    manualZoneData.gaps = Array.isArray(manualZoneData.gaps) ? manualZoneData.gaps : [];
+    manualZoneData.gaps = manualZoneData.gaps.filter(b => String(b) !== blockKey);
+    if (!manualZoneData.covered.some(b => String(b) === blockKey)) manualZoneData.covered.push(numBlock);
+    manualZoneData.total = Math.max(
+      Number(manualZoneData.total) || 0,
+      new Set([...manualZoneData.covered, ...manualZoneData.gaps].map(b => String(b))).size
+    );
+    manualZoneData.coverage_pct = manualZoneData.total
+      ? Math.round((manualZoneData.covered.length / manualZoneData.total) * 100)
+      : 0;
+
+    localStorage.setItem(MANUAL_PHARMACY_STORAGE_KEY, JSON.stringify(manualPharmacyMap));
+    localStorage.setItem(MANUAL_AREA_STORAGE_KEY, JSON.stringify(manualAreaNames));
+    localStorage.setItem(MANUAL_COVERAGE_STORAGE_KEY, JSON.stringify(manualCoverageData));
   };
 
   const exportToExcel = async () => {
@@ -1971,6 +2195,19 @@ export function BlockCoverageAnalyzer({ onBack }) {
     [coverageData]
   );
 
+  const manualSourceStats = useMemo(() => {
+    const blocks = new Set();
+    let pharmacies = 0;
+    Object.entries(pharmacyMap || {}).forEach(([block, items]) => {
+      const manualItems = (Array.isArray(items) ? items : []).filter(item => item?.source === "Manual");
+      if (manualItems.length > 0) {
+        blocks.add(String(block));
+        pharmacies += manualItems.length;
+      }
+    });
+    return { blocks: blocks.size, pharmacies };
+  }, [pharmacyMap]);
+
   return (
     <DataContext.Provider value={{ coverageData, pharmacyMap, areaNames }}>
       <AddPharmacyModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddPharmacy} coverageData={coverageData} />
@@ -1991,7 +2228,7 @@ export function BlockCoverageAnalyzer({ onBack }) {
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={()=>setIsAddModalOpen(true)}
               className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">
-              + Link Pharmacy
+              + Link Pharmacy / Branch
             </button>
             <button onClick={exportToExcel}
               className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-800 text-white hover:bg-gray-900 shadow-sm flex items-center gap-2">
@@ -2016,6 +2253,56 @@ export function BlockCoverageAnalyzer({ onBack }) {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
         <BlockSearch onResult={handleSearch}/>
+
+        <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Legacy directory</p>
+            <p className="mt-2 text-2xl font-black text-slate-900">{LEGACY_SOURCE_STATS.pharmacies}</p>
+            <p className="text-sm font-semibold text-slate-500">
+              pharmacies across {LEGACY_SOURCE_STATS.pharmacyBlocks} blocks
+            </p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-700">Manual layer</p>
+            <p className="mt-2 text-2xl font-black text-emerald-900">{manualSourceStats.pharmacies}</p>
+            <p className="text-sm font-semibold text-emerald-700">
+              manual links across {manualSourceStats.blocks} blocks
+            </p>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-700">Database branches</p>
+            <p className="mt-2 text-2xl font-black text-blue-900">{dbSyncStatus.mappedBlockCount}</p>
+            <p className="text-sm font-semibold text-blue-700">
+              branch origin blocks synced from delivery profiles
+            </p>
+          </div>
+        </div>
+
+        <div className={`mb-5 rounded-xl border p-4 text-sm font-semibold ${
+          dbSyncStatus.state === "error"
+            ? "border-red-200 bg-red-50 text-red-800"
+            : dbSyncStatus.state === "loading"
+              ? "border-blue-200 bg-blue-50 text-blue-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+        }`}>
+          {dbSyncStatus.state === "loading" && "Loading registered branch coverage from database..."}
+          {dbSyncStatus.state === "error" && (
+            <>
+              Database branch coverage could not be loaded. Showing local browser data only.
+              <span className="ml-2 font-bold">{dbSyncStatus.error}</span>
+            </>
+          )}
+          {dbSyncStatus.state === "ready" && (
+            <>
+              Synced from database: {dbSyncStatus.mappedBlockCount} branch origin block{dbSyncStatus.mappedBlockCount === 1 ? "" : "s"} mapped from {dbSyncStatus.profileCount} delivery profile{dbSyncStatus.profileCount === 1 ? "" : "s"}.
+              {dbSyncStatus.missingProfileCount > 0 && (
+                <span className="ml-2 text-amber-700">
+                  {dbSyncStatus.missingProfileCount} branch{dbSyncStatus.missingProfileCount === 1 ? "" : "es"} still need Delivery Zones origin block setup.
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Search result banner */}
         {searchResult && (
