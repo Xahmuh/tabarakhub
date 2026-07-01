@@ -232,6 +232,44 @@ const BranchInfoItem: React.FC<{
     </div>
 );
 
+const DEFAULT_BRANCH_DUTY_RADIUS_M = 50;
+
+const newBranchForm = (): Partial<Branch> => ({
+    role: 'branch',
+    lat: null,
+    lng: null,
+    dutyRadiusM: DEFAULT_BRANCH_DUTY_RADIUS_M,
+    isSpinEnabled: false,
+    isItemsEntryEnabled: true,
+    isKPIDashboardEnabled: true
+});
+
+const parseOptionalCoordinate = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseOptionalRadius = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const formatBranchCoordinates = (branch: Partial<Branch>) => {
+    if (branch.lat === null || branch.lat === undefined || branch.lng === null || branch.lng === undefined) {
+        return 'Not configured';
+    }
+    return `${Number(branch.lat).toFixed(7)}, ${Number(branch.lng).toFixed(7)}`;
+};
+
+const formatBranchDutyRadius = (branch: Partial<Branch>) => {
+    if (branch.dutyRadiusM === null || branch.dutyRadiusM === undefined) return `${DEFAULT_BRANCH_DUTY_RADIUS_M} m default`;
+    return `${branch.dutyRadiusM} m`;
+};
+
 const ACCESS_LEVELS: Array<{
     level: 'default' | 'none' | 'read' | 'edit';
     title: string;
@@ -327,7 +365,7 @@ export const ProjectSettings: React.FC<{
     // Form States
     const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
     const [isPharModalOpen, setIsPharModalOpen] = useState(false);
-    const [branchForm, setBranchForm] = useState<Partial<Branch>>({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
+    const [branchForm, setBranchForm] = useState<Partial<Branch>>(newBranchForm);
     const [pharForm, setPharForm] = useState<{ code: string; name: string; isActive: boolean; branchIds: string[]; id?: string }>({
         code: '',
         name: '',
@@ -603,8 +641,32 @@ export const ProjectSettings: React.FC<{
             Swal.fire('Select registered pharmacist', 'Branch Manager Name must be selected from active registered pharmacists.', 'warning');
             return;
         }
+        const hasLat = branchForm.lat !== null && branchForm.lat !== undefined;
+        const hasLng = branchForm.lng !== null && branchForm.lng !== undefined;
+        if (hasLat !== hasLng) {
+            Swal.fire('Incomplete GPS location', 'Latitude and Longitude must be saved together, or both left empty.', 'warning');
+            return;
+        }
+        if (hasLat && (!Number.isFinite(branchForm.lat) || Number(branchForm.lat) < -90 || Number(branchForm.lat) > 90)) {
+            Swal.fire('Invalid latitude', 'Latitude must be between -90 and 90.', 'warning');
+            return;
+        }
+        if (hasLng && (!Number.isFinite(branchForm.lng) || Number(branchForm.lng) < -180 || Number(branchForm.lng) > 180)) {
+            Swal.fire('Invalid longitude', 'Longitude must be between -180 and 180.', 'warning');
+            return;
+        }
+        const hasRadius = branchForm.dutyRadiusM !== null && branchForm.dutyRadiusM !== undefined;
+        if (hasRadius && (!Number.isFinite(branchForm.dutyRadiusM) || Number(branchForm.dutyRadiusM) < 10 || Number(branchForm.dutyRadiusM) > 1000)) {
+            Swal.fire('Invalid start radius', 'Start Shift Radius must be between 10 and 1000 meters.', 'warning');
+            return;
+        }
         try {
-            await supabase.branches.upsert({ ...branchForm, branchManagerName, role: 'branch' });
+            await supabase.branches.upsert({
+                ...branchForm,
+                branchManagerName,
+                role: 'branch',
+                dutyRadiusM: branchForm.dutyRadiusM ?? DEFAULT_BRANCH_DUTY_RADIUS_M
+            });
             Swal.fire('Success', 'Branch saved successfully', 'success');
             setIsBranchModalOpen(false);
             loadData();
@@ -988,7 +1050,7 @@ export const ProjectSettings: React.FC<{
                                         <button
                                             onClick={() => {
                                                 if (activeTab === 'branches') {
-                                                    setBranchForm({ role: 'branch', isSpinEnabled: false, isItemsEntryEnabled: true, isKPIDashboardEnabled: true });
+                                                    setBranchForm(newBranchForm());
                                                     setIsBranchModalOpen(true);
                                                 } else {
                                                     setPharForm({ code: '', name: '', isActive: true, branchIds: [] });
@@ -1082,7 +1144,13 @@ export const ProjectSettings: React.FC<{
                                                                 </div>
                                                                 <div className="flex shrink-0 gap-2">
                                                                     <button
-                                                                        onClick={() => { setBranchForm(branch); setIsBranchModalOpen(true); }}
+                                                                        onClick={() => {
+                                                                            setBranchForm({
+                                                                                ...branch,
+                                                                                dutyRadiusM: branch.dutyRadiusM ?? DEFAULT_BRANCH_DUTY_RADIUS_M
+                                                                            });
+                                                                            setIsBranchModalOpen(true);
+                                                                        }}
                                                                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
                                                                         title="Edit branch"
                                                                         aria-label={`Edit ${branch.name}`}
@@ -1106,6 +1174,8 @@ export const ProjectSettings: React.FC<{
                                                                 <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
                                                                 <BranchInfoItem label="CR No." value={branch.crNumber} icon={Hash} />
                                                                 <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
+                                                                <BranchInfoItem label="GPS" value={formatBranchCoordinates(branch)} icon={MapPinned} />
+                                                                <BranchInfoItem label="Start Radius" value={formatBranchDutyRadius(branch)} icon={RadioTower} />
                                                             </div>
                                                         </div>
 
@@ -2020,6 +2090,66 @@ export const ProjectSettings: React.FC<{
                                                 className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
                                                 placeholder="Branch commercial registration"
                                             />
+                                        </div>
+                                        <div className="space-y-3 rounded-xl border border-brand/10 bg-brand/[0.03] p-4 md:col-span-2">
+                                            <div className="flex items-start gap-3">
+                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+                                                    <MapPinned size={18} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand">Branch GPS & Shift Radius</p>
+                                                    <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                                                        Linked directly to the branch database record. Driver Mobile uses this radius to enable Start Shift near the selected branch.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Latitude</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.0000001"
+                                                        min="-90"
+                                                        max="90"
+                                                        value={branchForm.lat ?? ''}
+                                                        onChange={e => setBranchForm({ ...branchForm, lat: parseOptionalCoordinate(e.target.value) })}
+                                                        className="w-full bg-white border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                        placeholder="26.2112862"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Longitude</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.0000001"
+                                                        min="-180"
+                                                        max="180"
+                                                        value={branchForm.lng ?? ''}
+                                                        onChange={e => setBranchForm({ ...branchForm, lng: parseOptionalCoordinate(e.target.value) })}
+                                                        className="w-full bg-white border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                        placeholder="50.5775068"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Start Shift Radius</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            step="1"
+                                                            min="10"
+                                                            max="1000"
+                                                            value={branchForm.dutyRadiusM ?? ''}
+                                                            onChange={e => setBranchForm({ ...branchForm, dutyRadiusM: parseOptionalRadius(e.target.value) })}
+                                                            className="w-full bg-white border border-slate-200 p-3 pr-12 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                            placeholder="50"
+                                                        />
+                                                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-slate-400">m</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold leading-5 text-slate-500">
+                                                Leave Latitude and Longitude empty only if this branch should not be used for GPS-based features. Radius accepts 10–1000 meters.
+                                            </p>
                                         </div>
                                     </div>
                                 </section>
