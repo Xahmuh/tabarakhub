@@ -1,13 +1,18 @@
 const BHD_DECIMAL_PLACES = 3;
 const BHD_SCALE = 10 ** BHD_DECIMAL_PLACES;
 
-const numberToPlainText = (value: number) =>
-  Number.isFinite(value)
-    ? value.toLocaleString('en-US', {
-      useGrouping: false,
-      maximumFractionDigits: 20
-    })
-    : '0';
+const numberToPlainText = (value: number) => {
+  if (!Number.isFinite(value)) return '0';
+  const scaled = value * BHD_SCALE;
+  const nearestFils = Math.round(scaled);
+  if (Math.abs(scaled - nearestFils) < 1e-9) {
+    return (nearestFils / BHD_SCALE).toFixed(BHD_DECIMAL_PLACES);
+  }
+  return value.toLocaleString('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 20
+  });
+};
 
 const normalizeMoneyText = (value: number | string | null | undefined) => {
   const raw = typeof value === 'number' ? numberToPlainText(value) : String(value ?? '');
@@ -30,14 +35,16 @@ const moneyParts = (value: number | string | null | undefined) => {
 
 export const truncateBhd = (value: number | string | null | undefined) => {
   const { sign, integer, fraction } = moneyParts(value);
-  const amount = Number(integer) + Number(fraction) / BHD_SCALE;
-  return sign === '-' ? -amount : amount;
+  return Number(`${sign}${integer}.${fraction}`);
 };
 
 export const formatBhdAmount = (value: number | string | null | undefined) => {
   const { sign, integer, fraction } = moneyParts(value);
   return `${sign}${integer}.${fraction}`;
 };
+
+export const toBhdStorageValue = (value: number | string | null | undefined) =>
+  formatBhdAmount(value);
 
 export const formatBhdWithCurrency = (value: number | string | null | undefined) =>
   `${formatBhdAmount(value)} BHD`;

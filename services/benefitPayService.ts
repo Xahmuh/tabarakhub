@@ -4,7 +4,7 @@ import {
   BenefitPayTransferInput,
   BenefitPayTransferType
 } from '../types';
-import { truncateBhd } from '../utils/money';
+import { toBhdStorageValue } from '../utils/money';
 
 const TRANSFER_TYPES: BenefitPayTransferType[] = ['AFS', 'CREDIMAX', 'IBAN'];
 
@@ -40,7 +40,7 @@ const normalizeTime = (value: string) => {
   return `${match[1]}:${match[2]}`;
 };
 
-const normalizeBhd = (value: number) => truncateBhd(value);
+const normalizeBhd = (value: number | string | null | undefined) => toBhdStorageValue(value);
 
 const toTransfer = (row: any): BenefitPayTransfer => ({
   id: row.id,
@@ -133,7 +133,7 @@ export const benefitPayService = {
       const pharmacistId = input.pharmacistId?.trim();
       const transferType = normalizeTransferType(input.transferType);
       const transferTime = normalizeTime(input.transferTime);
-      const valueBhd = Number(input.valueBhd);
+      const valueBhd = Number(normalizeBhd(input.valueBhd));
 
       if (!branchId) throw new Error('Branch is required.');
       if (!transferDate || !isValidDateKey(transferDate)) throw new Error('A valid transfer date is required.');
@@ -149,7 +149,7 @@ export const benefitPayService = {
         pharmacist_id: pharmacistId,
         pharmacist_name: pharmacistName,
         transfer_type: transferType,
-        value_bhd: normalizeBhd(valueBhd),
+        value_bhd: normalizeBhd(input.valueBhd),
         transfer_time: transferTime,
         source: 'manual',
         notes: input.notes?.trim() || null,
@@ -173,7 +173,7 @@ export const benefitPayService = {
       const pharmacistId = input.pharmacistId?.trim();
       const transferType = normalizeTransferType(input.transferType);
       const transferTime = normalizeTime(input.transferTime);
-      const valueBhd = Number(input.valueBhd);
+      const valueBhd = Number(normalizeBhd(input.valueBhd));
 
       if (!transferId) throw new Error('Benefit Pay transfer is required.');
       if (!branchId) throw new Error('Branch is required.');
@@ -190,7 +190,7 @@ export const benefitPayService = {
         pharmacist_id: pharmacistId,
         pharmacist_name: pharmacistName,
         transfer_type: transferType,
-        value_bhd: normalizeBhd(valueBhd),
+        value_bhd: normalizeBhd(input.valueBhd),
         transfer_time: transferTime,
         notes: input.notes?.trim() || null,
         updated_by: session.session?.user?.id || null

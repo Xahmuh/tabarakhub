@@ -696,14 +696,16 @@ export interface DeliveryOrder {
   lifecycleUpdatedAt?: string | null;
 }
 
+export type BhdAmountInput = number | string;
+
 export interface DeliveryOrderInput {
   branchId: string;
   orderDate: string;
-  valueBhd: number;
+  valueBhd: BhdAmountInput;
   paymentType: DeliveryPaymentType;
   paymentCollectionStatus?: DeliveryPaymentCollectionStatus;
-  amountReceivedBhd?: number | null;
-  cashHandedToDriverBhd?: number | null;
+  amountReceivedBhd?: BhdAmountInput | null;
+  cashHandedToDriverBhd?: BhdAmountInput | null;
   benefitPayReceivedTime?: string | null;
   driverPaymentNote?: string | null;
   orderKind?: DeliveryOrderKind;
@@ -774,7 +776,7 @@ export interface BenefitPayTransferInput {
   transferDate: string;
   pharmacistId: string;
   transferType: BenefitPayTransferType;
-  valueBhd: number;
+  valueBhd: BhdAmountInput;
   transferTime: string;
   notes?: string | null;
 }

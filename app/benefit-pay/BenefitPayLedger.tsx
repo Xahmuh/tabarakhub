@@ -423,7 +423,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
         transferDate,
         pharmacistId,
         transferType,
-        valueBhd: Number(value),
+        valueBhd: value,
         transferTime,
         notes
       };

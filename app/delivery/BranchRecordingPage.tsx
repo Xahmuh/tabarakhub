@@ -850,12 +850,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       return;
     }
     const normalizedPaymentCollectionStatus: DeliveryPaymentCollectionStatus = isBlockExemptPayment ? 'paid' : paymentCollectionStatus;
-    const normalizedAmountReceived = normalizedPaymentCollectionStatus === 'paid'
-      ? numericValue
+    const normalizedAmountReceivedInput = normalizedPaymentCollectionStatus === 'paid'
+      ? value
       : normalizedPaymentCollectionStatus === 'collect_on_delivery'
         ? 0
-        : Number(amountReceived);
-    const normalizedCashHandedToDriver = isBlockExemptPayment ? 0 : Number(cashHandedToDriver || 0);
+        : amountReceived;
+    const normalizedAmountReceived = Number(normalizedAmountReceivedInput);
+    const normalizedCashHandedToDriverInput = isBlockExemptPayment ? 0 : cashHandedToDriver || 0;
+    const normalizedCashHandedToDriver = Number(normalizedCashHandedToDriverInput);
     if (normalizedPaymentCollectionStatus === 'partial' && (!Number.isFinite(normalizedAmountReceived) || normalizedAmountReceived <= 0 || normalizedAmountReceived >= numericValue)) {
       Swal.fire('Partial payment amount required', 'Enter the amount already received. It must be greater than zero and less than the order value.', 'warning');
       return;
@@ -919,11 +921,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     const input: DeliveryOrderInput = {
       branchId: branch.id,
       orderDate,
-      valueBhd: numericValue,
+      valueBhd: value,
       paymentType,
       paymentCollectionStatus: normalizedPaymentCollectionStatus,
-      amountReceivedBhd: normalizedAmountReceived,
-      cashHandedToDriverBhd: normalizedCashHandedToDriver,
+      amountReceivedBhd: normalizedAmountReceivedInput,
+      cashHandedToDriverBhd: normalizedCashHandedToDriverInput,
       benefitPayReceivedTime: shouldCaptureBenefitPayTime ? benefitPayReceivedTime : null,
       driverPaymentNote: isBlockExemptPayment ? null : driverPaymentNote.trim() || null,
       pharmacistId,
