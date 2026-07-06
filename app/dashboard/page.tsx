@@ -1426,10 +1426,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
       const medicineData = viewData.filter((s: any) => medicineCategories.includes((s.category || '').toLowerCase()));
       const generalData = viewData.filter((s: any) => generalCategories.includes((s.category || '').toLowerCase()));
-      const otherData = viewData.filter((s: any) => {
-        const category = (s.category || '').toLowerCase();
-        return !medicineCategories.includes(category) && !generalCategories.includes(category);
-      });
 
       // TAB 1: ALL SHORTAGES (Master List)
       createSheet('All Shortages', viewData);
@@ -1440,10 +1436,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       // TAB 3: GENERAL STORE
       createSheet('General Store', generalData);
 
-      // TAB 4: OTHER CATEGORIES (keeps unmatched categories visible instead of hiding them)
-      createSheet('Other Categories', otherData);
-
-      // TAB 5: RANKING (Branches & Pharmacists)
+      // TAB 4: RANKING (Branches & Pharmacists)
       const rankingSheet = workbook.addWorksheet('Ranking');
 
       // Branch Ranking
