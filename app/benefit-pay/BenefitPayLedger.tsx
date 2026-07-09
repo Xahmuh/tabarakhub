@@ -179,7 +179,8 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
   const [customTo, setCustomTo] = useState(todayKey());
   const [dashboardTransferType, setDashboardTransferType] = useState<BenefitPayTransferType | 'all'>('all');
   const [dashboardSource, setDashboardSource] = useState<BenefitPaySourceFilter>('all');
-  const [sortMode, setSortMode] = useState<BenefitPayExportSortMode>('time');
+  const [sortField, setSortField] = useState<'time' | 'serial' | 'branch' | 'value'>('time');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [transferDate, setTransferDate] = useState(todayKey());
   const [pharmacistId, setPharmacistId] = useState<string | null>(null);
   const [isPharmacistLocked, setIsPharmacistLocked] = useState(false);
@@ -264,16 +265,43 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     allCount: 0
   }), [transfers]);
   const sortedTransfers = useMemo(() => {
-    const byTime = (a: BenefitPayTransfer, b: BenefitPayTransfer) =>
-      b.transferDate.localeCompare(a.transferDate)
-      || b.transferTime.localeCompare(a.transferTime)
-      || b.serialNumber.localeCompare(a.serialNumber);
-    const byBranch = (a: BenefitPayTransfer, b: BenefitPayTransfer) =>
-      (a.branchCode || '').localeCompare(b.branchCode || '')
-      || (a.branchName || '').localeCompare(b.branchName || '')
-      || byTime(a, b);
-    return [...transfers].sort(sortMode === 'branch' ? byBranch : byTime);
-  }, [sortMode, transfers]);
+    const compare = (a: BenefitPayTransfer, b: BenefitPayTransfer) => {
+      if (sortField === 'serial') {
+        return a.serialNumber.localeCompare(b.serialNumber);
+      }
+      if (sortField === 'branch') {
+        const branchA = a.branchCode || a.branchName || '';
+        const branchB = b.branchCode || b.branchName || '';
+        return branchA.localeCompare(branchB);
+      }
+      if (sortField === 'value') {
+        return a.valueBhd - b.valueBhd;
+      }
+      // default: sort by date and time
+      const dateCompare = a.transferDate.localeCompare(b.transferDate);
+      if (dateCompare !== 0) return dateCompare;
+      const timeCompare = a.transferTime.localeCompare(b.transferTime);
+      if (timeCompare !== 0) return timeCompare;
+      return a.serialNumber.localeCompare(b.serialNumber);
+    };
+
+    const sorted = [...transfers].sort(compare);
+    return sortDirection === 'desc' ? sorted.reverse() : sorted;
+  }, [sortField, sortDirection, transfers]);
+
+  const handleSortToggle = (field: 'time' | 'serial' | 'branch' | 'value') => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'serial' ? 'asc' : 'desc');
+    }
+  };
+
+  const renderSortIndicator = (field: 'time' | 'serial' | 'branch' | 'value') => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? ' ▴' : ' ▾';
+  };
   const totalTransferPages = Math.max(1, Math.ceil(transfers.length / LEDGER_PAGE_SIZE));
   const currentRecordsPage = Math.min(recordsPage, totalTransferPages);
   const paginatedTransfers = useMemo(() => {
@@ -355,7 +383,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
   useEffect(() => { loadBranches(); }, [isBranch, user.id]);
   useEffect(() => { loadPharmacists(); }, [recordBranchId]);
   useEffect(() => { loadTransfers(); }, [activeTab, activeBranchFilter, range.from, range.to, canRead, dashboardTransferType, dashboardSource]);
-  useEffect(() => { setRecordsPage(1); }, [activeTab, activeBranchFilter, range.from, range.to, dashboardTransferType, dashboardSource, sortMode]);
+  useEffect(() => { setRecordsPage(1); }, [activeTab, activeBranchFilter, range.from, range.to, dashboardTransferType, dashboardSource, sortField, sortDirection]);
   useEffect(() => {
     if (!focusTarget?.deliveryOrderId) return;
     setHighlightedDeliveryOrderId(focusTarget.deliveryOrderId);
@@ -525,7 +553,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
       consolidated
         ? benefitPayConsolidatedExportFileName(range.from, range.to)
         : benefitPayExportFileName(branchCode, range.from, range.to),
-      { consolidated, sortMode }
+      { consolidated, sortMode: sortField === 'branch' ? 'branch' : 'time' }
     ).catch(error => Swal.fire('Export failed', error?.message || 'Could not export Benefit Pay sheet.', 'error'));
   };
 
@@ -830,7 +858,7 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[1fr_0.95fr_0.75fr]">
+          <div className="grid gap-3 xl:grid-cols-[1.1fr_1fr_1fr_0.6fr]">
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Transfer type</p>
               <div className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
@@ -877,18 +905,42 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
             </div>
 
             <div>
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Sort records</p>
-              <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Sort by</p>
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
                 {([
                   { value: 'time', label: 'Time' },
+                  { value: 'serial', label: 'SN' },
                   { value: 'branch', label: 'Branch' }
-                ] as Array<{ value: BenefitPayExportSortMode; label: string }>).map(option => (
+                ] as Array<{ value: 'time' | 'serial' | 'branch'; label: string }>).map(option => (
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => setSortMode(option.value)}
+                    onClick={() => setSortField(option.value)}
                     className={`rounded-md px-2 py-2 text-[10px] font-black uppercase tracking-widest transition ${
-                      sortMode === option.value
+                      sortField === option.value
+                        ? 'bg-white text-brand shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Dir</p>
+              <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
+                {([
+                  { value: 'asc', label: 'Asc' },
+                  { value: 'desc', label: 'Desc' }
+                ] as Array<{ value: 'asc' | 'desc'; label: string }>).map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSortDirection(option.value)}
+                    className={`rounded-md px-2 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+                      sortDirection === option.value
                         ? 'bg-white text-brand shadow-sm'
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
@@ -968,11 +1020,43 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="py-2 pr-3">SN / date</th>
-                    <th className="py-2 pr-3">Branch</th>
+                    <th className="py-2 pr-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSortToggle('serial')}
+                        className="inline-flex items-center gap-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+                      >
+                        SN / date {renderSortIndicator('serial')}
+                      </button>
+                    </th>
+                    <th className="py-2 pr-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSortToggle('branch')}
+                        className="inline-flex items-center gap-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+                      >
+                        Branch {renderSortIndicator('branch')}
+                      </button>
+                    </th>
                     <th className="py-2 pr-3">Transfer</th>
-                    <th className="py-2 pr-3 text-right">Value</th>
-                    <th className="py-2 pr-3">Time</th>
+                    <th className="py-2 pr-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleSortToggle('value')}
+                        className="inline-flex items-center justify-end gap-0.5 w-full text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+                      >
+                        Value {renderSortIndicator('value')}
+                      </button>
+                    </th>
+                    <th className="py-2 pr-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSortToggle('time')}
+                        className="inline-flex items-center gap-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+                      >
+                        Time {renderSortIndicator('time')}
+                      </button>
+                    </th>
                     <th className="py-2 pr-3">Pharmacist</th>
                     <th className="py-2 pr-3">Source</th>
                     {canManageRows && <th className="py-2 text-right">Actions</th>}
