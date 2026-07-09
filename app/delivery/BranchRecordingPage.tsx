@@ -2312,7 +2312,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
           role="dialog"
           aria-modal="true"
         >
-          <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/15 animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-md rounded-xl border border-slate-200/60 bg-white shadow-xl shadow-slate-900/10 animate-in zoom-in-95 duration-200 overflow-visible">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
@@ -2361,7 +2361,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-4">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-4 rounded-b-xl">
               <button
                 type="button"
                 onClick={() => setReassigningOrder(null)}
