@@ -443,6 +443,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
+  const [reassigningOrder, setReassigningOrder] = useState<DeliveryOrder | null>(null);
+  const [reassignDriverId, setReassignDriverId] = useState<string | null>(null);
+  const [isReassigning, setIsReassigning] = useState(false);
   const [historyView, setHistoryView] = useState<HistoryViewMode>('all');
   const [historyPage, setHistoryPage] = useState(1);
 
@@ -844,49 +847,22 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     return reason.includes('driver mobile') || reason.includes('تطبيق السائق') || reason.includes('منسوخ') || reason.includes('বাতيل');
   };
 
-  const handleAssignNewDriver = async (order: DeliveryOrder) => {
-    const activeDrivers = drivers.filter(d => d.isActive);
-    if (activeDrivers.length === 0) {
-      Swal.fire('No active drivers', 'There are no active drivers assigned to this branch.', 'warning');
-      return;
-    }
+  const handleReassignClick = (order: DeliveryOrder) => {
+    setReassigningOrder(order);
+    setReassignDriverId(order.driverId || null);
+  };
 
-    const driverOptions = activeDrivers.reduce((acc, d) => {
-      acc[d.id] = d.driverCode ? `${d.driverCode} - ${d.name}` : d.name;
-      return acc;
-    }, {} as Record<string, string>);
-
-    const { value: newDriverId } = await Swal.fire({
-      title: 'Assign New Driver',
-      text: `Select a new driver to deliver Order ${deliveryOrderNumber(order)}`,
-      input: 'select',
-      inputOptions: driverOptions,
-      inputPlaceholder: 'Select a driver...',
-      showCancelButton: true,
-      confirmButtonText: 'Assign & Reopen',
-      confirmButtonColor: '#0f172a',
-      cancelButtonText: 'Cancel',
-      inputValidator: (value) => {
-        return new Promise((resolve) => {
-          if (value) {
-            resolve();
-          } else {
-            resolve('You must select a driver');
-          }
-        });
-      }
-    });
-
-    if (!newDriverId) return;
-
-    setIsLoading(true);
+  const confirmReassignment = async () => {
+    if (!reassigningOrder || !reassignDriverId) return;
+    setIsReassigning(true);
     try {
-      await deliveryService.orders.update(order.id, { driverId: newDriverId });
+      await deliveryService.orders.update(reassigningOrder.id, { driverId: reassignDriverId });
       await deliveryService.lifecycle.returnOrder({
-        orderId: order.id,
+        orderId: reassigningOrder.id,
         notes: `Reassigned to new driver by pharmacy`
       });
       await loadHistory();
+      setReassigningOrder(null);
       Swal.fire({
         title: 'Success',
         text: 'The order has been reassigned and is now active in Dispatch.',
@@ -897,7 +873,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     } catch (error: any) {
       Swal.fire('Reassignment failed', error?.message || 'Could not reassign this order.', 'error');
     } finally {
-      setIsLoading(false);
+      setIsReassigning(false);
     }
   };
 
@@ -2069,8 +2045,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     const isHighlightedOrder = highlightedOrderId === order.id;
                     const canOpenBenefitPayTrace = isBenefitPayOrder(order) && Boolean(onOpenBenefitPayTransfer);
 
+                    const isDriverCancelled = isCancelledByDriver(order);
                     return (
-                    <tr key={order.id} className={`transition hover:bg-slate-50/70 ${isHighlightedOrder ? 'bg-brand/5 ring-2 ring-inset ring-brand/20' : ''}`}>
+                    <tr
+                      key={order.id}
+                      className={`transition hover:bg-slate-50/70 ${
+                        isHighlightedOrder
+                          ? 'bg-brand/5 ring-2 ring-inset ring-brand/20'
+                          : isDriverCancelled
+                            ? 'bg-red-50/10 ring-2 ring-inset ring-red-300/60'
+                            : ''
+                      }`}
+                    >
                       {canEdit && (
                         <td className="px-2 py-3 text-center align-top">
                           <input
@@ -2088,9 +2074,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           <div className="min-w-0 text-left">
                             <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5">
                               <span className="block break-words font-black leading-5 text-brand" title={deliveryOrderNumber(order)}>{deliveryOrderNumber(order)}</span>
-                              {isCancelledByDriver(order) && (
+                              {isDriverCancelled && (
                                 <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-700 animate-pulse">
-                                  ألغاه السائق
+                                  Cancelled by Driver
                                 </span>
                               )}
                               {canOpenBenefitPayTrace && (
@@ -2162,7 +2148,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                             )}
                             {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
                               <button
-                                onClick={() => handleAssignNewDriver(order)}
+                                onClick={() => handleReassignClick(order)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Assign new driver and reopen"
                                 aria-label="Assign new driver and reopen"
@@ -2194,8 +2180,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 const isHighlightedOrder = highlightedOrderId === order.id;
                 const canOpenBenefitPayTrace = isBenefitPayOrder(order) && Boolean(onOpenBenefitPayTransfer);
 
+                const isDriverCancelled = isCancelledByDriver(order);
                 return (
-                <div key={order.id} className={`rounded-lg border bg-white p-3 ${isHighlightedOrder ? 'border-brand/30 ring-2 ring-brand/20' : 'border-slate-200'}`}>
+                <div
+                  key={order.id}
+                  className={`rounded-lg border p-3 bg-white transition-all ${
+                    isHighlightedOrder
+                      ? 'border-brand/30 ring-2 ring-brand/20'
+                      : isDriverCancelled
+                        ? 'border-red-300 ring-2 ring-red-100 bg-red-50/5'
+                        : 'border-slate-200'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <span className="text-base font-black text-slate-900 tabular-nums">{formatBhd(order.valueBhd)}</span>
                     <div className="flex items-center gap-2">
@@ -2215,9 +2211,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     <div className="min-w-0 text-left">
                       <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5">
                         <p className="min-w-0 break-words text-[11px] font-black uppercase tracking-widest text-brand">{deliveryOrderNumber(order)}</p>
-                        {isCancelledByDriver(order) && (
+                        {isDriverCancelled && (
                           <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-700 animate-pulse">
-                            ألغاه السائق
+                            Cancelled by Driver
                           </span>
                         )}
                         {canOpenBenefitPayTrace && (
@@ -2275,7 +2271,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       )}
                       {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
                         <button
-                          onClick={() => handleAssignNewDriver(order)}
+                          onClick={() => handleReassignClick(order)}
                           className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
                           title="Assign new driver and reopen"
                           aria-label="Assign new driver and reopen"
@@ -2309,6 +2305,82 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
           </>
         )}
       </section>
+
+      {reassigningOrder && (
+        <div
+          className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/15 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
+                  <UserPlus className="h-5 w-5" strokeWidth={2.4} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Order Delivery Reassignment</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950 font-bold">
+                    Assign New Driver
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setReassigningOrder(null)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-ring"
+                aria-label="Close modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-xs font-bold text-slate-600 space-y-1">
+                <p>Order Number: <span className="font-black text-brand">{deliveryOrderNumber(reassigningOrder)}</span></p>
+                <p>Value: <span className="font-black text-slate-950">{formatBhd(reassigningOrder.valueBhd)} BHD</span></p>
+                <p>Block / Area: <span className="font-black text-slate-950">{deliveryBlockAreaLabel(reassigningOrder, paymentTypes)}</span></p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Select New Driver
+                </label>
+                <SearchableSelect
+                  options={drivers.filter(d => d.isActive).map(d => ({
+                    value: d.id,
+                    label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name,
+                    hint: d.driverCode
+                  }))}
+                  value={reassignDriverId}
+                  onChange={setReassignDriverId}
+                  placeholder="Search and select driver..."
+                  allowClear={false}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setReassigningOrder(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReassignment}
+                disabled={!reassignDriverId || isReassigning}
+                className="btn-primary min-h-9 px-5 text-xs font-black uppercase tracking-widest disabled:opacity-50"
+              >
+                {isReassigning ? 'Assigning...' : 'Assign & Reopen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
