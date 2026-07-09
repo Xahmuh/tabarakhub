@@ -12,7 +12,7 @@ const TRANSFER_SELECT = `
   *,
   branch:branches!benefit_pay_transfers_branch_id_fkey(code, name),
   pharmacist:pharmacists!benefit_pay_transfers_pharmacist_id_fkey(code, name),
-  delivery_order:delivery_orders!benefit_pay_transfers_delivery_order_id_fkey(order_number)
+  delivery_order:delivery_orders!benefit_pay_transfers_delivery_order_id_fkey(order_number, delivery_status)
 `;
 
 const isValidDateKey = (value: string) => {
@@ -58,6 +58,7 @@ const toTransfer = (row: any): BenefitPayTransfer => ({
   source: row.source === 'delivery' ? 'delivery' : 'manual',
   deliveryOrderId: row.delivery_order_id || null,
   deliveryOrderNumber: row.delivery_order?.order_number || null,
+  deliveryOrderStatus: row.delivery_order?.delivery_status || null,
   notes: row.notes || null,
   createdBy: row.created_by || null,
   createdAt: row.created_at,

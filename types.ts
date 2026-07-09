@@ -764,6 +764,7 @@ export interface BenefitPayTransfer {
   source: BenefitPayTransferSource;
   deliveryOrderId?: string | null;
   deliveryOrderNumber?: string | null;
+  deliveryOrderStatus?: DeliveryLifecycleStatus | null;
   notes?: string | null;
   createdBy?: string | null;
   createdAt: string;

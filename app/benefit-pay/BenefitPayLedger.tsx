@@ -42,7 +42,7 @@ import {
 } from './exports';
 
 type LedgerTab = 'record' | 'dashboard';
-type BenefitPaySourceFilter = BenefitPayTransfer['source'] | 'all';
+type BenefitPaySourceFilter = 'all' | 'manual' | 'delivery' | 'delivery_active' | 'delivery_cancelled';
 const LEDGER_PAGE_SIZE = 20;
 
 interface BenefitPayLedgerProps {
@@ -83,13 +83,24 @@ const transferTypeClass = (type: BenefitPayTransferType) => {
   return 'border-emerald-100 bg-emerald-50 text-emerald-700';
 };
 
-const sourceBadgeClass = (source: BenefitPayTransfer['source']) =>
-  source === 'delivery'
+const isCancelledDeliveryTransfer = (row: BenefitPayTransfer) =>
+  row.source === 'delivery' && row.deliveryOrderStatus === 'cancelled';
+
+const canModifyTransfer = (row: BenefitPayTransfer) => row.source === 'manual';
+
+const sourceBadgeClass = (row: BenefitPayTransfer) =>
+  isCancelledDeliveryTransfer(row)
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : row.source === 'delivery'
     ? 'border-brand/10 bg-brand/5 text-brand'
     : 'border-slate-200 bg-slate-50 text-slate-600';
 
 const sourceLabel = (row: BenefitPayTransfer) =>
-  row.source === 'delivery' ? `Delivery ${row.deliveryOrderNumber || ''}`.trim() : 'In-store';
+  isCancelledDeliveryTransfer(row)
+    ? `Cancelled Delivery ${row.deliveryOrderNumber || ''}`.trim()
+    : row.source === 'delivery'
+      ? `Delivery ${row.deliveryOrderNumber || ''}`.trim()
+      : 'In-store';
 
 type KpiTone = 'brand' | 'blue' | 'violet' | 'emerald' | 'slate';
 
@@ -218,16 +229,24 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
   const lockStorageKey = recordBranchId ? `benefit-pay-entry-locks:${recordBranchId}` : null;
 
   const totals = useMemo(() => transfers.reduce((acc, row) => {
-    acc.total += row.valueBhd;
-    acc.count += 1;
-    acc[row.transferType] += row.valueBhd;
-    if (row.source === 'delivery') {
-      acc.delivery += row.valueBhd;
-      acc.deliveryCount += 1;
+    const isCancelled = isCancelledDeliveryTransfer(row);
+    if (isCancelled) {
+      acc.cancelledTotal += row.valueBhd;
+      acc.cancelledCount += 1;
     } else {
-      acc.manual += row.valueBhd;
-      acc.manualCount += 1;
+      acc.total += row.valueBhd;
+      acc.count += 1;
+      acc[row.transferType] += row.valueBhd;
+      if (row.source === 'delivery') {
+        acc.delivery += row.valueBhd;
+        acc.deliveryCount += 1;
+      } else {
+        acc.manual += row.valueBhd;
+        acc.manualCount += 1;
+      }
     }
+    acc.allTotal += row.valueBhd;
+    acc.allCount += 1;
     return acc;
   }, {
     AFS: 0,
@@ -238,7 +257,11 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     manualCount: 0,
     deliveryCount: 0,
     total: 0,
-    count: 0
+    count: 0,
+    cancelledTotal: 0,
+    cancelledCount: 0,
+    allTotal: 0,
+    allCount: 0
   }), [transfers]);
   const sortedTransfers = useMemo(() => {
     const byTime = (a: BenefitPayTransfer, b: BenefitPayTransfer) =>
@@ -299,14 +322,28 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
     }
     setIsLoading(true);
     try {
+      const sourceFilter = activeTab === 'dashboard' ? dashboardSource : undefined;
+      const dbSource = (sourceFilter === 'delivery_active' || sourceFilter === 'delivery_cancelled' || sourceFilter === 'delivery')
+        ? 'delivery'
+        : (sourceFilter === 'manual' ? 'manual' : undefined);
+
       const rows = await benefitPayService.transfers.list({
         branchId: activeBranchFilter || 'all',
         dateFrom: range.from,
         dateTo: range.to,
         transferType: activeTab === 'dashboard' ? dashboardTransferType : undefined,
-        source: activeTab === 'dashboard' ? dashboardSource : undefined
+        source: dbSource
       });
-      setTransfers(rows);
+
+      let filteredRows = rows;
+      if (activeTab === 'dashboard') {
+        if (sourceFilter === 'delivery_active') {
+          filteredRows = rows.filter(r => r.source === 'delivery' && r.deliveryOrderStatus !== 'cancelled');
+        } else if (sourceFilter === 'delivery_cancelled') {
+          filteredRows = rows.filter(r => r.source === 'delivery' && r.deliveryOrderStatus === 'cancelled');
+        }
+      }
+      setTransfers(filteredRows);
     } catch (error) {
       console.error('Benefit Pay Ledger load failed', error);
       setTransfers([]);
@@ -778,7 +815,17 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current view</p>
               <p className="mt-0.5 text-xs font-black text-slate-800">
-                {dashboardTransferType === 'all' ? 'All types' : dashboardTransferType} / {dashboardSource === 'all' ? 'All sources' : dashboardSource === 'manual' ? 'In-store' : 'Delivery'}
+                {dashboardTransferType === 'all' ? 'All types' : dashboardTransferType} / {
+                  dashboardSource === 'all'
+                    ? 'All sources'
+                    : dashboardSource === 'manual'
+                    ? 'In-store'
+                    : dashboardSource === 'delivery_active'
+                    ? 'Active Delivery'
+                    : dashboardSource === 'delivery_cancelled'
+                    ? 'Cancelled Delivery'
+                    : 'Delivery'
+                }
               </p>
             </div>
           </div>
@@ -806,11 +853,12 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
 
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Source</p>
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
+              <div className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200/60 bg-slate-100/70 p-1">
                 {([
                   { value: 'all', label: 'All' },
                   { value: 'manual', label: 'In-store' },
-                  { value: 'delivery', label: 'Delivery' }
+                  { value: 'delivery_active', label: 'Active Del' },
+                  { value: 'delivery_cancelled', label: 'Cancelled Del' }
                 ] as Array<{ value: BenefitPaySourceFilter; label: string }>).map(option => (
                   <button
                     key={option.value}
@@ -856,10 +904,34 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
 
       {activeTab === 'dashboard' && (
         <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <KpiCard label="Total transfers" value={String(totals.count)} sub={periodLabel(preset, range.from, range.to)} icon={<ReceiptText className="h-4 w-4" />} tone="slate" />
-          <KpiCard label="Total value" value={`${formatBhd(totals.total)} BHD`} icon={<Banknote className="h-4 w-4" />} tone="brand" />
-          <KpiCard label="In-store" value={String(totals.manualCount)} sub={`${formatBhd(totals.manual)} BHD`} icon={<Landmark className="h-4 w-4" />} tone="emerald" />
-          <KpiCard label="Delivery BP" value={String(totals.deliveryCount)} sub={`${formatBhd(totals.delivery)} BHD`} icon={<WalletCards className="h-4 w-4" />} tone="blue" />
+          <KpiCard
+            label="Active transfers"
+            value={String(totals.count)}
+            sub={totals.cancelledCount > 0 ? `All: ${totals.allCount} (${totals.cancelledCount} cancelled)` : periodLabel(preset, range.from, range.to)}
+            icon={<ReceiptText className="h-4 w-4" />}
+            tone="slate"
+          />
+          <KpiCard
+            label="Active total value"
+            value={`${formatBhd(totals.total)} BHD`}
+            sub={totals.cancelledTotal > 0 ? `Cancelled: ${formatBhd(totals.cancelledTotal)} BHD` : periodLabel(preset, range.from, range.to)}
+            icon={<Banknote className="h-4 w-4" />}
+            tone="brand"
+          />
+          <KpiCard
+            label="In-store (Active)"
+            value={String(totals.manualCount)}
+            sub={`${formatBhd(totals.manual)} BHD`}
+            icon={<Landmark className="h-4 w-4" />}
+            tone="emerald"
+          />
+          <KpiCard
+            label="Delivery BP (Active)"
+            value={String(totals.deliveryCount)}
+            sub={`${formatBhd(totals.delivery)} BHD`}
+            icon={<WalletCards className="h-4 w-4" />}
+            tone="blue"
+          />
         </section>
       )}
 
@@ -875,7 +947,9 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
             <p className="mt-0.5 text-xs font-bold text-slate-400">{recordsScopeMeta}</p>
           </div>
           <p className="text-xs font-bold text-slate-400">
-            {transfers.length} transfers / {formatBhd(totals.total)}
+            {totals.cancelledCount > 0
+              ? `${totals.count} active (${totals.cancelledCount} cancelled) / ${formatBhd(totals.total)} BHD`
+              : `${totals.count} transfers / ${formatBhd(totals.total)} BHD`}
           </p>
         </div>
 
@@ -933,40 +1007,46 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenDeliveryOrder?.(row)}
-                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black transition hover:border-brand/30 hover:bg-brand/10 ${sourceBadgeClass(row.source)}`}
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black transition hover:border-brand/30 hover:bg-brand/10 ${sourceBadgeClass(row)}`}
                             title="Open linked delivery order"
                           >
                             {sourceLabel(row)}
                             <ArrowUpRight className="h-3 w-3" />
                           </button>
                         ) : (
-                          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${sourceBadgeClass(row.source)}`}>
+                          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${sourceBadgeClass(row)}`}>
                             {sourceLabel(row)}
                           </span>
                         )}
                       </td>
                       {canManageRows && (
                         <td className="py-2 text-right">
-                          <div className="inline-flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(row)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100"
-                              title="Edit transfer"
-                              aria-label="Edit transfer"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(row)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100"
-                              title="Delete transfer"
-                              aria-label="Delete transfer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                          {canModifyTransfer(row) ? (
+                            <div className="inline-flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(row)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100"
+                                title="Edit transfer"
+                                aria-label="Edit transfer"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(row)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100"
+                                title="Delete transfer"
+                                aria-label="Delete transfer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-100 bg-slate-50 px-2 text-[10px] font-bold text-slate-400" title="Auto-synced from delivery order. Must edit in delivery order.">
+                              <Lock className="h-3 w-3" /> Auto-synced
+                            </span>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -1007,35 +1087,43 @@ export const BenefitPayLedger: React.FC<BenefitPayLedgerProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenDeliveryOrder?.(row)}
-                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black transition hover:border-brand/30 hover:bg-brand/10 ${sourceBadgeClass(row.source)}`}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-black transition hover:border-brand/30 hover:bg-brand/10 ${sourceBadgeClass(row)}`}
                         title="Open linked delivery order"
                       >
                         {sourceLabel(row)}
                         <ArrowUpRight className="h-3 w-3" />
                       </button>
                     ) : (
-                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${sourceBadgeClass(row.source)}`}>
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${sourceBadgeClass(row)}`}>
                         {sourceLabel(row)}
                       </span>
                     )}
                     {canManageRows && (
                       <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(row)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700"
-                          aria-label="Edit transfer"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(row)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700"
-                          aria-label="Delete transfer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {canModifyTransfer(row) ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(row)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700"
+                              aria-label="Edit transfer"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(row)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700"
+                              aria-label="Delete transfer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-100 bg-slate-50 px-2 text-[10px] font-bold text-slate-400" title="Auto-synced from delivery order. Must edit in delivery order.">
+                            <Lock className="h-3 w-3" /> Auto-synced
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
