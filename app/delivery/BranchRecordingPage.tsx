@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { pharmacistService } from '../../services/pharmacistService';
@@ -837,6 +837,69 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       onEditDone?.();
     }
   }, [orderToEdit]);
+
+  const isCancelledByDriver = (order: DeliveryOrder) => {
+    if (order.deliveryStatus !== 'cancelled') return false;
+    const reason = order.cancelledReason || '';
+    return reason.includes('driver mobile') || reason.includes('تطبيق السائق') || reason.includes('منسوخ') || reason.includes('বাতيل');
+  };
+
+  const handleAssignNewDriver = async (order: DeliveryOrder) => {
+    const activeDrivers = drivers.filter(d => d.isActive);
+    if (activeDrivers.length === 0) {
+      Swal.fire('No active drivers', 'There are no active drivers assigned to this branch.', 'warning');
+      return;
+    }
+
+    const driverOptions = activeDrivers.reduce((acc, d) => {
+      acc[d.id] = d.driverCode ? `${d.driverCode} - ${d.name}` : d.name;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const { value: newDriverId } = await Swal.fire({
+      title: 'Assign New Driver',
+      text: `Select a new driver to deliver Order ${deliveryOrderNumber(order)}`,
+      input: 'select',
+      inputOptions: driverOptions,
+      inputPlaceholder: 'Select a driver...',
+      showCancelButton: true,
+      confirmButtonText: 'Assign & Reopen',
+      confirmButtonColor: '#0f172a',
+      cancelButtonText: 'Cancel',
+      inputValidator: (value) => {
+        return new Promise((resolve) => {
+          if (value) {
+            resolve();
+          } else {
+            resolve('You must select a driver');
+          }
+        });
+      }
+    });
+
+    if (!newDriverId) return;
+
+    setIsLoading(true);
+    try {
+      await deliveryService.orders.update(order.id, { driverId: newDriverId });
+      await deliveryService.lifecycle.returnOrder({
+        orderId: order.id,
+        notes: `Reassigned to new driver by pharmacy`
+      });
+      await loadHistory();
+      Swal.fire({
+        title: 'Success',
+        text: 'The order has been reassigned and is now active in Dispatch.',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error: any) {
+      Swal.fire('Reassignment failed', error?.message || 'Could not reassign this order.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
@@ -2023,8 +2086,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         <div className="grid w-full grid-cols-[28px_minmax(0,1fr)] items-start gap-2">
                           <PaymentStatusCircleBadge order={order} />
                           <div className="min-w-0 text-left">
-                            <div className="flex min-w-0 items-center justify-start gap-1.5">
+                            <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5">
                               <span className="block break-words font-black leading-5 text-brand" title={deliveryOrderNumber(order)}>{deliveryOrderNumber(order)}</span>
+                              {isCancelledByDriver(order) && (
+                                <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-700 animate-pulse">
+                                  ألغاه السائق
+                                </span>
+                              )}
                               {canOpenBenefitPayTrace && (
                                 <button
                                   type="button"
@@ -2092,6 +2160,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                                 {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Settle Cash'}
                               </button>
                             )}
+                            {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
+                              <button
+                                onClick={() => handleAssignNewDriver(order)}
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                                title="Assign new driver and reopen"
+                                aria-label="Assign new driver and reopen"
+                              >
+                                <UserPlus className="h-3.5 w-3.5" />
+                                Reassign
+                              </button>
+                            )}
                             <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -2134,8 +2213,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   <div className="mt-1 grid w-full grid-cols-[28px_minmax(0,1fr)] items-start gap-2">
                     <PaymentStatusCircleBadge order={order} />
                     <div className="min-w-0 text-left">
-                      <div className="flex min-w-0 items-center justify-start gap-1.5">
+                      <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5">
                         <p className="min-w-0 break-words text-[11px] font-black uppercase tracking-widest text-brand">{deliveryOrderNumber(order)}</p>
+                        {isCancelledByDriver(order) && (
+                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-700 animate-pulse">
+                            ألغاه السائق
+                          </span>
+                        )}
                         {canOpenBenefitPayTrace && (
                           <button
                             type="button"
@@ -2187,6 +2271,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         >
                           <CheckCircle2 className="h-4 w-4" />
                           {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Settle Cash'}
+                        </button>
+                      )}
+                      {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
+                        <button
+                          onClick={() => handleAssignNewDriver(order)}
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                          title="Assign new driver and reopen"
+                          aria-label="Assign new driver and reopen"
+                        >
+                          <UserPlus className="h-3.5 w-3.5" />
+                          Reassign
                         </button>
                       )}
                       <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
