@@ -885,23 +885,25 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => {
-                                const expiryDate = new Date();
-                                expiryDate.setDate(expiryDate.getDate() + 7);
-                                const expiryStr = expiryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                                const branchName = session?.branches?.name || 'Tabarak Pharmacy';
-                                const fullName = `${firstName} ${lastName}`;
-                                const fullPhone = `${countryCode}${phone}`;
-                                const text = `Hey Tabarak! I just won ${wonPrize.name} at ${branchName}, My voucher code is ${voucherCode} and its expiry is ${expiryStr}.. my name is ${fullName} and my phone number is ${fullPhone}`;
+                        <div className={session?.branches?.whatsapp_number ? "grid grid-cols-2 gap-3" : "w-full"}>
+                            {session?.branches?.whatsapp_number && (
+                                <button onClick={() => {
+                                    const expiryDate = new Date();
+                                    expiryDate.setDate(expiryDate.getDate() + 7);
+                                    const expiryStr = expiryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                    const branchName = session?.branches?.name || 'Tabarak Pharmacy';
+                                    const fullName = `${firstName} ${lastName}`;
+                                    const fullPhone = `${countryCode}${phone}`;
+                                    const text = `Hey Tabarak! I just won ${wonPrize.name} at ${branchName}, My voucher code is ${voucherCode} and its expiry is ${expiryStr}.. my name is ${fullName} and my phone number is ${fullPhone}`;
 
-                                const targetPhone = session?.branches?.whatsapp_number || '97333616996';
-                                window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`, '_blank');
-                            }} className="bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98]">
-                                <MessageCircle className="w-5 h-5" />
-                                <span>Share with Pharmacy</span>
-                            </button>
-                            <button onClick={downloadVoucher} disabled={isLoading} className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98]">
+                                    const targetPhone = session.branches.whatsapp_number;
+                                    window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                                }} className="bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98] w-full">
+                                    <MessageCircle className="w-5 h-5" />
+                                    <span>Share with Pharmacy</span>
+                                </button>
+                            )}
+                            <button onClick={downloadVoucher} disabled={isLoading} className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98] w-full">
                                 <Download className="w-5 h-5" />
                                 <span>{isLoading ? 'Saving...' : 'Save Voucher'}</span>
                             </button>
