@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { formatBhd, getPresetRange } from './utils';
 import { isDeliveryPaymentBlockExempt, normalizeDeliveryPaymentCode } from '../../lib/deliveryPaymentTypes';
+import { BahrainLicensePlate } from './components/BahrainLicensePlate';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 
@@ -197,6 +198,10 @@ export const DeliverySettings: React.FC = () => {
             <input id="swal-name" value="${escapeHtml(driver?.name)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
           <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Fleet Vehicle / Plate Number</label>
+            <input id="swal-plate" value="${escapeHtml(driver?.notes || '39717')}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" placeholder="e.g. 39717">
+          </div>
+          <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone (optional)</label>
             <input id="swal-phone" value="${escapeHtml(driver?.phone)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
@@ -206,12 +211,19 @@ export const DeliverySettings: React.FC = () => {
       confirmButtonColor: '#B91c1c',
       preConfirm: () => ({
         name: (document.getElementById('swal-name') as HTMLInputElement).value.trim(),
-        phone: (document.getElementById('swal-phone') as HTMLInputElement).value.trim()
+        phone: (document.getElementById('swal-phone') as HTMLInputElement).value.trim(),
+        notes: (document.getElementById('swal-plate') as HTMLInputElement).value.trim() || undefined
       })
     });
     if (!value?.name) return;
     try {
-      await deliveryService.drivers.upsert({ id: driver?.id, name: value.name, phone: value.phone || undefined, isActive: driver?.isActive ?? true });
+      await deliveryService.drivers.upsert({
+        id: driver?.id,
+        name: value.name,
+        phone: value.phone || undefined,
+        notes: value.notes || undefined,
+        isActive: driver?.isActive ?? true
+      });
       await load();
     } catch (e: any) {
       Swal.fire('Save failed', e?.message || 'Could not save driver.', 'error');
@@ -760,40 +772,52 @@ export const DeliverySettings: React.FC = () => {
               <p className="mt-1 text-2xl font-black text-brand tabular-nums">{selectedDriverIds.size}</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {drivers.map(driver => (
-              <div key={driver.id} className={`rounded-lg border p-3 ${selectedDriverIds.has(driver.id) ? 'border-brand/40 bg-brand/5' : driver.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedDriverIds.has(driver.id)}
-                      onChange={() => toggleDriverSelection(driver.id)}
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                      aria-label={`Select ${driver.name}`}
-                    />
-                    <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-800">{driver.name}</p>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-brand">
-                      {driver.driverCode || 'Pending Driver ID'}
-                    </p>
-                      {driver.authUserId && <p className="mt-1 text-[10px] font-bold text-slate-400">Linked login account</p>}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {drivers.map(driver => {
+              const plateNumber = driver.notes?.trim() || '39717';
+
+              return (
+                <div key={driver.id} className={`rounded-xl border p-3.5 shadow-sm transition-all ${selectedDriverIds.has(driver.id) ? 'border-brand/40 bg-brand/5 ring-1 ring-brand/20' : driver.isActive ? 'border-slate-200 bg-white hover:border-slate-300' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedDriverIds.has(driver.id)}
+                        onChange={() => toggleDriverSelection(driver.id)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        aria-label={`Select ${driver.name}`}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-900 leading-snug">{driver.name}</p>
+                        <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-brand">
+                          {driver.driverCode || 'Pending Driver ID'}
+                        </p>
+                        {driver.phone && <p className="mt-0.5 text-[11px] font-bold text-slate-400">{driver.phone}</p>}
+                        {driver.authUserId && <p className="mt-0.5 text-[10px] font-bold text-cyan-600">✓ Linked Login</p>}
+                      </div>
+                    </div>
+
+                    {/* Realistic Bahrain Metal License Plate */}
+                    <div className="shrink-0 flex flex-col items-end gap-1.5">
+                      <BahrainLicensePlate plateNumber={plateNumber} size="sm" withHolder={false} />
+                      <span className={`rounded-md border px-2 py-0.5 text-[8.5px] font-black uppercase tracking-wider ${driver.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                        {driver.isActive ? 'Active' : 'Inactive'}
+                      </span>
                     </div>
                   </div>
-                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase ${driver.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
-                    {driver.isActive ? 'Active' : 'Inactive'}
-                  </span>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] font-bold">
+                    <button onClick={() => editDriver(driver)} className="text-slate-600 hover:text-brand">Edit Plate / Info</button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => toggleDriver(driver)} className="text-slate-400 hover:text-slate-600">
+                        {driver.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      <button onClick={() => deleteDrivers([driver])} className="text-red-500 hover:text-red-700">Delete</button>
+                    </div>
+                  </div>
                 </div>
-                {driver.phone && <p className="mt-1 text-[11px] font-bold text-slate-400">{driver.phone}</p>}
-                <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold">
-                  <button onClick={() => editDriver(driver)} className="text-slate-500 hover:text-brand">Edit</button>
-                  <button onClick={() => toggleDriver(driver)} className="text-slate-400 hover:text-brand">
-                    {driver.isActive ? 'Deactivate' : 'Reactivate'}
-                  </button>
-                  <button onClick={() => deleteDrivers([driver])} className="text-red-500 hover:text-red-700">Delete</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {drivers.length === 0 && <p className="text-xs font-bold text-slate-400">No drivers yet — add the first one.</p>}
           </div>
         </section>

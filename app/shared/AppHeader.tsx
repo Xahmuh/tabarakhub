@@ -105,29 +105,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {isModuleEnabled('settings') && ((isManagerRole(authState.user?.role) && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
                 <button
                   type="button"
-                  onClick={() => onTabChange('system-settings')}
+                  onClick={() => onTabChange('settings')}
                   className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
-                    activeTab === 'settings' || activeTab === 'system-settings'
+                    activeTab === 'settings' || activeTab === 'system-settings' || activeTab === 'access-control'
                       ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  <Settings className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'settings' || activeTab === 'system-settings' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
-                  <span>System</span>
-                </button>
-              )}
-              {isModuleEnabled('settings') && ((isManagerRole(authState.user?.role) && checkPermission('settings', 'edit')) || canOpenApprovalQueue) && (
-                <button
-                  type="button"
-                  onClick={() => onTabChange('access-control')}
-                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-[13px] font-bold transition-all duration-300 ${
-                    activeTab === 'access-control'
-                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <ShieldCheck className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'access-control' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
-                  <span>Access</span>
+                  <Settings className={`h-4 w-4 transition-colors duration-300 ${activeTab === 'settings' || activeTab === 'system-settings' || activeTab === 'access-control' ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
+                  <span>Control Center</span>
                 </button>
               )}
             </div>

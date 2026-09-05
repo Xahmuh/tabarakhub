@@ -221,18 +221,19 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
     tip: 'Treat Codex content as the operating reference, not informal chat history.'
   },
   settings: {
-    title: 'Settings & Permissions',
-    eyebrow: 'Control module',
-    summary: 'Manage branches, users, role permissions, system settings, and operational defaults.',
+    title: 'Unified Control Center',
+    eyebrow: 'Admin Suite',
+    summary: 'Consolidated control for system settings, user accounts, role matrix, branch infrastructure, and granular sub-tools.',
     icon: Settings2,
-    features: ['Branches', 'Pharmacists', 'Users & roles', 'Role permissions', 'Module layout', 'Delivery zones'],
+    features: ['Users & Permissions', 'Role Matrix & Defaults', 'Supervisor Scopes', 'Login Approvals', 'Branch Roster & Fleet', 'Delivery Zones', 'Module Layout & Badges', 'Branding & Logos', 'System Maintenance', 'Supabase Health'],
     steps: [
-      'Choose the settings tab that matches the configuration area.',
-      'Search existing records before adding a new branch, user, or staff member.',
-      'Save changes deliberately and re-check permissions after role updates.',
-      'Use delivery zones and module layout only when operational data is ready.'
+      'Navigate using the 4 Core Pillars (Identity, Operations, Experience, Maintenance).',
+      'Use the Sub-Tools button on any account to apply granular sub-tool permissions.',
+      'Adjust role matrix permissions with one-click cycle badges.',
+      'Manage branches, GPS coordinates, staff assignments, and delivery service rings.',
+      'Control global maintenance mode and inspect real-time Supabase connection health.'
     ],
-    tip: 'Settings changes can affect access, so validate with the intended role after saving.'
+    tip: 'Granular sub-tool overrides take deterministic priority over role matrix defaults.'
   },
   'system-settings': {
     title: 'System Settings',

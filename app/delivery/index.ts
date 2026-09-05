@@ -6,3 +6,5 @@ export { AdminDeliveryAnalytics } from './AdminDeliveryAnalytics';
 export { DeliveryCoverage } from './DeliveryCoverage';
 export { DeliveryProfitability } from './DeliveryProfitability';
 export { DeliverySettings } from './DeliverySettings';
+export { BahrainLicensePlate, FleetVehiclePlate, FleetVehiclesBar, FleetMotorcyclePlate, FleetMotorcyclesBar } from './components/BahrainLicensePlate';
+export type { BahrainLicensePlateProps } from './components/BahrainLicensePlate';
