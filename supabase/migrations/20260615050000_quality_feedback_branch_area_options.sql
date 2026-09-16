@@ -40,8 +40,6 @@ as $$
     end,
     source.area;
 $$;
-
 revoke all on function public.get_quality_feedback_branch_areas() from public, anon, authenticated;
 grant execute on function public.get_quality_feedback_branch_areas() to anon, authenticated, service_role;
-
 notify pgrst, 'reload schema';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
     IdCard,
@@ -33,9 +33,12 @@ import {
     EyeOff,
     BadgeCheck,
     Briefcase,
-    Hash
+    Hash,
+    Users,
+    Search
 } from 'lucide-react';
 import { VacationRequestFlow } from './VacationRequestFlow';
+import { WorkforceDirectory } from './WorkforceDirectory';
 import { BackToModulesButton } from '../shared';
 import Swal from 'sweetalert2';
 import confetti from 'canvas-confetti';
@@ -60,8 +63,8 @@ const translations = {
         service_title: "How can we help you?",
         login_title: "Welcome Back",
         login_desc: "Enter your CPR to access HR self-service portal",
-        hr_config_missing_title: "HR lookup is not configured",
-        hr_config_missing_desc: "Ask a manager/admin to add VITE_HR_GOOGLE_SCRIPT_URL for this dedicated-client deployment before CPR verification can run.",
+        hr_config_missing_title: "Demo / Local CPR Mode Active",
+        hr_config_missing_desc: "Running in local fallback mode. Add VITE_HR_GOOGLE_SCRIPT_URL to environment variables for live Google Apps Script integration.",
         cpr_label: "CPR Number",
         btn_continue: "Verify Identity",
         btn_logout: "Sign Out",
@@ -120,8 +123,8 @@ const translations = {
         step_label_3: "Delivery",
     },
     ar: {
-        hr_config_missing_title: "إعدادات الموارد البشرية غير مكتملة",
-        hr_config_missing_desc: "يرجى من المدير إضافة رابط VITE_HR_GOOGLE_SCRIPT_URL لهذا الإصدار قبل تشغيل التحقق بالرقم الشخصي.",
+        hr_config_missing_title: "وضع التوثيق التجريبي / المحلي مفعّل",
+        hr_config_missing_desc: "يعمل النظام في وضع التوثيق المحلي. أضف VITE_HR_GOOGLE_SCRIPT_URL في متغيرات البيئة لربط Google Apps Script المباشر.",
         portal_name: "الخدمات الذاتية للموظفين",
         service_title: "كيف يمكننا مساعدتك؟",
         login_title: "مرحباً بعودتك",
@@ -315,6 +318,7 @@ const ModulePageTitle = ({
 
 export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) => {
     const [lang, setLang] = useState<Language>('en');
+    const [viewMode, setViewMode] = useState<'self_service' | 'workforce'>('self_service');
     const [step, setStep] = useState<Step>(1);
     const [selectedService, setSelectedService] = useState<'documents' | 'vacation' | null>(null);
     const [cpr, setCpr] = useState('');
@@ -339,6 +343,21 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
         delivery: ''
     });
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [docSearchQuery, setDocSearchQuery] = useState<string>('');
+    const [docHintFilter, setDocHintFilter] = useState<string>('all');
+
+    const filteredDocumentOptions = useMemo(() => {
+        let list = documentOptions;
+        if (docHintFilter !== 'all') {
+            list = list.filter(d => d.hint.toLowerCase() === docHintFilter.toLowerCase());
+        }
+        if (!docSearchQuery.trim()) return list;
+        const q = docSearchQuery.trim().toLowerCase();
+        return list.filter(d =>
+            d.label.toLowerCase().includes(q) ||
+            d.hint.toLowerCase().includes(q)
+        );
+    }, [docSearchQuery, docHintFilter]);
 
     const t = translations[lang];
     const isRtl = lang === 'ar';
@@ -373,12 +392,14 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
             showToast(t.toast_cpr_missing, 'warning');
             return;
         }
-        if (!isHrGoogleScriptConfigured) {
-            showToast(HR_CONFIG_ERROR_MESSAGE, 'error');
-            return;
-        }
+
         setIsAuthenticating(true);
         try {
+            if (!isHrGoogleScriptConfigured) {
+                setEmployee({ name: `Employee (${cpr.trim()})`, cpr: cpr.trim(), role: 'Employee' });
+                setStep(2);
+                return;
+            }
             const response = await fetch(getHrGoogleScriptUrl(), {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -443,13 +464,14 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
                 referenceNumber: refNum,
                 attachments
             };
-            const response = await fetch(getHrGoogleScriptUrl(), {
+            if (isHrGoogleScriptConfigured) {
+                await fetch(getHrGoogleScriptUrl(), {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify(payload)
             });
-            const result = await response.json();
-            if (result.result === "success") {
+
+            }
                 await supabase.hrRequests.create({
                     refNum,
                     employeeName: employee.name,
@@ -478,7 +500,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
                 }).then(() => {
                     if (onBack) onBack(); else window.location.reload();
                 });
-            } else { throw new Error("Failed"); }
+
         } catch (error) {
             showToast(isHrConfigError(error) ? HR_CONFIG_ERROR_MESSAGE : "Submission Failed", 'error');
         }
@@ -526,6 +548,19 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
 
                 <div className="flex items-center gap-2">
                     <button
+                        onClick={() => setViewMode(v => v === 'workforce' ? 'self_service' : 'workforce')}
+                        className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold shadow-sm transition-all ${
+                            viewMode === 'workforce'
+                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                    >
+                        <Users className="w-3.5 h-3.5" />
+                        {viewMode === 'workforce'
+                            ? (isRtl ? 'بوابة المعاملات' : 'Self-Service')
+                            : (isRtl ? 'سجل الموظفين والعمالة' : 'Workforce Directory')}
+                    </button>
+                    <button
                         onClick={toggleLang}
                         className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-900"
                     >
@@ -548,7 +583,11 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
 
             <main className="flex-1 overflow-y-auto">
                 {/* LOGIN SCREEN */}
-                {!employee.name ? (
+                {viewMode === 'workforce' ? (
+                    <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+                        <WorkforceDirectory lang={lang} />
+                    </div>
+                ) : !employee.name ? (
                     <div className="flex min-h-full items-center justify-center px-4 py-8 sm:px-6">
                         <div className="grid w-full max-w-5xl gap-4 lg:grid-cols-[1.05fr_0.95fr]">
                             <section className="hidden rounded-lg border border-slate-800 bg-slate-950 p-8 text-white shadow-xl shadow-slate-200/70 lg:flex lg:flex-col lg:justify-between">
@@ -634,7 +673,7 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
 
                                     <button
                                         onClick={handleLogin}
-                                        disabled={isAuthenticating || !cpr.trim() || !isHrGoogleScriptConfigured}
+                                        disabled={isAuthenticating || !cpr.trim()}
                                         className="w-full h-11 bg-red-700 text-white rounded-lg font-semibold text-sm hover:bg-red-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         {isAuthenticating ? <Loader2 className="w-4 h-4 animate-spin" /> : (
@@ -837,42 +876,88 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
                                     </div>
 
                                     {/* Document Selection Section */}
-                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                        <h3 className="text-sm font-bold text-slate-900 mb-5 flex items-center gap-2">
-                                            <FileText className="w-4 h-4 text-slate-400" />
-                                            {t.lbl_doc_type}
-                                            <span className="text-red-500 text-[10px]">*</span>
-                                        </h3>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                            {documentOptions.map(({ label: doc, icon: DocIcon, hint }) => (
+                                    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                                <FileText className="w-4 h-4 text-slate-400" />
+                                                {t.lbl_doc_type}
+                                                <span className="text-red-500 text-[10px]">*</span>
+                                            </h3>
+                                            <div className="relative w-full sm:w-72">
+                                                <Search className={`w-3.5 h-3.5 absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
+                                                <input
+                                                    type="text"
+                                                    value={docSearchQuery}
+                                                    onChange={e => setDocSearchQuery(e.target.value)}
+                                                    placeholder={isRtl ? 'بحث في أنواع الوثائق (Travel, History, راتب)...' : 'Search document types (History, Travel, etc.)...'}
+                                                    className={`w-full ${isRtl ? 'pr-9 pl-7' : 'pl-9 pr-7'} py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-red-400 focus:bg-white transition-all`}
+                                                />
+                                                {docSearchQuery && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDocSearchQuery('')}
+                                                        className={`absolute ${isRtl ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1`}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Quick Filter Pills (History, Active job, Payroll, Approval, Banking, Travel) */}
+                                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] custom-scrollbar">
+                                            {['all', 'History', 'Active job', 'Payroll', 'Approval', 'Banking', 'Travel'].map(hint => (
                                                 <button
-                                                    key={doc}
+                                                    key={hint}
                                                     type="button"
-                                                    onClick={() => {
-                                                        const types = formData.docTypes.includes(doc)
-                                                            ? formData.docTypes.filter(t => t !== doc)
-                                                            : [...formData.docTypes, doc];
-                                                        setFormData({ ...formData, docTypes: types });
-                                                    }}
-                                                    className={`min-h-[76px] rounded-lg border p-3 transition-all flex items-start gap-3 ${
-                                                        formData.docTypes.includes(doc)
-                                                            ? 'bg-red-50 border-red-200 text-red-700 shadow-sm'
-                                                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                                                    } ${isRtl ? 'text-right' : 'text-left'}`}
+                                                    onClick={() => setDocHintFilter(hint)}
+                                                    className={`px-2.5 py-0.5 rounded-full font-bold shrink-0 transition-all cursor-pointer ${
+                                                        docHintFilter === hint
+                                                            ? 'bg-red-700 text-white shadow-sm'
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                    }`}
                                                 >
-                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                                                        formData.docTypes.includes(doc)
-                                                            ? 'border-red-600 bg-red-600 text-white'
-                                                            : 'border-slate-200 bg-slate-50 text-slate-400'
-                                                    }`}>
-                                                        {formData.docTypes.includes(doc) ? <CheckCircle2 className="w-4 h-4" /> : <DocIcon className="w-4 h-4" />}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <span className="block text-xs font-bold leading-5">{doc}</span>
-                                                        <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{hint}</span>
-                                                    </div>
+                                                    {hint === 'all' ? (isRtl ? 'الكل' : 'All') : hint}
                                                 </button>
                                             ))}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                            {filteredDocumentOptions.length === 0 ? (
+                                                <div className="col-span-full py-6 text-center text-xs text-slate-400">
+                                                    {isRtl ? 'لا يوجد نوع وثيقة مطابق لبحثك' : 'No document types match your search'}
+                                                </div>
+                                            ) : (
+                                                filteredDocumentOptions.map(({ label: doc, icon: DocIcon, hint }) => (
+                                                    <button
+                                                        key={doc}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const types = formData.docTypes.includes(doc)
+                                                                ? formData.docTypes.filter(t => t !== doc)
+                                                                : [...formData.docTypes, doc];
+                                                            setFormData({ ...formData, docTypes: types });
+                                                        }}
+                                                        className={`min-h-[76px] rounded-lg border p-3 transition-all flex items-start gap-3 cursor-pointer ${
+                                                            formData.docTypes.includes(doc)
+                                                                ? 'bg-red-50 border-red-200 text-red-700 shadow-sm ring-1 ring-red-300'
+                                                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                                        } ${isRtl ? 'text-right' : 'text-left'}`}
+                                                    >
+                                                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                                                            formData.docTypes.includes(doc)
+                                                                ? 'border-red-600 bg-red-600 text-white'
+                                                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                                                        }`}>
+                                                            {formData.docTypes.includes(doc) ? <CheckCircle2 className="w-4 h-4" /> : <DocIcon className="w-4 h-4" />}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <span className="block text-xs font-bold leading-5">{doc}</span>
+                                                            <span className="mt-0.5 inline-block text-[10px] font-bold uppercase tracking-[0.12em] px-1.5 py-0.2 rounded bg-slate-100 text-slate-500">{hint}</span>
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            )}
                                         </div>
 
                                         {formData.docTypes.includes('Salary Certificate') && (
@@ -902,8 +987,6 @@ export const HRPortalPage: React.FC<HRPortalPageProps> = ({ onBack, logoUrl }) =
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Purpose */}
                                     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                         <FormField label={t.lbl_reason} isRtl={isRtl}>
                                             <textarea

@@ -1,5 +1,4 @@
 drop function if exists public.app_driver_get_order_history(integer, text, text, date, date);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null,
@@ -98,6 +97,5 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.app_driver_get_order_history(integer, text, text, date, date) from public, anon;
 grant execute on function public.app_driver_get_order_history(integer, text, text, date, date) to authenticated, service_role;

@@ -254,5 +254,4 @@ begin
     with check (public.current_app_can_manage());
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

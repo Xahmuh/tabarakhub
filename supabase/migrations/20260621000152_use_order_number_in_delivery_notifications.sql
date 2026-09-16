@@ -99,6 +99,5 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.app_enqueue_delivery_delivered_notification() from public, anon, authenticated;
 grant execute on function public.app_enqueue_delivery_delivered_notification() to service_role;

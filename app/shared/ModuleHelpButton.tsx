@@ -31,7 +31,6 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 export type ModuleHelpKey =
-  | 'command-center'
   | 'owner-dashboard'
   | 'pos'
   | 'dashboard'
@@ -66,20 +65,6 @@ type ModuleHelpContent = {
 };
 
 const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
-  'command-center': {
-    title: 'Daily Command Center',
-    eyebrow: 'Operations module',
-    summary: 'One control view for daily risks, saved tasks, branch health, and urgent follow-up.',
-    icon: Radar,
-    features: ['Unified alerts', 'Saved operations tasks', 'Branch health', 'Pending work', 'Yesterday exports'],
-    steps: [
-      'Start by reviewing the risk counters and branch health summary.',
-      'Open any alert to inspect the affected branch, workflow, and recommended action.',
-      'Create a saved task only when the alert needs accountable follow-up.',
-      'Update task status and comments so the event trail stays clear for managers.'
-    ],
-    tip: 'Suggested actions are not persisted until a real task is created.'
-  },
   'owner-dashboard': {
     title: 'Owner Dashboard',
     eyebrow: 'Owner read-only module',
@@ -221,46 +206,46 @@ const MODULE_HELP_CONTENT: Record<ModuleHelpKey, ModuleHelpContent> = {
     tip: 'Treat Codex content as the operating reference, not informal chat history.'
   },
   settings: {
-    title: 'Settings & Permissions',
-    eyebrow: 'Control module',
-    summary: 'Manage branches, users, role permissions, system settings, and operational defaults.',
+    title: 'Control Center',
+    eyebrow: 'System & Security Control',
+    summary: 'Unified control center for Identity & Access, Operational Infrastructure, System Experience, and Maintenance.',
     icon: Settings2,
-    features: ['Branches', 'Pharmacists', 'Users & roles', 'Role permissions', 'Module layout', 'Delivery zones'],
+    features: ['Identity & Access', 'Operational Infrastructure', 'System Experience', 'Maintenance & Domain'],
     steps: [
-      'Choose the settings tab that matches the configuration area.',
-      'Search existing records before adding a new branch, user, or staff member.',
-      'Save changes deliberately and re-check permissions after role updates.',
-      'Use delivery zones and module layout only when operational data is ready.'
+      'Navigate between the 4 Pillars in the Control Center.',
+      'Manage Users, Roles, Branch Overrides, and Sub-feature Permissions.',
+      'Configure Pharmacy Branches, Staff, and Delivery Zones.',
+      'Customize System Branding, Launcher Layout, and Maintenance Mode.'
     ],
-    tip: 'Settings changes can affect access, so validate with the intended role after saving.'
+    tip: 'All access control changes update in real time with zero-conflict resolution.'
   },
   'system-settings': {
-    title: 'System Settings',
-    eyebrow: 'System module',
-    summary: 'Manage maintenance mode, branding, module layout, delivery zones, and branch operating records.',
+    title: 'Control Center',
+    eyebrow: 'System & Security Control',
+    summary: 'Unified control center for Identity & Access, Operational Infrastructure, System Experience, and Maintenance.',
     icon: Settings2,
-    features: ['Maintenance mode', 'Login branding', 'Footer branding', 'Module layout', 'Delivery zones', 'Branches'],
+    features: ['Identity & Access', 'Operational Infrastructure', 'System Experience', 'Maintenance & Domain'],
     steps: [
-      'Start with maintenance status when the domain needs to be paused.',
-      'Update branding and login copy before changing public-facing pages.',
-      'Use Module Layout to arrange launcher cards and badges.',
-      'Maintain branches and delivery zones before relying on branch-level dashboards.'
+      'Navigate between the 4 Pillars in the Control Center.',
+      'Manage Users, Roles, Branch Overrides, and Sub-feature Permissions.',
+      'Configure Pharmacy Branches, Staff, and Delivery Zones.',
+      'Customize System Branding, Launcher Layout, and Maintenance Mode.'
     ],
-    tip: 'System changes affect every user, so refresh and verify from the module launcher after saving.'
+    tip: 'All access control changes update in real time with zero-conflict resolution.'
   },
   'access-control': {
-    title: 'Access Control',
-    eyebrow: 'Security module',
-    summary: 'Manage people, users, role defaults, module permissions, and trusted login approvals.',
-    icon: ShieldCheck,
-    features: ['People records', 'Users & roles', 'Role defaults', 'Branch permissions', 'Login approvals'],
+    title: 'Control Center',
+    eyebrow: 'System & Security Control',
+    summary: 'Unified control center for Identity & Access, Operational Infrastructure, System Experience, and Maintenance.',
+    icon: Settings2,
+    features: ['Identity & Access', 'Operational Infrastructure', 'System Experience', 'Maintenance & Domain'],
     steps: [
-      'Review the user or role identity before changing permissions.',
-      'Use read/edit levels to separate viewing from operational actions.',
-      'Check the role preview to confirm what each identity will see.',
-      'Approve login requests only when the device and branch context are expected.'
+      'Navigate between the 4 Pillars in the Control Center.',
+      'Manage Users, Roles, Branch Overrides, and Sub-feature Permissions.',
+      'Configure Pharmacy Branches, Staff, and Delivery Zones.',
+      'Customize System Branding, Launcher Layout, and Maintenance Mode.'
     ],
-    tip: 'After permission changes, validate with the intended role before treating access as final.'
+    tip: 'All access control changes update in real time with zero-conflict resolution.'
   },
   'feedback-form': {
     title: 'QA Insights',

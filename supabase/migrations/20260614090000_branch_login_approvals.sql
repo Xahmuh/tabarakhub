@@ -24,7 +24,6 @@ create table if not exists public.branch_login_approvals (
   constraint branch_login_approvals_status_check
     check (status in ('pending', 'approved', 'rejected', 'expired', 'cancelled'))
 );
-
 create index if not exists branch_login_approvals_user_id_idx
   on public.branch_login_approvals(user_id);
 create index if not exists branch_login_approvals_branch_id_idx
@@ -37,11 +36,9 @@ create index if not exists branch_login_approvals_expires_at_idx
   on public.branch_login_approvals(expires_at);
 create index if not exists branch_login_approvals_device_fingerprint_hash_idx
   on public.branch_login_approvals(device_fingerprint_hash);
-
 create unique index if not exists branch_login_approvals_one_pending_device_idx
   on public.branch_login_approvals(user_id, branch_id, coalesce(device_fingerprint_hash, ''))
   where status = 'pending';
-
 create or replace function public.branch_login_approvals_touch_updated_at()
 returns trigger
 language plpgsql
@@ -52,12 +49,10 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists branch_login_approvals_touch_updated_at on public.branch_login_approvals;
 create trigger branch_login_approvals_touch_updated_at
 before update on public.branch_login_approvals
 for each row execute function public.branch_login_approvals_touch_updated_at();
-
 create or replace function public.current_app_can_approve_branch_login()
 returns boolean
 language sql
@@ -67,19 +62,15 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager', 'owner'), false)
 $$;
-
 revoke all on function public.current_app_can_approve_branch_login() from public, anon;
 grant execute on function public.current_app_can_approve_branch_login() to authenticated, service_role;
-
 alter table public.branch_login_approvals enable row level security;
-
 revoke all on public.branch_login_approvals from anon;
 revoke all on public.branch_login_approvals from authenticated;
 grant select, insert on public.branch_login_approvals to authenticated;
 grant update (status, approved_by, approved_at, rejected_by, rejected_at, rejection_reason, updated_at)
   on public.branch_login_approvals to authenticated;
 grant all on public.branch_login_approvals to service_role;
-
 drop policy if exists "branch login approvals select own or approver" on public.branch_login_approvals;
 create policy "branch login approvals select own or approver"
 on public.branch_login_approvals
@@ -89,7 +80,6 @@ using (
   user_id = auth.uid()
   or public.current_app_can_approve_branch_login()
 );
-
 drop policy if exists "branch login approvals insert own branch pending" on public.branch_login_approvals;
 create policy "branch login approvals insert own branch pending"
 on public.branch_login_approvals
@@ -105,7 +95,6 @@ with check (
   and rejected_by is null
   and rejected_at is null
 );
-
 drop policy if exists "branch login approvals approver update" on public.branch_login_approvals;
 create policy "branch login approvals approver update"
 on public.branch_login_approvals
@@ -113,7 +102,6 @@ for update
 to authenticated
 using (public.current_app_can_approve_branch_login())
 with check (public.current_app_can_approve_branch_login());
-
 create or replace function public.branch_login_approval_expire_old()
 returns integer
 language plpgsql
@@ -133,7 +121,6 @@ begin
   return affected_count;
 end;
 $$;
-
 create or replace function public.branch_login_approval_list_pending()
 returns table (
   id uuid,
@@ -201,7 +188,6 @@ begin
   order by a.requested_at desc;
 end;
 $$;
-
 create or replace function public.branch_login_approval_approve(target_request_id uuid)
 returns public.branch_login_approvals
 language plpgsql
@@ -253,7 +239,6 @@ begin
   return updated;
 end;
 $$;
-
 create or replace function public.branch_login_approval_reject(
   target_request_id uuid,
   reason text default null
@@ -300,7 +285,6 @@ begin
   return updated;
 end;
 $$;
-
 create or replace function public.branch_login_approval_cancel(target_request_id uuid)
 returns public.branch_login_approvals
 language plpgsql
@@ -337,17 +321,14 @@ begin
   return updated;
 end;
 $$;
-
 revoke all on function public.branch_login_approval_expire_old() from public, anon;
 revoke all on function public.branch_login_approval_list_pending() from public, anon;
 revoke all on function public.branch_login_approval_approve(uuid) from public, anon;
 revoke all on function public.branch_login_approval_reject(uuid, text) from public, anon;
 revoke all on function public.branch_login_approval_cancel(uuid) from public, anon;
-
 grant execute on function public.branch_login_approval_expire_old() to authenticated, service_role;
 grant execute on function public.branch_login_approval_list_pending() to authenticated, service_role;
 grant execute on function public.branch_login_approval_approve(uuid) to authenticated, service_role;
 grant execute on function public.branch_login_approval_reject(uuid, text) to authenticated, service_role;
 grant execute on function public.branch_login_approval_cancel(uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

@@ -17,12 +17,9 @@ as $$
     false
   )
 $$;
-
 revoke all on function public.current_app_can_export_branch(uuid) from public;
 grant execute on function public.current_app_can_export_branch(uuid) to authenticated, service_role;
-
 drop view if exists public.lost_sales_excel_export;
-
 create or replace view public.lost_sales_excel_export
 with (security_invoker = true)
 as
@@ -48,9 +45,7 @@ from public.lost_sales ls
 left join public.products p on ls.product_id = p.id
 left join public.branches b on ls.branch_id = b.id
 where public.current_app_can_export_branch(ls.branch_id);
-
 drop view if exists public.shortages_excel_export;
-
 create or replace view public.shortages_excel_export
 with (security_invoker = true)
 as
@@ -71,10 +66,8 @@ from public.shortages s
 left join public.products p on s.product_id = p.id
 left join public.branches b on s.branch_id = b.id
 where public.current_app_can_export_branch(s.branch_id);
-
 revoke all on public.lost_sales_excel_export from anon;
 revoke all on public.shortages_excel_export from anon;
 grant select on public.lost_sales_excel_export to authenticated, service_role;
 grant select on public.shortages_excel_export to authenticated, service_role;
-
 notify pgrst, 'reload schema';

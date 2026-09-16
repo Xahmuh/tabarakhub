@@ -14,14 +14,11 @@ create table if not exists public.legacy_branch_scope_reference_backups (
   payload jsonb not null,
   captured_at timestamptz not null default now()
 );
-
 create unique index if not exists legacy_branch_scope_reference_backups_source_idx
   on public.legacy_branch_scope_reference_backups(source_table, source_pk);
-
 alter table public.legacy_branch_scope_reference_backups enable row level security;
 revoke all on public.legacy_branch_scope_reference_backups from anon, authenticated;
 grant all on public.legacy_branch_scope_reference_backups to service_role;
-
 do $$
 begin
   if to_regclass('public.feature_permissions') is not null then
@@ -78,7 +75,6 @@ begin
       and (b.role <> 'branch' or b.role is null);
   end if;
 end $$;
-
 do $$
 begin
   if to_regclass('public.delivery_orders') is not null then

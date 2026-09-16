@@ -14,7 +14,6 @@
 -- - preserve the intentional public customer-flow EXECUTE allowlist.
 
 drop function if exists public.generate_spin_session_from_branch_code(text);
-
 create or replace function public.generate_spin_session_from_branch_code(
   p_branch_code text
 )
@@ -124,12 +123,9 @@ begin
   return query select v_token, v_expires_at, v_now;
 end;
 $$;
-
 create index if not exists spin_sessions_branch_single_use_recent_idx
 on public.spin_sessions(branch_id, created_at desc)
 where coalesce(is_multi_use, false) = false;
-
 revoke all on function public.generate_spin_session_from_branch_code(text) from public;
 grant execute on function public.generate_spin_session_from_branch_code(text) to anon, authenticated, service_role;
-
 notify pgrst, 'reload schema';

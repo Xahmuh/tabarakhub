@@ -1,12 +1,10 @@
 alter table public.benefit_pay_transfers
   drop constraint if exists benefit_pay_transfers_delivery_order_id_fkey;
-
 alter table public.benefit_pay_transfers
   add constraint benefit_pay_transfers_delivery_order_id_fkey
   foreign key (delivery_order_id)
   references public.delivery_orders(id)
   on delete cascade;
-
 create or replace function public.benefit_pay_assign_serial()
 returns trigger
 language plpgsql
@@ -85,7 +83,6 @@ begin
   return new;
 end;
 $$;
-
 drop policy if exists "benefit pay transfers update scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers update scoped"
 on public.benefit_pay_transfers
@@ -99,7 +96,6 @@ with check (
   public.current_app_can_manage()
   or branch_id = public.current_app_branch_id()
 );
-
 drop policy if exists "benefit pay transfers delete scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers delete scoped"
 on public.benefit_pay_transfers
@@ -109,7 +105,6 @@ using (
   public.current_app_can_manage()
   or branch_id = public.current_app_branch_id()
 );
-
 create or replace function public.app_benefit_pay_delete_transfer(p_transfer_id uuid)
 returns boolean
 language plpgsql
@@ -151,8 +146,6 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.app_benefit_pay_delete_transfer(uuid) from public, anon;
 grant execute on function public.app_benefit_pay_delete_transfer(uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

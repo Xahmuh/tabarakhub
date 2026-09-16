@@ -1,6 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "alwaysStrict": false,
+    "useUnknownInCatchVariables": false,
+    "forceConsistentCasingInFileNames": true,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
@@ -29,6 +39,7 @@
   "exclude": [
     "dist",
     "node_modules",
-    "supabase/functions"
+    "supabase/functions",
+    "app/api"
   ]
 }

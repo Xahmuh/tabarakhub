@@ -12,10 +12,12 @@ import { branchLoginApprovalService } from './services/branchLoginApprovalServic
 import { deliveryNotificationService } from './services/deliveryNotificationService';
 import {
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage,
-  HRRequestsSection, WorkforcePage, SuitePage,
+  HRRequestsSection, WorkforcePage, SuitePage, WorkforceDirectory,
   CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
-  CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, WorkflowTodoPage, DeliveryHub, BenefitPayLedger, DeliveryNotificationsPage, OwnerDashboardPage
+  CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, MaintenancePage,
+  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, WorkflowTodoPage, DeliveryHub, BenefitPayLedger, OperationalExpensesHub, DeliveryNotificationsPage, OwnerDashboardPage, PayrollModuleHub,
+  OfficialHrLetterGenerator, OperationalRenewalsHub, DutySchedulerHub, LeaveManagementHub,
+  AttendanceHub
 } from './app/index';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
@@ -27,11 +29,10 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'command-center' | 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'workflow-todo' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'notifications';
+type AppTab = 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'hr-directory' | 'hr-letter' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'workflow-todo' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'operational-expenses' | 'operational-renewals' | 'duty-scheduler' | 'leave-management' | 'notifications' | 'payroll' | 'attendance';
 type DeliveryFocusTarget = { orderId: string; orderDate?: string | null; branchId?: string | null };
 type BenefitPayFocusTarget = { deliveryOrderId: string; transferDate?: string | null; branchId?: string | null };
 const APP_TABS: AppTab[] = [
-  'command-center',
   'owner-dashboard',
   'pos',
   'dashboard',
@@ -39,6 +40,8 @@ const APP_TABS: AppTab[] = [
   'spin-win',
   'hr',
   'hr-manager',
+  'hr-directory',
+  'hr-letter',
   'workforce',
   'cash-flow',
   'cash-tracker',
@@ -53,7 +56,13 @@ const APP_TABS: AppTab[] = [
   'block-analyzer',
   'delivery',
   'benefit-pay-ledger',
-  'notifications'
+  'operational-expenses',
+  'operational-renewals',
+  'duty-scheduler',
+  'leave-management',
+  'notifications',
+  'payroll',
+  'attendance'
 ];
 const ACTIVE_TAB_STORAGE_KEY = 'tabarak_active_tab';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
@@ -203,6 +212,7 @@ const App: React.FC = () => {
   const [hasDeliveryNotificationAlert, setHasDeliveryNotificationAlert] = useState(false);
   const [deliveryFocusTarget, setDeliveryFocusTarget] = useState<DeliveryFocusTarget | null>(null);
   const [benefitPayFocusTarget, setBenefitPayFocusTarget] = useState<BenefitPayFocusTarget | null>(null);
+  const [hrLetterInitialData, setHrLetterInitialData] = useState<any>(null);
   const [isCustomerFlow] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('token') || params.has('node') || params.has('branch');
@@ -232,12 +242,9 @@ const App: React.FC = () => {
     permissionState: Pick<AuthState, 'permissions' | 'rolePermissions'> = authState
   ) => {
     if (!tab || tab === 'selector') return true;
-    if (role === 'owner' && tab !== 'owner-dashboard') return false;
     switch (tab) {
-      case 'command-center':
-        return canUseFeature('command_center', 'read', role, permissionState);
       case 'owner-dashboard':
-        return role === 'owner';
+        return canUseFeature('owner_dashboard', 'read', role, permissionState);
       case 'pos':
         return isModuleEnabled('sales') && (canUseFeature('lost_sales', 'edit', role, permissionState) || canUseFeature('shortages', 'edit', role, permissionState));
       case 'dashboard':
@@ -247,6 +254,9 @@ const App: React.FC = () => {
       case 'hr':
       case 'hr-manager':
         return isModuleEnabled('hr') && canUseFeature('hr_requests', 'read', role, permissionState);
+      case 'hr-directory':
+      case 'hr-letter':
+        return isModuleEnabled('hr') && (isManagerRole(role) || canUseFeature('hr_requests', 'read', role, permissionState));
       case 'workforce':
         return isModuleEnabled('hr') && isModuleEnabled('workforce') && canUseFeature('workforce', 'read', role, permissionState);
       case 'cash-flow':
@@ -276,8 +286,18 @@ const App: React.FC = () => {
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role, permissionState);
       case 'benefit-pay-ledger':
         return isModuleEnabled('benefitPayLedger') && canUseFeature('benefit_pay_ledger', 'read', role, permissionState);
+      case 'operational-expenses':
+        return isModuleEnabled('operationalExpenses') && (role === 'branch' || canUseFeature('operational_expenses', 'read', role, permissionState));
+      case 'operational-renewals':
+        return isModuleEnabled('operationalRenewals') && (isManagerRole(role) || canUseFeature('operational_renewals', 'read', role, permissionState) || canUseFeature('settings', 'read', role, permissionState));
+      case 'duty-scheduler':
+        return isModuleEnabled('dutyScheduler') && (isManagerRole(role) || canUseFeature('duty_scheduler', 'read', role, permissionState));
+      case 'leave-management':
+        return isModuleEnabled('leaveManagement') && (isManagerRole(role) || canUseFeature('leave_management', 'read', role, permissionState) || canUseFeature('duty_scheduler', 'read', role, permissionState) || canUseFeature('hr_requests', 'read', role, permissionState));
       case 'notifications':
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role, permissionState);
+      case 'payroll':
+        return role !== 'branch' && isModuleEnabled('hr') && (isManagerRole(role) || canUseFeature('hr_requests', 'read', role, permissionState) || canUseFeature('workforce', 'read', role, permissionState) || canUseFeature('delivery', 'read', role, permissionState));
       default:
         return true;
     }
@@ -362,8 +382,8 @@ const App: React.FC = () => {
     setIsMaintenanceAdminLoginOpen(false);
 
     if (maintenanceSettings?.isMaintenanceModeEnabled && canControlMaintenance(user.role) && isModuleEnabled('settings')) {
-      storeActiveTab('system-settings');
-      startTransition(() => setActiveTab('system-settings'));
+      storeActiveTab('settings');
+      startTransition(() => setActiveTab('settings'));
     } else {
       const restoredTab = getRestorableActiveTab(newState);
       storeActiveTab(restoredTab);
@@ -941,9 +961,7 @@ const App: React.FC = () => {
         <div className="mb-4 flex justify-end print:hidden">
           <ModuleHelpButton moduleKey={activeTab === 'selector' ? null : activeTab} />
         </div>
-        {activeTab === 'command-center' ? (
-          <DailyCommandCenter user={authState.user} onNavigate={handleTabChange} />
-        ) : activeTab === 'owner-dashboard' ? (
+        {activeTab === 'owner-dashboard' ? (
           <OwnerDashboardPage user={authState.user!} onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'pos' ? (
           <POSPage branch={activePOSBranch || authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
@@ -964,8 +982,25 @@ const App: React.FC = () => {
               </div>
               <BackToModulesButton onClick={() => handleTabChange('selector')} />
             </div>
-            <HRRequestsSection />
+            <HRRequestsSection
+              onOpenInLetterGenerator={(request, lang = 'ar') => {
+                setHrLetterInitialData({ ...request, initialLang: lang });
+                handleTabChange('hr-letter');
+              }}
+            />
           </div>
+        ) : activeTab === 'hr-directory' ? (
+          <WorkforceDirectory lang="en" onBack={() => handleTabChange('selector')} />
+        ) : activeTab === 'hr-letter' ? (
+          <OfficialHrLetterGenerator
+            initialEmployee={hrLetterInitialData}
+            onBack={() => {
+              const target = hrLetterInitialData ? 'hr-manager' : 'selector';
+              setHrLetterInitialData(null);
+              handleTabChange(target);
+            }}
+            standalone={true}
+          />
         ) : activeTab === 'workforce' ? (
           <WorkforcePage onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'cash-flow' ? (
@@ -988,12 +1023,8 @@ const App: React.FC = () => {
             userRole={authState.user?.role || 'branch'}
             onBack={() => handleTabChange('selector')}
           />
-        ) : activeTab === 'settings' ? (
+        ) : (activeTab === 'settings' || activeTab === 'system-settings' || activeTab === 'access-control') ? (
           <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
-        ) : activeTab === 'system-settings' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="system" />
-        ) : activeTab === 'access-control' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="access" />
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (
@@ -1033,14 +1064,56 @@ const App: React.FC = () => {
             onFocusConsumed={() => setBenefitPayFocusTarget(null)}
             onOpenDeliveryOrder={handleOpenDeliveryFromBenefitPay}
           />
+        ) : activeTab === 'operational-expenses' ? (
+          <OperationalExpensesHub
+            user={authState.user!}
+            pharmacist={authState.pharmacist}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+          />
+        ) : activeTab === 'operational-renewals' ? (
+          <OperationalRenewalsHub
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+          />
+        ) : activeTab === 'duty-scheduler' ? (
+          <DutySchedulerHub
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+            onNavigateToLeave={() => handleTabChange('leave-management')}
+          />
+        ) : activeTab === 'leave-management' ? (
+          <LeaveManagementHub
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+            onNavigateToScheduler={() => handleTabChange('duty-scheduler')}
+          />
         ) : activeTab === 'notifications' ? (
           <DeliveryNotificationsPage
             onBack={() => handleTabChange('selector')}
             onUnreadCountChange={setDeliveryNotificationUnreadCount}
             onOpenDeliveryOrder={handleOpenDeliveryFromNotification}
           />
+        ) : activeTab === 'payroll' ? (
+          <PayrollModuleHub
+            user={authState.user!}
+            onBack={() => handleTabChange('selector')}
+            checkPermission={checkPermission}
+          />
+        ) : activeTab === 'attendance' ? (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <BackToModulesButton onClick={() => handleTabChange('selector')} />
+            </div>
+            <AttendanceHub
+              currentUserId={authState.user?.id || 'admin'}
+              currentUserRole={authState.user?.role || 'Admin'}
+            />
+          </div>
         ) : (
-
           <DashboardPage
             user={authState.user!}
             permissions={authState.permissions || []}

@@ -147,7 +147,7 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
 
   if (settingsError) {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+      <div className="rounded-2xl border border-amber-200/60 bg-amber-50/80 p-8 shadow-sm backdrop-blur-xl">
         <p className="text-sm font-black text-amber-800">System settings unavailable</p>
         <p className="mt-2 text-sm font-semibold leading-6 text-amber-700">{settingsError}</p>
       </div>
@@ -156,33 +156,34 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
 
   if (!settings) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-8 text-sm font-bold text-slate-500 shadow-sm backdrop-blur-xl">
         Module layout settings are not loaded yet.
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand shadow-sm">
-              <Tags size={18} />
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all md:p-6 lg:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 text-brand ring-1 ring-brand/10">
+              <Tags size={24} />
             </div>
             <div>
-              <h3 className="text-sm font-black tracking-tight text-slate-900">Module order, badges, and grid</h3>
-              <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-500">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Launcher Experience</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">Module order, badges, and grid</h3>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
                 Arrange the module launcher cards, control visible badges, and choose the Operations Modules grid. This changes presentation only; access still follows Users & Roles, feature permissions, and RLS.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-3">
             <button
               type="button"
               onClick={handleReset}
-              className="btn-secondary text-[10px] uppercase tracking-widest"
+              className="btn-secondary rounded-xl text-[11px] uppercase tracking-widest"
             >
               <RotateCcw size={16} />
               Reset draft
@@ -191,7 +192,7 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
               type="button"
               onClick={handleSave}
               disabled={isSaving}
-              className="btn-primary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary rounded-xl text-[11px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={18} />
               Save layout
@@ -200,22 +201,22 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
         </div>
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand">
-              <LayoutGrid size={18} />
+      <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all md:p-6 lg:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 text-brand ring-1 ring-brand/10">
+              <LayoutGrid size={24} />
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Operations Modules grid</p>
-              <h3 className="mt-1 text-sm font-black tracking-tight text-slate-900">Cards per row</h3>
-              <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-slate-500">
+              <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Cards per row</h3>
+              <p className="mt-1 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
                 Pick how wide the module launcher feels on desktop. Mobile and tablet still collapse automatically.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:min-w-[320px]">
+          <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200/60 bg-slate-50/50 p-2 sm:min-w-[340px]">
             {([4, 3] as ModuleDisplayGridColumns[]).map(columns => {
               const isSelected = draftGridColumns === columns;
               return (
@@ -223,14 +224,14 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
                   key={columns}
                   type="button"
                   onClick={() => setDraftGridColumns(columns)}
-                  className={`rounded-lg px-4 py-3 text-center transition-all ${
+                  className={`group relative flex flex-col items-center justify-center rounded-xl p-4 transition-all duration-300 ${
                     isSelected
-                      ? 'bg-brand text-white shadow-sm shadow-brand/20'
-                      : 'bg-transparent text-slate-500 hover:bg-white hover:text-slate-800'
+                      ? 'bg-gradient-to-br from-brand to-brand-dark text-white shadow-md shadow-brand/20 ring-1 ring-brand/50'
+                      : 'bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-900 hover:shadow border border-slate-200/60'
                   }`}
                 >
-                  <span className="block text-sm font-black">{columns} x {columns}</span>
-                  <span className={`mt-1 block text-[9px] font-black uppercase tracking-widest ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>
+                  <span className="block text-xl font-black">{columns} <span className="opacity-60 font-bold">x</span> {columns}</span>
+                  <span className={`mt-1.5 block text-[10px] font-black uppercase tracking-[0.15em] ${isSelected ? 'text-white/80' : 'text-slate-400 group-hover:text-brand'}`}>
                     {columns === 4 ? 'Compact' : 'Wider cards'}
                   </span>
                 </button>
@@ -240,8 +241,8 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_0.72fr]">
-        <section className="space-y-3">
+      <div className="space-y-6">
+        <section className="space-y-4">
           {draftItems.map((item, index) => {
             const badgeText = item.badge.trim();
             const visibleBadge = badgeText && item.badgeStyle === 'red';
@@ -254,108 +255,88 @@ export const ModuleDisplaySettingsSection: React.FC<ModuleDisplaySettingsSection
                 onDragOver={event => handleDragOver(event, item.key)}
                 onDrop={event => handleDrop(event, item.key)}
                 onDragEnd={resetDragState}
-                className={`relative rounded-lg border bg-white p-4 shadow-sm transition-all duration-200 ${isDragging ? 'scale-[0.99] border-brand/30 opacity-60 ring-2 ring-brand/10' : isDropTarget ? 'border-brand/60 bg-brand/5 shadow-md shadow-brand/10' : 'border-slate-200'}`}
+                className={`relative rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-xl transition-all duration-300 ${isDragging ? 'scale-[0.99] border-brand/40 opacity-70 ring-4 ring-brand/10' : isDropTarget ? 'border-brand/60 bg-brand/5 shadow-md shadow-brand/10' : 'border-slate-200/80 hover:border-slate-300'}`}
               >
                 {isDropTarget && (
-                  <div className={`pointer-events-none absolute left-4 right-4 z-10 h-1 rounded-full bg-brand shadow-sm shadow-brand/30 ${dragOverPosition === 'before' ? '-top-2' : '-bottom-2'}`} />
+                  <div className={`pointer-events-none absolute left-4 right-4 z-10 h-1.5 rounded-full bg-brand shadow-sm shadow-brand/30 ${dragOverPosition === 'before' ? '-top-2' : '-bottom-2'}`} />
                 )}
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(220px,0.8fr)_minmax(360px,1.2fr)_auto] xl:items-center">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 flex-1 items-center gap-4 pr-4">
                     <button
                       type="button"
                       draggable
                       onDragStart={event => handleDragStart(event, item.key)}
                       onDragEnd={resetDragState}
-                      className="flex h-10 w-10 cursor-grab items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand active:cursor-grabbing focus-ring"
+                      className="group flex h-14 w-14 shrink-0 cursor-grab flex-col items-center justify-center rounded-xl border border-slate-200/60 bg-slate-50 text-slate-400 shadow-inner transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand active:cursor-grabbing focus-ring"
                       title="Drag to reorder"
                       aria-label={`Drag ${MODULE_DISPLAY_LABELS[item.key] || item.key} to reorder`}
                     >
-                      <GripVertical size={17} />
+                      <span className="text-[11px] font-black text-slate-300 transition-colors group-hover:text-brand/50">{index + 1}</span>
+                      <GripVertical size={16} className="-mt-1 opacity-50 transition-opacity group-hover:opacity-100" />
                     </button>
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-sm font-black text-slate-950">{MODULE_DISPLAY_LABELS[item.key] || item.key}</h4>
+                        <h4 className="text-base font-black leading-tight tracking-tight text-slate-950 whitespace-normal break-words">{MODULE_DISPLAY_LABELS[item.key] || item.key}</h4>
                         {visibleBadge && (
-                          <span className="inline-flex max-w-full items-center justify-center rounded-full bg-brand px-3 py-1.5 text-center text-[10px] font-black uppercase leading-4 tracking-[0.08em] text-white shadow-sm ring-1 ring-brand/10 whitespace-normal break-words">
+                          <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-dark px-3.5 py-1 text-center text-[10px] font-black uppercase leading-4 tracking-widest text-white shadow-sm ring-1 ring-brand/20">
                             {badgeText}
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{item.key}</p>
+                      <p className="mt-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{item.key}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(280px,1fr)_auto] md:items-end">
-                    <label className="block min-w-0 space-y-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Badge text</span>
-                      <input
-                        type="text"
-                        value={item.badge}
-                        onChange={event => updateItem(item.key, { badge: event.target.value.slice(0, MODULE_BADGE_MAX_LENGTH) })}
-                        maxLength={MODULE_BADGE_MAX_LENGTH}
-                        placeholder="New module, Daily use, Important"
-                        className="min-h-[50px] w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900 shadow-inner outline-none transition-all placeholder:text-slate-500 focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
-                      />
-                    </label>
-                    <label className="flex h-[46px] cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3">
-                      <input
-                        type="checkbox"
-                        checked={item.badgeStyle === 'red'}
-                        onChange={event => updateItem(item.key, { badgeStyle: event.target.checked ? 'red' : 'hidden' })}
-                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand/20"
-                      />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Show badge</span>
-                    </label>
-                  </div>
+                  <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end">
+                    <div className="flex flex-1 sm:flex-none flex-col gap-4 sm:flex-row sm:items-end">
+                      <label className="block w-full min-w-0 sm:w-40 lg:w-48 xl:w-52 space-y-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Badge Override</span>
+                        <input
+                          type="text"
+                          value={item.badge}
+                          onChange={event => updateItem(item.key, { badge: event.target.value.slice(0, MODULE_BADGE_MAX_LENGTH) })}
+                          maxLength={MODULE_BADGE_MAX_LENGTH}
+                          placeholder="e.g. New, Daily"
+                          className="w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-900 shadow-sm outline-none transition-all placeholder:text-slate-400 placeholder:font-medium focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10"
+                        />
+                      </label>
+                      <label className="flex h-[46px] w-full sm:w-auto shrink-0 cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 shadow-sm transition-all hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={item.badgeStyle === 'red'}
+                          onChange={event => updateItem(item.key, { badgeStyle: event.target.checked ? 'red' : 'hidden' })}
+                          className="h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand/20 transition-all cursor-pointer"
+                        />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-600">Active</span>
+                      </label>
+                    </div>
 
-                  <div className="flex gap-2 lg:justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setDraftItems(current => reorderItems(current, index, -1))}
-                      disabled={index === 0}
-                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:cursor-not-allowed disabled:opacity-30"
-                      title="Move up"
-                    >
-                      <ArrowUp size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraftItems(current => reorderItems(current, index, 1))}
-                      disabled={index === draftItems.length - 1}
-                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:cursor-not-allowed disabled:opacity-30"
-                      title="Move down"
-                    >
-                      <ArrowDown size={16} />
-                    </button>
+                    <div className="flex h-[46px] shrink-0 gap-2 sm:h-auto sm:items-end">
+                      <button
+                        type="button"
+                        onClick={() => setDraftItems(current => reorderItems(current, index, -1))}
+                        disabled={index === 0}
+                        className="flex h-[46px] flex-1 sm:flex-none w-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:cursor-not-allowed disabled:opacity-30 active:scale-95"
+                        title="Move up"
+                      >
+                        <ArrowUp size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraftItems(current => reorderItems(current, index, 1))}
+                        disabled={index === draftItems.length - 1}
+                        className="flex h-[46px] flex-1 sm:flex-none w-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-brand/30 hover:bg-brand/5 hover:text-brand disabled:cursor-not-allowed disabled:opacity-30 active:scale-95"
+                        title="Move down"
+                      >
+                        <ArrowDown size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>
             );
           })}
         </section>
-
-        <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4 xl:sticky xl:top-24 xl:self-start">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Preview order</p>
-          <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Launcher grid</p>
-            <p className="mt-1 text-sm font-black text-slate-900">{draftGridColumns} x {draftGridColumns}</p>
-          </div>
-          <div className="mt-3 space-y-2">
-            {draftItems.map((item, index) => (
-              <div key={`preview-${item.key}`} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <p className="break-words text-xs font-black leading-5 text-slate-900">{index + 1}. {MODULE_DISPLAY_LABELS[item.key] || item.key}</p>
-                  <p className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{item.key}</p>
-                </div>
-                {item.badge.trim() && item.badgeStyle === 'red' && (
-                  <span className="inline-flex max-w-full items-center justify-center rounded-full bg-brand px-3 py-1.5 text-center text-[10px] font-black uppercase leading-4 tracking-[0.08em] text-white shadow-sm ring-1 ring-brand/10 whitespace-normal break-words sm:max-w-[48%]">
-                    {item.badge.trim()}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </aside>
       </div>
     </div>
   );

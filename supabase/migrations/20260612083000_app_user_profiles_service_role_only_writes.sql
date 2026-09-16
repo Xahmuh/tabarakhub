@@ -3,12 +3,9 @@
 -- provisioning and mutation must happen through trusted SQL or service_role.
 
 alter table public.app_user_profiles enable row level security;
-
 drop policy if exists "app profiles manage" on public.app_user_profiles;
-
 revoke all privileges on table public.app_user_profiles from anon;
 revoke all privileges on table public.app_user_profiles from authenticated;
-
 do $$
 declare
   app_profile_columns text;
@@ -26,8 +23,6 @@ begin
     );
   end if;
 end $$;
-
 grant select on table public.app_user_profiles to authenticated;
 grant all privileges on table public.app_user_profiles to service_role;
-
 notify pgrst, 'reload schema';

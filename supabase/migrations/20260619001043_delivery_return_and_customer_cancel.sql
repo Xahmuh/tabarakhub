@@ -154,7 +154,6 @@ begin
   return v_event;
 end;
 $$;
-
 create or replace function public.app_delivery_cancel_customer_order(
   p_order_id uuid,
   p_notes text default null
@@ -230,11 +229,8 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.app_delivery_return_order(uuid, text, text) from public, anon;
 revoke all on function public.app_delivery_cancel_customer_order(uuid, text) from public, anon;
-
 grant execute on function public.app_delivery_return_order(uuid, text, text) to authenticated, service_role;
 grant execute on function public.app_delivery_cancel_customer_order(uuid, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

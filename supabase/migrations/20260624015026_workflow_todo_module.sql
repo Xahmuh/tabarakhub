@@ -30,7 +30,6 @@ create table if not exists public.workflow_task_templates (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create table if not exists public.workflow_tasks (
   id uuid primary key default gen_random_uuid(),
   task_kind text not null default 'work' check (task_kind in ('work', 'personal')),
@@ -60,7 +59,6 @@ create table if not exists public.workflow_tasks (
   updated_at timestamptz not null default now(),
   last_activity_at timestamptz not null default now()
 );
-
 create table if not exists public.workflow_task_events (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.workflow_tasks(id) on delete cascade,
@@ -72,7 +70,6 @@ create table if not exists public.workflow_task_events (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
-
 create table if not exists public.workflow_task_attachments (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.workflow_tasks(id) on delete cascade,
@@ -85,43 +82,32 @@ create table if not exists public.workflow_task_attachments (
   created_at timestamptz not null default now(),
   check (file_path is not null or file_url is not null)
 );
-
 create index if not exists workflow_tasks_status_due_idx
 on public.workflow_tasks(status, due_at);
-
 create index if not exists workflow_tasks_branch_status_due_idx
 on public.workflow_tasks(branch_id, status, due_at)
 where branch_id is not null;
-
 create index if not exists workflow_tasks_assigned_status_due_idx
 on public.workflow_tasks(assigned_to, status, due_at)
 where assigned_to is not null;
-
 create index if not exists workflow_tasks_created_kind_status_idx
 on public.workflow_tasks(created_by, task_kind, status);
-
 create index if not exists workflow_tasks_role_status_due_idx
 on public.workflow_tasks(assignee_role, status, due_at)
 where assignee_role is not null;
-
 create index if not exists workflow_tasks_template_idx
 on public.workflow_tasks(template_id, template_occurrence_date)
 where template_id is not null;
-
 create unique index if not exists workflow_tasks_template_occurrence_guard_idx
 on public.workflow_tasks(template_id, template_occurrence_date)
 where template_id is not null and template_occurrence_date is not null;
-
 create index if not exists workflow_task_events_task_created_idx
 on public.workflow_task_events(task_id, created_at desc);
-
 create index if not exists workflow_task_templates_active_next_due_idx
 on public.workflow_task_templates(is_active, next_due_on)
 where is_active;
-
 create index if not exists workflow_task_attachments_task_created_idx
 on public.workflow_task_attachments(task_id, created_at desc);
-
 create or replace function public.current_app_can_read_workflow_task(
   target_branch_id uuid,
   target_assigned_to uuid,
@@ -146,7 +132,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_can_update_workflow_task(
   target_branch_id uuid,
   target_assigned_to uuid,
@@ -178,12 +163,10 @@ as $$
     false
   )
 $$;
-
 revoke all on function public.current_app_can_read_workflow_task(uuid, uuid, text, uuid, text) from public, anon;
 revoke all on function public.current_app_can_update_workflow_task(uuid, uuid, text, uuid, text) from public, anon;
 grant execute on function public.current_app_can_read_workflow_task(uuid, uuid, text, uuid, text) to authenticated, service_role;
 grant execute on function public.current_app_can_update_workflow_task(uuid, uuid, text, uuid, text) to authenticated, service_role;
-
 create or replace function public.prepare_workflow_task_template_insert()
 returns trigger
 language plpgsql
@@ -197,7 +180,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.prepare_workflow_task_template_update()
 returns trigger
 language plpgsql
@@ -215,7 +197,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.prepare_workflow_task_insert()
 returns trigger
 language plpgsql
@@ -244,7 +225,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.enforce_workflow_task_update()
 returns trigger
 language plpgsql
@@ -316,7 +296,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.prepare_workflow_task_event_insert()
 returns trigger
 language plpgsql
@@ -354,7 +333,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.prepare_workflow_task_attachment_insert()
 returns trigger
 language plpgsql
@@ -366,69 +344,56 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.prepare_workflow_task_template_insert() from public, anon;
 revoke all on function public.prepare_workflow_task_template_update() from public, anon;
 revoke all on function public.prepare_workflow_task_insert() from public, anon;
 revoke all on function public.enforce_workflow_task_update() from public, anon;
 revoke all on function public.prepare_workflow_task_event_insert() from public, anon;
 revoke all on function public.prepare_workflow_task_attachment_insert() from public, anon;
-
 drop trigger if exists workflow_task_templates_before_insert on public.workflow_task_templates;
 create trigger workflow_task_templates_before_insert
 before insert on public.workflow_task_templates
 for each row execute function public.prepare_workflow_task_template_insert();
-
 drop trigger if exists workflow_task_templates_before_update on public.workflow_task_templates;
 create trigger workflow_task_templates_before_update
 before update on public.workflow_task_templates
 for each row execute function public.prepare_workflow_task_template_update();
-
 drop trigger if exists workflow_tasks_before_insert on public.workflow_tasks;
 create trigger workflow_tasks_before_insert
 before insert on public.workflow_tasks
 for each row execute function public.prepare_workflow_task_insert();
-
 drop trigger if exists workflow_tasks_before_update on public.workflow_tasks;
 create trigger workflow_tasks_before_update
 before update on public.workflow_tasks
 for each row execute function public.enforce_workflow_task_update();
-
 drop trigger if exists workflow_task_events_before_insert on public.workflow_task_events;
 create trigger workflow_task_events_before_insert
 before insert on public.workflow_task_events
 for each row execute function public.prepare_workflow_task_event_insert();
-
 drop trigger if exists workflow_task_attachments_before_insert on public.workflow_task_attachments;
 create trigger workflow_task_attachments_before_insert
 before insert on public.workflow_task_attachments
 for each row execute function public.prepare_workflow_task_attachment_insert();
-
 alter table public.workflow_task_templates enable row level security;
 alter table public.workflow_tasks enable row level security;
 alter table public.workflow_task_events enable row level security;
 alter table public.workflow_task_attachments enable row level security;
-
 revoke all on public.workflow_task_templates from anon;
 revoke all on public.workflow_tasks from anon;
 revoke all on public.workflow_task_events from anon;
 revoke all on public.workflow_task_attachments from anon;
-
 revoke all on public.workflow_task_templates from authenticated;
 revoke all on public.workflow_tasks from authenticated;
 revoke all on public.workflow_task_events from authenticated;
 revoke all on public.workflow_task_attachments from authenticated;
-
 grant select, insert, update, delete on public.workflow_task_templates to authenticated;
 grant select, insert, update on public.workflow_tasks to authenticated;
 grant select, insert on public.workflow_task_events to authenticated;
 grant select, insert, delete on public.workflow_task_attachments to authenticated;
-
 grant all on public.workflow_task_templates to service_role;
 grant all on public.workflow_tasks to service_role;
 grant all on public.workflow_task_events to service_role;
 grant all on public.workflow_task_attachments to service_role;
-
 drop policy if exists "workflow templates select scoped" on public.workflow_task_templates;
 drop policy if exists "workflow templates insert managers" on public.workflow_task_templates;
 drop policy if exists "workflow templates update managers" on public.workflow_task_templates;
@@ -441,7 +406,6 @@ drop policy if exists "workflow events insert scoped" on public.workflow_task_ev
 drop policy if exists "workflow attachments select scoped" on public.workflow_task_attachments;
 drop policy if exists "workflow attachments insert scoped" on public.workflow_task_attachments;
 drop policy if exists "workflow attachments delete scoped" on public.workflow_task_attachments;
-
 create policy "workflow templates select scoped"
 on public.workflow_task_templates
 for select
@@ -453,26 +417,22 @@ using (
     and public.current_app_can_read_workflow_task(branch_id, assigned_to, assignee_role, created_by, task_kind)
   )
 );
-
 create policy "workflow templates insert managers"
 on public.workflow_task_templates
 for insert
 to authenticated
 with check (public.current_app_can_manage());
-
 create policy "workflow templates update managers"
 on public.workflow_task_templates
 for update
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 create policy "workflow templates delete managers"
 on public.workflow_task_templates
 for delete
 to authenticated
 using (public.current_app_can_manage());
-
 create policy "workflow tasks select scoped"
 on public.workflow_tasks
 for select
@@ -480,7 +440,6 @@ to authenticated
 using (
   public.current_app_can_read_workflow_task(branch_id, assigned_to, assignee_role, created_by, task_kind)
 );
-
 create policy "workflow tasks insert scoped"
 on public.workflow_tasks
 for insert
@@ -502,7 +461,6 @@ with check (
     )
   )
 );
-
 create policy "workflow tasks update scoped"
 on public.workflow_tasks
 for update
@@ -513,7 +471,6 @@ using (
 with check (
   public.current_app_can_update_workflow_task(branch_id, assigned_to, assignee_role, created_by, task_kind)
 );
-
 create policy "workflow events select scoped"
 on public.workflow_task_events
 for select
@@ -526,7 +483,6 @@ using (
       and public.current_app_can_read_workflow_task(t.branch_id, t.assigned_to, t.assignee_role, t.created_by, t.task_kind)
   )
 );
-
 create policy "workflow events insert scoped"
 on public.workflow_task_events
 for insert
@@ -540,7 +496,6 @@ with check (
       and public.current_app_can_update_workflow_task(t.branch_id, t.assigned_to, t.assignee_role, t.created_by, t.task_kind)
   )
 );
-
 create policy "workflow attachments select scoped"
 on public.workflow_task_attachments
 for select
@@ -553,7 +508,6 @@ using (
       and public.current_app_can_read_workflow_task(t.branch_id, t.assigned_to, t.assignee_role, t.created_by, t.task_kind)
   )
 );
-
 create policy "workflow attachments insert scoped"
 on public.workflow_task_attachments
 for insert
@@ -567,7 +521,6 @@ with check (
       and public.current_app_can_update_workflow_task(t.branch_id, t.assigned_to, t.assignee_role, t.created_by, t.task_kind)
   )
 );
-
 create policy "workflow attachments delete scoped"
 on public.workflow_task_attachments
 for delete
@@ -576,5 +529,4 @@ using (
   public.current_app_can_manage()
   or uploaded_by = (select auth.uid())
 );
-
 notify pgrst, 'reload schema';

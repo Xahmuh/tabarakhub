@@ -3,11 +3,9 @@
 
 alter table public.workflow_task_templates
   drop constraint if exists workflow_task_templates_recurrence_frequency_check;
-
 alter table public.workflow_task_templates
   add constraint workflow_task_templates_recurrence_frequency_check
   check (recurrence_frequency in ('none', 'daily', 'weekly', 'monthly', 'quarterly'));
-
 create or replace function public.advance_template_next_due_on()
 returns trigger
 language plpgsql
@@ -67,7 +65,5 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.advance_template_next_due_on() from public, anon;
-
 notify pgrst, 'reload schema';

@@ -7,13 +7,10 @@ create sequence if not exists public.delivery_driver_code_seq
   start with 1
   increment by 1
   minvalue 1;
-
 alter table public.delivery_drivers
   add column if not exists driver_code text;
-
 comment on column public.delivery_drivers.driver_code is
   'Human-readable delivery driver ID assigned automatically on registration, e.g. DRV-0001.';
-
 with numbered as (
   select
     id,
@@ -25,13 +22,10 @@ update public.delivery_drivers d
 set driver_code = 'DRV-' || lpad(numbered.rn::text, 4, '0')
 from numbered
 where d.id = numbered.id;
-
 alter table public.delivery_drivers
   alter column driver_code set not null;
-
 create unique index if not exists delivery_drivers_driver_code_uidx
 on public.delivery_drivers (driver_code);
-
 create or replace function public.assign_delivery_driver_code()
 returns trigger
 language plpgsql
@@ -48,7 +42,6 @@ begin
   return new;
 end;
 $$;
-
 do $$
 declare
   max_code bigint;
@@ -64,7 +57,6 @@ begin
     perform setval('public.delivery_driver_code_seq', 1, false);
   end if;
 end $$;
-
 drop trigger if exists delivery_drivers_assign_driver_code on public.delivery_drivers;
 create trigger delivery_drivers_assign_driver_code
 before insert on public.delivery_drivers

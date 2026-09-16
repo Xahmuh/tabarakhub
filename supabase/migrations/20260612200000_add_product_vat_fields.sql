@@ -32,5 +32,4 @@ begin
       check (vat_rate >= 0 and vat_rate <= 1);
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

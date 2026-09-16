@@ -6,16 +6,13 @@
 
 alter table public.app_user_profiles
   add column if not exists supervisor_scope_mode text not null default 'assigned_zones';
-
 update public.app_user_profiles
 set supervisor_scope_mode = 'assigned_zones'
 where supervisor_scope_mode is null
    or supervisor_scope_mode not in ('assigned_zones', 'all_zones');
-
 alter table public.app_user_profiles
   alter column supervisor_scope_mode set default 'assigned_zones',
   alter column supervisor_scope_mode set not null;
-
 do $$
 begin
   if not exists (
@@ -29,7 +26,6 @@ begin
       check (supervisor_scope_mode in ('assigned_zones', 'all_zones'));
   end if;
 end $$;
-
 create or replace function public.current_app_supervisor_scope_mode()
 returns text
 language sql
@@ -46,7 +42,6 @@ as $$
     limit 1
   ), 'assigned_zones')
 $$;
-
 create or replace function public.current_app_can_read_all()
 returns boolean
 language sql
@@ -59,7 +54,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_supervisor_can_read_all_zones()
 returns boolean
 language sql
@@ -69,7 +63,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_supervisor_scope_mode() = 'all_zones', false)
 $$;
-
 create or replace function public.current_app_can_access_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -93,7 +86,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_can_export_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -107,7 +99,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.app_admin_list_users()
 returns table (
   user_id uuid,
@@ -147,7 +138,6 @@ begin
   order by case when p.role = 'manager' then 'admin' else p.role end, coalesce(b.code, u.email::text);
 end;
 $$;
-
 create or replace function public.app_admin_set_user_role(
   target_user_id uuid,
   new_role text,
@@ -243,7 +233,6 @@ begin
   end if;
 end;
 $$;
-
 create or replace function public.app_admin_set_supervisor_scope_mode(
   target_user_id uuid,
   new_scope_mode text
@@ -277,7 +266,6 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.current_app_supervisor_scope_mode() from public, anon;
 revoke all on function public.current_app_can_read_all() from public, anon;
 revoke all on function public.current_app_supervisor_can_read_all_zones() from public, anon;
@@ -286,7 +274,6 @@ revoke all on function public.current_app_can_export_branch(uuid) from public, a
 revoke all on function public.app_admin_list_users() from public, anon;
 revoke all on function public.app_admin_set_user_role(uuid, text, uuid, boolean) from public, anon;
 revoke all on function public.app_admin_set_supervisor_scope_mode(uuid, text) from public, anon;
-
 grant execute on function public.current_app_supervisor_scope_mode() to authenticated, service_role;
 grant execute on function public.current_app_can_read_all() to authenticated, service_role;
 grant execute on function public.current_app_supervisor_can_read_all_zones() to authenticated, service_role;
@@ -295,5 +282,4 @@ grant execute on function public.current_app_can_export_branch(uuid) to authenti
 grant execute on function public.app_admin_list_users() to authenticated, service_role;
 grant execute on function public.app_admin_set_user_role(uuid, text, uuid, boolean) to authenticated, service_role;
 grant execute on function public.app_admin_set_supervisor_scope_mode(uuid, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

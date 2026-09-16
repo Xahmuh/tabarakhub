@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, Settings2, Truck } from 'lucide-react';
+import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, Truck, Wallet } from 'lucide-react';
 import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
@@ -8,11 +8,11 @@ import { AdminDeliveryAnalytics } from './AdminDeliveryAnalytics';
 import { DeliveryCoverage } from './DeliveryCoverage';
 import { DeliveryLifecycleBoard } from './DeliveryLifecycleBoard';
 import { DeliveryProfitability } from './DeliveryProfitability';
-import { DeliverySettings } from './DeliverySettings';
 import { DriverDutyReport } from './DriverDutyReport';
+import { DriverPayrollHub } from './DriverPayrollHub';
 import { BackToModulesButton } from '../shared';
 
-type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'coverage' | 'profitability' | 'settings';
+type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'driver-payroll' | 'coverage' | 'profitability';
 
 interface DeliveryHubProps {
   user: Branch;
@@ -41,6 +41,7 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
   const canReadDeliveryAnalytics = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor');
   const canReadDeliveryCoverage = canReadDeliveryAnalytics || (canReadDelivery && isBranch);
   const canReadDriverDuty = canReadDelivery && (canReadDeliveryAnalytics || isDriver);
+  const canReadDriverPayroll = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor' || isDriver);
   const canRecord = isBranch && checkPermission('delivery', 'edit');
   const canTransitionLifecycle = canManageDelivery || canRecord;
 
@@ -49,10 +50,10 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
     { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch && canReadDelivery },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, visible: canReadDeliveryAnalytics },
     { id: 'dispatch', label: 'Dispatch', icon: Truck, visible: canReadDelivery && !isDriver },
-    { id: 'driver-duty', label: 'Driver Duties', icon: CalendarClock, visible: canReadDriverDuty },
+    { id: 'driver-duty', label: 'Driver Attendance', icon: CalendarClock, visible: canReadDriverDuty },
+    { id: 'driver-payroll', label: 'Driver Payroll', icon: Wallet, visible: canReadDriverPayroll },
     { id: 'coverage', label: 'Block Coverage', icon: MapPinned, visible: canReadDeliveryCoverage },
-    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) },
-    { id: 'settings', label: 'Delivery Settings', icon: Settings2, visible: canManageDelivery }
+    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) }
   ];
 
   const visibleTabs = tabs.filter(t => t.visible);
@@ -134,14 +135,14 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
       {activeTab === 'driver-duty' && canReadDriverDuty && (
         <DriverDutyReport selfOnly={isDriver} />
       )}
+      {activeTab === 'driver-payroll' && canReadDriverPayroll && (
+        <DriverPayrollHub selfOnly={isDriver} />
+      )}
       {activeTab === 'coverage' && canReadDeliveryCoverage && (
         <DeliveryCoverage lockedBranchId={isBranch ? user.id : null} canCreateTask={!isBranch && canManageDelivery} branchView={isBranch} />
       )}
       {activeTab === 'profitability' && canReadDelivery && (canManageDelivery || isOwner) && (
         <DeliveryProfitability canEdit={canManageDelivery} />
-      )}
-      {activeTab === 'settings' && canManageDelivery && (
-        <DeliverySettings />
       )}
     </div>
   );

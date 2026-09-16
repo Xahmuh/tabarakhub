@@ -32,11 +32,6 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
 
     // Mirroring SuitePage display logic
 
-    // Daily Command Center
-    if (!isOwner && checkPermission('command_center')) {
-        enabledModuleCount += 1;
-    }
-
     if (isOwner) {
         enabledModuleCount += 1;
     }
@@ -55,41 +50,39 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
         enabledModuleCount += 1;
     }
 
-    // 3. HR Admin Portal (Manager) / HR Self-Service (Branch)
-    if (isModuleEnabled('hr') && isManager && checkPermission('hr_requests')) {
-        enabledModuleCount += 1;
-    } else if (isModuleEnabled('hr') && role === 'branch' && checkPermission('hr_requests')) {
+    // 3. HR Admin Portal / HR Self-Service
+    if (isModuleEnabled('hr') && (isManager || role === 'branch' || checkPermission('hr_requests'))) {
         enabledModuleCount += 1;
     }
 
     // 4. Workforce Analytics (Manager only)
-    if (isModuleEnabled('hr') && isModuleEnabled('workforce') && isManager && checkPermission('workforce')) {
+    if (isModuleEnabled('hr') && isModuleEnabled('workforce') && (isManager || checkPermission('workforce'))) {
         enabledModuleCount += 1;
     }
 
     // 5. Cash Flow Planner / Branch Cash Tracker
-    if (!isOwner && isModuleEnabled('cashFlow') && checkPermission('cash_flow')) {
+    if (isModuleEnabled('cashFlow') && checkPermission('cash_flow')) {
         enabledModuleCount += 1;
-    } else if (!isOwner && isModuleEnabled('cashTracker') && !isManager && checkPermission('cash_tracker')) {
+    } else if (isModuleEnabled('cashTracker') && checkPermission('cash_tracker')) {
         enabledModuleCount += 1;
     }
 
     // 6. Corporate Codex
-    if (!isOwner && isModuleEnabled('corporateCodex') && checkPermission('corporate_codex')) {
+    if (isModuleEnabled('corporateCodex') && checkPermission('corporate_codex')) {
         enabledModuleCount += 1;
     }
 
     // 7. Spin & Win
-    if (!isOwner && isModuleEnabled('spinWin') && checkPermission('spin_win')) {
+    if (isModuleEnabled('spinWin') && checkPermission('spin_win')) {
         enabledModuleCount += 1;
     }
 
     // 8. System Settings + Access Control
-    if (isModuleEnabled('settings') && (isManager || canApproveBranchLogins)) {
+    if (isModuleEnabled('settings') && (isManager || canApproveBranchLogins || checkPermission('settings'))) {
         enabledModuleCount += 2;
     }
 
-    if (!isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {
+    if (isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {
         enabledModuleCount += 1;
     }
 
@@ -97,7 +90,23 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
         enabledModuleCount += 1;
     }
 
-    if (!isOwner && isModuleEnabled('employeeContributions') && checkPermission('employee_contributions')) {
+    if (isModuleEnabled('employeeContributions') && checkPermission('employee_contributions')) {
+        enabledModuleCount += 1;
+    }
+
+    if (isModuleEnabled('products') && (checkPermission('products') || checkPermission('products:catalogue') || checkPermission('products:search'))) {
+        enabledModuleCount += 1;
+    }
+
+    if (isModuleEnabled('operationalExpenses') && (role === 'branch' || checkPermission('operational_expenses'))) {
+        enabledModuleCount += 1;
+    }
+
+    if (isModuleEnabled('dutyScheduler') && checkPermission('duty_scheduler')) {
+        enabledModuleCount += 1;
+    }
+
+    if (isModuleEnabled('leaveManagement') && (checkPermission('leave_management') || checkPermission('duty_scheduler') || isManager)) {
         enabledModuleCount += 1;
     }
 

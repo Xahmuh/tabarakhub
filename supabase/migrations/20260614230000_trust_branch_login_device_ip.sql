@@ -2,7 +2,6 @@
 -- A new device or a new IP creates a fresh pending approval for admin review.
 
 drop index if exists public.branch_login_approvals_one_pending_device_idx;
-
 create unique index if not exists branch_login_approvals_one_pending_device_ip_idx
   on public.branch_login_approvals(
     user_id,
@@ -11,7 +10,6 @@ create unique index if not exists branch_login_approvals_one_pending_device_ip_i
     coalesce(last_ip, '')
   )
   where status = 'pending';
-
 create index if not exists branch_login_approvals_trusted_device_ip_idx
   on public.branch_login_approvals(
     user_id,
@@ -21,7 +19,6 @@ create index if not exists branch_login_approvals_trusted_device_ip_idx
     approved_at desc
   )
   where status = 'approved';
-
 create or replace function public.branch_login_approval_request_ip()
 returns text
 language plpgsql
@@ -57,7 +54,6 @@ exception
     return null;
 end;
 $$;
-
 create or replace function public.branch_login_approval_open_request(
   p_target_branch_id uuid,
   p_device_fingerprint_hash text default null,
@@ -174,11 +170,8 @@ begin
   return v_pending;
 end;
 $$;
-
 revoke all on function public.branch_login_approval_request_ip() from public, anon;
 revoke all on function public.branch_login_approval_open_request(uuid, text, text, text, text, text) from public, anon;
-
 grant execute on function public.branch_login_approval_request_ip() to authenticated, service_role;
 grant execute on function public.branch_login_approval_open_request(uuid, text, text, text, text, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

@@ -52,7 +52,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.delivery_order_events_block_talabat_assignment()
 returns trigger
 language plpgsql
@@ -81,10 +80,8 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists delivery_order_events_block_talabat_assignment_trigger on public.delivery_order_events;
 create trigger delivery_order_events_block_talabat_assignment_trigger
 before insert or update on public.delivery_order_events
 for each row execute function public.delivery_order_events_block_talabat_assignment();
-
 notify pgrst, 'reload schema';

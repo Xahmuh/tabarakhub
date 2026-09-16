@@ -1,6 +1,5 @@
-
 // Define Role type for consistent usage
-export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver';
+export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver' | 'worker';
 export type SupervisorScopeMode = 'assigned_zones' | 'all_zones';
 
 export interface Branch {
@@ -21,6 +20,20 @@ export interface Branch {
   lng?: number | null;
   dutyRadiusM?: number | null;
   supervisorScopeMode?: SupervisorScopeMode | null;
+  regionId?: string;
+  regionName?: string;
+  areaName?: string;
+  is24Hour?: boolean;
+  isActive?: boolean;
+}
+
+export interface BranchArea {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type DeliveryZoneClass = 'core' | 'standard' | 'extended' | 'outside_range' | 'unavailable';
@@ -327,6 +340,7 @@ export interface HRRequest {
   location?: string;
   mobile?: string;
   notes?: string;
+  nationality?: string;
   lastVacationDate?: string;
 }
 
@@ -840,6 +854,8 @@ export interface DeliveryDriverDutyReportRow {
   cancelledCount: number;
   actualDeliveryCount: number;
   internalTransferCount: number;
+  notes?: string;
+  isMissingPunch?: boolean;
 }
 
 // --- Delivery Coverage Analytics (manager Bahrain block coverage) ---
@@ -1168,4 +1184,1014 @@ export interface DriverEfficiency {
   estimatedContribution: number | null;
   estimatedNet: number | null;
   classification: DriverEfficiencyClass | 'no_cost_data';
+}
+
+// ============================================================================
+// OPERATIONAL ALERT & RENEWALS TYPES
+// ============================================================================
+
+export type OperationalRenewalType =
+  | 'CR'
+  | 'CHAMBER_OF_COMMERCE'
+  | 'NHRA_PHARMACY'
+  | 'NHRA_PHARMACIST'
+  | 'NHRA'
+  | 'WORK_PERMIT'
+  | 'FLEET_VEHICLE'
+  | 'OTHER';
+
+export type OperationalEntityType = 'COMPANY' | 'BRANCH' | 'EMPLOYEE' | 'VEHICLE' | 'OTHER';
+
+export type RenewalWorkflowStatus =
+  | 'NOT_STARTED'
+  | 'PLANNED'
+  | 'IN_PROGRESS'
+  | 'SUBMITTED'
+  | 'AWAITING_APPROVAL'
+  | 'RENEWED'
+  | 'CANCELLED';
+
+export type AlertSeverity =
+  | 'NORMAL'
+  | 'UPCOMING'
+  | 'WARNING'
+  | 'URGENT'
+  | 'CRITICAL'
+  | 'EXPIRED';
+
+export interface OperationalRenewalRecord {
+  id: string;
+  renewalType: OperationalRenewalType;
+  entityType: OperationalEntityType;
+  entityId?: string;
+  entityName: string;
+  documentType: string;
+  documentNumber: string;
+  branchId?: string;
+  branchName?: string;
+  issueDate?: string;
+  expiryDate: string;
+  renewalStatus: RenewalWorkflowStatus;
+  priority?: AlertSeverity;
+  responsibleUserId?: string;
+  responsibleUserName?: string;
+  notes?: string;
+  isActive: boolean;
+  metadata?: Record<string, any>;
+  attachmentsCount?: number;
+  historyCount?: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+  costCenterCode?: string;
+  costCenterName?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  currency?: string;
+  paymentStatus?: 'UNPAID' | 'SCHEDULED' | 'PAID' | 'WAIVED';
+  plannedPaymentDate?: string;
+  paidAt?: string;
+  paymentMethod?: 'BENEFIT_PAY' | 'SADAD_GOV' | 'CREDIT_CARD' | 'BANK_TRANSFER' | 'PETTY_CASH' | 'OTHER';
+  paymentReference?: string;
+  renewalDurationMonths?: number;
+  daysRemaining: number;
+  severity: AlertSeverity;
+}
+
+export interface OperationalRenewalInput {
+  renewalType: OperationalRenewalType;
+  entityType: OperationalEntityType;
+  entityId?: string;
+  entityName: string;
+  documentType: string;
+  documentNumber: string;
+  branchId?: string;
+  branchName?: string;
+  issueDate?: string;
+  expiryDate: string;
+  renewalStatus?: RenewalWorkflowStatus;
+  priority?: AlertSeverity;
+  responsibleUserId?: string;
+  responsibleUserName?: string;
+  notes?: string;
+  isActive?: boolean;
+  metadata?: Record<string, any>;
+  costCenterCode?: string;
+  costCenterName?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  currency?: string;
+  paymentStatus?: 'UNPAID' | 'SCHEDULED' | 'PAID' | 'WAIVED';
+  plannedPaymentDate?: string;
+  paidAt?: string;
+  paymentMethod?: 'BENEFIT_PAY' | 'SADAD_GOV' | 'CREDIT_CARD' | 'BANK_TRANSFER' | 'PETTY_CASH' | 'OTHER';
+  paymentReference?: string;
+  renewalDurationMonths?: number;
+}
+
+export interface OperationalRenewalHistory {
+  id: string;
+  renewalId: string;
+  entityName?: string;
+  renewalType?: OperationalRenewalType;
+  documentNumber?: string;
+  previousExpiryDate?: string;
+  newExpiryDate?: string;
+  previousDocumentNumber?: string;
+  newDocumentNumber?: string;
+  action: string;
+  performedBy?: string;
+  performedAt: string;
+  cost?: number;
+  paidAt?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  notes?: string;
+  attachmentUrl?: string;
+}
+
+export interface OperationalRenewalAttachment {
+  id: string;
+  renewalId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileUrl: string;
+  uploadedBy?: string;
+  uploadedAt: string;
+  notes?: string;
+}
+
+export interface OperationalRenewalActivity {
+  id: string;
+  renewalId: string;
+  action: string;
+  fieldName?: string;
+  previousValue?: string;
+  newValue?: string;
+  performedBy?: string;
+  performedAt: string;
+  notes?: string;
+}
+
+export interface OperationalRenewalSettings {
+  id?: string;
+  criticalDays: number;
+  urgentDays: number;
+  warningDays: number;
+  upcomingDays: number;
+  reminderIntervals: number[];
+  enabledTypes: OperationalRenewalType[];
+  defaultResponsibleUserId?: string;
+  defaultResponsibleUserName?: string;
+}
+
+export interface OperationalRenewalFilters {
+  renewalType?: OperationalRenewalType | 'ALL';
+  severity?: AlertSeverity | 'ALL';
+  renewalStatus?: RenewalWorkflowStatus | 'ALL';
+  branchId?: string;
+  responsibleUserId?: string;
+  search?: string;
+  expiryPeriod?: 'ALL' | 'EXPIRED' | 'TODAY' | 'NEXT_7_DAYS' | 'NEXT_30_DAYS' | 'NEXT_60_DAYS' | 'NEXT_90_DAYS' | 'CUSTOM';
+  startDate?: string;
+  endDate?: string;
+  includeArchived?: boolean;
+}
+
+export interface OperationalRenewalKpis {
+  totalActive: number;
+  criticalCount: number;
+  expiredCount: number;
+  expiringSoonCount: number;
+  renewalInProgressCount: number;
+  renewedCount: number;
+  distribution: Record<AlertSeverity, number>;
+}
+
+export type RenewalCostCenterType = 'BRANCH' | 'DEPARTMENT' | 'REGULATORY' | 'HOLDING';
+
+export interface RenewalCostCenter {
+  id: string;
+  code: string;
+  name: string;
+  nameAr?: string;
+  type: RenewalCostCenterType;
+  branchId?: string;
+  branchCode?: string;
+  isActive: boolean;
+}
+
+export interface RenewalMonthlyBudget {
+  monthKey: string;
+  monthLabel: string;
+  year: number;
+  month: number;
+  renewalCount: number;
+  estimatedTotal: number;
+  paidTotal: number;
+  pendingTotal: number;
+}
+
+export interface RenewalCostCenterBudget {
+  costCenterCode: string;
+  costCenterName: string;
+  type: RenewalCostCenterType;
+  renewalCount: number;
+  estimatedTotal: number;
+  paidTotal: number;
+  pendingTotal: number;
+  paymentCompletionPercentage: number;
+}
+
+export interface RenewalBudgetSummary {
+  totalRenewals: number;
+  totalEstimatedCost: number;
+  totalPaidAmount: number;
+  totalPendingAmount: number;
+  dueIn30Days: number;
+  dueIn60Days: number;
+  dueIn90Days: number;
+  monthlyBreakdown: RenewalMonthlyBudget[];
+  costCenterBreakdown: RenewalCostCenterBudget[];
+}
+
+export type WPDurationMonths = 6 | 12 | 24;
+
+export interface RenewalTariffRule {
+  id: string;
+  renewalType: OperationalRenewalType;
+  label: string;
+  labelAr?: string;
+  baseCostBHD: number;
+  durationMonths?: number;
+  entityPattern?: string;
+  branchCode?: string;
+  documentTypePattern?: string;
+  paymentLeadDays?: number;
+  targetPaymentDate?: string;
+  isDefault?: boolean;
+  isActive?: boolean;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TariffLookupResult {
+  cost: number;
+  matchedRule?: RenewalTariffRule;
+  ruleLabel: string;
+  isCustomOverride: boolean;
+  paymentLeadDays?: number;
+  targetPaymentDate?: string;
+}
+
+// ============================================================================
+// OPERATIONAL EXPENSES TYPES
+// ============================================================================
+
+export type VehicleOwnershipType = 'Internal' | 'External';
+
+export interface Vehicle {
+  id: string;
+  vehicleCode: string;
+  vehicleType: string;
+  ownershipType?: VehicleOwnershipType;
+  plateNumber?: string;
+  crNumber?: string;
+  registrationExpiryDate?: string;
+  initialOdometer: number;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface VehicleOdometerHistory {
+  id: string;
+  vehicleId: string;
+  odometerReading: number;
+  readingDate: string;
+  readingTime?: string;
+  sourceType: string;
+  sourceReferenceId?: string;
+  driverId?: string;
+  driverName?: string;
+  branchId?: string;
+  branchName?: string;
+  branchCode?: string;
+  amount?: number;
+  location?: string;
+  notes?: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+export interface FuelExpenseDetail {
+  id: string;
+  expenseId: string;
+  vehicleId: string;
+  driverId?: string;
+  previousOdometer: number;
+  currentOdometer: number;
+  distanceSincePrevious: number;
+  liters?: number;
+  fuelPricePerLiter?: number;
+  createdAt?: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  slug: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface ExpenseTransaction {
+  id: string;
+  referenceNo: string;
+  branchId: string;
+  branchCode?: string;
+  branchName?: string;
+  categoryId: string;
+  categoryName?: string;
+  categorySlug?: string;
+  expenseDate: string;
+  expenseTime?: string;
+  amount: number;
+  currency: string;
+  status: string;
+  description?: string;
+  paidTo?: string;
+  driverId?: string;
+  driverName?: string;
+  vehicleId?: string;
+  vehicleCode?: string;
+  plateNumber?: string;
+  ownershipType?: VehicleOwnershipType;
+  receiptUrl?: string;
+  receiptProvidedToAccounts: boolean;
+  receiptProvidedAt?: string;
+  receiptProvidedBy?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+  deletedAt?: string;
+  fuelDetails?: FuelExpenseDetail;
+}
+
+export interface ExpenseTransactionInput {
+  branchId: string;
+  categoryId: string;
+  expenseDate: string;
+  expenseTime?: string;
+  amount: number;
+  currency?: string;
+  description?: string;
+  paidTo?: string;
+  driverId?: string;
+  vehicleId?: string;
+  receiptUrl?: string;
+  receiptProvidedToAccounts?: boolean;
+  createdBy?: string;
+  currentOdometer?: number;
+  liters?: number;
+  fuelPricePerLiter?: number;
+  fuelDetails?: {
+    currentOdometer: number;
+    liters?: number;
+    fuelPricePerLiter?: number;
+  };
+}
+
+export interface ExpenseFilters {
+  branchId?: string;
+  categoryId?: string;
+  vehicleId?: string;
+  driverId?: string;
+  startDate?: string;
+  endDate?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  status?: string;
+  receiptPending?: boolean;
+}
+
+export interface HighestExpenseVehicle {
+  vehicleId: string;
+  vehicleCode: string;
+  plateNumber?: string;
+  totalExpense: number;
+}
+
+export interface ExpenseDashboardKpis {
+  totalExpenses: number;
+  totalCount?: number;
+  transactionCount?: number;
+  fuelTotal: number;
+  maintenanceTotal: number;
+  suppliesTotal: number;
+  vehicleServicesTotal: number;
+  otherTotal: number;
+  todayTotal?: number;
+  weekTotal?: number;
+  monthTotal?: number;
+  receiptsPending?: number;
+  receiptsPendingCount?: number;
+  totalDistanceKm: number;
+  totalFuelLiters: number;
+  avgCostPerKm: number;
+  avgLitersPer100Km?: number;
+  avgConsumptionPer100Km?: number;
+  prevPeriodLabel?: string;
+  totalExpensesChangePct?: number;
+  fuelTotalChangePct?: number;
+  avgCostPerKmChangePct?: number;
+  avgConsumptionChangePct?: number;
+  highestExpenseVehicle?: HighestExpenseVehicle;
+}
+
+export interface ExpenseCalendarDay {
+  date: string;
+  dayOfMonth?: number;
+  dayOfWeek?: number;
+  total?: number;
+  count?: number;
+  totalAmount?: number;
+  transactionCount?: number;
+  isCurrentMonth?: boolean;
+  isToday?: boolean;
+  }
+
+export interface BranchExpenseRanking {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  total?: number;
+  count?: number;
+  totalAmount?: number;
+  transactionCount?: number;
+  percentage: number;
+}
+
+// ============================================================================
+// AUTOMATED DUTY SCHEDULER TYPES (Spec v1.0)
+// ============================================================================
+
+export interface Region {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BranchShiftType {
+  id: string;
+  branchId: string;
+  code: string;
+  shiftTypeCode?: string;
+  name: string;
+  startTime: string; // "HH:MM:SS" or "HH:MM"
+  endTime: string;
+  crossesMidnight?: boolean;
+  durationHours?: number;
+  isActive?: boolean;
+  staffRequired: number;
+  createdAt?: string;
+}
+
+export type DutySchedulerLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface DutySchedulerLeaveRecord {
+  id: string;
+  employeeId: string;
+  leaveType: string;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string;
+  status: DutySchedulerLeaveStatus;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// Comprehensive Annual Leave Management Types
+// ==========================================
+
+export type AnnualLeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type AnnualLeaveEventType = 'ACCRUAL' | 'CONSUMPTION' | 'MANUAL_ADJUSTMENT' | 'CONSUMPTION_REFUND';
+
+export interface AnnualLeaveRequest {
+  id: string;
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  requestedDays: number;
+  status: AnnualLeaveRequestStatus;
+  requestComments: string | null;
+  requestedAt: string;
+  decidedByUserId: string | null;
+  decidedAt: string | null;
+  decisionComments: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnnualLeaveLedgerEntry {
+  id: string;
+  employeeId: string;
+  period: string; // 'YYYY-MM'
+  openingBalance: number;
+  accruedDays: number;
+  consumedDays: number;
+  closingBalance: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnnualLeaveAccrualEvent {
+  id: string;
+  employeeId: string;
+  ledgerEntryId: string;
+  eventType: AnnualLeaveEventType;
+  amount: number;
+  relatedRequestId: string | null;
+  note: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+export type WeeklyRestComplianceStatus = 'UNDER' | 'OK' | 'OVER';
+
+export interface WeeklyRestComplianceRow {
+  employeeId: string;
+  employeeName: string;
+  totalCalendarDays: number;
+  weeksCount: number;
+  expectedRestDaysMin: number;
+  expectedRestDaysMax: number;
+  actualRestDaysTaken: number;
+  leaveDaysCount: number;
+  status: WeeklyRestComplianceStatus;
+}
+
+export interface WeeklyRestComplianceReport {
+  startDate: string;
+  endDate: string;
+  rows: WeeklyRestComplianceRow[];
+  summary: {
+    totalEmployees: number;
+    okCount: number;
+    underCount: number;
+    overCount: number;
+  };
+}
+
+
+export type PharmacistRoleType = 'FIXED' | 'RELIEF';
+export type WorkRestMode = 'DAYS_PER_WEEK' | 'FIXED_CYCLE' | 'VARIABLE_CYCLE' | 'CUSTOM_CALENDAR' | 'DYNAMIC_VARIABLE_CYCLE';
+export type PatternStrictness = 'HARD' | 'SOFT';
+export type ShiftEligibility = 'AM_ONLY' | 'PM_ONLY' | 'NIGHT_ONLY' | 'MIXED';
+export type DutyScheduleStatus = 'DRAFT' | 'UNDER_REVIEW' | 'PUBLISHED' | 'ARCHIVED';
+export type DutyConflictSeverity = 'HARD' | 'SOFT';
+
+export interface DynamicVariableCycleConfig {
+  targetStreakMin: number;       // soft preference lower bound, e.g. 4
+  targetStreakMax: number;       // soft preference upper bound, e.g. 6
+  minRestDaysAfterStreak: number; // typically 1, configurable per profile
+}
+
+export interface PharmacistSchedulingProfile {
+  id: string;
+  employeeId: string;
+  roleType: PharmacistRoleType;
+  primaryBranchId?: string;
+  workRestMode: WorkRestMode;
+  workRestConfig: any; // JSON configuration based on the mode
+  patternStrictness: PatternStrictness;
+  maximumConsecutiveWorkingDays: number;
+  maxConsecutiveWorkingDaysOverride?: number | null; // Optional override; null = use global Control Center value
+  minimumRestHours: number; // Spec §5.2 - default 11.0
+  weekendPreference?: any; // JSON
+  isActive: boolean;
+  effectiveFrom?: string; // "YYYY-MM-DD"
+  effectiveTo?: string; // "YYYY-MM-DD"
+  createdAt: string;
+  updatedAt: string;
+  
+  // Relations mapped at runtime
+  allowedBranchIds?: string[];
+  allowedShiftTypes?: string[];
+  zoneId?: string;
+  zoneName?: string;
+  secondaryZoneId?: string;
+  secondaryZoneName?: string;
+  secondaryZoneMaxDays?: number;
+}
+
+export interface DutySchedule {
+  id: string;
+  name?: string;
+  zoneId?: string;
+  zoneName?: string;
+  periodStart: string; // "YYYY-MM-DD"
+  periodEnd: string; // "YYYY-MM-DD"
+  status: DutyScheduleStatus;
+  version: number;
+  editingUserId?: string;
+  editingStartedAt?: string;
+  lockedAt?: string;
+  lockedBy?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DutyScheduleAssignment {
+  id: string;
+  scheduleId: string;
+  employeeId: string;
+  branchId: string;
+  date: string; // "YYYY-MM-DD"
+  shiftCode: string;
+  isLocked: boolean;
+  isRelief: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PharmacistRollingState {
+  id: string;
+  employeeId: string;
+  scheduleId: string;
+  consecutiveWorkingDays: number;
+  currentConsecutiveWorkingDays?: number;
+  currentConsecutiveRestDays?: number;
+  currentPatternCycleIndex?: number;
+  lastShiftType?: string;
+  lastBranchId?: string;
+  lastShiftEndTime?: string; // TIMESTAMPTZ
+  lastShiftEndDatetime?: string;
+  daysSinceWeeklyRest: number;
+  workloadScore: number;
+  totalWorkloadScore?: number;
+  recentWorkloadScore?: number;
+  weekendAssignmentCount?: number;
+  
+  // Dynamic Variable Cycle extensions
+  isOnActiveStreak?: boolean;
+  streakStartDate?: string | null;
+  currentStreakTargetLength?: number | null;
+  
+  createdAt: string;
+}
+
+export interface DutyScheduleConflict {
+  id: string;
+  scheduleId: string;
+  employeeId?: string; // Nullable if branch-level conflict
+  branchId?: string;
+  date: string; // "YYYY-MM-DD"
+  conflictType: string;
+  severity: DutyConflictSeverity;
+  description: string;
+  createdAt: string;
+}
+
+export interface DutyScheduleChange {
+  id: string;
+  scheduleId: string;
+  actingUserId?: string;
+  eventType: string;
+  targetId?: string;
+  oldValue?: any;
+  newValue?: any;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface DutySchedulerSettings {
+  id?: string;
+  defaultMinimumRestHours: number;
+  defaultMaximumConsecutiveWorkingDays: number;
+  defaultWorkRestMode: WorkRestMode;
+  defaultWorkRestConfig: any;
+  defaultRestDaysPerPeriod?: number;
+  globalMaxConsecutiveDays?: number; // Admin-configurable ceiling for DYNAMIC_VARIABLE_CYCLE (default 8)
+  shiftWeights: {
+    AM: number;
+    PM: number;
+    NIGHT: number;
+    FULL?: number;
+    weekend_bonus?: number;
+    [key: string]: number | undefined;
+  };
+  weekendDays: number[];
+  fairnessWeight: number;
+  continuityWeight: number;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface EmployeeSpecialRestRequest {
+  id?: string;
+  employeeId: string;
+  employeeName?: string;
+  dates: string[]; // List of specific dates (YYYY-MM-DD) requested as weekly rest / off-days
+  notes?: string;
+}
+
+export interface SchedulingPeriodAdjustments {
+  extraRestDays?: Record<string, number>; // employeeId -> additional rest days to take this period
+  weekendPharmacistIds?: string[];        // 3-5 employeeIds designated for Friday/Saturday rest & off-day distribution
+  leaveRecords?: DutySchedulerLeaveRecord[]; // Verified leave records from wizard for zero-gap solver
+  specialRestRequests?: EmployeeSpecialRestRequest[]; // Specific requested weekly off-days per employee
+}
+
+export interface PatternDeviationRecord {
+  employeeId: string;
+  date: string;
+  type: string;
+  description: string;
+  streakLength?: number;
+}
+
+export interface DynamicCycleSolverInput {
+  periodStart: string;
+  periodEnd: string;
+  pharmacists: Array<{
+    id: string;
+    full_name?: string;
+    name?: string;
+    profile?: PharmacistSchedulingProfile;
+    [key: string]: any;
+  }>;
+  rollingStates: Record<string, PharmacistRollingState>;
+  branchShiftRequirements: BranchShiftType[];
+  approvedLeave: DutySchedulerLeaveRecord[];
+  branches: Branch[];
+  lockedAssignments?: DutyScheduleAssignment[];
+  globalMaxConsecutiveDays?: number;
+  periodAdjustments?: SchedulingPeriodAdjustments;
+  targetZoneId?: string;
+  shiftWeights?: Record<string, number>;
+}
+
+export interface DynamicCycleSolverOutput {
+  assignments: DutyScheduleAssignment[];
+  updatedRollingStates: Record<string, PharmacistRollingState>;
+  conflicts: DutyScheduleConflict[];
+  deviations: PatternDeviationRecord[];
+  success?: boolean;
+  backtrackCount?: number;
+  backjumpCount?: number;
+}
+
+
+// ============================================================================
+// ATTENDANCE & GEOFENCING MODULE TYPES (Hardened Spec v1.0)
+// ============================================================================
+
+// ---------- Staff Category ----------
+export type StaffCategory = 'Pharmacist' | 'Driver' | 'Worker' | 'Management';
+
+// ---------- Core Attendance ----------
+export type AttendancePunchType = 'CLOCK_IN' | 'CLOCK_OUT';
+export type AttendanceStatus = 'PRESENT' | 'LATE' | 'EARLY_LEAVE' | 'ABSENT' | 'ON_LEAVE' | 'DAY_OFF' | 'HOLIDAY';
+export type GeofenceValidation = 'INSIDE' | 'OUTSIDE' | 'GPS_UNAVAILABLE' | 'LOW_CONFIDENCE' | 'MANUAL_OVERRIDE';
+export type AttendanceSyncStatus = 'CONFIRMED' | 'PENDING_SYNC' | 'SYNC_FAILED';
+
+export interface AttendancePunch {
+  id: string;
+  employeeId: string;
+  punchType: AttendancePunchType;
+  punchTime: string;                 // ISO 8601 timestamp (captured client-side, authoritative)
+  serverReceivedAt?: string;         // ISO 8601 timestamp (when server processed it)
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;           // GPS accuracy in meters
+  matchedBranchId: string | null;
+  matchedBranchName?: string;
+  distanceFromBranch: number | null;  // meters from nearest geofence center
+  geofenceValidation: GeofenceValidation;
+  syncStatus: AttendanceSyncStatus;   // §4: Supabase-first with pending-sync queue
+  deviceFingerprint?: string;         // browser/device identifier
+  photoUrl?: string | null;           // optional selfie capture
+  ipAddress?: string | null;
+  notes?: string;
+  flaggedForReview?: boolean;         // §3: anti-spoofing flags
+  flagReasons?: string[];             // e.g. ['impossible_travel', 'low_accuracy']
+  overriddenBy?: string | null;       // manager userId who approved override
+  overrideReason?: string | null;
+  createdAt: string;
+}
+
+export interface AttendanceDailyRecord {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  category?: StaffCategory;
+  date: string;                       // YYYY-MM-DD
+  scheduledShiftCode?: string;        // from Duty Scheduler assignment
+  scheduledBranchId?: string;
+  scheduledBranchName?: string;
+  scheduledStartTime?: string;        // HH:MM
+  scheduledEndTime?: string;
+  actualClockIn?: string;             // ISO timestamp
+  actualClockOut?: string;
+  clockInPunchId?: string;
+  clockOutPunchId?: string;
+  clockInGeofence: GeofenceValidation;
+  clockOutGeofence: GeofenceValidation;
+  status: AttendanceStatus;
+  lateMinutes: number;                // 0 if on time (measured AFTER grace period — §5.1)
+  earlyLeaveMinutes: number;          // 0 if full shift
+  overtimeMinutes: number;
+  totalWorkedMinutes: number;
+  breakMinutes: number;               // configurable deduction
+  netWorkedMinutes: number;
+  penaltyIds: string[];               // FK references to penalty_ledger
+  isManualEntry: boolean;
+  manualEntryBy?: string | null;
+  manualEntryReason?: string;
+  approvedBy?: string | null;
+  remarks?: string;
+  registeredFingerprint?: string;
+  deviceFingerprint?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------- Penalties Engine ----------
+export type PenaltyRuleType =
+  | 'LATE_ARRIVAL'
+  | 'EARLY_DEPARTURE'
+  | 'ABSENT_NO_EXCUSE'
+  | 'ABSENT_NO_NOTICE'
+  | 'MISSING_PUNCH'
+  | 'OUTSIDE_GEOFENCE'
+  | 'CONSECUTIVE_LATE'
+  | 'MONTHLY_LATE_THRESHOLD'
+  | 'CUSTOM';
+
+export type PenaltyActionType =
+  | 'VERBAL_WARNING'
+  | 'WRITTEN_WARNING'
+  | 'SALARY_DEDUCTION_HOURS'    // deduct N hours of daily rate
+  | 'SALARY_DEDUCTION_DAYS'     // deduct N days of monthly salary
+  | 'SALARY_DEDUCTION_FIXED'    // fixed BHD amount
+  | 'SUSPENSION_DAYS'
+  | 'TERMINATION_FLAG';          // §5.3: INERT — only creates a flag for HR review, never auto-deactivates
+
+export type PenaltyEscalationTier = 1 | 2 | 3 | 4 | 5;
+
+export interface AttendancePenaltyRule {
+  id: string;
+  ruleType: PenaltyRuleType;
+  name: string;                       // e.g. "Late Arrival (1-15 min)"
+  nameAr?: string;
+  description?: string;
+  descriptionAr?: string;
+
+  // Trigger conditions
+  triggerCondition: {
+    minLateMinutes?: number;          // measured AFTER grace period is subtracted (§5.1)
+    maxLateMinutes?: number;
+    minEarlyLeaveMinutes?: number;
+    consecutiveCount?: number;        // for escalation rules
+    monthlyOccurrenceThreshold?: number;
+    geofenceRequired?: boolean;
+  };
+
+  // Tiered escalation
+  escalationTiers: Array<{
+    tier: PenaltyEscalationTier;
+    occurrenceRange: [number, number]; // e.g. [1,1] = 1st time, [2,3] = 2nd-3rd
+    action: PenaltyActionType;
+    deductionValue?: number;          // hours, days, or BHD depending on action
+    description: string;
+    descriptionAr?: string;
+  }>;
+
+  isActive: boolean;
+  appliesTo: StaffCategory[];         // which staff categories this rule applies to
+  resetPeriod: 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'NEVER';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttendancePenaltyLedger {
+  id: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  date: string;                       // YYYY-MM-DD
+  ruleId: string;
+  ruleName: string;
+  ruleType: PenaltyRuleType;
+  tier: PenaltyEscalationTier;
+  action: PenaltyActionType;
+  deductionValue: number;
+  deductionUnit: 'HOURS' | 'DAYS' | 'BHD';
+  calculatedDeductionBhd: number;     // final BHD amount
+  occurrenceNumber: number;           // nth violation in reset period
+  isWaived: boolean;
+  waivedBy?: string;
+  waivedReason?: string;
+  waivedAt?: string;
+  linkedAttendanceRecordId: string;
+  notes?: string;
+  createdAt: string;
+}
+
+// ---------- Overtime Configuration (§2.2 — configurable, not hard-coded) ----------
+export interface OvertimeRateConfig {
+  normalDayMultiplier: number;         // e.g. 1.25, admin-editable
+  weekendMultiplier: number;           // e.g. 1.5 — Bahrain law treats weekend/holiday OT differently
+  publicHolidayMultiplier: number;     // e.g. 1.5 or higher, admin-editable
+}
+
+// ---------- Module Configuration (§2.1 — no duplicated publicHolidays/weekendDays) ----------
+export interface AttendanceModuleConfig {
+  id: string;
+  gracePeriodMinutes: number;           // default 5
+  earlyClockInWindowMinutes: number;    // how early they can punch in (e.g. 30)
+  autoClockOutAfterHours: number;       // auto clock-out if forgot (e.g. 14)
+  breakDeductionMinutes: number;        // standard break deduction (e.g. 30)
+  requireGeofenceForClockIn: boolean;
+  requireGeofenceForClockOut: boolean;
+  allowManualEntryByEmployee: boolean;
+  requirePhotoOnClockIn: boolean;       // photo on first clock-in of the day only (§6)
+  gpsAccuracyThresholdMeters: number;   // §3.1: reject/flag punches with accuracy worse than this (e.g. 100)
+  impossibleTravelSpeedKmh: number;     // §3.2: flag if implied speed exceeds this (e.g. 200)
+  geofenceRadiusOverrideMeters?: number | null; // global override, null = per-branch assignment
+  overtimeThresholdMinutes: number;     // minutes after shift end to count OT (e.g. 15)
+  overtimeRateConfig: OvertimeRateConfig;
+  workingHoursPerDay: number;           // for deduction calculations (e.g. 8)
+  // NOTE: weekendDays sourced from DutySchedulerSettings.weekendDays — not duplicated here (§2.1)
+  // NOTE: publicHolidays sourced from PublicHoliday table — not duplicated here (§2.1)
+  updatedBy?: string;
+  updatedAt: string;
+}
+
+// ---------- Granular Permissions (§2.3) ----------
+export type AttendancePermissionKey =
+  | 'attendance_clock_self'            // Clock In/Out for own record
+  | 'attendance_view_own'              // View own attendance history
+  | 'attendance_view_team'             // Manager dashboard, all employees in scope
+  | 'attendance_manual_entry'          // Admin override entry
+  | 'attendance_manage_penalty_rules'  // Edit AttendancePenaltyRule configuration
+  | 'attendance_waive_penalty'         // Waiver action on penalty ledger
+  | 'attendance_view_penalty_ledger'   // Read-only access to penalty history/audit
+  | 'attendance_configure_module';     // Edit AttendanceModuleConfig
+
+// ---------- Reporting ----------
+export interface AttendanceMonthlyReport {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  category: string;
+  branchName: string;
+  month: string;                      // YYYY-MM
+  scheduledDays: number;
+  presentDays: number;
+  lateDays: number;
+  absentDays: number;
+  leaveDays: number;
+  dayOffDays: number;
+  holidayDays: number;
+  earlyLeaveDays: number;
+  totalLateMinutes: number;
+  totalEarlyLeaveMinutes: number;
+  totalOvertimeMinutes: number;
+  totalWorkedHours: number;
+  totalPenaltiesBhd: number;
+  totalWaivedPenaltiesBhd: number;
+  penaltyBreakdown: Array<{
+    ruleType: PenaltyRuleType;
+    count: number;
+    totalBhd: number;
+    waivedCount: number;
+  }>;
+  attendancePercentage: number;        // present / scheduled × 100
+  punctualityScore: number;            // 0-100 composite score
+}
+
+// ---------- Anti-Spoofing Review Queue ----------
+export interface AttendanceReviewItem {
+  punchId: string;
+  employeeId: string;
+  employeeName: string;
+  punchTime: string;
+  flagReasons: string[];
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolution?: 'APPROVED' | 'REJECTED' | 'PENDING';
 }

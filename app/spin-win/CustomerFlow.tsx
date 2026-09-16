@@ -21,7 +21,8 @@ import {
     ArrowRight,
     Loader2,
     Instagram,
-    MessagesSquare
+    MessagesSquare,
+    ExternalLink
 } from 'lucide-react';
 
 interface CustomerFlowProps {
@@ -83,7 +84,7 @@ const loadSpinRecoveryState = (token: string): SpinFlowDraft | null => {
 
         return {
             token,
-            step: draft.step === 'review' || draft.step === 'spin' ? draft.step : 'info',
+            step: draft.step === 'spin' ? 'spin' : 'info',
             phone: draft.phone || '',
             firstName: draft.firstName || '',
             lastName: draft.lastName || '',
@@ -163,7 +164,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
     };
 
     const currentRecoveryStep = (): SpinRecoveryStep =>
-        step === 'review' || step === 'spin' ? step : 'info';
+        step === 'spin' ? 'spin' : 'info';
 
     const persistSpinReturn = (
         ratingOverride = skipRating,
@@ -229,8 +230,8 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                         setEmail(savedDraft.email);
                         setCountryCode(savedDraft.countryCode);
                         setHasClickedRate(savedDraft.hasClickedRate);
-                        const restoredStep = !shouldSkipRating && (savedDraft.hasClickedRate || savedDraft.step === 'review' || savedDraft.step === 'spin')
-                            ? 'review'
+                        const restoredStep = savedDraft.step === 'spin'
+                            ? 'spin'
                             : 'info';
                         persistSpinReturn(shouldSkipRating, {
                             ...savedDraft,
@@ -255,13 +256,12 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
     }, [token]);
 
     useEffect(() => {
-        if (step === 'info' || step === 'review' || step === 'spin') {
+        if (step === 'info' || step === 'spin') {
             persistSpinReturn(skipRating, { step });
         }
 
         switch (step) {
             case 'info': document.title = `Register Entry | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
-            case 'review': document.title = `Unlock Prize | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
             case 'spin': document.title = `Lucky Spinner | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
             case 'result': document.title = `You Won! | ${clientConfig.clientName} | ${clientConfig.appName}`; break;
             default: document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
@@ -290,16 +290,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
             // Production fraud/rate checks are enforced server-side inside the spin RPC.
 
             if (session) {
-                if (skipRating) {
-                    loadPrizes();
-                } else {
-                    const hasReviewed = await spinWinService.reviews.checkToday(cust.id, session.branchId);
-                    if (hasReviewed) {
-                        loadPrizes();
-                    } else {
-                        setStep('review');
-                    }
-                }
+                await loadPrizes();
             }
         } catch {
             setError('We could not save your details right now. Please check your connection and try again.');
@@ -312,7 +303,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
         try {
             const activePrizes = await spinWinService.prizes.list();
             setPrizes(activePrizes.filter(p => p.isActive));
-            saveFlowDraft({ hasClickedRate: true, step: 'spin' });
+            saveFlowDraft({ step: 'spin' });
             setStep('spin');
         } catch (err) {
             setError('Error loading prizes.');
@@ -320,15 +311,16 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
     };
 
     const handleReviewClick = async () => {
-        if (!customer || !session) return;
-        const mapsOpenedAt = Date.now();
+        if (!session) return;
         setHasClickedRate(true);
-        saveFlowDraft({ hasClickedRate: true, step: 'review', mapsOpenedAt });
-        void spinWinService.reviews.log({
-            customerId: customer.id,
-            branchId: session.branchId,
-            reviewClicked: true
-        });
+        saveFlowDraft({ hasClickedRate: true });
+        if (customer) {
+            void spinWinService.reviews.log({
+                customerId: customer.id,
+                branchId: session.branchId,
+                reviewClicked: true
+            });
+        }
         const reviewUrl = session.branches?.google_maps_link || 'https://search.google.com/local/writereview?placeid=ChIJo_Y029TfPTUREonl7Y1yN5A';
         const opened = window.open(reviewUrl, '_blank', 'noopener,noreferrer');
         if (!opened) {
@@ -597,7 +589,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
             : motionPermission === 'denied'
                 ? 'Blocked'
                 : 'Tap only';
-    const isWheelStep = step === 'review' || step === 'spin';
+    const isWheelStep = step === 'spin';
 
     if (error) {
         return (
@@ -714,8 +706,8 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                     </div>
                 )}
 
-                {/* Review & Spin */}
-                {(step === 'review' || step === 'spin') && (
+                {/* Spin Wheel */}
+                {step === 'spin' && (
                     <div className="relative flex min-h-[100svh] flex-col overflow-hidden bg-slate-950 text-white animate-in fade-in duration-500">
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(220,38,38,0.28),transparent_34%),linear-gradient(180deg,#111827_0%,#020617_64%,#111827_100%)]" />
                         <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-red-700/25 to-transparent" />
@@ -731,7 +723,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                                     </h2>
                                 </div>
                                 <div className="shrink-0 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white/70">
-                                    {step === 'review' ? 'Locked' : 'Ready'}
+                                    Ready
                                 </div>
                             </div>
 
@@ -744,7 +736,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                             </div>
 
                             <div className="flex flex-1 flex-col items-center justify-center gap-3 py-3">
-                                <div className={`relative w-full max-w-[min(86vw,420px)] transition-all duration-700 ${step === 'review' ? 'grayscale opacity-55 scale-[0.94] blur-[1.5px]' : 'scale-100'}`}>
+                                <div className="relative w-full max-w-[min(86vw,420px)] transition-all duration-700 scale-100">
                                     <Spinner
                                         prizes={prizes.map(p => ({ id: p.id, name: p.name, color: p.color || '' }))}
                                         winner={winningPrize}
@@ -756,90 +748,62 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                                         isMotionActive={motionPermission === 'enabled' && wheelMotion.strength > 8}
                                         logoUrl={logoUrl}
                                     />
-                                    {step === 'review' && (
-                                        <div className="absolute inset-0 z-30 flex items-center justify-center">
-                                            <div className="flex max-w-[210px] flex-col items-center rounded-[1.75rem] border border-white/10 bg-slate-950/90 p-5 text-center shadow-2xl backdrop-blur-md">
-                                                <Star className="h-8 w-8 animate-bounce fill-amber-400 text-amber-400" />
-                                                <span className="mt-3 text-xs font-black uppercase leading-tight tracking-[0.16em] text-white">Unlock Wheel</span>
-                                                <span className="mt-1 text-[10px] font-bold leading-relaxed text-white/50">Google Maps rating required</span>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
-                                {step === 'spin' && (
-                                    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.07] p-3 shadow-xl">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-red-200">
-                                                    <Smartphone className="h-4 w-4" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Motion Spin</p>
-                                                    <p className="text-[10px] font-bold text-white/35">Twist strength</p>
-                                                </div>
+                                <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.07] p-3 shadow-xl">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-red-200">
+                                                <Smartphone className="h-4 w-4" />
                                             </div>
-                                            <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${motionPermission === 'enabled' ? 'bg-emerald-400/15 text-emerald-200' : motionPermission === 'prompt' ? 'bg-amber-400/15 text-amber-200' : 'bg-white/10 text-white/45'}`}>
-                                                {motionStatusLabel}
-                                            </span>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">Motion Spin</p>
+                                                <p className="text-[10px] font-bold text-white/35">Twist strength</p>
+                                            </div>
                                         </div>
-                                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                                            <div
-                                                className="h-full rounded-full bg-gradient-to-r from-red-400 via-amber-300 to-emerald-300 transition-all duration-150"
-                                                style={{ width: `${clamp(wheelMotion.strength, 0, 100)}%` }}
-                                            />
-                                        </div>
+                                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${motionPermission === 'enabled' ? 'bg-emerald-400/15 text-emerald-200' : motionPermission === 'prompt' ? 'bg-amber-400/15 text-amber-200' : 'bg-white/10 text-white/45'}`}>
+                                            {motionStatusLabel}
+                                        </span>
                                     </div>
-                                )}
+                                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                        <div
+                                            className="h-full rounded-full bg-gradient-to-r from-red-400 via-amber-300 to-emerald-300 transition-all duration-150"
+                                            style={{ width: `${clamp(wheelMotion.strength, 0, 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="w-full max-w-sm self-center space-y-3 pb-1">
-                                {step === 'review' ? (
-                                    !hasClickedRate ? (
-                                        <button onClick={handleReviewClick} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-red-600 py-4 text-sm font-black text-white shadow-lg shadow-red-950/30 transition-all hover:bg-red-700 active:scale-[0.98]">
-                                            <Star className="h-5 w-5" />
-                                            <span>Rate Branch to Spin</span>
-                                            <ArrowRight className="h-4 w-4" />
-                                        </button>
+                                <button
+                                    onClick={() => startSpin('tap')}
+                                    disabled={isSpinning || isLoading || prizes.length === 0}
+                                    className="flex w-full items-center justify-center gap-3 rounded-2xl bg-white py-4 text-sm font-black text-slate-950 shadow-2xl transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
+                                >
+                                    {isLoading ? (
+                                        <><Loader2 className="h-5 w-5 animate-spin" /><span>Authenticating...</span></>
+                                    ) : isSpinning ? (
+                                        <span>Consulting Luck...</span>
                                     ) : (
-                                        <button onClick={() => { saveFlowDraft({ hasClickedRate: true, step: 'review' }); loadPrizes(); }} className="flex w-full animate-in zoom-in items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-4 text-sm font-black text-white shadow-lg shadow-emerald-950/30 transition-all hover:bg-emerald-700 active:scale-[0.98]">
-                                            <CheckCircle2 className="h-5 w-5" />
-                                            <span>I Have Rated - Continue</span>
-                                        </button>
-                                    )
-                                ) : (
-                                    <>
-                                        <button
-                                            onClick={() => startSpin('tap')}
-                                            disabled={isSpinning || isLoading || prizes.length === 0}
-                                            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-white py-4 text-sm font-black text-slate-950 shadow-2xl transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
-                                        >
-                                            {isLoading ? (
-                                                <><Loader2 className="h-5 w-5 animate-spin" /><span>Authenticating...</span></>
-                                            ) : isSpinning ? (
-                                                <span>Consulting Luck...</span>
-                                            ) : (
-                                                <span>Tap to Spin Wheel</span>
-                                            )}
-                                        </button>
+                                        <span>Tap to Spin Wheel</span>
+                                    )}
+                                </button>
 
-                                        {motionPermission === 'prompt' && (
-                                            <button
-                                                type="button"
-                                                onClick={requestMotionAccess}
-                                                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.08] py-3 text-xs font-black uppercase tracking-[0.14em] text-white/80 transition-all hover:bg-white/[0.12] active:scale-[0.98]"
-                                            >
-                                                <Smartphone className="h-4 w-4" />
-                                                Enable Phone Motion
-                                            </button>
-                                        )}
+                                {motionPermission === 'prompt' && (
+                                    <button
+                                        type="button"
+                                        onClick={requestMotionAccess}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.08] py-3 text-xs font-black uppercase tracking-[0.14em] text-white/80 transition-all hover:bg-white/[0.12] active:scale-[0.98]"
+                                    >
+                                        <Smartphone className="h-4 w-4" />
+                                        Enable Phone Motion
+                                    </button>
+                                )}
 
-                                        {motionPermission === 'denied' && (
-                                            <p className="text-center text-[10px] font-bold leading-relaxed text-white/40">
-                                                Motion access is blocked by the browser. Tap spin still works.
-                                            </p>
-                                        )}
-                                    </>
+                                {motionPermission === 'denied' && (
+                                    <p className="text-center text-[10px] font-bold leading-relaxed text-white/40">
+                                        Motion access is blocked by the browser. Tap spin still works.
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -884,6 +848,67 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                             </div>
                         </div>
 
+                        {/* Google Maps Rating Card - Bilingual with flat icons */}
+                        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1 text-amber-400">
+                                    {[1, 2, 3, 4, 5].map((i) => (
+                                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold tracking-wide">
+                                    <MapPin className="w-3 h-3 text-red-600" />
+                                    <span>Google Maps</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 text-center">
+                                <p className="text-sm font-bold text-slate-900 leading-snug" dir="rtl">
+                                    سعداء بفوزك معنا! شاركنا تجربتك وادعم فرعنا بالتقييم علي خرائط قوقل
+                                </p>
+                                <p className="text-xs font-medium text-slate-500 leading-relaxed" dir="ltr">
+                                    Happy with your win! Share your experience and support our branch on Google Maps
+                                </p>
+                            </div>
+
+                            {!hasClickedRate ? (
+                                <button
+                                    type="button"
+                                    onClick={handleReviewClick}
+                                    className="w-full bg-slate-900 hover:bg-red-700 text-white py-3.5 px-4 rounded-xl font-bold transition-all duration-200 shadow-md flex items-center justify-between group active:scale-[0.98]"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-red-400 group-hover:text-white transition-colors">
+                                            <MapPin className="w-4 h-4" />
+                                        </div>
+                                        <div className="text-left">
+                                            <div className="text-xs font-black tracking-tight leading-tight">قيّم الفرع على خرائط جوجل</div>
+                                            <div className="text-[10px] font-medium text-white/70 leading-tight">Rate Branch on Google Maps</div>
+                                        </div>
+                                    </div>
+                                    <ExternalLink className="w-4 h-4 text-white/70 group-hover:text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                </button>
+                            ) : (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-center space-y-1.5">
+                                    <div className="flex items-center justify-center gap-1.5 text-emerald-800 font-bold text-xs">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                        <span dir="rtl">شكراً جزيلاً لدعمك وتقييمك لفرعنا!</span>
+                                    </div>
+                                    <p className="text-[10px] text-emerald-700/80 font-medium" dir="ltr">
+                                        Thank you so much for supporting and rating our branch!
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleReviewClick}
+                                        className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-800 pt-1 transition-colors"
+                                    >
+                                        <span>إعادة فتح الرابط / Reopen Google Maps</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Action Buttons */}
                         <div className={session?.branches?.whatsapp_number ? "grid grid-cols-2 gap-3" : "w-full"}>
                             {session?.branches?.whatsapp_number && (
@@ -898,7 +923,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
 
                                     const targetPhone = session.branches.whatsapp_number;
                                     window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`, '_blank');
-                                }} className="bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98] w-full">
+                                }} className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 p-4 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all active:scale-[0.98] w-full">
                                     <MessageCircle className="w-5 h-5" />
                                     <span>Share with Pharmacy</span>
                                 </button>
@@ -915,18 +940,18 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                                 href="https://whatsapp.com/channel/0029VaX7ZLf1t90dNDBNaw11"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="group relative overflow-hidden bg-[#25D366] text-white p-4 rounded-2xl shadow-md transition-all active:scale-[0.98] hover:shadow-lg flex items-center justify-between"
+                                className="group relative overflow-hidden bg-white text-slate-900 p-4 rounded-2xl shadow-md border border-slate-100 transition-all active:scale-[0.98] hover:shadow-lg hover:border-emerald-200 flex items-center justify-between"
                             >
                                 <div className="flex items-center space-x-3">
-                                    <div className="p-2 bg-white/20 rounded-xl">
+                                    <div className="p-2 bg-gradient-to-br from-[#25D366] to-[#128C7E] text-white rounded-xl">
                                         <MessagesSquare className="w-5 h-5" />
                                     </div>
                                     <div className="text-left">
-                                        <h4 className="font-bold text-xs">Stay Updated</h4>
-                                        <p className="text-[10px] opacity-80">Join WhatsApp Channel</p>
+                                        <h4 className="font-bold text-xs text-slate-900">Stay Updated</h4>
+                                        <p className="text-[10px] text-slate-500">Join WhatsApp Channel</p>
                                     </div>
                                 </div>
-                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
                             </a>
 
                             <a

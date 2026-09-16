@@ -11,21 +11,16 @@
 
 alter table public.app_user_profiles
   drop constraint if exists app_user_profiles_role_check;
-
 update public.app_user_profiles set role = 'warehouse' where role = 'admin';
-
 -- Retired role: keep the auth link but deactivate until the manager re-assigns.
 update public.app_user_profiles
 set role = 'warehouse', is_active = false
 where role = 'accounts';
-
 alter table public.app_user_profiles
   add constraint app_user_profiles_role_check
   check (role in ('owner', 'manager', 'supervisor', 'warehouse', 'branch'));
-
 -- Legacy identity rows stored in branches keep working as display identities.
 update public.branches set role = 'warehouse' where role in ('admin', 'accounts');
-
 -- 2. Supervisor branch assignments ---------------------------------------------------
 
 create table if not exists public.supervisor_branches (
@@ -35,12 +30,10 @@ create table if not exists public.supervisor_branches (
   created_by uuid references auth.users(id) on delete set null,
   primary key (supervisor_user_id, branch_id)
 );
-
 alter table public.supervisor_branches enable row level security;
 revoke all on public.supervisor_branches from anon;
 grant select, insert, update, delete on public.supervisor_branches to authenticated;
 grant all on public.supervisor_branches to service_role;
-
 -- 3. Role-level default permissions --------------------------------------------------
 -- Effective permission = branch/user override (feature_permissions) -> role default -> none.
 
@@ -52,34 +45,12 @@ create table if not exists public.role_permissions (
   updated_by uuid references auth.users(id) on delete set null,
   primary key (role, feature_name)
 );
-
 alter table public.role_permissions enable row level security;
 revoke all on public.role_permissions from anon;
 grant select, insert, update, delete on public.role_permissions to authenticated;
 grant all on public.role_permissions to service_role;
-
 -- Seed defaults that preserve today's de-facto behavior for branch users.
 insert into public.role_permissions (role, feature_name, access_level) values
-  ('branch', 'command_center', 'edit'),
-  ('branch', 'workforce', 'none'),
-  ('branch', 'quality_feedback', 'edit'),
-  ('branch', 'block_analyzer', 'none'),
-  ('owner', 'command_center', 'read'),
-  ('owner', 'workforce', 'read'),
-  ('owner', 'quality_feedback', 'read'),
-  ('owner', 'block_analyzer', 'read'),
-  ('supervisor', 'command_center', 'read'),
-  ('supervisor', 'workforce', 'none'),
-  ('supervisor', 'quality_feedback', 'read'),
-  ('supervisor', 'block_analyzer', 'none'),
-  ('warehouse', 'command_center', 'read'),
-  ('warehouse', 'workforce', 'none'),
-  ('warehouse', 'quality_feedback', 'read'),
-  ('warehouse', 'block_analyzer', 'none'),
-  ('manager', 'command_center', 'edit'),
-  ('manager', 'workforce', 'edit'),
-  ('manager', 'quality_feedback', 'edit'),
-  ('manager', 'block_analyzer', 'edit'),
   ('branch', 'lost_sales', 'edit'),
   ('branch', 'shortages', 'edit'),
   ('branch', 'spin_win', 'edit'),
@@ -131,7 +102,6 @@ insert into public.role_permissions (role, feature_name, access_level) values
   ('manager', 'settings', 'edit'),
   ('manager', 'delivery', 'edit')
 on conflict (role, feature_name) do nothing;
-
 -- 4. Redefine authorization helpers --------------------------------------------------
 
 create or replace function public.current_app_can_manage()
@@ -143,7 +113,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() = 'manager', false)
 $$;
-
 -- Manager is the top role now; kept because existing policies reference it.
 create or replace function public.current_app_is_admin()
 returns boolean
@@ -154,7 +123,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() = 'manager', false)
 $$;
-
 create or replace function public.current_app_can_read_all()
 returns boolean
 language sql
@@ -164,7 +132,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('manager', 'owner', 'warehouse'), false)
 $$;
-
 create or replace function public.current_app_is_supervisor_of(target_branch_id uuid)
 returns boolean
 language sql
@@ -183,7 +150,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_can_access_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -198,10 +164,8 @@ as $$
     false
   )
 $$;
-
 revoke all on function public.current_app_is_supervisor_of(uuid) from public;
 grant execute on function public.current_app_is_supervisor_of(uuid) to authenticated, service_role;
-
 -- Operations tasks read scope now follows branch access (adds supervisor scoping).
 create or replace function public.current_app_can_read_operations_task(target_branch_id uuid)
 returns boolean
@@ -216,7 +180,6 @@ as $$
     false
   )
 $$;
-
 -- 5. Policies for the new tables -----------------------------------------------------
 
 drop policy if exists "supervisor branches select" on public.supervisor_branches;
@@ -225,7 +188,6 @@ on public.supervisor_branches
 for select
 to authenticated
 using (supervisor_user_id = auth.uid() or public.current_app_can_manage());
-
 drop policy if exists "supervisor branches manage" on public.supervisor_branches;
 create policy "supervisor branches manage"
 on public.supervisor_branches
@@ -233,14 +195,12 @@ for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "role permissions select" on public.role_permissions;
 create policy "role permissions select"
 on public.role_permissions
 for select
 to authenticated
 using (true);
-
 drop policy if exists "role permissions manage" on public.role_permissions;
 create policy "role permissions manage"
 on public.role_permissions
@@ -248,7 +208,6 @@ for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 -- 6. Tighten write policies that previously included the accounts role ----------------
 -- Finance tables used can_read_all for writes (so accounts could edit). With accounts
 -- retired and owner/warehouse added to can_read_all, writes must be manager-only.
@@ -270,7 +229,6 @@ begin
     execute 'create policy "cash differences update authenticated" on public.cash_differences for update to authenticated using (public.current_app_can_manage()) with check (public.current_app_can_manage())';
   end if;
 end $$;
-
 -- 7. Manager-guarded administration RPCs ----------------------------------------------
 -- app_user_profiles writes stay service-role-only at the table level; the manager
 -- administers users through these security-definer functions instead.
@@ -312,7 +270,6 @@ begin
   order by p.role, coalesce(b.code, u.email::text);
 end;
 $$;
-
 create or replace function public.app_admin_set_user_role(
   target_user_id uuid,
   new_role text,
@@ -358,12 +315,10 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.app_admin_list_users() from public, anon;
 revoke all on function public.app_admin_set_user_role(uuid, text, uuid, boolean) from public, anon;
 grant execute on function public.app_admin_list_users() to authenticated, service_role;
 grant execute on function public.app_admin_set_user_role(uuid, text, uuid, boolean) to authenticated, service_role;
-
 -- 8. Post-migration checks -------------------------------------------------------------
 
 do $$
@@ -402,15 +357,5 @@ begin
   if anon_priv_count > 0 then
     raise exception 'anon must not have privileges on role tables';
   end if;
-
-  -- Safety: the app must keep at least one active manager, otherwise nobody can
-  -- administer roles from the UI. Warning (not exception) because fresh projects
-  -- provision app_user_profiles after this migration via service_role.
-  if not exists (
-    select 1 from public.app_user_profiles where role = 'manager' and is_active
-  ) then
-    raise warning 'No active manager profile exists. Promote one via service_role/SQL editor: update public.app_user_profiles set role = ''manager'', is_active = true where user_id = ''<auth-user-uuid>'';';
-  end if;
 end $$;
-
 notify pgrst, 'reload schema';

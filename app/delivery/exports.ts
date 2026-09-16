@@ -345,6 +345,20 @@ export const exportBreakdownToExcel = async (
   saveAs(new Blob([buffer]), `${fileName}.xlsx`);
 };
 
+const sanitizeSheetName = (name: string, index: number, existingNames: Set<string>): string => {
+  let clean = name.replace(/[\\/?*:[\]]/g, '').trim();
+  if (!clean) clean = `Driver ${index + 1}`;
+  if (clean.length > 28) clean = clean.slice(0, 28);
+  let finalName = clean;
+  let counter = 1;
+  while (existingNames.has(finalName.toLowerCase())) {
+    finalName = `${clean.slice(0, 24)}_${counter}`;
+    counter++;
+  }
+  existingNames.add(finalName.toLowerCase());
+  return finalName;
+};
+
 export const exportDriverDutyToExcel = async (
   rows: DeliveryDriverDutyReportRow[],
   title: string,
@@ -359,121 +373,373 @@ export const exportDriverDutyToExcel = async (
   workbook.creator = 'Tabarak Hub';
   workbook.created = new Date();
 
-  const summarySheet = workbook.addWorksheet('Date Summary');
-  summarySheet.addRow([title]);
-  summarySheet.getRow(1).font = { bold: true, size: 14 };
-  summarySheet.addRow([`Generated: ${formatDutyDateTime(new Date().toISOString())}`]);
-  summarySheet.addRow([]);
-  styleHeader(summarySheet.addRow([
-    'Date',
-    'Drivers',
-    'Duty Sessions',
-    'Working Hours',
-    'Working Minutes',
-    'Assigned',
-    'Picked Up',
-    'Actual Delivery',
-    'Internal Transfer',
-    'Delivered',
-    'Cancelled'
-  ]));
+  // Tab 1: all attendance logs
+  const allLogsSheet = workbook.addWorksheet('all attendance logs');
+  allLogsSheet.views = [{ showGridLines: true }];
+  allLogsSheet.addRow([title]);
+  allLogsSheet.getRow(1).font = { bold: true, size: 14 };
+  allLogsSheet.addRow([`Generated: ${formatDutyDateTime(new Date().toISOString())}`]);
+  allLogsSheet.addRow([]);
 
-  groupDutyRowsByDate(rows).forEach(group => {
-    summarySheet.addRow([
-      group.date,
-      group.drivers.size,
-      group.shifts,
-      formatDutyHours(group.minutes),
-      group.minutes,
-      group.assigned,
-      group.pickedUp,
-      group.actual,
-      group.internal,
-      group.delivered,
-      group.cancelled
-    ]);
-  });
-
-  const detailSheet = workbook.addWorksheet('Duty Details');
-  detailSheet.addRow([title]);
-  detailSheet.getRow(1).font = { bold: true, size: 14 };
-  detailSheet.addRow([]);
-  styleHeader(detailSheet.addRow([
+  const logHeaders = [
     'Date',
     'Driver Code',
     'Driver Name',
     'Started Duty',
+    'Start Branch',
     'Finished Duty',
-    'Duty Sessions',
+    'Last Branch',
     'Working Hours',
     'Working Minutes',
-    'Start Branch',
-    'Start Latitude',
-    'Start Longitude',
-    'Branch Distance (m)',
     'Assigned',
     'Picked Up',
     'Actual Delivery',
     'Internal Transfer',
     'Delivered',
-    'Cancelled'
-  ]));
+    'Cancelled',
+    'Notes'
+  ];
+  styleHeader(allLogsSheet.addRow(logHeaders));
 
-  rows.forEach(row => {
-    detailSheet.addRow([
+  const sortedRows = [...rows].sort((a, b) => b.statDate.localeCompare(a.statDate) || a.driverName.localeCompare(b.driverName));
+
+  sortedRows.forEach(row => {
+    const addedRow = allLogsSheet.addRow([
       row.statDate,
       row.driverCode || '',
       row.driverName,
       formatDutyDateTime(row.firstOnlineAt),
+      row.startedBranchName || '',
       formatDutyDateTime(row.lastOfflineAt),
-      row.shiftCount,
+      row.startedBranchName || '',
       formatDutyHours(row.totalWorkingMinutes),
       row.totalWorkingMinutes,
-      row.startedBranchName || '',
-      row.startedLat ?? '',
-      row.startedLng ?? '',
-      row.startedDistanceM ?? '',
       row.assignedCount,
       row.pickedUpCount,
       row.actualDeliveryCount,
       row.internalTransferCount,
       row.deliveredCount,
-      row.cancelledCount
+      row.cancelledCount,
+      row.notes || (row.isMissingPunch ? '⚠️ Missing Clock-out (Auto-closed)' : '')
     ]);
+
+    if (row.isMissingPunch) {
+      const finishedCell = addedRow.getCell(6);
+      const notesCell = addedRow.getCell(16);
+      [finishedCell, notesCell].forEach(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+        cell.font = { bold: true, color: { argb: 'FF92400E' } };
+      });
+    }
   });
 
   const totalMinutes = rows.reduce((acc, row) => acc + row.totalWorkingMinutes, 0);
-  const totalRow = detailSheet.addRow([
+  const totalRow = allLogsSheet.addRow([
     'TOTAL',
     '',
     `${new Set(rows.map(row => row.driverId)).size} drivers`,
     '',
     '',
-    rows.reduce((acc, row) => acc + row.shiftCount, 0),
+    '',
+    '',
     formatDutyHours(totalMinutes),
     totalMinutes,
-    '',
-    '',
-    '',
-    '',
     rows.reduce((acc, row) => acc + row.assignedCount, 0),
     rows.reduce((acc, row) => acc + row.pickedUpCount, 0),
     rows.reduce((acc, row) => acc + row.actualDeliveryCount, 0),
     rows.reduce((acc, row) => acc + row.internalTransferCount, 0),
     rows.reduce((acc, row) => acc + row.deliveredCount, 0),
-    rows.reduce((acc, row) => acc + row.cancelledCount, 0)
+    rows.reduce((acc, row) => acc + row.cancelledCount, 0),
+    ''
   ]);
   totalRow.font = { bold: true };
 
-  [summarySheet, detailSheet].forEach(sheet => {
-    sheet.columns.forEach((column, index) => {
-      column.width = index === 2 ? 26 : 18;
-    });
+  allLogsSheet.columns.forEach((col, idx) => {
+    col.width = idx === 2 ? 26 : idx === 3 || idx === 5 ? 20 : idx === 15 ? 36 : 16;
   });
 
-  detailSheet.getColumn(10).numFmt = '0.000000';
-  detailSheet.getColumn(11).numFmt = '0.000000';
-  detailSheet.getColumn(12).numFmt = '0';
+  // Tab 2: Attendance summary (Consolidated Pivot for all drivers in one sheet with KPI header)
+  const driverGroupMap = new Map<string, { driverId: string; driverCode: string; driverName: string; rows: DeliveryDriverDutyReportRow[] }>();
+  rows.forEach(row => {
+    const existing = driverGroupMap.get(row.driverId) || {
+      driverId: row.driverId,
+      driverCode: row.driverCode || '',
+      driverName: row.driverName,
+      rows: []
+    };
+    if (!existing.driverCode && row.driverCode) existing.driverCode = row.driverCode;
+    existing.rows.push(row);
+    driverGroupMap.set(row.driverId, existing);
+  });
+
+  const driverGroups = [...driverGroupMap.values()].sort((a, b) => a.driverName.localeCompare(b.driverName));
+  const usedSheetNames = new Set<string>(['all attendance logs', 'attendance summary']);
+
+  const summarySheet = workbook.addWorksheet('Attendance summary');
+  summarySheet.views = [{ showGridLines: true }];
+
+  summarySheet.addRow(['Driver Attendance Summary']);
+  summarySheet.getRow(1).font = { bold: true, size: 14 };
+  summarySheet.addRow([`${title} | Total Drivers: ${driverGroups.length}`]);
+  summarySheet.getRow(2).font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+  summarySheet.addRow([]);
+
+  // Overall KPI Header Section for all drivers
+  summarySheet.addRow(['OVERALL ATTENDANCE KPIS']).font = { bold: true, size: 11 };
+  const overallKpiHeader = summarySheet.addRow([
+    'Total Drivers',
+    'Total Duty Days',
+    'Total Sessions',
+    'Working Hours',
+    'Working Minutes',
+    'Assigned',
+    'Picked Up',
+    'Actual Delivery',
+    'Internal Transfer',
+    'Delivered',
+    'Cancelled',
+    'Missing Punches'
+  ]);
+  styleHeader(overallKpiHeader);
+
+  const globalTotalDays = new Set(rows.map(r => `${r.driverId}:${r.statDate}`)).size;
+  const globalTotalShifts = rows.reduce((a, r) => a + r.shiftCount, 0);
+  const globalTotalMins = rows.reduce((a, r) => a + r.totalWorkingMinutes, 0);
+  const globalAssigned = rows.reduce((a, r) => a + r.assignedCount, 0);
+  const globalPicked = rows.reduce((a, r) => a + r.pickedUpCount, 0);
+  const globalActual = rows.reduce((a, r) => a + r.actualDeliveryCount, 0);
+  const globalInternal = rows.reduce((a, r) => a + r.internalTransferCount, 0);
+  const globalDelivered = rows.reduce((a, r) => a + r.deliveredCount, 0);
+  const globalCancelled = rows.reduce((a, r) => a + r.cancelledCount, 0);
+  const globalMissing = rows.reduce((a, r) => a + (r.isMissingPunch ? 1 : 0), 0);
+
+  const overallKpiValues = summarySheet.addRow([
+    driverGroups.length,
+    globalTotalDays,
+    globalTotalShifts,
+    formatDutyHours(globalTotalMins),
+    globalTotalMins,
+    globalAssigned,
+    globalPicked,
+    globalActual,
+    globalInternal,
+    globalDelivered,
+    globalCancelled,
+    globalMissing
+  ]);
+  overallKpiValues.font = { bold: true };
+  overallKpiValues.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+  });
+
+  summarySheet.addRow([]);
+
+  // All Drivers Consolidated Pivot Table
+  summarySheet.addRow(['ALL DRIVERS ATTENDANCE SUMMARY (PIVOT TABLE)']).font = { bold: true, size: 11 };
+  const driverPivotHeaders = [
+    'Driver Code',
+    'Driver Name',
+    'Duty Days',
+    'Duty Sessions',
+    'Working Hours',
+    'Working Minutes',
+    'Assigned',
+    'Picked Up',
+    'Actual Delivery',
+    'Internal Transfer',
+    'Delivered',
+    'Cancelled',
+    'Missing Punches'
+  ];
+  styleHeader(summarySheet.addRow(driverPivotHeaders));
+
+  driverGroups.forEach(group => {
+    const dRows = group.rows;
+    const dDays = dRows.length;
+    const dShifts = dRows.reduce((a, r) => a + r.shiftCount, 0);
+    const dMins = dRows.reduce((a, r) => a + r.totalWorkingMinutes, 0);
+    const dAssigned = dRows.reduce((a, r) => a + r.assignedCount, 0);
+    const dPicked = dRows.reduce((a, r) => a + r.pickedUpCount, 0);
+    const dActual = dRows.reduce((a, r) => a + r.actualDeliveryCount, 0);
+    const dInternal = dRows.reduce((a, r) => a + r.internalTransferCount, 0);
+    const dDelivered = dRows.reduce((a, r) => a + r.deliveredCount, 0);
+    const dCancelled = dRows.reduce((a, r) => a + r.cancelledCount, 0);
+    const dMissing = dRows.reduce((a, r) => a + (r.isMissingPunch ? 1 : 0), 0);
+
+    const addedRow = summarySheet.addRow([
+      group.driverCode || '',
+      group.driverName,
+      dDays,
+      dShifts,
+      formatDutyHours(dMins),
+      dMins,
+      dAssigned,
+      dPicked,
+      dActual,
+      dInternal,
+      dDelivered,
+      dCancelled,
+      dMissing
+    ]);
+
+    if (dMissing > 0) {
+      const missingCell = addedRow.getCell(13);
+      missingCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+      missingCell.font = { bold: true, color: { argb: 'FF92400E' } };
+    }
+  });
+
+  const summaryTotalRow = summarySheet.addRow([
+    'TOTAL',
+    `${driverGroups.length} drivers`,
+    globalTotalDays,
+    globalTotalShifts,
+    formatDutyHours(globalTotalMins),
+    globalTotalMins,
+    globalAssigned,
+    globalPicked,
+    globalActual,
+    globalInternal,
+    globalDelivered,
+    globalCancelled,
+    globalMissing
+  ]);
+  summaryTotalRow.font = { bold: true };
+
+  summarySheet.columns.forEach((col, idx) => {
+    col.width = idx === 1 ? 26 : 16;
+  });
+
+  // Remaining tabs: Driver Attendance Pivot Data per driver
+
+  driverGroups.forEach((group, index) => {
+    const tabName = sanitizeSheetName(group.driverName, index, usedSheetNames);
+    const driverSheet = workbook.addWorksheet(tabName);
+    driverSheet.views = [{ showGridLines: true }];
+
+    const dRows = [...group.rows].sort((a, b) => b.statDate.localeCompare(a.statDate));
+    const dDays = dRows.length;
+    const dShifts = dRows.reduce((a, r) => a + r.shiftCount, 0);
+    const dMins = dRows.reduce((a, r) => a + r.totalWorkingMinutes, 0);
+    const dAssigned = dRows.reduce((a, r) => a + r.assignedCount, 0);
+    const dPicked = dRows.reduce((a, r) => a + r.pickedUpCount, 0);
+    const dActual = dRows.reduce((a, r) => a + r.actualDeliveryCount, 0);
+    const dInternal = dRows.reduce((a, r) => a + r.internalTransferCount, 0);
+    const dDelivered = dRows.reduce((a, r) => a + r.deliveredCount, 0);
+    const dCancelled = dRows.reduce((a, r) => a + r.cancelledCount, 0);
+
+    // Driver Title & Code
+    driverSheet.addRow([`Driver Attendance - ${group.driverName}`]);
+    driverSheet.getRow(1).font = { bold: true, size: 14 };
+    driverSheet.addRow([`Code: ${group.driverCode || 'N/A'} | Activity Period: ${dRows[dRows.length - 1]?.statDate || ''} to ${dRows[0]?.statDate || ''}`]);
+    driverSheet.getRow(2).font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+    driverSheet.addRow([]);
+
+    // KPI Header Section
+    driverSheet.addRow(['DRIVER SUMMARY KPIS']).font = { bold: true, size: 11 };
+    const kpiHeader = driverSheet.addRow([
+      'Duty Days',
+      'Duty Sessions',
+      'Working Hours',
+      'Working Minutes',
+      'Assigned',
+      'Picked Up',
+      'Actual Delivery',
+      'Internal Transfer',
+      'Delivered',
+      'Cancelled'
+    ]);
+    styleHeader(kpiHeader);
+
+    const kpiValuesRow = driverSheet.addRow([
+      dDays,
+      dShifts,
+      formatDutyHours(dMins),
+      dMins,
+      dAssigned,
+      dPicked,
+      dActual,
+      dInternal,
+      dDelivered,
+      dCancelled
+    ]);
+    kpiValuesRow.font = { bold: true };
+    kpiValuesRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    });
+
+    driverSheet.addRow([]);
+
+    // Driver Attendance Table (Pivot view per date)
+    driverSheet.addRow(['ATTENDANCE DATA (DAILY PIVOT SHEET)']).font = { bold: true, size: 11 };
+    const pivotHeaders = [
+      'Date',
+      'Started Duty',
+      'Start Branch',
+      'Finished Duty',
+      'Last Branch',
+      'Working Hours',
+      'Working Minutes',
+      'Assigned',
+      'Picked Up',
+      'Actual Delivery',
+      'Internal Transfer',
+      'Delivered',
+      'Cancelled',
+      'Notes'
+    ];
+    styleHeader(driverSheet.addRow(pivotHeaders));
+
+    dRows.forEach(r => {
+      const addedRow = driverSheet.addRow([
+        r.statDate,
+        formatDutyDateTime(r.firstOnlineAt),
+        r.startedBranchName || '',
+        formatDutyDateTime(r.lastOfflineAt),
+        r.startedBranchName || '',
+        formatDutyHours(r.totalWorkingMinutes),
+        r.totalWorkingMinutes,
+        r.assignedCount,
+        r.pickedUpCount,
+        r.actualDeliveryCount,
+        r.internalTransferCount,
+        r.deliveredCount,
+        r.cancelledCount,
+        r.notes || (r.isMissingPunch ? '⚠️ Missing Clock-out (Auto-closed)' : '')
+      ]);
+
+      if (r.isMissingPunch) {
+        const finishedCell = addedRow.getCell(4);
+        const notesCell = addedRow.getCell(14);
+        [finishedCell, notesCell].forEach(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+          cell.font = { bold: true, color: { argb: 'FF92400E' } };
+        });
+      }
+    });
+
+    const dTotalRow = driverSheet.addRow([
+      'TOTAL',
+      '',
+      '',
+      '',
+      '',
+      formatDutyHours(dMins),
+      dMins,
+      dAssigned,
+      dPicked,
+      dActual,
+      dInternal,
+      dDelivered,
+      dCancelled,
+      ''
+    ]);
+    dTotalRow.font = { bold: true };
+
+    driverSheet.columns.forEach((col, idx) => {
+      col.width = idx === 1 || idx === 3 ? 20 : idx === 13 ? 36 : 16;
+    });
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(
@@ -517,10 +783,11 @@ export const printDriverDutyReport = (
       <td>${escapeHtml(row.driverCode || '')}</td>
       <td>${escapeHtml(row.driverName)}</td>
       <td>${escapeHtml(formatDutyDateTime(row.firstOnlineAt))}</td>
-      <td>${escapeHtml(formatDutyDateTime(row.lastOfflineAt))}</td>
-      <td>${escapeHtml(row.shiftCount)}</td>
-      <td>${escapeHtml(formatDutyHours(row.totalWorkingMinutes))}</td>
       <td>${escapeHtml(row.startedBranchName || '')}</td>
+      <td>${escapeHtml(formatDutyDateTime(row.lastOfflineAt))}</td>
+      <td>${escapeHtml(row.startedBranchName || '')}</td>
+      <td>${escapeHtml(formatDutyHours(row.totalWorkingMinutes))}</td>
+      <td>${escapeHtml(row.totalWorkingMinutes)}</td>
       <td>${escapeHtml(row.assignedCount)}</td>
       <td>${escapeHtml(row.pickedUpCount)}</td>
       <td>${escapeHtml(row.actualDeliveryCount)}</td>
@@ -584,14 +851,14 @@ export const printDriverDutyReport = (
           </thead>
           <tbody>${dateSummaryRows || '<tr><td colspan="8">No data</td></tr>'}</tbody>
         </table>
-        <h2>Duty details</h2>
+        <h2>Attendance details</h2>
         <table>
           <thead>
             <tr>
-              <th>Date</th><th>Code</th><th>Driver</th><th>Started</th><th>Finished</th><th>Sessions</th><th>Hours</th><th>Start branch</th><th>Assigned</th><th>Picked up</th><th>Actual</th><th>Internal</th><th>Delivered</th><th>Cancelled</th>
+              <th>Date</th><th>Code</th><th>Driver</th><th>Started</th><th>Start branch</th><th>Finished</th><th>Last branch</th><th>Hours</th><th>Minutes</th><th>Assigned</th><th>Picked up</th><th>Actual</th><th>Internal</th><th>Delivered</th><th>Cancelled</th>
             </tr>
           </thead>
-          <tbody>${bodyRows || '<tr><td colspan="14">No data</td></tr>'}</tbody>
+          <tbody>${bodyRows || '<tr><td colspan="15">No data</td></tr>'}</tbody>
         </table>
       </body>
     </html>`);

@@ -1,9 +1,7 @@
 alter table public.delivery_orders
   add column if not exists benefit_pay_received_time time;
-
 comment on column public.delivery_orders.benefit_pay_received_time is
   'Optional branch-recorded time when a Benefit Pay transfer was received for BP delivery orders.';
-
 create or replace function public.delivery_orders_normalize_payment_tracking()
 returns trigger
 language plpgsql
@@ -97,7 +95,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -300,11 +297,9 @@ begin
   return new;
 end;
 $$;
-
 drop function if exists public.app_delivery_record_and_assign_order(
   uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text
 );
-
 create function public.app_delivery_record_and_assign_order(
   p_branch_id uuid,
   p_order_date date,
@@ -479,14 +474,12 @@ begin
   return v_order.id;
 end;
 $$;
-
 revoke all on function public.app_delivery_record_and_assign_order(
   uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text, time
 ) from public, anon, authenticated;
 grant execute on function public.app_delivery_record_and_assign_order(
   uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text, time
 ) to authenticated, service_role;
-
 create or replace view public.delivery_orders_clean
 with (security_invoker = true)
 as
@@ -543,11 +536,8 @@ left join public.branches tf
 left join public.branches tt
   on tt.id = o.transfer_to_branch_id
 where o.deleted_at is null;
-
 revoke all on table public.delivery_orders_clean from public, anon, authenticated;
 grant select on table public.delivery_orders_clean to authenticated;
-
 comment on view public.delivery_orders_clean is
   'Phase B read-only clean delivery order view. Uses security_invoker=true and includes Benefit Pay received time while hiding legacy order columns.';
-
 notify pgrst, 'reload schema';

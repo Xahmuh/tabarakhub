@@ -183,9 +183,7 @@ begin
   return new;
 end;
 $$;
-
 drop function if exists public.app_delivery_reconcile_payment(uuid, numeric, text);
-
 create function public.app_delivery_reconcile_payment(
   p_order_id uuid,
   p_collected_amount_bhd numeric default null,
@@ -289,8 +287,6 @@ begin
   return v_order.id;
 end;
 $$;
-
 revoke all on function public.app_delivery_reconcile_payment(uuid, numeric, text) from public, anon;
 grant execute on function public.app_delivery_reconcile_payment(uuid, numeric, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

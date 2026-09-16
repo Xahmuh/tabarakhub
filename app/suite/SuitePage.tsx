@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { 
-  BarChart3, BookOpenCheck, ClipboardCheck, ClipboardList, FileText, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, PieChart, QrCode, Radar, ReceiptText, Settings2, ShieldCheck, Truck, UsersRound, WalletCards
+  AlertTriangle, Award, Banknote, BarChart3, BookOpenCheck, ClipboardCheck, ClipboardList, FileText, Fingerprint, Landmark, LayoutGrid, Lightbulb, LogOut, MapPinned, MessageSquareText, Package, PieChart, QrCode, Radar, ReceiptText, Settings2, ShieldCheck, Truck, UsersRound, WalletCards, Calendar, CalendarCheck
 } from 'lucide-react';
 import { AuthState, MaintenanceSettings } from '../../types';
 import { Footer } from '../shared';
@@ -242,7 +242,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'owner-dashboard',
-      visible: isOwner,
+      visible: checkPermission('owner_dashboard'),
       title: 'Owner Dashboard',
       description: 'Read-only performance, delivery traceability, map zones, driver KPIs, and pharmacy KPIs.',
       icon: <ShieldCheck className="h-5 w-5" />,
@@ -274,13 +274,60 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'hr-manager',
-      visible: isManager && canUseHr && checkPermission('hr_requests'),
+      visible: canUseHr && (isManager || checkPermission('hr_requests')),
       title: 'HR Requests Admin',
       description: 'Review employee requests and generate official letterheads.',
       icon: <ClipboardList className="h-5 w-5" />,
       onClick: () => handleTabChange('hr-manager'),
       isPending,
       badge: 'Admin'
+    },
+    {
+      key: 'hr-directory',
+      visible: canUseHr && (isManager || checkPermission('hr_requests')),
+      title: 'HR Workforce Directory',
+      description: 'Unified staff registry with prefixed codes (E, D, W, M) and geofenced branch locations.',
+      icon: <UsersRound className="h-5 w-5" />,
+      onClick: () => handleTabChange('hr-directory'),
+      isPending,
+      badge: 'Directory',
+      tone: 'feature'
+    },
+    {
+      key: 'hr-letter',
+      visible: canUseHr && (isManager || checkPermission('hr_requests')),
+      title: 'Official HR Letter Generator',
+      description: 'Generate, customize, live-preview, and print official bilingual corporate HR letters with NHRA licensing and salary matrix.',
+      icon: <Award className="h-5 w-5" />,
+      onClick: () => handleTabChange('hr-letter'),
+      isPending,
+      badge: 'Corporate Letters',
+      badgeStyle: 'red',
+      tone: 'feature'
+    },
+    {
+      key: 'payroll',
+      visible: role !== 'branch' && canUseHr && (isManager || isOwner || checkPermission('workforce') || checkPermission('delivery') || checkPermission('hr_requests')),
+      title: 'Payroll & Incentive Engine',
+      description: 'Enterprise payroll management, driver & employee commissions, target bonuses, attendance deductions, and payslips.',
+      icon: <WalletCards className="h-5 w-5" />,
+      onClick: () => handleTabChange('payroll'),
+      isPending,
+      badge: 'new module',
+      badgeStyle: 'red',
+      tone: 'finance'
+    },
+    {
+      key: 'attendance',
+      visible: canUseHr && (isManager || isOwner || checkPermission('workforce') || checkPermission('attendance')),
+      title: 'Attendance & Geofencing',
+      description: 'GPS radius clock-in/out, live team board, tiered disciplinary penalties engine, and monthly audit reports.',
+      icon: <Fingerprint className="h-5 w-5" />,
+      onClick: () => handleTabChange('attendance'),
+      isPending,
+      badge: 'new module',
+      badgeStyle: 'red',
+      tone: 'feature'
     },
     {
       key: 'dashboard-branch',
@@ -294,7 +341,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'workforce',
-      visible: isManager && canUseWorkforce && checkPermission('workforce'),
+      visible: canUseWorkforce && (isManager || checkPermission('workforce')),
       title: 'Workforce Analytics',
       description: 'Optimize staffing levels and calculate relief requirements.',
       icon: <UsersRound className="h-5 w-5" />,
@@ -304,7 +351,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'hr',
-      visible: role === 'branch' && canUseHr && checkPermission('hr_requests'),
+      visible: canUseHr && (role === 'branch' || checkPermission('hr_requests')),
       title: 'HR Self-Service',
       description: 'Request official documents and certificates directly.',
       icon: <FileText className="h-5 w-5" />,
@@ -314,7 +361,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'cash-flow',
-      visible: !isOwner && isModuleEnabled('cashFlow') && checkPermission('cash_flow'),
+      visible: isModuleEnabled('cashFlow') && checkPermission('cash_flow'),
       title: 'Cash Flow Planner',
       description: 'Liquidity forecasting, expense planning, and financial risk monitoring.',
       icon: <Landmark className="h-5 w-5" />,
@@ -325,7 +372,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'cash-tracker',
-      visible: !isManager && !isOwner && isModuleEnabled('cashTracker') && checkPermission('cash_tracker'),
+      visible: isModuleEnabled('cashTracker') && checkPermission('cash_tracker'),
       title: 'Branch Cash Tracker',
       description: 'Log and track daily cash differences between POS and count.',
       icon: <WalletCards className="h-5 w-5" />,
@@ -336,7 +383,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'corporate-codex',
-      visible: !isOwner && isModuleEnabled('corporateCodex') && checkPermission('corporate_codex'),
+      visible: isModuleEnabled('corporateCodex') && checkPermission('corporate_codex'),
       title: 'Corporate Codex',
       description: 'Official policies, circulars, and operating protocols.',
       icon: <BookOpenCheck className="h-5 w-5" />,
@@ -346,28 +393,18 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'knowledge'
     },
     {
-      key: 'system-settings',
-      visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
-      title: 'System Settings',
-      description: 'Maintenance mode, branding, module layout, delivery zones, and branch operating setup.',
+      key: 'settings',
+      visible: isModuleEnabled('settings') && (isManager || canOpenApprovalQueue || role === 'admin' || checkPermission('settings')),
+      title: 'Control Center',
+      description: 'Unified management of System Settings, Access Control, Users, Roles & Operational Infrastructure.',
       icon: <Settings2 className="h-5 w-5" />,
-      onClick: () => handleTabChange('system-settings'),
+      onClick: () => handleTabChange('settings'),
       isPending,
-      badge: 'System'
-    },
-    {
-      key: 'access-control',
-      visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
-      title: 'Access Control',
-      description: 'Users, roles, read/edit module permissions, people records, and login approvals.',
-      icon: <ShieldCheck className="h-5 w-5" />,
-      onClick: () => handleTabChange('access-control'),
-      isPending,
-      badge: 'Security'
+      badge: 'Admin'
     },
     {
       key: 'spin-win',
-      visible: !isOwner && isModuleEnabled('spinWin') && checkPermission('spin_win'),
+      visible: isModuleEnabled('spinWin') && checkPermission('spin_win'),
       title: isManager ? 'Reward Control' : 'Spin & Win',
       description: 'Generate QR tokens for the customer reward wheel.',
       icon: <QrCode className="h-5 w-5" />,
@@ -378,7 +415,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'feedback-form',
-      visible: !isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
+      visible: isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback'),
       title: 'QA Insights',
       description: 'Submit anonymous quality feedback and suggestions.',
       icon: <MessageSquareText className="h-5 w-5" />,
@@ -389,7 +426,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'feedback-admin',
-      visible: isModuleEnabled('qualityFeedback') && checkPermission('feedback_admin', 'edit'),
+      visible: isModuleEnabled('qualityFeedback') && checkPermission('feedback_admin'),
       title: 'Feedback Admin',
       description: 'Analyze quality metrics and review anonymous feedback.',
       icon: <PieChart className="h-5 w-5" />,
@@ -400,7 +437,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'employee-contributions',
-      visible: !isOwner && isModuleEnabled('employeeContributions') && checkPermission('employee_contributions'),
+      visible: isModuleEnabled('employeeContributions') && checkPermission('employee_contributions'),
       title: 'Team Contributions',
       description: 'Discover tools, automations, and projects shared by the team.',
       icon: <Lightbulb className="h-5 w-5" />,
@@ -412,7 +449,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'workflow-todo',
-      visible: !isOwner && isModuleEnabled('workflowTodo') && checkPermission('workflow_todo'),
+      visible: isModuleEnabled('workflowTodo') && checkPermission('workflow_todo'),
       title: 'Workflow & Todo',
       description: 'Assign branch tasks, track personal todos, review submissions, and follow recurring work.',
       icon: <ClipboardCheck className="h-5 w-5" />,
@@ -425,7 +462,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'delivery',
-      visible: role !== 'owner' && isModuleEnabled('delivery') && checkPermission('delivery'),
+      visible: isModuleEnabled('delivery') && checkPermission('delivery'),
       title: 'Delivery Recording & Traceability',
       description: role === 'branch'
         ? 'Record daily delivery orders and track WhatsApp & Talabat activity.'
@@ -439,7 +476,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'benefit-pay-ledger',
-      visible: role !== 'owner' && isModuleEnabled('benefitPayLedger') && checkPermission('benefit_pay_ledger'),
+      visible: isModuleEnabled('benefitPayLedger') && checkPermission('benefit_pay_ledger'),
       title: role === 'branch' ? 'Benefit Pay Recording & Traceability' : 'Benefit Pay Ledger',
       description: role === 'branch'
         ? 'Record Benefit Pay receipts and export your daily BP sheet.'
@@ -451,8 +488,45 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'finance'
     },
     {
+      key: 'operational-expenses',
+      visible: isModuleEnabled('operationalExpenses') && (role === 'branch' || checkPermission('operational_expenses')),
+      title: 'Operational Cash Expenses',
+      description: role === 'branch'
+        ? 'Record operational cash expenses paid by your pharmacy branch.'
+        : 'Track, report, and analyze operational cash expenses across branches.',
+      icon: <Banknote className="h-5 w-5" />,
+      onClick: () => handleTabChange('operational-expenses'),
+      isPending,
+      badge: 'new module',
+      badgeStyle: 'red',
+      tone: 'finance'
+    },
+    {
+      key: 'operational-renewals',
+      visible: isModuleEnabled('operationalRenewals') && (isManager || isOwner || checkPermission('operational_renewals') || checkPermission('settings')),
+      title: 'Operational Alert & Renewals',
+      description: 'Proactive compliance tracking and renewal workflow for Commercial Registrations, NHRA licenses, and Work Permits.',
+      icon: <AlertTriangle className="h-5 w-5" />,
+      onClick: () => handleTabChange('operational-renewals'),
+      isPending,
+      badge: 'Compliance',
+      badgeStyle: 'red',
+      tone: 'feature'
+    },
+    {
+      key: 'products',
+      visible: false,
+      title: 'Product Catalogue',
+      description: 'Search item prices, check product details, and browse active inventory catalogue.',
+      icon: <Package className="h-5 w-5" />,
+      onClick: () => handleTabChange('products'),
+      isPending,
+      badge: 'Catalogue',
+      tone: 'feature'
+    },
+    {
       key: 'block-analyzer',
-      visible: isManager && checkPermission('block_analyzer'),
+      visible: checkPermission('block_analyzer'),
       title: 'BH Block Analyzer',
       description: 'Analyze block coverage and population data across regions.',
       icon: <MapPinned className="h-5 w-5" />,
@@ -462,51 +536,56 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'feature'
     },
     {
-      key: 'command-center',
-      visible: !isOwner && checkPermission('command_center'),
-      title: 'Daily Command Center',
-      description: 'Download yesterday branch files, review recovery signals, and follow up daily actions.',
-      icon: <Radar className="h-5 w-5" />,
-      onClick: () => handleTabChange('command-center'),
+      key: 'duty-scheduler',
+      visible: isModuleEnabled('dutyScheduler') && checkPermission('duty_scheduler'),
+      title: 'Duty Scheduler',
+      description: 'Generate, manage, and track automated pharmacist duty schedules.',
+      icon: <Calendar className="h-5 w-5" />,
+      onClick: () => handleTabChange('duty-scheduler'),
       isPending,
-      badge: 'new module',
+      badge: 'Beta',
+      tone: 'feature'
+    },
+    {
+      key: 'leave-management',
+      visible: isModuleEnabled('leaveManagement') && (
+        checkPermission('leave_management') ||
+        checkPermission('duty_scheduler') ||
+        checkPermission('hr_requests') ||
+        isManager ||
+        isOwner
+      ),
+      title: 'Leave Management & Compliance',
+      description: 'Annual leave requests, dynamic accrual ledgers, manual balance adjustments, and Bahrain Labor Law weekly rest compliance.',
+      icon: <CalendarCheck className="h-5 w-5" />,
+      onClick: () => handleTabChange('leave-management'),
+      isPending,
+      badge: 'Compliance',
       badgeStyle: 'red',
-      cta: 'Open command center'
+      tone: 'feature'
     }
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] flex flex-col selection:bg-brand/10">
-      <div className="flex-1 max-w-[1400px] mx-auto w-full px-5 md:px-8 py-8 lg:py-12">
-        <div className="mb-8 page-enter">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between mb-6">
-            <div className="flex items-center space-x-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-brand/15 bg-brand/10 text-brand shadow-sm">
-                <LayoutGrid className="h-6 w-6" strokeWidth={2.3} />
-              </div>
-              <div>
-                <h2 className="text-2xl md:text-3xl font-black text-slate-950 tracking-tight mb-1.5">Operations Modules</h2>
-                <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 bg-slate-900 text-white rounded-md text-[11px] font-bold">{authState.user?.code}</span>
-                  <span className="flex items-center space-x-1.5 text-xs font-medium text-slate-500">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                    <span>Connected</span>
-                  </span>
-                </div>
-              </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        {/* Banner / Header */}
+        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-brand/10 text-brand flex items-center justify-center font-black text-xl shadow-inner">
+              TH
             </div>
-
-            <div className="hidden lg:flex items-center space-x-4 bg-white p-3 pr-5 rounded-xl border border-slate-200 shadow-sm">
-              <div className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center text-slate-400">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[11px] font-medium text-slate-400">On duty</span>
-                <span className="text-sm font-bold text-slate-900 leading-none mt-0.5">{role && role !== 'branch' ? ROLE_LABELS[role] : authState.pharmacist?.name}</span>
-              </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Module Launcher</h2>
+              <p className="text-sm font-medium text-slate-500">Access operational workspaces and central administration tools</p>
             </div>
           </div>
-          <div className="divider-gradient"></div>
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1.5 bg-slate-100 rounded-lg text-slate-700 text-xs font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>{role && role !== 'branch' ? ROLE_LABELS[role] : authState.pharmacist?.name}</span>
+            </div>
+          </div>
         </div>
 
         <div className="mb-5 flex items-center justify-between">

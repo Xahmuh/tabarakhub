@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, CalendarClock, Clock3, FileDown, MapPin, Printer, Route, Truck } from 'lucide-react';
+import { CalendarClock, Clock3, FileDown, Printer, Route, Table, Truck, AlertTriangle, Edit3, X } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { DeliveryDriver, DeliveryDriverDutyReportRow } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
@@ -11,11 +11,12 @@ interface DriverDutyReportProps {
   selfOnly?: boolean;
 }
 
-type DutyPeriodPreset = 'this-month' | 'last-month' | 'custom';
+type DutyPeriodPreset = 'this-month' | 'last-month' | 'all-time' | 'custom';
 
 const PERIOD_OPTIONS: Array<{ id: DutyPeriodPreset; label: string }> = [
   { id: 'this-month', label: 'This month' },
   { id: 'last-month', label: 'Last month' },
+  { id: 'all-time', label: 'All the time' },
   { id: 'custom', label: 'Custom time' }
 ];
 
@@ -41,6 +42,9 @@ const getDutyRange = (preset: DutyPeriodPreset, customFrom: string, customTo: st
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     return monthRangeFromKey(monthKeyFromDate(lastMonth));
   }
+  if (preset === 'all-time') {
+    return { from: '2020-01-01', to: toDateKey(now) };
+  }
   return { from: customFrom, to: customTo };
 };
 
@@ -56,17 +60,6 @@ const formatDateTime = (value?: string | null) => {
   }).format(date);
 };
 
-const formatDateStripLabel = (dateKey: string) => {
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (!Number.isFinite(date.getTime())) return dateKey;
-  return new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  }).format(date);
-};
-
 const formatMonthLabel = (dateKey: string) => {
   const date = new Date(`${dateKey}T00:00:00`);
   if (!Number.isFinite(date.getTime())) return dateKey;
@@ -76,6 +69,7 @@ const formatMonthLabel = (dateKey: string) => {
 const dutyPeriodLabel = (preset: DutyPeriodPreset, from: string, to: string) => {
   if (preset === 'this-month') return `This month (${from} - ${to})`;
   if (preset === 'last-month') return `Last month (${from} - ${to})`;
+  if (preset === 'all-time') return `All the time (${from} - ${to})`;
   return from === to ? from : `${from} - ${to}`;
 };
 
@@ -86,12 +80,6 @@ const formatHours = (minutes: number) => {
   if (!hours) return `${rest}m`;
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 };
-
-const formatCoordinate = (value?: number | null) =>
-  value === null || value === undefined || !Number.isFinite(value) ? '-' : value.toFixed(6);
-
-const formatDistance = (value?: number | null) =>
-  value === null || value === undefined || !Number.isFinite(value) ? '-' : `${Math.round(value)} m`;
 
 const sanitizeFileSegment = (value: string) =>
   value
@@ -113,6 +101,14 @@ const driverLabel = (driver?: DeliveryDriver | null, row?: DeliveryDriverDutyRep
   return 'All Drivers';
 };
 
+const toDateTimeInput = (isoStr?: string | null) => {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (!Number.isFinite(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
   <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-center justify-between gap-3">
@@ -123,23 +119,6 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: Reac
     {sub && <p className="mt-1 text-xs font-bold text-slate-500">{sub}</p>}
   </div>
 );
-
-const StripMetric: React.FC<{ label: string; value: React.ReactNode; tone?: 'brand' | 'slate' | 'green' | 'red' }> = ({ label, value, tone = 'slate' }) => {
-  const toneClass = tone === 'brand'
-    ? 'text-brand'
-    : tone === 'green'
-      ? 'text-emerald-700'
-      : tone === 'red'
-        ? 'text-red-700'
-        : 'text-slate-900';
-
-  return (
-    <div className="min-w-[72px]">
-      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-      <p className={`mt-0.5 text-sm font-black tabular-nums ${toneClass}`}>{value}</p>
-    </div>
-  );
-};
 
 export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = false }) => {
   const initialMonth = monthRangeFromKey(monthKeyFromDate(new Date()));
@@ -153,6 +132,13 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isPrintingPdf, setIsPrintingPdf] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Edit Modal State
+  const [editingRow, setEditingRow] = useState<DeliveryDriverDutyReportRow | null>(null);
+  const [editStartedAt, setEditStartedAt] = useState('');
+  const [editEndedAt, setEditEndedAt] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const range = useMemo(() => getDutyRange(preset, customFrom, customTo), [customFrom, customTo, preset]);
   const label = useMemo(() => dutyPeriodLabel(preset, range.from, range.to), [preset, range.from, range.to]);
@@ -168,99 +154,59 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
       .catch(error => console.warn('Driver duty driver list failed', error));
   }, [selfOnly]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadData = () => {
     setIsLoading(true);
     setErrorMessage(null);
-
     deliveryService.driverDuty.list({
       driverId: selfOnly ? undefined : driverFilter || undefined,
       dateFrom: range.from,
       dateTo: range.to
     })
-      .then(data => {
-        if (!cancelled) setRows(data);
-      })
+      .then(setRows)
       .catch(error => {
         console.error('Driver duty report failed', error);
-        if (!cancelled) {
-          setRows([]);
-          setErrorMessage(error?.message || 'Could not load driver duty report.');
-        }
+        setRows([]);
+        setErrorMessage(error?.message || 'Could not load driver duty report.');
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       });
+  };
 
-    return () => { cancelled = true; };
+  useEffect(() => {
+    loadData();
   }, [driverFilter, range.from, range.to, selfOnly]);
 
   const totals = useMemo(() => rows.reduce((acc, row) => {
     acc.minutes += row.totalWorkingMinutes;
     acc.shifts += row.shiftCount;
+    acc.assigned += row.assignedCount;
+    acc.picked += row.pickedUpCount;
     acc.actual += row.actualDeliveryCount;
     acc.transfers += row.internalTransferCount;
     acc.delivered += row.deliveredCount;
     acc.cancelled += row.cancelledCount;
+    if (row.isMissingPunch) acc.missingPunches += 1;
     acc.days.add(`${row.driverId}:${row.statDate}`);
     acc.drivers.add(row.driverId);
     return acc;
   }, {
     minutes: 0,
     shifts: 0,
+    assigned: 0,
+    picked: 0,
     actual: 0,
     transfers: 0,
     delivered: 0,
     cancelled: 0,
+    missingPunches: 0,
     days: new Set<string>(),
     drivers: new Set<string>()
   }), [rows]);
 
-  const dateGroups = useMemo(() => {
-    const map = new Map<string, {
-      date: string;
-      rows: DeliveryDriverDutyReportRow[];
-      drivers: Set<string>;
-      minutes: number;
-      shifts: number;
-      assigned: number;
-      pickedUp: number;
-      actual: number;
-      internal: number;
-      delivered: number;
-      cancelled: number;
-    }>();
-
-    rows.forEach(row => {
-      const group = map.get(row.statDate) || {
-        date: row.statDate,
-        rows: [],
-        drivers: new Set<string>(),
-        minutes: 0,
-        shifts: 0,
-        assigned: 0,
-        pickedUp: 0,
-        actual: 0,
-        internal: 0,
-        delivered: 0,
-        cancelled: 0
-      };
-      group.rows.push(row);
-      group.rows.sort((a, b) => a.driverName.localeCompare(b.driverName));
-      group.drivers.add(row.driverId);
-      group.minutes += row.totalWorkingMinutes;
-      group.shifts += row.shiftCount;
-      group.assigned += row.assignedCount;
-      group.pickedUp += row.pickedUpCount;
-      group.actual += row.actualDeliveryCount;
-      group.internal += row.internalTransferCount;
-      group.delivered += row.deliveredCount;
-      group.cancelled += row.cancelledCount;
-      map.set(row.statDate, group);
-    });
-
-    return [...map.values()].sort((a, b) => b.date.localeCompare(a.date));
-  }, [rows]);
+  const sortedSheetRows = useMemo(() => (
+    [...rows].sort((a, b) => b.statDate.localeCompare(a.statDate) || a.driverName.localeCompare(b.driverName))
+  ), [rows]);
 
   const exportDriverLabel = useMemo(() => {
     if (selfOnly) return driverLabel(null, rows[0]);
@@ -268,11 +214,11 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
   }, [driverFilter, rows, selectedDriver, selfOnly]);
 
   const exportFileName = useMemo(() => (
-    `Driver_Duty_${sanitizeFileSegment(exportDriverLabel)}_${filePeriodSegment(range.from, range.to)}`
+    `Driver_Attendance_${sanitizeFileSegment(exportDriverLabel)}_${filePeriodSegment(range.from, range.to)}`
   ), [exportDriverLabel, range.from, range.to]);
 
   const exportTitle = useMemo(() => (
-    `Driver Duty Archive - ${exportDriverLabel} - ${label}`
+    `Driver Attendance Archive - ${exportDriverLabel} - ${label}`
   ), [exportDriverLabel, label]);
 
   const handlePresetChange = (nextPreset: DutyPeriodPreset) => {
@@ -288,6 +234,11 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
       const nextRange = monthRangeFromKey(monthKeyFromDate(lastMonth));
       setCustomFrom(nextRange.from);
       setCustomTo(nextRange.to);
+    }
+    if (nextPreset === 'all-time') {
+      const now = new Date();
+      setCustomFrom('2020-01-01');
+      setCustomTo(toDateKey(now));
     }
   };
 
@@ -333,14 +284,43 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
     }
   };
 
+  const openEditModal = (row: DeliveryDriverDutyReportRow) => {
+    setEditingRow(row);
+    setEditStartedAt(toDateTimeInput(row.firstOnlineAt));
+    setEditEndedAt(toDateTimeInput(row.lastOfflineAt));
+    setEditNotes(row.notes || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRow) return;
+    setIsSavingEdit(true);
+    setErrorMessage(null);
+    try {
+      await deliveryService.driverDuty.updateShift({
+        driverId: editingRow.driverId,
+        statDate: editingRow.statDate,
+        firstOnlineAt: editStartedAt ? new Date(editStartedAt).toISOString() : null,
+        lastOfflineAt: editEndedAt ? new Date(editEndedAt).toISOString() : null,
+        notes: editNotes
+      });
+      setEditingRow(null);
+      loadData();
+    } catch (error: any) {
+      console.error('Driver shift edit failed', error);
+      setErrorMessage(error?.message || 'Failed to save driver attendance shift update.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <section className="operational-panel p-4 print:hidden">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Duty archive</p>
-              <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Driver monthly attendance</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Attendance archive</p>
+              <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">Driver attendance</h3>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex rounded-lg border border-slate-200/70 bg-slate-100/70 p-1">
@@ -388,7 +368,7 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             {!selfOnly && (
-              <div className="min-w-[260px]">
+              <div className="min-w-[240px]">
                 <SearchableSelect
                   options={drivers.map(driver => ({
                     value: driver.id,
@@ -431,14 +411,14 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
         <KpiCard label="Duty sessions" value={String(totals.shifts)} sub="in / out logs" icon={<CalendarClock className="h-4 w-4" />} />
         <KpiCard label="Work hours" value={formatHours(totals.minutes)} icon={<Clock3 className="h-4 w-4" />} />
         <KpiCard label="Actual delivery" value={String(totals.actual)} sub="completed" icon={<Route className="h-4 w-4" />} />
-        <KpiCard label="Internal transfer" value={String(totals.transfers)} sub="completed" icon={<ArrowRightLeft className="h-4 w-4" />} />
+        <KpiCard label="Missing punches" value={String(totals.missingPunches)} sub="auto-closed" icon={<AlertTriangle className="h-4 w-4 text-amber-500" />} />
         <KpiCard label="Closed orders" value={String(totals.delivered + totals.cancelled)} sub={`${totals.cancelled} cancelled`} icon={<Truck className="h-4 w-4" />} />
       </div>
 
       <section className="operational-panel overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-slate-100 p-4 md:flex-row md:items-center md:justify-between md:p-5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Monthly archive</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Attendance log sheet</p>
             <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">{formatMonthLabel(range.from)}</h3>
           </div>
           <p className="text-xs font-bold text-slate-500">{exportDriverLabel} - {range.from} to {range.to}</p>
@@ -448,71 +428,178 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
           <div className="flex h-44 items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-100 border-t-brand"></div>
           </div>
-        ) : dateGroups.length === 0 ? (
+        ) : sortedSheetRows.length === 0 ? (
           <p className="p-10 text-center text-xs font-bold text-slate-400">No driver duty activity in this period.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {dateGroups.map(group => (
-              <div key={group.date} className="bg-white">
-                <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(180px,1.2fr)_2.8fr] lg:items-center lg:px-5">
-                  <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{group.date}</p>
-                    <h4 className="mt-1 truncate text-base font-black tracking-tight text-slate-950">{formatDateStripLabel(group.date)}</h4>
-                    <p className="mt-1 text-xs font-bold text-slate-500">{group.drivers.size} driver{group.drivers.size === 1 ? '' : 's'} on duty</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-8">
-                    <StripMetric label="Sessions" value={group.shifts} tone="brand" />
-                    <StripMetric label="Hours" value={formatHours(group.minutes)} />
-                    <StripMetric label="Assigned" value={group.assigned} />
-                    <StripMetric label="Picked" value={group.pickedUp} />
-                    <StripMetric label="Actual" value={group.actual} tone="brand" />
-                    <StripMetric label="Internal" value={group.internal} />
-                    <StripMetric label="Delivered" value={group.delivered} tone="green" />
-                    <StripMetric label="Cancelled" value={group.cancelled} tone="red" />
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-3 lg:px-5">
-                  <div className="grid gap-2">
-                    {group.rows.map(row => (
-                      <div
-                        key={`${row.driverId}:${row.statDate}`}
-                        className="grid gap-3 border-l-2 border-brand/20 bg-white px-3 py-3 text-xs shadow-[0_1px_0_rgba(15,23,42,0.04)] lg:grid-cols-[minmax(170px,1.1fr)_minmax(220px,1.2fr)_minmax(220px,1.5fr)_minmax(220px,1.3fr)] lg:items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-slate-950">
-                            {row.driverCode ? `${row.driverCode} - ` : ''}{row.driverName}
-                          </p>
-                          <p className="mt-0.5 font-bold text-slate-400">{row.shiftCount} session{row.shiftCount === 1 ? '' : 's'} - {formatHours(row.totalWorkingMinutes)}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <StripMetric label="Started" value={formatDateTime(row.firstOnlineAt)} />
-                          <StripMetric label="Finished" value={formatDateTime(row.lastOfflineAt)} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-1.5 truncate font-black text-slate-700">
-                            <MapPin className="h-3.5 w-3.5 shrink-0 text-brand" />
-                            {row.startedBranchName || '-'}
-                          </p>
-                          <p className="mt-1 font-bold tabular-nums text-slate-400">
-                            {formatCoordinate(row.startedLat)}, {formatCoordinate(row.startedLng)} - {formatDistance(row.startedDistanceM)}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          <StripMetric label="Assigned" value={row.assignedCount} />
-                          <StripMetric label="Picked" value={row.pickedUpCount} />
-                          <StripMetric label="Actual" value={row.actualDeliveryCount} tone="brand" />
-                          <StripMetric label="Closed" value={row.deliveredCount + row.cancelledCount} tone={row.cancelledCount ? 'red' : 'green'} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-3">Date</th>
+                  <th className="px-3 py-3">Driver Code</th>
+                  <th className="px-3 py-3">Driver Name</th>
+                  <th className="px-3 py-3">Started Duty</th>
+                  <th className="px-3 py-3">Start Branch</th>
+                  <th className="px-3 py-3">Finished Duty</th>
+                  <th className="px-3 py-3">Last Branch</th>
+                  <th className="px-3 py-3 text-right">Working Hours</th>
+                  <th className="px-3 py-3 text-right">Working Minutes</th>
+                  <th className="px-3 py-3 text-right">Assigned</th>
+                  <th className="px-3 py-3 text-right">Picked Up</th>
+                  <th className="px-3 py-3 text-right">Actual Delivery</th>
+                  <th className="px-3 py-3 text-right">Internal Transfer</th>
+                  <th className="px-3 py-3 text-right">Delivered</th>
+                  <th className="px-3 py-3 text-right">Cancelled</th>
+                  <th className="px-3 py-3">Notes</th>
+                  {!selfOnly && <th className="px-3 py-3 text-center">Action</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                {sortedSheetRows.map(row => (
+                  <tr key={`${row.driverId}:${row.statDate}`} className={`transition-colors ${row.isMissingPunch ? 'bg-amber-50/70 hover:bg-amber-100/60' : 'hover:bg-slate-50/80'}`}>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-bold text-slate-900">{row.statDate}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-slate-500">{row.driverCode || '-'}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-bold text-slate-950">{row.driverName}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">{formatDateTime(row.firstOnlineAt)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">{row.startedBranchName || '-'}</td>
+                    <td className={`whitespace-nowrap px-3 py-2.5 font-semibold ${row.isMissingPunch ? 'text-amber-800 font-bold' : 'text-slate-600'}`}>
+                      {formatDateTime(row.lastOfflineAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">{row.startedBranchName || '-'}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-black text-brand tabular-nums">{formatHours(row.totalWorkingMinutes)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-600">{row.totalWorkingMinutes}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700">{row.assignedCount}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700">{row.pickedUpCount}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold text-brand tabular-nums">{row.actualDeliveryCount}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-slate-700">{row.internalTransferCount}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold text-emerald-700 tabular-nums">{row.deliveredCount}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold text-red-600 tabular-nums">{row.cancelledCount}</td>
+                    <td className="px-3 py-2.5 min-w-[200px]">
+                      {row.isMissingPunch ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 border border-amber-300">
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-700" />
+                          {row.notes || '⚠️ Missing Clock-out (Auto-closed)'}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">{row.notes || '-'}</span>
+                      )}
+                    </td>
+                    {!selfOnly && (
+                      <td className="whitespace-nowrap px-3 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(row)}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition-all hover:border-brand/40 hover:text-brand"
+                          title="Edit attendance timestamps"
+                        >
+                          <Edit3 className="h-3 w-3" /> Edit
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-100 font-black text-slate-950">
+                  <td className="px-3 py-3">TOTAL</td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3">{totals.drivers.size} drivers</td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 text-right text-brand tabular-nums">{formatHours(totals.minutes)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{totals.minutes}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{totals.assigned}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{totals.picked}</td>
+                  <td className="px-3 py-3 text-right text-brand tabular-nums">{totals.actual}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{totals.transfers}</td>
+                  <td className="px-3 py-3 text-right text-emerald-700 tabular-nums">{totals.delivered}</td>
+                  <td className="px-3 py-3 text-right text-red-600 tabular-nums">{totals.cancelled}</td>
+                  <td className="px-3 py-3"></td>
+                  {!selfOnly && <td className="px-3 py-3"></td>}
+                </tr>
+              </tfoot>
+            </table>
           </div>
         )}
       </section>
+
+      {/* Admin Edit Attendance Shift Modal */}
+      {editingRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brand">Admin Correction</p>
+                <h3 className="text-base font-black text-slate-950">
+                  Edit Attendance: {editingRow.driverName} ({editingRow.statDate})
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingRow(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs font-bold">
+              <div>
+                <label className="block text-slate-700 mb-1">Started Duty Time (Start Punch)</label>
+                <input
+                  type="datetime-local"
+                  value={editStartedAt}
+                  onChange={e => setEditStartedAt(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold text-slate-900 outline-none focus:border-brand"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Finished Duty Time (End Punch / Missing Clock-out Correction)</label>
+                <input
+                  type="datetime-local"
+                  value={editEndedAt}
+                  onChange={e => setEditEndedAt(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold text-slate-900 outline-none focus:border-brand"
+                />
+                <p className="mt-1 text-[11px] font-medium text-slate-500">
+                  Provide the actual clock-out timestamp to resolve missing punch flags.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Correction Notes / Reason</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Corrected by HR - Verified shift checkout"
+                  value={editNotes}
+                  onChange={e => setEditNotes(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-medium text-slate-900 outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setEditingRow(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="btn-primary text-xs font-bold disabled:opacity-50"
+              >
+                {isSavingEdit ? 'Saving...' : 'Save Attendance Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

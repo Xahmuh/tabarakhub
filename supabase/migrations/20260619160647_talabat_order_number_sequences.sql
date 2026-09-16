@@ -7,12 +7,9 @@ create table if not exists public.delivery_talabat_order_daily_sequences (
   primary key (branch_id, order_date),
   constraint delivery_talabat_order_daily_sequences_last_sequence_check check (last_sequence >= 0)
 );
-
 alter table public.delivery_talabat_order_daily_sequences enable row level security;
-
 revoke all on public.delivery_talabat_order_daily_sequences from public, anon, authenticated;
 grant all on public.delivery_talabat_order_daily_sequences to service_role;
-
 create or replace function public.delivery_format_order_number(
   p_branch_id uuid,
   p_order_date date,
@@ -31,7 +28,6 @@ begin
     || lpad(greatest(coalesce(p_sequence, 1), 1)::text, 3, '0');
 end;
 $$;
-
 create or replace function public.delivery_format_talabat_order_number(
   p_branch_id uuid,
   p_order_date date,
@@ -51,7 +47,6 @@ begin
     || lpad(greatest(coalesce(p_sequence, 1), 1)::text, 3, '0');
 end;
 $$;
-
 create or replace function public.delivery_next_talabat_order_number(
   p_branch_id uuid,
   p_order_date date
@@ -93,12 +88,10 @@ begin
   return public.delivery_format_talabat_order_number(p_branch_id, v_order_date, v_sequence);
 end;
 $$;
-
 -- Re-seed the normal sequence from non-Talabat, non-transfer rows only.
 -- Order numbers already written to delivery_orders stay immutable; this only
 -- controls the next generated numbers after this policy change.
 delete from public.delivery_order_daily_sequences;
-
 insert into public.delivery_order_daily_sequences (
   branch_id,
   order_date,
@@ -118,7 +111,6 @@ where o.branch_id is not null
   and coalesce(o.order_kind, 'actual_delivery') <> 'internal_transfer'
   and upper(btrim(coalesce(o.payment_type, ''))) <> 'TALABAT'
 group by o.branch_id, o.order_date;
-
 insert into public.delivery_talabat_order_daily_sequences (
   branch_id,
   order_date,
@@ -142,10 +134,8 @@ on conflict (branch_id, order_date)
 do update set
   last_sequence = excluded.last_sequence,
   updated_at = now();
-
 create index if not exists delivery_talabat_order_daily_sequences_date_idx
   on public.delivery_talabat_order_daily_sequences(order_date desc, branch_id);
-
 create or replace function public.delivery_orders_assign_order_number()
 returns trigger
 language plpgsql
@@ -176,15 +166,12 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.delivery_format_order_number(uuid, date, integer) from public, anon, authenticated;
 revoke all on function public.delivery_format_talabat_order_number(uuid, date, integer) from public, anon, authenticated;
 revoke all on function public.delivery_next_talabat_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_orders_assign_order_number() from public, anon, authenticated;
-
 grant execute on function public.delivery_format_order_number(uuid, date, integer) to service_role;
 grant execute on function public.delivery_format_talabat_order_number(uuid, date, integer) to service_role;
 grant execute on function public.delivery_next_talabat_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_orders_assign_order_number() to service_role;
-
 notify pgrst, 'reload schema';

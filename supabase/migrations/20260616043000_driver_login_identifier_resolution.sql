@@ -52,8 +52,6 @@ begin
   return v_email;
 end;
 $$;
-
 revoke all on function public.app_driver_resolve_login_identifier(text) from public, anon, authenticated;
 grant execute on function public.app_driver_resolve_login_identifier(text) to anon, authenticated, service_role;
-
 notify pgrst, 'reload schema';

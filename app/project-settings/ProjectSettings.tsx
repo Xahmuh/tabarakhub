@@ -34,7 +34,18 @@ import {
     LayoutGrid,
     UploadCloud,
     Image as ImageIcon,
-    PieChart
+    PieChart,
+    Settings2,
+    Truck,
+    Package,
+    Trophy,
+    Crown,
+    CheckSquare,
+    Receipt,
+    LayoutGrid as LayoutGridIcon,
+    Calendar,
+    CalendarCheck,
+    LayoutDashboard
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission } from '../../types';
@@ -45,15 +56,23 @@ import { getSystemSettingsErrorMessage, type SystemBrandingAssetSlot } from '../
 import { BranchLoginApprovalsSection } from './BranchLoginApprovalsSection';
 import { DeliveryZonesSection } from './DeliveryZonesSection';
 import { ModuleDisplaySettingsSection } from './ModuleDisplaySettingsSection';
-import { BackToModulesButton } from '../shared';
+import { RegisteredCrsSection } from './RegisteredCrsSection';
+import { ContractTypesSection } from './ContractTypesSection';
+import { OperationalRenewalsSettingsSection } from './OperationalRenewalsSettingsSection';
+import { VehicleManager } from '../operational-expenses/VehicleManager';
+import { DeliverySettings } from '../delivery/DeliverySettings';
+import { ProductManagementSection, BackToModulesButton } from '../shared';
 import { clientConfig } from '../../config/clientConfig';
+import { Clock } from 'lucide-react';
 
-const FEATURE_ICON_MAP: Partial<Record<AccessFeatureId, React.ElementType>> = {
-    command_center: RadioTower,
+const FEATURE_ICON_MAP: Record<AccessFeatureId, React.ElementType> = {
+    command_center: LayoutDashboard,
     lost_sales: Activity,
     shortages: ShoppingCart,
     spin_win: Zap,
     hr_requests: FileText,
+    hr_directory: UserCheck,
+    driver_payroll: Wallet,
     workforce: Users,
     cash_flow: Wallet,
     cash_tracker: Briefcase,
@@ -61,9 +80,16 @@ const FEATURE_ICON_MAP: Partial<Record<AccessFeatureId, React.ElementType>> = {
     quality_feedback: MessageCircle,
     feedback_admin: PieChart,
     employee_contributions: Activity,
+    workflow_todo: CheckSquare,
     delivery: ShoppingCart,
+    benefit_pay_ledger: Receipt,
     products: Store,
     block_analyzer: SlidersHorizontal,
+    operational_expenses: Wallet,
+    operational_renewals: AlertTriangle,
+    owner_dashboard: Crown,
+    duty_scheduler: Calendar,
+    leave_management: CalendarCheck,
     settings: Settings
 };
 
@@ -76,7 +102,7 @@ const DEFAULT_HUB_LOGO_URL = '/tabarak-logo.svg';
 const DEFAULT_PHARMACY_LOGO_URL = clientConfig.logoUrl;
 const DEFAULT_LOADING_SPINNER_URL = '/spinner.svg';
 
-type SettingsTab = 'branches' | 'module-layout' | 'delivery-zones' | 'pharmacists' | 'permissions' | 'access-control' | 'login-approvals' | 'system';
+type SettingsTab = 'registered-crs' | 'contract-types' | 'branches' | 'module-layout' | 'products' | 'delivery-zones' | 'delivery-settings' | 'vehicles' | 'operational-alerts' | 'pharmacists' | 'access-control' | 'login-approvals' | 'system';
 type SettingsMode = 'combined' | 'system' | 'access';
 type BrandingLogoSettingKey = 'pharmacyLogoUrl' | 'hubLogoUrl' | 'browserIconUrl' | 'loadingSpinnerUrl' | 'footerLogoUrl';
 
@@ -89,9 +115,9 @@ const BRANDING_ASSET_FIELD_BY_SLOT: Record<SystemBrandingAssetSlot, BrandingLogo
 };
 
 const SETTINGS_MODE_TABS: Record<SettingsMode, SettingsTab[]> = {
-    combined: ['branches', 'module-layout', 'delivery-zones', 'pharmacists', 'permissions', 'access-control', 'login-approvals', 'system'],
-    system: ['system', 'module-layout', 'delivery-zones', 'branches'],
-    access: ['access-control', 'pharmacists', 'permissions', 'login-approvals']
+    combined: ['registered-crs', 'contract-types', 'branches', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts', 'pharmacists', 'access-control', 'login-approvals', 'system'],
+    system: ['system', 'registered-crs', 'contract-types', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts', 'branches'],
+    access: ['access-control', 'contract-types', 'pharmacists', 'login-approvals']
 };
 
 const SETTINGS_MODE_META: Record<SettingsMode, {
@@ -103,13 +129,13 @@ const SETTINGS_MODE_META: Record<SettingsMode, {
     combined: {
         title: 'Admin Control',
         eyebrow: 'Control center',
-        description: 'Manage system setup, staff access, login roles, module layout, and operational defaults.',
+        description: 'Manage system setup, product catalogue, staff access, login roles, module layout, fleet registration, and delivery settings.',
         icon: Settings
     },
     system: {
         title: 'System Settings',
         eyebrow: 'System control',
-        description: 'Control maintenance mode, branding, module layout, delivery zones, and branch operating records.',
+        description: 'Control maintenance mode, branding, product catalogue, module layout, delivery zones, fleet registration, and branch operating records.',
         icon: Settings
     },
     access: {
@@ -134,6 +160,16 @@ const TAB_META: Record<SettingsTab, {
     description: string;
     icon: React.ElementType;
 }> = {
+    'registered-crs': {
+        label: 'Registered CRs',
+        description: 'Main corporate CR & sub-CR branch assignments',
+        icon: Building2
+    },
+    'contract-types': {
+        label: 'Contract Types & Hours',
+        description: '8 Hrs, 10 Hrs, and 12 Hrs shift contract templates',
+        icon: Clock
+    },
     branches: {
         label: 'Branches',
         description: 'Operational pharmacy branches only',
@@ -144,20 +180,35 @@ const TAB_META: Record<SettingsTab, {
         description: 'Order launcher cards and module badges',
         icon: LayoutGrid
     },
+    products: {
+        label: 'Product Catalogue',
+        description: 'Global product catalog, pricing, BHD VAT management & bulk Excel imports',
+        icon: Package
+    },
     'delivery-zones': {
         label: 'Delivery Zones',
         description: 'Branch origin blocks, service rings, and delivery radius settings',
         icon: MapPinned
     },
+    'delivery-settings': {
+        label: 'Delivery Settings',
+        description: 'Payment options, driver targets, and delivery operational parameters',
+        icon: ShoppingCart
+    },
+    vehicles: {
+        label: 'Vehicle Fleet',
+        description: 'Register company & flexi vehicles, track odometers and expiry dates',
+        icon: Truck
+    },
+    'operational-alerts': {
+        label: 'Alerts & Renewals',
+        description: 'Configure dynamic alert thresholds, reminder intervals, and compliance categories',
+        icon: AlertTriangle
+    },
     pharmacists: {
         label: 'People',
         description: 'Specialist profiles and branch assignments',
         icon: UserCheck
-    },
-    permissions: {
-        label: 'Access',
-        description: 'Module permission overrides per branch',
-        icon: SlidersHorizontal
     },
     'access-control': {
         label: 'Users & Roles',
@@ -175,6 +226,40 @@ const TAB_META: Record<SettingsTab, {
         icon: RadioTower
     }
 };
+
+type Pillar = {
+    id: string;
+    title: string;
+    description: string;
+    tabs: SettingsTab[];
+};
+
+const PILLARS: Pillar[] = [
+    {
+        id: 'infrastructure',
+        title: 'Operational Infrastructure',
+        description: 'Registered CRs, pharmacy branches, product catalogue, delivery zones & vehicle fleet',
+        tabs: ['registered-crs', 'branches', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts']
+    },
+    {
+        id: 'identity',
+        title: 'Identity & Contracts',
+        description: 'Users, employment contract templates, role matrix & branch permissions',
+        tabs: ['contract-types', 'access-control', 'pharmacists', 'login-approvals']
+    },
+    {
+        id: 'experience',
+        title: 'System Experience & Launcher',
+        description: 'Module launcher ordering & alert badges',
+        tabs: ['module-layout']
+    },
+    {
+        id: 'maintenance',
+        title: 'Domain & Maintenance',
+        description: 'Domain maintenance & system flags',
+        tabs: ['system']
+    }
+];
 
 const StatTile: React.FC<{
     label: string;
@@ -270,6 +355,21 @@ const formatBranchDutyRadius = (branch: Partial<Branch>) => {
     return `${branch.dutyRadiusM} m`;
 };
 
+const getAutoAssignedCrForBranch = (branchId?: string, branchName?: string, branchCode?: string) => {
+    try {
+        const saved = localStorage.getItem('tabarak_registered_crs');
+        if (!saved) return null;
+        const crs: any[] = JSON.parse(saved);
+        return crs.find(c =>
+            (branchId && c.linked_branch_id === branchId) ||
+            (branchCode && c.linked_branch_name && c.linked_branch_name.includes(branchCode)) ||
+            (branchName && c.linked_branch_name && c.linked_branch_name.toLowerCase().includes(branchName.toLowerCase()))
+        ) || null;
+    } catch (e) {
+        return null;
+    }
+};
+
 const ACCESS_LEVELS: Array<{
     level: 'default' | 'none' | 'read' | 'edit';
     title: string;
@@ -335,11 +435,12 @@ export const ProjectSettings: React.FC<{
     mode?: SettingsMode;
 }> = ({ onBack, onSettingsChange, currentRole = 'admin', mode: requestedMode = 'combined' }) => {
     const settingsMode = requestedMode as SettingsMode;
-    const canManageSettings = currentRole === 'admin' || currentRole === 'manager';
-    const canManageDeliveryZones = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
-    const canApproveLoginRequests = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner';
+    const isAdministrativeRole = !currentRole || currentRole === 'admin' || currentRole === 'manager' || currentRole === 'owner' || currentRole === 'supervisor';
+    const canManageSettings = isAdministrativeRole;
+    const canManageDeliveryZones = isAdministrativeRole;
+    const canApproveLoginRequests = isAdministrativeRole;
     const [activeTab, setActiveTab] = useState<SettingsTab>(() =>
-        getVisibleTabsForMode(settingsMode, canManageSettings, canManageDeliveryZones, canApproveLoginRequests)[0] || 'login-approvals'
+        getVisibleTabsForMode(settingsMode, canManageSettings, canManageDeliveryZones, canApproveLoginRequests)[0] || 'branches'
     );
     const [branches, setBranches] = useState<Branch[]>([]);
     const [branchClassifications, setBranchClassifications] = useState<BranchClassification[]>([]);
@@ -911,131 +1012,143 @@ export const ProjectSettings: React.FC<{
 
     return (
         <div className="min-h-screen bg-[#f6f8fb] p-4 md:p-6 lg:p-8 animate-in fade-in duration-500">
-            <div className="mx-auto max-w-[1500px] space-y-6">
-                <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-100 p-5 md:p-7">
-                        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-                            <div className="flex min-w-0 items-start gap-4 md:gap-5">
-                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/15">
-                                    <ModeIcon className="h-6 w-6" />
-                                </div>
-                                <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-brand">{modeMeta.eyebrow}</p>
-                                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${maintenanceEnabled ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                            {maintenanceEnabled ? 'Maintenance on' : 'Live'}
-                                        </span>
-                                    </div>
-                                    <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{modeMeta.title}</h1>
-                                    <p className="mt-3 max-w-3xl text-sm font-semibold leading-6 text-slate-500 md:text-base">
-                                        {modeMeta.description}
-                                    </p>
-                                </div>
+            <div className="mx-auto w-full max-w-[1800px]">
+                <header className="relative overflow-hidden rounded-[2rem] border border-slate-200/60 bg-white/60 p-6 shadow-xl shadow-slate-200/20 backdrop-blur-xl md:p-8">
+                    {/* Decorative Background Elements */}
+                    <div className="pointer-events-none absolute -right-32 -top-32 h-[400px] w-[400px] rounded-full bg-brand/5 blur-[100px]"></div>
+                    <div className="pointer-events-none absolute -bottom-32 left-1/4 h-[300px] w-[300px] rounded-full bg-emerald-500/5 blur-[80px]"></div>
+
+                    <div className="relative flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="flex min-w-0 items-start gap-5">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-lg shadow-brand/25 ring-4 ring-white/50">
+                                <ModeIcon className="h-7 w-7" />
                             </div>
-                            <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center">
-                                <button
-                                    onClick={loadData}
-                                    disabled={isLoading}
-                                    className="btn-secondary rounded-xl text-[10px] uppercase tracking-widest"
-                                >
-                                    <RotateCcw size={16} className={isLoading ? 'animate-spin' : ''} />
-                                    Refresh
-                                </button>
-                                <BackToModulesButton onClick={onBack} />
+                            <div className="min-w-0 pt-1">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-brand">{modeMeta.eyebrow}</p>
+                                    <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ring-1 ring-inset ${maintenanceEnabled ? 'bg-amber-50 text-amber-700 ring-amber-500/20' : 'bg-emerald-50 text-emerald-700 ring-emerald-500/20'}`}>
+                                        <span className={`h-1.5 w-1.5 rounded-full ${maintenanceEnabled ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                                        {maintenanceEnabled ? 'Maintenance on' : 'Live & Active'}
+                                    </span>
+                                </div>
+                                <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">{modeMeta.title}</h1>
+                                <p className="mt-3 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500 md:text-base">
+                                    {modeMeta.description}
+                                </p>
                             </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <button
+                                onClick={loadData}
+                                disabled={isLoading}
+                                className="group relative flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-[11px] font-black uppercase tracking-widest text-slate-700 shadow-sm ring-1 ring-slate-200 transition-all hover:bg-slate-50 hover:text-brand hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                                <RotateCcw size={16} className={`transition-transform ${isLoading ? 'animate-spin text-brand' : 'group-hover:-rotate-90'}`} />
+                                Refresh Sync
+                            </button>
+                            <div className="h-10 w-px bg-slate-200 hidden sm:block"></div>
+                            <BackToModulesButton onClick={onBack} />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 bg-slate-50/60 p-4 md:grid-cols-2 xl:grid-cols-4">
-                        <StatTile label="Branches" value={branchCount} icon={Store} tone="brand" />
-                        <StatTile label="Classified branches" value={`${classifiedBranchCount}/${branchCount}`} icon={Building2} />
-                        <StatTile label="Active people" value={activePharmacistCount} icon={UserCheck} tone="emerald" />
-                        <StatTile label="Domain status" value={maintenanceEnabled ? 'Paused' : 'Live'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
+                    <div className="relative mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <StatTile label="Registered Branches" value={branchCount} icon={Store} tone="brand" />
+                        <StatTile label="Classified Fleet" value={`${classifiedBranchCount} / ${branchCount}`} icon={Building2} />
+                        <StatTile label="Active Personnel" value={activePharmacistCount} icon={UserCheck} tone="emerald" />
+                        <StatTile label="Domain Status" value={maintenanceEnabled ? 'Paused' : 'Operating'} icon={maintenanceEnabled ? Wrench : CheckCircle2} tone={maintenanceEnabled ? 'amber' : 'emerald'} />
                     </div>
                 </header>
-
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm shadow-brand/15">
-                                <ActiveTabIcon size={19} />
+                <div className="mt-8 space-y-8">
+                    {/* Horizontal Navigation Section */}
+                    <section className="w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 bg-slate-50/50 p-4 gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm shadow-brand/20">
+                                    <Settings2 size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Navigation</p>
+                                    <h2 className="mt-0.5 text-base font-black tracking-tight text-slate-950 whitespace-nowrap">Control Areas</h2>
+                                </div>
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Control areas</p>
-                                <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950">{settingsMode === 'access' ? 'Access map' : settingsMode === 'system' ? 'System map' : 'Operations map'}</h2>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">{visibleSettingsTabs.length} areas</span>
                             {maintenanceEnabled && (
-                                <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">Maintenance on</span>
+                                <span className="relative flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 ring-1 ring-inset ring-amber-500/20">
+                                    <span className="relative flex h-2 w-2 shrink-0">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
+                                    </span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-700">Maintenance Active</span>
+                                </span>
                             )}
                         </div>
-                    </div>
 
-                    <nav className="custom-scrollbar flex gap-2 overflow-x-auto p-3" aria-label="Settings sections">
-                        {visibleSettingsTabs.map(tab => {
-                            const meta = TAB_META[tab];
-                            const Icon = meta.icon;
-                            const isActive = activeTab === tab;
+                        <div className="p-5 overflow-x-auto custom-scrollbar bg-slate-50/30">
+                            <div className="flex gap-8 min-w-max">
+                                {PILLARS.map(pillar => {
+                                    const pillarTabs = pillar.tabs.filter(t => visibleSettingsTabs.includes(t));
+                                    if (pillarTabs.length === 0) return null;
+                                    return (
+                                        <div key={pillar.id} className="flex flex-col gap-3 min-w-[220px]">
+                                            <div className="px-1 flex items-center gap-2">
+                                                <div className="h-3 w-1 bg-brand rounded-full"></div>
+                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{pillar.title}</span>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {pillarTabs.map(tab => {
+                                                    const meta = TAB_META[tab];
+                                                    const Icon = meta.icon;
+                                                    const isActive = activeTab === tab;
 
-                            return (
-                                <button
-                                    key={tab}
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveTab(tab);
-                                        if (tab === 'permissions') setSearchTerm('');
-                                    }}
-                                    aria-current={isActive ? 'page' : undefined}
-                                    className={`group flex min-w-[190px] flex-1 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all focus-ring ${
-                                        isActive
-                                            ? 'border-brand bg-brand text-white shadow-sm shadow-brand/20'
-                                            : 'border-slate-200 bg-white text-slate-600 hover:border-brand/25 hover:bg-brand/5 hover:text-slate-950'
-                                    }`}
-                                >
-                                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                                        isActive ? 'border-white/15 bg-white/15 text-white' : 'border-slate-200 bg-slate-50 text-slate-400 group-hover:border-brand/20 group-hover:text-brand'
-                                    }`}>
-                                        <Icon size={18} />
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="flex items-center gap-2">
-                                            <span className="truncate text-sm font-black tracking-tight">{meta.label}</span>
-                                            {tab === 'system' && maintenanceEnabled && (
-                                                <span className={`rounded-md px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>On</span>
-                                            )}
-                                        </span>
-                                        <span className={`mt-0.5 block truncate text-xs font-semibold ${isActive ? 'text-white/70' : 'text-slate-400'}`}>{meta.description}</span>
-                                    </span>
-                                    <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${isActive ? 'text-white/80' : 'text-slate-300 group-hover:text-brand'}`} />
-                                </button>
-                            );
-                        })}
-                    </nav>
-                </section>
+                                                    return (
+                                                        <button
+                                                            key={tab}
+                                                            type="button"
+                                                            onClick={() => setActiveTab(tab)}
+                                                            aria-current={isActive ? 'page' : undefined}
+                                                            className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-all duration-300 ${
+                                                                isActive
+                                                                    ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5 scale-[1.02]'
+                                                                    : 'text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200/60 shadow-sm hover:shadow hover:border-slate-300/60'
+                                                            }`}
+                                                        >
+                                                            <Icon size={16} className={`shrink-0 transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
+                                                            <span className="min-w-0 flex-1 whitespace-nowrap text-xs font-bold leading-tight">{meta.label}</span>
+                                                            {tab === 'system' && maintenanceEnabled && (
+                                                                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>On</span>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </section>
 
-                <section className="min-w-0 space-y-5">
-                        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-                            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                                <div className="flex min-w-0 items-start gap-3">
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                                        <ActiveTabIcon size={19} />
+                    <main className="w-full space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all md:p-6">
+                            <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+                                <div className="flex min-w-0 flex-1 items-start gap-4 pr-4">
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 text-brand ring-1 ring-brand/10">
+                                        <ActiveTabIcon size={20} />
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Workspace</p>
-                                        <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">{activeTabMeta.label}</h2>
-                                        <p className="mt-1 text-sm font-medium leading-6 text-slate-500">{activeTabMeta.description}</p>
+                                        <h2 className="mt-1 break-words text-xl font-black tracking-tight text-slate-950">{activeTabMeta.label}</h2>
+                                        <p className="mt-1 break-words text-sm font-medium leading-6 text-slate-500">{activeTabMeta.description}</p>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                     {activeTab !== 'system' && activeTab !== 'access-control' && activeTab !== 'login-approvals' && activeTab !== 'delivery-zones' && activeTab !== 'module-layout' && (
-                                        <div className="relative min-w-0 md:w-80">
+                                        <div className="relative min-w-0 w-full sm:w-64 md:w-72 xl:w-80 shrink-0">
                                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                             <input
                                                 type="text"
-                                                placeholder={activeTab === 'permissions' ? 'Find branch...' : activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
+                                                placeholder={activeTab === 'pharmacists' ? 'Search name or code...' : 'Search records...'}
                                                 value={searchTerm}
                                                 onChange={e => setSearchTerm(e.target.value)}
                                                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-10 text-sm font-bold outline-none transition-all focus:border-brand/40 focus:bg-white focus:ring-2 focus:ring-brand/10"
@@ -1057,7 +1170,7 @@ export const ProjectSettings: React.FC<{
                                                     setIsPharModalOpen(true);
                                                 }
                                             }}
-                                            className="btn-primary whitespace-nowrap rounded-xl text-[10px] uppercase tracking-widest"
+                                            className="btn-primary shrink-0 whitespace-nowrap rounded-xl text-[10px] uppercase tracking-widest"
                                         >
                                             <Plus size={18} />
                                             Add {activeTab === 'branches' ? 'Branch' : 'Person'}
@@ -1075,6 +1188,14 @@ export const ProjectSettings: React.FC<{
                         </div>
                     ) : (
                         <div className="p-5 md:p-6">
+                            {activeTab === 'registered-crs' && (
+                                <RegisteredCrsSection branches={branches} />
+                            )}
+
+                            {activeTab === 'contract-types' && (
+                                <ContractTypesSection />
+                            )}
+
                             {activeTab === 'login-approvals' && (
                                 <BranchLoginApprovalsSection
                                     settings={maintenanceSettings}
@@ -1168,15 +1289,23 @@ export const ProjectSettings: React.FC<{
                                                                 </div>
                                                             </div>
 
-                                                            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                                                                <BranchInfoItem label="Area" value={areaName} icon={Building2} />
-                                                                <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
-                                                                <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
-                                                                <BranchInfoItem label="CR No." value={branch.crNumber} icon={Hash} />
-                                                                <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
-                                                                <BranchInfoItem label="GPS" value={formatBranchCoordinates(branch)} icon={MapPinned} />
-                                                                <BranchInfoItem label="Start Radius" value={formatBranchDutyRadius(branch)} icon={RadioTower} />
-                                                            </div>
+                                                            {(() => {
+                                                                const autoAssignedCr = getAutoAssignedCrForBranch(branch.id, branch.name, branch.code);
+                                                                const displayCrVal = autoAssignedCr
+                                                                    ? `${autoAssignedCr.cr_number} (Auto-Assigned)`
+                                                                    : (branch.crNumber || 'Not assigned');
+                                                                return (
+                                                                    <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                                                        <BranchInfoItem label="Area" value={areaName} icon={Building2} />
+                                                                        <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
+                                                                        <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
+                                                                        <BranchInfoItem label="CR No." value={displayCrVal} icon={Building2} />
+                                                                        <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
+                                                                        <BranchInfoItem label="GPS" value={formatBranchCoordinates(branch)} icon={MapPinned} />
+                                                                        <BranchInfoItem label="Start Radius" value={formatBranchDutyRadius(branch)} icon={RadioTower} />
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
 
                                                         <aside className="border-t border-slate-100 bg-slate-50/70 p-5 md:p-6 xl:border-l xl:border-t-0">
@@ -1215,8 +1344,24 @@ export const ProjectSettings: React.FC<{
                                 )
                             )}
 
+                            {activeTab === 'products' && (
+                                <ProductManagementSection />
+                            )}
+
                             {activeTab === 'delivery-zones' && (
                                 <DeliveryZonesSection branches={branches} canEdit={canManageDeliveryZones} />
+                            )}
+
+                            {activeTab === 'delivery-settings' && (
+                                <DeliverySettings />
+                            )}
+
+                            {activeTab === 'vehicles' && (
+                                <VehicleManager />
+                            )}
+
+                            {activeTab === 'operational-alerts' && (
+                                <OperationalRenewalsSettingsSection />
                             )}
 
                             {activeTab === 'pharmacists' && (
@@ -1340,135 +1485,6 @@ export const ProjectSettings: React.FC<{
 
                             {activeTab === 'access-control' && (
                                 <AccessControlSection currentUserId={currentUserId} settings={maintenanceSettings} />
-                            )}
-
-                            {activeTab === 'permissions' && (
-                                <div className="space-y-5">
-                                    <AccessGuide />
-                                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-                                        <aside className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                                            <div className="mb-3 px-2">
-                                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Target branch</h2>
-                                                <p className="mt-1 text-xs font-medium text-slate-500">Pick one branch, then adjust overrides on top of the Branch role defaults.</p>
-                                            </div>
-                                            <div className="max-h-[540px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
-                                                {filteredBranches.length === 0 ? (
-                                                    <div className="rounded-lg border border-dashed border-slate-200 bg-white p-5 text-center text-xs font-bold text-slate-400">
-                                                        No matching branches
-                                                    </div>
-                                                ) : filteredBranches.map(branch => {
-                                                    const selected = selectedBranchForPerms === branch.id;
-                                                    return (
-                                                        <button
-                                                            key={branch.id}
-                                                            onClick={() => loadPermissions(branch.id)}
-                                                            className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                                                                selected
-                                                                    ? 'border-brand bg-brand text-white shadow-sm shadow-brand/10'
-                                                                    : 'border-slate-200 bg-white text-slate-600 hover:border-brand/20 hover:bg-brand/5'
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center justify-between gap-3">
-                                                                <div className="min-w-0">
-                                                                <p className="break-words text-[11px] font-black uppercase tracking-wider leading-5">{branch.name}</p>
-                                                                    <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${selected ? 'text-white/60' : 'text-slate-400'}`}>Branch / {branch.code}</p>
-                                                                </div>
-                                                                <ChevronRight size={16} className={selected ? 'text-white' : 'text-slate-300'} />
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </aside>
-
-                                        <div className="min-w-0">
-                                            {!selectedBranch ? (
-                                                <EmptyState
-                                                    icon={Lock}
-                                                    title="Select a branch"
-                                                    description="Choose an operational branch to review effective module access and manage branch-specific overrides."
-                                                />
-                                            ) : (
-                                                <div className="space-y-5">
-                                                    <div className="rounded-lg border border-slate-200 bg-white p-4">
-                                                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                                                            <div>
-                                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">Permission target</p>
-                                                                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">{selectedBranch.name}</h3>
-                                                                <p className="mt-1 text-sm font-medium text-slate-500">BRANCH / {selectedBranch.code}</p>
-                                                            </div>
-                                                            <div className="rounded-lg border border-brand/10 bg-brand/5 px-4 py-3 text-right">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-brand">Effective access</p>
-                                                                <p className="mt-1 text-2xl font-black text-slate-950">{selectedBranchPermissionCount}/{FEATURES.length}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                                                        {FEATURES.map(feature => {
-                                                            const explicitPermission = permissions.find(p => p.featureName === feature.id);
-                                                            const defaultPerm = getBranchRoleDefaultAccess(feature.id);
-                                                            const currentPerm = explicitPermission?.accessLevel || defaultPerm;
-                                                            const isExplicitOverride = Boolean(explicitPermission);
-                                                            const accessTone = currentPerm === 'none'
-                                                                ? 'text-red-600 bg-red-50 border-red-100'
-                                                                : currentPerm === 'read'
-                                                                    ? 'text-blue-600 bg-blue-50 border-blue-100'
-                                                                    : 'text-emerald-600 bg-emerald-50 border-emerald-100';
-
-                                                            return (
-                                                                <article key={feature.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-brand/30">
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-brand">
-                                                                            <feature.icon size={18} />
-                                                                        </div>
-                                                                        <div className="min-w-0 flex-1">
-                                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                                <h4 className="text-sm font-black tracking-tight text-slate-950">{feature.label}</h4>
-                                                                                <span className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest ${accessTone}`}>{currentPerm}</span>
-                                                                            </div>
-                                                                            {feature.description && (
-                                                                                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{feature.description}</p>
-                                                                            )}
-                                                                            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                                                                {isExplicitOverride ? 'Branch override active' : `Inherited branch default: ${defaultPerm}`}
-                                                                            </p>
-                                                                            <div className="mt-4 grid grid-cols-4 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-                                                                                <button
-                                                                                    onClick={() => handleClearPermission(feature.id)}
-                                                                                    className={`rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
-                                                                                        !isExplicitOverride
-                                                                                            ? 'bg-slate-900 text-white shadow-sm'
-                                                                                            : 'text-slate-400 hover:bg-white hover:text-slate-700'
-                                                                                    }`}
-                                                                                >
-                                                                                    Default
-                                                                                </button>
-                                                                                {(['none', 'read', 'edit'] as const).map(level => (
-                                                                                    <button
-                                                                                        key={level}
-                                                                                        onClick={() => handleUpdatePermission(feature.id, level)}
-                                                                                        className={`rounded-md px-2 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
-                                                                                            isExplicitOverride && currentPerm === level
-                                                                                                ? 'bg-brand text-white shadow-sm'
-                                                                                                : 'text-slate-400 hover:bg-white hover:text-slate-700'
-                                                                                        }`}
-                                                                                    >
-                                                                                        {level}
-                                                                                    </button>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </article>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
                             )}
 
                             {activeTab === 'system' && maintenanceSettingsError && (
@@ -1976,46 +1992,47 @@ export const ProjectSettings: React.FC<{
                         </div>
                     )}
                         </div>
-                    </section>
+                    </main>
+                </div>
             </div>
 
             {/* Branch Modal */}
             {isBranchModalOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-6"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="branch-modal-title"
                     aria-describedby="branch-modal-description"
                 >
-                    <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-100 bg-white shadow-xl animate-in zoom-in-95 duration-300">
+                    <div className="flex max-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-300">
                         <span id="branch-modal-description" className="sr-only">Configuration form for operational pharmacy branches.</span>
-                        <div className="shrink-0 border-b bg-slate-50 p-4 sm:p-5">
+                        <div className="shrink-0 border-b border-slate-200/50 bg-slate-50/50 p-5 sm:p-6">
                             <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
-                                <h3 id="branch-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">Branch</h3>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Configure an operational pharmacy branch</p>
+                                <h3 id="branch-modal-title" className="text-2xl font-black text-slate-950 uppercase tracking-tight">Branch Configuration</h3>
+                                <p className="text-[11px] font-black text-brand uppercase tracking-[0.2em] mt-1">Operational Pharmacy Details</p>
                             </div>
-                            <button onClick={() => setIsBranchModalOpen(false)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white transition-colors hover:bg-slate-100"><X size={18} /></button>
+                            <button onClick={() => setIsBranchModalOpen(false)} className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/40 hover:bg-brand/5 active:scale-95"><X size={20} className="text-slate-500 group-hover:text-brand" /></button>
                             </div>
                         </div>
-                        <div className="custom-scrollbar flex-1 overflow-y-auto p-4 sm:p-5">
-                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-                                <section className="rounded-lg border border-slate-100 bg-white p-4">
-                                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div className="custom-scrollbar flex-1 overflow-y-auto p-5 sm:p-6">
+                            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:gap-8">
+                                <section className="lg:col-span-2 rounded-2xl border border-slate-200/70 bg-white p-5 sm:p-6 shadow-sm">
+                                    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 mb-5">
                                         <div className="min-w-0">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Branch Details</p>
-                                            <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">Identity & contacts</h4>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Section 1</p>
+                                            <h4 className="text-base font-black uppercase tracking-tight text-slate-900 mt-0.5">Identity & Contacts</h4>
                                         </div>
                                     </div>
-                                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Code</label>
                                             <input
                                                 type="text"
                                                 value={branchForm.code}
                                                 onChange={e => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase(), role: 'branch' })}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all"
                                                 placeholder="e.g. T001"
                                             />
                                         </div>
@@ -2025,7 +2042,7 @@ export const ProjectSettings: React.FC<{
                                                 type="text"
                                                 value={branchForm.name}
                                                 onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all"
                                                 placeholder="e.g. Tabarak Jerdab Branch"
                                             />
                                         </div>
@@ -2038,7 +2055,7 @@ export const ProjectSettings: React.FC<{
                                                     setBranchForm({ ...branchForm, branchManagerName: selectedPharmacist?.name || '' });
                                                 }}
                                                 disabled={branchManagerOptions.length === 0}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all disabled:cursor-not-allowed disabled:text-slate-400"
+                                                className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 <option value="">{branchManagerOptions.length === 0 ? 'Register active pharmacists first' : 'Select registered pharmacist'}</option>
                                                 {currentBranchManagerName && !selectedBranchManagerOption && (
@@ -2055,7 +2072,7 @@ export const ProjectSettings: React.FC<{
                                                     );
                                                 })}
                                             </select>
-                                            <p className="text-[10px] font-bold text-slate-400">
+                                            <p className="text-[10px] font-bold text-slate-400 mt-1">
                                                 {branchManagerOptions.length === 0
                                                     ? 'Add active pharmacist profiles before assigning a branch manager.'
                                                     : `${assignedBranchManagerOptionCount} assigned pharmacist${assignedBranchManagerOptionCount === 1 ? '' : 's'} listed first for this branch.`}
@@ -2067,7 +2084,7 @@ export const ProjectSettings: React.FC<{
                                                 type="text"
                                                 value={branchForm.whatsappNumber}
                                                 onChange={e => setBranchForm({ ...branchForm, whatsappNumber: e.target.value })}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all"
                                                 placeholder="+973 1234 5678"
                                             />
                                         </div>
@@ -2077,35 +2094,68 @@ export const ProjectSettings: React.FC<{
                                                 type="text"
                                                 value={branchForm.nhraLicenseNo || ''}
                                                 onChange={e => setBranchForm({ ...branchForm, nhraLicenseNo: e.target.value })}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all"
                                                 placeholder="Branch NHRA license"
                                             />
                                         </div>
-                                        <div className="space-y-2 md:col-span-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number</label>
-                                            <input
-                                                type="text"
-                                                value={branchForm.crNumber || ''}
-                                                onChange={e => setBranchForm({ ...branchForm, crNumber: e.target.value })}
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
-                                                placeholder="Branch commercial registration"
-                                            />
-                                        </div>
-                                        <div className="space-y-3 rounded-xl border border-brand/10 bg-brand/[0.03] p-4 md:col-span-2">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
-                                                    <MapPinned size={18} />
+                                        {(() => {
+                                            const autoAssignedCr = getAutoAssignedCrForBranch(branchForm.id, branchForm.name, branchForm.code);
+                                            const effectiveCrNumber = autoAssignedCr ? autoAssignedCr.cr_number : (branchForm.crNumber || '');
+
+                                            return (
+                                                <div className="space-y-2 md:col-span-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number (رقم السجل التجاري)</label>
+                                                        {autoAssignedCr && (
+                                                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                                                <CheckCircle2 size={12} /> Auto Assigned
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {autoAssignedCr ? (
+                                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
+                                                                    <Building2 size={18} />
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Linked Legal Registration</span>
+                                                                    <p className="text-xs font-black text-slate-900">{autoAssignedCr.cr_name}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-[10px] text-slate-400 font-bold uppercase block">CR Code</span>
+                                                                <span className="font-mono text-sm font-black text-emerald-800">{autoAssignedCr.cr_number}</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={effectiveCrNumber}
+                                                            onChange={e => setBranchForm({ ...branchForm, crNumber: e.target.value })}
+                                                            className="w-full bg-slate-50/80 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-sm font-bold focus:border-brand/50 focus:bg-white focus:ring-4 focus:ring-brand/10 transition-all"
+                                                            placeholder="Branch commercial registration (or link from Registered CRs)"
+                                                        />
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="space-y-4 rounded-2xl border-2 border-brand/15 bg-brand/[0.02] p-5 md:col-span-2 mt-2">
+                                            <div className="flex items-start gap-4">
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand shadow-sm">
+                                                    <MapPinned size={20} />
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand">Branch GPS & Shift Radius</p>
-                                                    <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.15em] text-brand">Branch GPS & Shift Radius</p>
+                                                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
                                                         Linked directly to the branch database record. Driver Mobile uses this radius to enable Start Shift near the selected branch.
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Latitude</label>
+                                                    <label className="text-[10px] font-black text-brand/70 uppercase tracking-widest">Latitude</label>
                                                     <input
                                                         type="number"
                                                         step="0.0000001"
@@ -2113,12 +2163,12 @@ export const ProjectSettings: React.FC<{
                                                         max="90"
                                                         value={branchForm.lat ?? ''}
                                                         onChange={e => setBranchForm({ ...branchForm, lat: parseOptionalCoordinate(e.target.value) })}
-                                                        className="w-full bg-white border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                        className="w-full bg-white border-2 border-brand/20 p-3 rounded-xl outline-none text-sm font-bold tabular-nums focus:border-brand/50 focus:ring-4 focus:ring-brand/10 transition-all"
                                                         placeholder="26.2112862"
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Longitude</label>
+                                                    <label className="text-[10px] font-black text-brand/70 uppercase tracking-widest">Longitude</label>
                                                     <input
                                                         type="number"
                                                         step="0.0000001"
@@ -2126,12 +2176,12 @@ export const ProjectSettings: React.FC<{
                                                         max="180"
                                                         value={branchForm.lng ?? ''}
                                                         onChange={e => setBranchForm({ ...branchForm, lng: parseOptionalCoordinate(e.target.value) })}
-                                                        className="w-full bg-white border border-slate-200 p-3 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                        className="w-full bg-white border-2 border-brand/20 p-3 rounded-xl outline-none text-sm font-bold tabular-nums focus:border-brand/50 focus:ring-4 focus:ring-brand/10 transition-all"
                                                         placeholder="50.5775068"
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Start Shift Radius</label>
+                                                    <label className="text-[10px] font-black text-brand/70 uppercase tracking-widest">Start Shift Radius</label>
                                                     <div className="relative">
                                                         <input
                                                             type="number"
@@ -2140,76 +2190,76 @@ export const ProjectSettings: React.FC<{
                                                             max="1000"
                                                             value={branchForm.dutyRadiusM ?? ''}
                                                             onChange={e => setBranchForm({ ...branchForm, dutyRadiusM: parseOptionalRadius(e.target.value) })}
-                                                            className="w-full bg-white border border-slate-200 p-3 pr-12 rounded-lg outline-none text-sm font-bold tabular-nums focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all"
+                                                            className="w-full bg-white border-2 border-brand/20 p-3 pr-12 rounded-xl outline-none text-sm font-bold tabular-nums focus:border-brand/50 focus:ring-4 focus:ring-brand/10 transition-all"
                                                             placeholder="50"
                                                         />
-                                                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-slate-400">m</span>
+                                                        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-brand/50">m</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold leading-5 text-slate-500">
+                                            <p className="rounded-xl border border-brand/10 bg-white/50 px-4 py-2.5 text-[11px] font-bold leading-5 text-slate-500">
                                                 Leave Latitude and Longitude empty only if this branch should not be used for GPS-based features. Radius accepts 10–1000 meters.
                                             </p>
                                         </div>
                                     </div>
                                 </section>
 
-                                <section className="rounded-lg border border-slate-100 bg-slate-50 p-4">
-                                    <div className="border-b border-slate-200 pb-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Module Access</p>
-                                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">Branch capabilities</h4>
+                                <section className="lg:col-span-1 flex flex-col gap-5 rounded-2xl border border-slate-200/70 bg-slate-50/50 p-5 sm:p-6 shadow-sm">
+                                    <div className="border-b border-slate-200 pb-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Section 2</p>
+                                        <h4 className="text-base font-black uppercase tracking-tight text-slate-900 mt-0.5">Module Capabilities</h4>
                                     </div>
-                                    <div className="mt-4 grid gap-3">
-                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                    <div className="flex-1 space-y-4">
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md hover:shadow-amber-100/50">
                                             <div className="flex items-center justify-between gap-4">
-                                                <div className="flex min-w-0 items-center gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50">
-                                                        <Zap size={18} className="text-amber-500" />
+                                                <div className="flex min-w-0 items-center gap-4">
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+                                                        <Zap size={20} className="text-amber-500" />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Spin & Win Capability</span>
-                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle customer incentive module</p>
+                                                        <span className="block text-xs font-black uppercase tracking-widest text-slate-900">Spin & Win</span>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">Toggle incentive module</p>
                                                     </div>
                                                 </div>
-                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                <label className="relative inline-flex cursor-pointer items-center shrink-0">
                                                     <input type="checkbox" checked={branchForm.isSpinEnabled} onChange={e => setBranchForm({ ...branchForm, isSpinEnabled: e.target.checked })} className="sr-only peer" />
-                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                    <div className="h-7 w-12 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                                                 </label>
                                             </div>
                                         </div>
 
-                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-blue-200 hover:shadow-md hover:shadow-blue-100/50">
                                             <div className="flex items-center justify-between gap-4">
-                                                <div className="flex min-w-0 items-center gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-                                                        <ShoppingCart size={18} className="text-blue-500" />
+                                                <div className="flex min-w-0 items-center gap-4">
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50">
+                                                        <ShoppingCart size={20} className="text-blue-500" />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Items Entry System</span>
-                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle item logging in POS</p>
+                                                        <span className="block text-xs font-black uppercase tracking-widest text-slate-900">Items Entry</span>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">Toggle POS item logging</p>
                                                     </div>
                                                 </div>
-                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                <label className="relative inline-flex cursor-pointer items-center shrink-0">
                                                     <input type="checkbox" checked={branchForm.isItemsEntryEnabled} onChange={e => setBranchForm({ ...branchForm, isItemsEntryEnabled: e.target.checked })} className="sr-only peer" />
-                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                    <div className="h-7 w-12 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                                                 </label>
                                             </div>
                                         </div>
 
-                                        <div className="rounded-lg border border-slate-100 bg-white p-3">
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-100/50">
                                             <div className="flex items-center justify-between gap-4">
-                                                <div className="flex min-w-0 items-center gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                                                        <Activity size={18} className="text-emerald-500" />
+                                                <div className="flex min-w-0 items-center gap-4">
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
+                                                        <Activity size={20} className="text-emerald-500" />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <span className="block text-[10px] font-black uppercase tracking-widest text-slate-900">Dashboard & KPI Analytics</span>
-                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Toggle charts and performance logs</p>
+                                                        <span className="block text-xs font-black uppercase tracking-widest text-slate-900">Dashboard</span>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">Toggle KPI Analytics</p>
                                                     </div>
                                                 </div>
-                                                <label className="relative inline-flex cursor-pointer items-center">
+                                                <label className="relative inline-flex cursor-pointer items-center shrink-0">
                                                     <input type="checkbox" checked={branchForm.isKPIDashboardEnabled} onChange={e => setBranchForm({ ...branchForm, isKPIDashboardEnabled: e.target.checked })} className="sr-only peer" />
-                                                    <div className="h-6 w-11 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                                    <div className="h-7 w-12 rounded-full bg-slate-200 peer peer-checked:bg-brand peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
                                                 </label>
                                             </div>
                                         </div>
@@ -2217,8 +2267,8 @@ export const ProjectSettings: React.FC<{
                                 </section>
                             </div>
                         </div>
-                        <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-4 sm:p-5 flex gap-4">
-                            <button onClick={handleSaveBranch} className="btn-primary flex-1 text-[10px] uppercase tracking-widest"><Save size={18} /> Save Branch</button>
+                        <div className="shrink-0 border-t border-slate-200/50 bg-slate-50/80 p-5 sm:p-6 flex gap-4">
+                            <button onClick={handleSaveBranch} className="btn-primary flex-1 py-4 text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-brand/30"><Save size={20} className="mr-2" /> Save Branch Configuration</button>
                         </div>
                     </div>
                 </div>

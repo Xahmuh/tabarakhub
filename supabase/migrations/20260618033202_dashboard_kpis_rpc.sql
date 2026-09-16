@@ -60,8 +60,6 @@ begin
   return v_result;
 end;
 $$;
-
 revoke all on function public.get_dashboard_kpis(uuid, date, date) from public, anon;
 grant execute on function public.get_dashboard_kpis(uuid, date, date) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

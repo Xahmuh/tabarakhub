@@ -66,8 +66,6 @@ begin
   return v_next_sequence;
 end;
 $$;
-
 revoke all on function public.benefit_pay_next_sequence(uuid, date) from public, anon, authenticated;
 grant execute on function public.benefit_pay_next_sequence(uuid, date) to service_role;
-
 notify pgrst, 'reload schema';

@@ -101,7 +101,6 @@ begin
   return v_candidate_number;
 end;
 $$;
-
 create or replace function public.delivery_next_talabat_order_number(
   p_branch_id uuid,
   p_order_date date
@@ -202,7 +201,6 @@ begin
   return v_candidate_number;
 end;
 $$;
-
 create or replace function public.delivery_next_internal_transfer_number(
   p_from_branch_id uuid,
   p_to_branch_id uuid,
@@ -319,7 +317,6 @@ begin
   return v_candidate_number;
 end;
 $$;
-
 with normal_max as (
   select
     o.branch_id,
@@ -348,7 +345,6 @@ on conflict (branch_id, order_date)
 do update set
   last_sequence = greatest(public.delivery_order_daily_sequences.last_sequence, excluded.last_sequence),
   updated_at = now();
-
 with talabat_max as (
   select
     o.branch_id,
@@ -377,7 +373,6 @@ on conflict (branch_id, order_date)
 do update set
   last_sequence = greatest(public.delivery_talabat_order_daily_sequences.last_sequence, excluded.last_sequence),
   updated_at = now();
-
 with transfer_max as (
   select
     o.transfer_from_branch_id,
@@ -408,13 +403,10 @@ on conflict (from_branch_id, to_branch_id, order_date)
 do update set
   last_sequence = greatest(public.delivery_internal_transfer_daily_sequences.last_sequence, excluded.last_sequence),
   updated_at = now();
-
 revoke all on function public.delivery_next_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_next_talabat_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_next_internal_transfer_number(uuid, uuid, date) from public, anon, authenticated;
-
 grant execute on function public.delivery_next_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_next_talabat_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_next_internal_transfer_number(uuid, uuid, date) to service_role;
-
 notify pgrst, 'reload schema';

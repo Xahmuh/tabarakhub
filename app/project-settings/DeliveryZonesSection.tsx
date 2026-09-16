@@ -57,7 +57,7 @@ export const DeliveryZonesSection: React.FC<DeliveryZonesSectionProps> = ({ bran
 
   const filteredBranches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const branchRows = branches.filter(branch => branch.role === 'branch');
+    const branchRows = branches.filter(branch => !branch.role || branch.role === 'branch');
     if (!q) return branchRows;
     return branchRows.filter(branch =>
       branch.code.toLowerCase().includes(q)
@@ -96,7 +96,7 @@ export const DeliveryZonesSection: React.FC<DeliveryZonesSectionProps> = ({ bran
       total: profiles.length,
       mapped,
       unmapped,
-      missingProfiles: Math.max(0, branches.filter(branch => branch.role === 'branch').length - profiles.length),
+      missingProfiles: Math.max(0, branches.filter(branch => !branch.role || branch.role === 'branch').length - profiles.length),
       missingOrigin,
       missingGeoJson,
       duplicateGroups: [...duplicateMap.entries()]

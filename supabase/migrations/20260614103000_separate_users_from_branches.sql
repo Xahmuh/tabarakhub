@@ -20,7 +20,6 @@ begin
       check (role is not null and role = 'branch') not valid;
   end if;
 end $$;
-
 do $$
 begin
   if not exists (
@@ -37,7 +36,6 @@ begin
       ) not valid;
   end if;
 end $$;
-
 create or replace function public.ensure_app_user_profile_branch_scope()
 returns trigger
 language plpgsql
@@ -65,14 +63,12 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists ensure_app_user_profile_branch_scope on public.app_user_profiles;
 create trigger ensure_app_user_profile_branch_scope
 before insert or update of role, branch_id
 on public.app_user_profiles
 for each row
 execute function public.ensure_app_user_profile_branch_scope();
-
 create or replace function public.ensure_operational_branch_reference()
 returns trigger
 language plpgsql
@@ -96,7 +92,6 @@ begin
   return new;
 end;
 $$;
-
 do $$
 begin
   if to_regclass('public.feature_permissions') is not null then
@@ -117,7 +112,6 @@ begin
       execute function public.ensure_operational_branch_reference()';
   end if;
 end $$;
-
 create or replace function public.current_app_branch_id()
 returns uuid
 language sql
@@ -133,7 +127,6 @@ as $$
     and p.is_active
   limit 1
 $$;
-
 create or replace function public.current_app_can_access_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -156,7 +149,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.app_admin_list_users()
 returns table (
   user_id uuid,
@@ -194,7 +186,6 @@ begin
   order by p.role, coalesce(b.code, u.email::text);
 end;
 $$;
-
 create or replace function public.app_admin_set_user_role(
   target_user_id uuid,
   new_role text,
@@ -256,14 +247,12 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.ensure_app_user_profile_branch_scope() from public, anon;
 revoke all on function public.ensure_operational_branch_reference() from public, anon;
 revoke all on function public.current_app_branch_id() from public, anon;
 revoke all on function public.current_app_can_access_branch(uuid) from public, anon;
 revoke all on function public.app_admin_list_users() from public, anon;
 revoke all on function public.app_admin_set_user_role(uuid, text, uuid, boolean) from public, anon;
-
 grant execute on function public.current_app_branch_id() to authenticated, service_role;
 grant execute on function public.current_app_can_access_branch(uuid) to authenticated, service_role;
 grant execute on function public.app_admin_list_users() to authenticated, service_role;

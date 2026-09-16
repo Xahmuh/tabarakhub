@@ -881,26 +881,72 @@ export const deliveryService = {
         p_driver_id: filters.driverId && filters.driverId !== 'all' ? filters.driverId : null
       });
       if (error) throw error;
-      return (data || []).map((row: any) => ({
-        driverId: row.driver_id,
-        driverCode: row.driver_code || null,
-        driverName: row.driver_name || 'Unknown driver',
-        statDate: row.stat_date,
-        firstOnlineAt: row.first_online_at || null,
-        lastOfflineAt: row.last_offline_at || null,
-        startedBranchName: row.started_branch_name || null,
-        startedLat: row.started_lat === null || row.started_lat === undefined ? null : Number(row.started_lat),
-        startedLng: row.started_lng === null || row.started_lng === undefined ? null : Number(row.started_lng),
-        startedDistanceM: row.started_distance_m === null || row.started_distance_m === undefined ? null : Number(row.started_distance_m),
-        shiftCount: Number(row.shift_count || 0),
-        totalWorkingMinutes: Number(row.total_working_minutes || 0),
-        assignedCount: Number(row.assigned_count || 0),
-        pickedUpCount: Number(row.picked_up_count || 0),
-        deliveredCount: Number(row.delivered_count || 0),
-        cancelledCount: Number(row.cancelled_count || 0),
-        actualDeliveryCount: Number(row.actual_delivery_count || 0),
-        internalTransferCount: Number(row.internal_transfer_count || 0)
-      }));
+      const todayKey = new Date().toISOString().slice(0, 10);
+
+      return (data || []).map((row: any) => {
+        let firstOnlineAt = row.first_online_at || null;
+        let lastOfflineAt = row.last_offline_at || null;
+        let totalWorkingMinutes = Number(row.total_working_minutes || 0);
+        let isMissingPunch = false;
+        let notes = '';
+
+        if (firstOnlineAt && (!lastOfflineAt || totalWorkingMinutes > 720 || row.stat_date < todayKey)) {
+          if (!lastOfflineAt || totalWorkingMinutes > 720 || row.stat_date < todayKey) {
+            isMissingPunch = !row.last_offline_at || totalWorkingMinutes > 720;
+            if (isMissingPunch) {
+              totalWorkingMinutes = Math.min(totalWorkingMinutes > 0 ? totalWorkingMinutes : 720, 720);
+              if (!lastOfflineAt) {
+                const startDate = new Date(firstOnlineAt);
+                const fallbackDate = new Date(startDate.getTime() + totalWorkingMinutes * 60 * 1000);
+                lastOfflineAt = fallbackDate.toISOString();
+                notes = '⚠️ Missing Clock-out: Auto-closed based on 12h max limit / last activity.';
+              } else {
+                notes = '⚠️ Excessive Duration: Exceeded 12h limit (Missing Punch flagged).';
+              }
+            }
+          }
+        }
+
+        return {
+          driverId: row.driver_id,
+          driverCode: row.driver_code || null,
+          driverName: row.driver_name || 'Unknown driver',
+          statDate: row.stat_date,
+          firstOnlineAt,
+          lastOfflineAt,
+          startedBranchName: row.started_branch_name || null,
+          startedLat: row.started_lat === null || row.started_lat === undefined ? null : Number(row.started_lat),
+          startedLng: row.started_lng === null || row.started_lng === undefined ? null : Number(row.started_lng),
+          startedDistanceM: row.started_distance_m === null || row.started_distance_m === undefined ? null : Number(row.started_distance_m),
+          shiftCount: Number(row.shift_count || 0),
+          totalWorkingMinutes,
+          assignedCount: Number(row.assigned_count || 0),
+          pickedUpCount: Number(row.picked_up_count || 0),
+          deliveredCount: Number(row.delivered_count || 0),
+          cancelledCount: Number(row.cancelled_count || 0),
+          actualDeliveryCount: Number(row.actual_delivery_count || 0),
+          internalTransferCount: Number(row.internal_transfer_count || 0),
+          isMissingPunch,
+          notes
+        };
+      });
+    },
+
+    updateShift: async (params: {
+      driverId: string;
+      statDate: string;
+      firstOnlineAt?: string | null;
+      lastOfflineAt?: string | null;
+      notes?: string | null;
+    }): Promise<void> => {
+      const { error } = await supabaseClient.rpc('app_admin_update_driver_duty_shift' as any, {
+        p_driver_id: params.driverId,
+        p_shift_date: params.statDate,
+        p_started_at: params.firstOnlineAt || null,
+        p_ended_at: params.lastOfflineAt || null,
+        p_notes: params.notes || null
+      });
+      if (error) throw error;
     }
   },
 

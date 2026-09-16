@@ -49,7 +49,6 @@ import {
 } from 'lucide-react';
 import { BackToModulesButton, RevenueChart, OperationalTrendChart, ShortageTrendChart, DailyPerformanceCalendar, RangeDatePicker } from '../shared';
 import { PharmacistActivitySection } from './PharmacistActivitySection';
-import { ProductManagementSection } from '../shared';
 import { supabase } from '../../lib/supabase';
 import { LostSale, Branch, Product, Shortage } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
@@ -207,6 +206,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
   const salesPerm = getPermission('lost_sales');
   const shortagesPerm = getPermission('shortages');
+  const productsPerm = isManagerRole(user.role) || ['products', 'products:catalogue', 'products:search'].some(
+    f => (permissions.find((p: any) => p.featureName === f)?.accessLevel || 'none') !== 'none'
+  ) ? 'read' : 'none';
   // --- States Management System ---
   const [sales, setSales] = useState<LostSale[]>([]);
   const [allSales, setAllSales] = useState<LostSale[]>([]); // NEW: Store unfiltered sales for historical calculations
@@ -244,17 +246,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const [performanceLogPage, setPerformanceLogPage] = useState(1);
   const [performanceLogFilter, setPerformanceLogFilter] = useState<'no_recovery' | 'alt_given' | 'transferred' | null>(null);
   const [performanceLogSearch, setPerformanceLogSearch] = useState('');
-  // تقسيم حالة التحميل: مزامنة البيانات وتصدير الملفات
   const [isSyncing, setIsSyncing] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const initialViewMode = (() => {
-    const saved = sessionStorage.getItem('tabarak_dashboard_view') as 'standard' | 'expanded' | 'products' | null;
-    if (saved) return saved;
+    const saved = sessionStorage.getItem('tabarak_dashboard_view') as 'standard' | 'expanded' | null;
+    if (saved === 'standard' || saved === 'expanded') return saved;
     return salesPerm !== 'none' ? 'standard' : 'expanded';
   })();
-  const [viewMode, setViewMode] = useState<'standard' | 'expanded' | 'products'>(initialViewMode);
+  const [viewMode, setViewMode] = useState<'standard' | 'expanded'>(initialViewMode);
 
-  const changeViewMode = (mode: 'standard' | 'expanded' | 'products') => {
+  const changeViewMode = (mode: 'standard' | 'expanded') => {
     sessionStorage.setItem('tabarak_dashboard_view', mode);
     setViewMode(mode);
   };
@@ -262,7 +263,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   const [shortageStatusFilter, setShortageStatusFilter] = useState<string | null>(null);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [branchSearchTerm, setBranchSearchTerm] = useState('');
-  // إدارة الأخطاء مع إمكانية إعادة المحاولة
   const [error, setError] = useState<{ message: string; retry?: () => void } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1558,7 +1558,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       }
 
       styleWorksheetHeader(lostSalesSheet);
-
       // --- TAB 2: LOSS BY AGENT (Powered by View) ---
       const agentSheet = workbook.addWorksheet('Loss by Agent');
       agentSheet.columns = [
@@ -1635,7 +1634,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       });
 
       Object.entries(combinedBranchStats)
-        .sort((a, b) => (b[1].salesVal + b[1].shortageCount) - (a[1].salesVal + a[1].shortageCount)) // Sort by combined weight
+        .sort((a, b) => (b[1].salesVal + b[1].shortageCount) - (a[1].salesVal + a[1].shortageCount))
         .forEach(([name, stats], idx) => {
           const row = rankingSheet.addRow([idx + 1, name, roundLostSalesTrackerValue(stats.salesVal), stats.shortageCount]);
           row.getCell(3).numFmt = LOST_SALES_TRACKER_NUM_FMT;
@@ -1680,7 +1679,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     }
   };
 
-
   const activeBranchLabel = selectedBranch === 'all' ? 'CENTRAL CONSOLE' : branches.find(b => b.id === selectedBranch)?.name;
   const headerTitle = viewMode === 'standard'
     ? 'Lost Sales Tracker'
@@ -1704,6 +1702,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     month: 'Last Month',
     custom: 'Custom Period'
   };
+
   const dateRangeOptions: Array<{ id: DashboardDateType; label: string; sub: string }> = [
     { id: 'all', label: 'All Time', sub: 'Total historical archive' },
     { id: 'today', label: 'Today', sub: 'Active duty records' },
@@ -1713,52 +1712,51 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     { id: 'custom', label: 'Choose Period', sub: 'Manual calendar range' }
   ];
 
-    return (
-      <div className="min-h-screen bg-white font-sans selection:bg-red-100">
-        <div className="max-w-[1600px] mx-auto px-6 md:px-12 py-10">
-          {/* --- HEADER --- */}
-          <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
-            <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm transition-all ${
-                viewMode === 'products' ? 'bg-slate-900 border border-slate-800' : 'bg-red-700'
-              }`}>
-                <HeaderIcon size={26} strokeWidth={2.2} />
-              </div>
-              <div>
-                <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none whitespace-nowrap">
-                  {headerTitle}
-                </h1>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mt-1.5">Real-time performance analytics</p>
-              </div>
+  return (
+    <div className="min-h-screen bg-white font-sans selection:bg-red-100">
+      <div className="max-w-[1600px] mx-auto px-6 md:px-12 py-10">
+        {/* --- HEADER --- */}
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm transition-all bg-red-700`}>
+              <HeaderIcon size={26} strokeWidth={2.2} />
             </div>
+            <div>
+              <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none whitespace-nowrap">
+                {headerTitle}
+              </h1>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mt-1.5">Real-time performance analytics</p>
+            </div>
+          </div>
 
-            <div className="flex flex-wrap lg:flex-nowrap items-center gap-3">
-              {isCanSelectBranch && (
-                <div className="relative dashboard-dropdown-container">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsDatePickerOpen(false);
-                      setIsExportDropdownOpen(false);
-                      setIsBranchDropdownOpen(!isBranchDropdownOpen);
-                    }}
-                    className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 text-left transition-all duration-200 ${
-                      isBranchDropdownOpen
-                        ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
-                        : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
-                    }`}
-                  >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                      isBranchDropdownOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
-                    }`}>
-                      <MapPin size={15} strokeWidth={2.7} />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[8px] font-black uppercase tracking-[0.18em] text-slate-400">Branch Scope</span>
-                      <span className="block max-w-[150px] truncate text-[10px] font-black uppercase tracking-[0.08em] text-slate-800">{activeBranchLabel}</span>
-                    </span>
-                    <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isBranchDropdownOpen ? 'rotate-180 text-red-700' : ''}`} />
-                  </button>
+          <div className="flex flex-wrap lg:flex-nowrap items-center gap-3">
+            {isCanSelectBranch && (
+              <div className="relative dashboard-dropdown-container">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDatePickerOpen(false);
+                    setIsExportDropdownOpen(false);
+                    setIsBranchDropdownOpen(!isBranchDropdownOpen);
+                  }}
+                  className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 text-left transition-all duration-200 ${
+                    isBranchDropdownOpen
+                      ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
+                      : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
+                  }`}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                    isBranchDropdownOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
+                  }`}>
+                    <MapPin size={15} strokeWidth={2.7} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[8px] font-black uppercase tracking-[0.18em] text-slate-400">Branch Scope</span>
+                    <span className="block max-w-[150px] truncate text-[10px] font-black uppercase tracking-[0.08em] text-slate-800">{activeBranchLabel}</span>
+                  </span>
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isBranchDropdownOpen ? 'rotate-180 text-red-700' : ''}`} />
+                </button>
+
                 {isBranchDropdownOpen && (
                   <div className="absolute top-full right-0 z-[100] mt-2 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/10 animate-in zoom-in-95 duration-200">
                     <div className="border-b border-slate-100 bg-white px-4 py-3">
@@ -1784,87 +1782,87 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
-                    <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedBranch('all');
-                          setIsBranchDropdownOpen(false);
-                          setBranchSearchTerm('');
-                        }}
-                        className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
-                          selectedBranch === 'all'
-                            ? 'border-red-200 bg-red-50 text-red-900'
-                            : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
-                        }`}
-                      >
-                        <span className="flex min-w-0 items-center gap-3">
-                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
-                            selectedBranch === 'all' ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-red-700'
-                          }`}>
-                            <MonitorCheck size={16} />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-xs font-black">Global Central Console</span>
-                            <span className={`mt-0.5 block text-[10px] font-bold ${
-                              selectedBranch === 'all' ? 'text-red-500' : 'text-slate-400'
-                            }`}>All branches combined</span>
-                          </span>
-                        </span>
-                        {selectedBranch === 'all' ? (
-                          <ShieldCheck size={17} className="shrink-0" />
-                        ) : (
-                          <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
-                        )}
-                      </button>
-
-                      <div className="mx-1 my-2 h-px bg-slate-100"></div>
-
-                      {filteredBranches.map(b => {
-                        const isSelected = selectedBranch === b.id;
-                        return (
-                          <button
-                            key={b.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedBranch(b.id);
-                              setIsBranchDropdownOpen(false);
-                              setBranchSearchTerm('');
-                            }}
-                            className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
-                              isSelected
-                                ? 'border-red-200 bg-red-50 text-red-900'
-                                : 'border-transparent text-slate-900 hover:border-red-100 hover:bg-red-50/40'
-                            }`}
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black uppercase ${
-                                isSelected ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-slate-500'
-                              }`}>
-                                {b.code?.slice(0, 2) || 'BR'}
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block truncate text-xs font-black">{b.name}</span>
-                                <span className={`mt-0.5 block text-[10px] font-bold ${
-                                  isSelected ? 'text-red-500' : 'text-slate-400'
-                                }`}>Pharmacy branch node</span>
-                              </span>
+                      <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBranch('all');
+                            setIsBranchDropdownOpen(false);
+                            setBranchSearchTerm('');
+                          }}
+                          className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                            selectedBranch === 'all'
+                              ? 'border-red-200 bg-red-50 text-red-900'
+                              : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-3">
+                            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                              selectedBranch === 'all' ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-red-700'
+                            }`}>
+                              <MonitorCheck size={16} />
                             </span>
-                            {isSelected ? (
-                              <ShieldCheck size={17} className="shrink-0" />
-                            ) : (
-                              <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
-                            )}
-                          </button>
-                        );
-                      })}
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-black">Global Central Console</span>
+                              <span className={`mt-0.5 block text-[10px] font-bold ${
+                                selectedBranch === 'all' ? 'text-red-500' : 'text-slate-400'
+                              }`}>All branches combined</span>
+                            </span>
+                          </span>
+                          {selectedBranch === 'all' ? (
+                            <ShieldCheck size={17} className="shrink-0" />
+                          ) : (
+                            <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                          )}
+                        </button>
 
-                      {filteredBranches.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-7 text-center">
-                          <p className="text-xs font-black text-slate-500">No branches found</p>
-                          <p className="mt-1 text-[10px] font-bold text-slate-400">Try another branch name or code</p>
-                        </div>
-                      )}
+                        <div className="mx-1 my-2 h-px bg-slate-100"></div>
+
+                        {filteredBranches.map(b => {
+                          const isSelected = selectedBranch === b.id;
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedBranch(b.id);
+                                setIsBranchDropdownOpen(false);
+                                setBranchSearchTerm('');
+                              }}
+                              className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                                isSelected
+                                  ? 'border-red-200 bg-red-50 text-red-900'
+                                  : 'border-transparent text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                              }`}
+                            >
+                              <span className="flex min-w-0 items-center gap-3">
+                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black uppercase ${
+                                  isSelected ? 'border-red-100 bg-white text-red-700' : 'border-slate-100 bg-slate-50 text-slate-500'
+                                }`}>
+                                  {b.code?.slice(0, 2) || 'BR'}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-black">{b.name}</span>
+                                  <span className={`mt-0.5 block text-[10px] font-bold ${
+                                    isSelected ? 'text-red-500' : 'text-slate-400'
+                                  }`}>Pharmacy branch node</span>
+                                </span>
+                              </span>
+                              {isSelected ? (
+                                <ShieldCheck size={17} className="shrink-0" />
+                              ) : (
+                                <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                              )}
+                            </button>
+                          );
+                        })}
+
+                        {filteredBranches.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-7 text-center">
+                            <p className="text-xs font-black text-slate-500">No branches found</p>
+                            <p className="mt-1 text-[10px] font-bold text-slate-400">Try another branch name or code</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1872,31 +1870,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
               </div>
             )}
 
-              <div className="relative dashboard-dropdown-container">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsBranchDropdownOpen(false);
-                    setIsExportDropdownOpen(false);
-                    setIsDatePickerOpen(!isDatePickerOpen);
-                  }}
-                  className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 transition-all duration-200 ${
-                    isDatePickerOpen
-                      ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
-                      : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
-                  }`}
-                >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                    isDatePickerOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
-                  }`}>
-                    <CalendarDays size={15} strokeWidth={2.7} />
-                  </span>
+            <div className="relative dashboard-dropdown-container">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBranchDropdownOpen(false);
+                  setIsExportDropdownOpen(false);
+                  setIsDatePickerOpen(!isDatePickerOpen);
+                }}
+                className={`group flex h-11 items-center gap-2.5 rounded-lg border px-3.5 transition-all duration-200 ${
+                  isDatePickerOpen
+                    ? 'border-red-200 bg-white shadow-md shadow-red-900/5'
+                    : 'border-slate-200 bg-white shadow-sm hover:border-red-200 hover:bg-red-50/30'
+                }`}
+              >
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                  isDatePickerOpen ? 'bg-red-50 text-red-700 ring-1 ring-red-100' : 'bg-slate-50 text-red-700 group-hover:bg-red-50'
+                }`}>
+                  <CalendarDays size={15} strokeWidth={2.7} />
+                </span>
                 <span className="min-w-0 text-left">
                   <span className="block text-[8px] font-black uppercase tracking-[0.18em] text-slate-400">Date Range</span>
                   <span className="block text-[10px] font-black uppercase tracking-[0.08em] text-slate-800">{activeDateLabel[dateType]}</span>
                 </span>
                 <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isDatePickerOpen ? 'rotate-180 text-red-700' : ''}`} />
               </button>
+
               {isDatePickerOpen && (
                 <div className={`absolute top-full right-0 z-[100] mt-2 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-900/10 animate-in slide-in-from-top-5 duration-200 ${dateType === 'custom' ? 'w-[330px]' : 'w-[310px]'}`}>
                   <div className="border-b border-slate-100 bg-white px-4 py-3">
@@ -1904,100 +1903,103 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                     <p className="mt-1 text-sm font-black tracking-tight text-slate-900">{activeDateLabel[dateType]}</p>
                   </div>
                   <div className="p-3">
-                  {dateType !== 'custom' ? (
-                    <div className="grid grid-cols-1 gap-1">
-                      {dateRangeOptions.map(t => (
-                        <button key={t.id} type="button" onClick={() => {
-                          // إعادة تعيين التواريخ عند التغيير من custom
-                          if (dateType === 'custom' && t.id !== 'custom') {
-                            setStartDate('');
-                            setEndDate('');
+                    {dateType !== 'custom' ? (
+                      <div className="grid grid-cols-1 gap-1">
+                        {dateRangeOptions.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              if (dateType === 'custom' && t.id !== 'custom') {
+                                setStartDate('');
+                                setEndDate('');
+                                setManualStart('');
+                                setManualEnd('');
+                              }
+                              setDateType(t.id);
+                              if (t.id !== 'custom') setIsDatePickerOpen(false);
+                            }}
+                            className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                              dateType === t.id
+                                ? 'border-red-200 bg-red-50 text-red-900'
+                                : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
+                            }`}
+                          >
+                            <span>
+                              <span className="block text-xs font-black">{t.label}</span>
+                              <span className={`mt-0.5 block text-[10px] font-bold ${dateType === t.id ? 'text-red-500' : 'text-slate-400'}`}>{t.sub}</span>
+                            </span>
+                            {dateType === t.id ? (
+                              <ShieldCheck size={17} className="shrink-0" />
+                            ) : (
+                              <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-3">
+                          <div>
+                            <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">From (DD-MM-YYYY)</label>
+                            <input
+                              type="text"
+                              placeholder="01-01-2026"
+                              value={manualStart}
+                              onChange={(e) => setManualStart(e.target.value)}
+                              className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">To (DD-MM-YYYY)</label>
+                            <input
+                              type="text"
+                              placeholder="31-01-2026"
+                              value={manualEnd}
+                              onChange={(e) => setManualEnd(e.target.value)}
+                              className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const s = parseManualDate(manualStart);
+                            const e = parseManualDate(manualEnd);
+                            if (s && e) {
+                              setStartDate(s);
+                              setEndDate(e);
+                              setIsDatePickerOpen(false);
+                            } else {
+                              showToast("Invalid date format. Please use DD-MM-YYYY (e.g., 09-01-2026). Check month (1-12), day (1-31), and valid date.", 'error');
+                            }
+                          }}
+                          className="w-full rounded-lg bg-red-600 p-3 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm shadow-red-600/20 transition-all hover:bg-red-700"
+                        >
+                          Confirm Period
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             setManualStart('');
                             setManualEnd('');
-                          }
-                          setDateType(t.id);
-                          if (t.id !== 'custom') setIsDatePickerOpen(false);
-                        }}
-                          className={`group flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
-                            dateType === t.id
-                              ? 'border-red-200 bg-red-50 text-red-900'
-                              : 'border-transparent bg-white text-slate-900 hover:border-red-100 hover:bg-red-50/40'
-                          }`}>
-                          <span>
-                            <span className="block text-xs font-black">{t.label}</span>
-                            <span className={`mt-0.5 block text-[10px] font-bold ${dateType === t.id ? 'text-red-500' : 'text-slate-400'}`}>{t.sub}</span>
-                          </span>
-                          {dateType === t.id ? (
-                            <ShieldCheck size={17} className="shrink-0" />
-                          ) : (
-                            <ChevronRight size={16} className="shrink-0 text-slate-300 transition-colors group-hover:text-red-600" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="space-y-3">
-                        <div>
-                          <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">From (DD-MM-YYYY)</label>
-                          <input
-                            type="text"
-                            placeholder="01-01-2026"
-                            value={manualStart}
-                            onChange={(e) => setManualStart(e.target.value)}
-                            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1.5 ml-1 block text-[10px] font-black text-slate-500">To (DD-MM-YYYY)</label>
-                          <input
-                            type="text"
-                            placeholder="31-01-2026"
-                            value={manualEnd}
-                            onChange={(e) => setManualEnd(e.target.value)}
-                            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-red-300 focus:ring-2 focus:ring-red-50"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const s = parseManualDate(manualStart);
-                          const e = parseManualDate(manualEnd);
-                          if (s && e) {
-                            setStartDate(s);
-                            setEndDate(e);
+                            setStartDate('');
+                            setEndDate('');
+                            setDateType('all');
                             setIsDatePickerOpen(false);
-                          } else {
-                            showToast("Invalid date format. Please use DD-MM-YYYY (e.g., 09-01-2026). Check month (1-12), day (1-31), and valid date.", 'error');
-                          }
-                        }}
-                        className="w-full rounded-lg bg-red-600 p-3 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm shadow-red-600/20 transition-all hover:bg-red-700"
-                      >
-                        Confirm Period
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setManualStart('');
-                          setManualEnd('');
-                          setStartDate('');
-                          setEndDate('');
-                          setDateType('all');
-                          setIsDatePickerOpen(false);
-                        }}
-                        className="w-full rounded-lg border border-slate-200 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50/40 hover:text-red-600"
-                      >
-                        Reset Filter
-                      </button>
-                    </div>
-                  )}
+                          }}
+                          className="w-full rounded-lg border border-slate-200 bg-white py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50/40 hover:text-red-600"
+                        >
+                          Reset Filter
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-              {isModuleEnabled('excelExport') && (
+            {isModuleEnabled('excelExport') && (
               <div className="relative dashboard-dropdown-container export-dropdown-container">
                 <button
                   type="button"
@@ -2008,138 +2010,122 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                   }}
                   className="flex h-12 items-center gap-2.5 rounded-2xl bg-red-700 px-5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-red-700/25 transition-all hover:-translate-y-0.5 hover:bg-red-800"
                 >
-                <Download size={17} />
-                <span>Export</span>
-                <ChevronDown size={14} className={`transition-transform duration-300 ${isExportDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
+                  <Download size={17} />
+                  <span>Export</span>
+                  <ChevronDown size={14} className={`transition-transform duration-300 ${isExportDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-              {isExportDropdownOpen && (
-                <div className="absolute top-full right-0 z-[100] mt-3 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 animate-in zoom-in-95 duration-300">
-                  <div className="border-b border-slate-100 bg-slate-950 px-5 py-4 text-white">
-                    <p className="text-[9px] font-black uppercase tracking-[0.28em] text-red-200">Export Center</p>
-                    <p className="mt-1 text-sm font-black uppercase tracking-tight">Download Excel Workbooks</p>
+                {isExportDropdownOpen && (
+                  <div className="absolute top-full right-0 z-[100] mt-3 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl shadow-slate-900/15 animate-in zoom-in-95 duration-300">
+                    <div className="border-b border-slate-100 bg-slate-950 px-5 py-4 text-white">
+                      <p className="text-[9px] font-black uppercase tracking-[0.28em] text-red-200">Export Center</p>
+                      <p className="mt-1 text-sm font-black tracking-tight">Download Excel Workbooks</p>
+                    </div>
+                    <div className="space-y-1.5 p-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          exportLostSales();
+                        }}
+                        className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-red-100 hover:bg-red-50/60"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-700">
+                            <Banknote size={16} />
+                          </div>
+                          <div>
+                            <p className="text-slate-900">Lost Sales Analysis</p>
+                            <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Records, Item, Agent, Ranking</p>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-red-600 transition-colors" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          exportShortage();
+                        }}
+                        className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-amber-100 hover:bg-amber-50/70"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                            <PackageX size={16} />
+                          </div>
+                          <div>
+                            <p className="text-slate-900">Shortage Analysis</p>
+                            <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">5 Tabs: All, Stores, Other, Ranking</p>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-amber-600 transition-colors" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsExportDropdownOpen(false);
+                          exportCombined();
+                        }}
+                        className="group flex w-full items-center justify-between rounded-2xl bg-slate-900 p-4 text-left text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/15 transition-all hover:bg-red-900"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white">
+                            <FileSpreadsheet size={16} />
+                          </div>
+                          <div>
+                            <p>Complete Analysis</p>
+                            <p className="text-[8px] text-white/60 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Lost Sales, Shortage, Ranking</p>
+                          </div>
+                        </div>
+                        <ChevronRight size={16} className="text-white/40 group-hover:text-white transition-colors" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1.5 p-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsExportDropdownOpen(false);
-                        exportLostSales();
-                      }}
-                      className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-red-100 hover:bg-red-50/60"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100 text-red-700">
-                          <Banknote size={16} />
-                        </div>
-                        <div>
-                          <p className="text-slate-900">Lost Sales Analysis</p>
-                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Records, Item, Agent, Ranking</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-300 group-hover:text-red-600 transition-colors" />
-                    </button>
+                )}
+              </div>
+            )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsExportDropdownOpen(false);
-                        exportShortage();
-                      }}
-                      className="group flex w-full items-center justify-between rounded-2xl border border-transparent p-4 text-left text-[10px] font-black uppercase tracking-widest transition-all hover:border-amber-100 hover:bg-amber-50/70"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                          <PackageX size={16} />
-                        </div>
-                        <div>
-                          <p className="text-slate-900">Shortage Analysis</p>
-                          <p className="text-[8px] text-slate-400 font-bold normal-case tracking-normal mt-0.5">5 Tabs: All, Stores, Other, Ranking</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-300 group-hover:text-amber-600 transition-colors" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsExportDropdownOpen(false);
-                        exportCombined();
-                      }}
-                      className="group flex w-full items-center justify-between rounded-2xl bg-slate-900 p-4 text-left text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/15 transition-all hover:bg-red-900"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white">
-                          <FileSpreadsheet size={16} />
-                        </div>
-                        <div>
-                          <p>Complete Analysis</p>
-                          <p className="text-[8px] text-white/60 font-bold normal-case tracking-normal mt-0.5">4 Tabs: Lost Sales, Shortage, Ranking</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-white/40 group-hover:text-white transition-colors" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-              )}
-
-              {onBack && (
-                <BackToModulesButton onClick={onBack} />
+            {onBack && (
+              <BackToModulesButton onClick={onBack} />
             )}
           </div>
         </header>
 
-
-
-          {/* Tabs Navigation */}
-          <div className="mb-10 flex justify-center">
-            <div className="relative inline-flex flex-wrap items-center justify-center gap-1 rounded-2xl border border-slate-200/60 bg-white/50 p-1.5 shadow-inner backdrop-blur-md">
-              {salesPerm !== 'none' && (
-                <button
-                  type="button"
-                  onClick={() => changeViewMode('standard')}
-                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
-                    viewMode === 'standard' 
-                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <TrendingDown className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'standard' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
-                  <span>Revenue Lost Analysis</span>
-                </button>
-              )}
-              {shortagesPerm !== 'none' && (
-                <button
-                  type="button"
-                  onClick={() => changeViewMode('expanded')}
-                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
-                    viewMode === 'expanded' 
-                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <PackageX className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'expanded' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
-                  <span>Inventory Shortages</span>
-                </button>
-              )}
-              {isManagerRole(user.role) && (
-                <button
-                  type="button"
-                  onClick={() => changeViewMode('products')}
-                  className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
-                    viewMode === 'products' 
-                      ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <Package className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'products' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
-                  <span>Product Catalogue</span>
-                </button>
-              )}
-            </div>
+        {/* Tabs Navigation */}
+        <div className="mb-10 flex justify-center">
+          <div className="relative inline-flex flex-wrap items-center justify-center gap-1 rounded-2xl border border-slate-200/60 bg-white/50 p-1.5 shadow-inner backdrop-blur-md">
+            {salesPerm !== 'none' && (
+              <button
+                type="button"
+                onClick={() => changeViewMode('standard')}
+                className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
+                  viewMode === 'standard' 
+                    ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <TrendingDown className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'standard' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
+                <span>Revenue Lost Analysis</span>
+              </button>
+            )}
+            {shortagesPerm !== 'none' && (
+              <button
+                type="button"
+                onClick={() => changeViewMode('expanded')}
+                className={`group relative z-10 flex items-center gap-2.5 rounded-xl px-6 py-3 text-[13px] font-bold transition-all duration-300 ${
+                  viewMode === 'expanded' 
+                    ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5' 
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <PackageX className={`h-4 w-4 transition-colors duration-300 ${viewMode === 'expanded' ? 'text-white' : 'text-slate-400 group-hover:text-red-600'}`} />
+                <span>Inventory Shortages</span>
+              </button>
+            )}
           </div>
+        </div>
 
         {
           viewMode === 'standard' ? (
@@ -3519,6 +3505,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
                         { label: 'Last close', value: formatLostSalesTrackerValue(operationalTrendSummary.lastValue), prefix: 'BHD', tone: 'text-white' },
                         { label: 'Change', value: `${operationalTrendSummary.delta >= 0 ? '+' : ''}${formatLostSalesTrackerValue(operationalTrendSummary.deltaAbs)}`, prefix: 'BHD', tone: operationalTrendSummary.delta > 0 ? 'text-red-300' : operationalTrendSummary.delta < 0 ? 'text-emerald-300' : 'text-sky-300' },
                         { label: 'Volume', value: String(operationalTrendSummary.totalSessions), prefix: 'CX', tone: 'text-amber-200' },
+                        { label: 'Volume', value: String(operationalTrendSummary.totalSessions), prefix: 'CX', tone: 'text-amber-200' },
                         { label: 'Days', value: String(operationalTrendSummary.dayCount), prefix: 'D', tone: 'text-slate-200' },
                       ].map(item => (
                         <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -3594,17 +3581,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
             </>
           ) : null
         }
-
-        {
-          viewMode === 'products' ? (
-            <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm min-h-[600px]">
-              <ProductManagementSection />
-            </div>
-          ) : null
-        }
         <div className="h-20"></div>
-
-        {/* عرض حالة الخطأ مع إمكانية إعادة المحاولة - Error State Display */}
         {
           error && (
             <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-red-50 border-2 border-red-200 rounded-2xl p-6 shadow-2xl z-[200] max-w-md animate-in slide-in-from-bottom-5">

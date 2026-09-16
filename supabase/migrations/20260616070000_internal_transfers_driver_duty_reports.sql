@@ -11,12 +11,10 @@ set label = excluded.label,
     is_active = true,
     sort_order = excluded.sort_order,
     updated_at = now();
-
 alter table public.delivery_orders
   add column if not exists order_kind text not null default 'actual_delivery',
   add column if not exists transfer_from_branch_id uuid,
   add column if not exists transfer_to_branch_id uuid;
-
 do $$
 begin
   if not exists (
@@ -41,27 +39,21 @@ begin
       foreign key (transfer_to_branch_id) references public.branches(id) on delete restrict not valid;
   end if;
 end $$;
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_order_kind_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_order_kind_check
   check (order_kind in ('actual_delivery', 'internal_transfer')) not valid;
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_value_bhd_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_value_bhd_check
   check (
     (order_kind = 'actual_delivery' and value_bhd > 0)
     or (order_kind = 'internal_transfer' and value_bhd >= 0)
   ) not valid;
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_internal_transfer_branches_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_internal_transfer_branches_check
   check (
@@ -77,25 +69,19 @@ alter table public.delivery_orders
       and transfer_from_branch_id <> transfer_to_branch_id
     )
   ) not valid;
-
 alter table public.delivery_orders validate constraint delivery_orders_order_kind_check;
 alter table public.delivery_orders validate constraint delivery_orders_value_bhd_check;
 alter table public.delivery_orders validate constraint delivery_orders_internal_transfer_branches_check;
-
 create index if not exists delivery_orders_order_kind_idx
   on public.delivery_orders(order_kind, order_date desc);
-
 create index if not exists delivery_orders_transfer_route_idx
   on public.delivery_orders(transfer_from_branch_id, transfer_to_branch_id, order_date desc)
   where order_kind = 'internal_transfer';
-
 alter table public.delivery_driver_daily_stats
   add column if not exists actual_delivery_count integer not null default 0,
   add column if not exists internal_transfer_count integer not null default 0;
-
 alter table public.delivery_driver_daily_stats
   drop constraint if exists delivery_driver_daily_stats_nonnegative;
-
 alter table public.delivery_driver_daily_stats
   add constraint delivery_driver_daily_stats_nonnegative
   check (
@@ -107,7 +93,6 @@ alter table public.delivery_driver_daily_stats
     and actual_delivery_count >= 0
     and internal_transfer_count >= 0
   );
-
 create or replace function public.delivery_driver_recompute_daily_stats(
   p_driver_id uuid,
   p_stat_date date
@@ -198,7 +183,6 @@ begin
   return v_stats;
 end;
 $$;
-
 create or replace function public.app_driver_get_session()
 returns jsonb
 language plpgsql
@@ -274,9 +258,7 @@ begin
   );
 end;
 $$;
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -353,9 +335,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null
@@ -444,7 +424,6 @@ begin
   limit v_limit;
 end;
 $$;
-
 create or replace function public.app_driver_list_transfer_branches()
 returns table (
   id uuid,
@@ -468,7 +447,6 @@ begin
   order by b.code nulls last, b.name;
 end;
 $$;
-
 create or replace function public.app_driver_create_internal_transfer(
   p_from_branch_id uuid,
   p_to_branch_id uuid,
@@ -623,7 +601,6 @@ begin
   return v_order.id;
 end;
 $$;
-
 create or replace function public.app_driver_get_duty_report(
   p_date_from date default current_date,
   p_date_to date default current_date,
@@ -744,13 +721,11 @@ begin
   order by k.stat_date desc, ds.name;
 end;
 $$;
-
 update public.role_permissions
 set access_level = 'read'
 where role = 'driver'
   and feature_name = 'delivery'
   and access_level = 'none';
-
 insert into public.role_permissions (role, feature_name, access_level)
 values ('driver', 'delivery', 'read')
 on conflict (role, feature_name) do update
@@ -758,7 +733,6 @@ set access_level = case
   when public.role_permissions.access_level = 'edit' then 'edit'
   else 'read'
 end;
-
 revoke all on function public.delivery_driver_recompute_daily_stats(uuid, date) from public, anon, authenticated;
 revoke all on function public.app_driver_get_session() from public, anon;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
@@ -766,7 +740,6 @@ revoke all on function public.app_driver_get_order_history(integer, text) from p
 revoke all on function public.app_driver_list_transfer_branches() from public, anon;
 revoke all on function public.app_driver_create_internal_transfer(uuid, uuid, text, text) from public, anon;
 revoke all on function public.app_driver_get_duty_report(date, date, uuid) from public, anon;
-
 grant execute on function public.delivery_driver_recompute_daily_stats(uuid, date) to service_role;
 grant execute on function public.app_driver_get_session() to authenticated, service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
@@ -774,5 +747,4 @@ grant execute on function public.app_driver_get_order_history(integer, text) to 
 grant execute on function public.app_driver_list_transfer_branches() to authenticated, service_role;
 grant execute on function public.app_driver_create_internal_transfer(uuid, uuid, text, text) to authenticated, service_role;
 grant execute on function public.app_driver_get_duty_report(date, date, uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

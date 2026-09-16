@@ -16,24 +16,18 @@ alter table public.delivery_orders
   add column if not exists cancelled_reason text,
   add column if not exists lifecycle_updated_at timestamptz,
   add column if not exists lifecycle_updated_by uuid references auth.users(id) on delete set null;
-
 update public.delivery_orders
 set delivery_status = 'recorded'
 where delivery_status is null;
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_delivery_status_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_delivery_status_check
   check (delivery_status in ('recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'));
-
 create index if not exists delivery_orders_delivery_status_idx
   on public.delivery_orders(delivery_status);
-
 create index if not exists delivery_orders_driver_status_date_idx
   on public.delivery_orders(driver_id, delivery_status, order_date desc);
-
 create table if not exists public.delivery_order_events (
   id uuid primary key default gen_random_uuid(),
   order_id uuid references public.delivery_orders(id) on delete set null,
@@ -56,30 +50,23 @@ create table if not exists public.delivery_order_events (
   constraint delivery_order_events_new_status_check
     check (new_status in ('recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'))
 );
-
 create index if not exists delivery_order_events_order_created_idx
   on public.delivery_order_events(order_id, created_at desc);
-
 create index if not exists delivery_order_events_branch_created_idx
   on public.delivery_order_events(branch_id, created_at desc);
-
 create unique index if not exists delivery_order_events_idempotency_idx
   on public.delivery_order_events(order_id, idempotency_key)
   where order_id is not null and idempotency_key is not null;
-
 alter table public.delivery_order_events enable row level security;
-
 revoke all on public.delivery_order_events from public, anon, authenticated;
 grant select on public.delivery_order_events to authenticated;
 grant all on public.delivery_order_events to service_role;
-
 drop policy if exists "delivery order events select" on public.delivery_order_events;
 create policy "delivery order events select"
 on public.delivery_order_events
 for select
 to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -162,10 +149,8 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.delivery_orders_guard_branch_update() from public, anon, authenticated;
 grant execute on function public.delivery_orders_guard_branch_update() to service_role;
-
 create or replace function public.app_delivery_transition_order(
   p_order_id uuid,
   p_next_status text,
@@ -354,8 +339,6 @@ begin
   return v_event;
 end;
 $$;
-
 revoke all on function public.app_delivery_transition_order(uuid, text, uuid, text, text) from public, anon, authenticated;
 grant execute on function public.app_delivery_transition_order(uuid, text, uuid, text, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

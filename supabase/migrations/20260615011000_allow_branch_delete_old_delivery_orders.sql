@@ -78,15 +78,12 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.delivery_orders_guard_branch_update() from public, anon, authenticated;
 grant execute on function public.delivery_orders_guard_branch_update() to service_role;
-
 drop trigger if exists delivery_orders_safe_branch_update_guard on public.delivery_orders;
 create trigger delivery_orders_safe_branch_update_guard
 before update on public.delivery_orders
 for each row execute function public.delivery_orders_guard_branch_update();
-
 drop policy if exists "delivery orders update" on public.delivery_orders;
 create policy "delivery orders update"
 on public.delivery_orders
@@ -110,12 +107,10 @@ with check (
     and order_date <= current_date
   )
 );
-
 drop policy if exists "delivery orders delete" on public.delivery_orders;
 create policy "delivery orders delete"
 on public.delivery_orders
 for delete
 to authenticated
 using (public.current_app_can_manage());
-
 notify pgrst, 'reload schema';

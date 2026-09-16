@@ -26,12 +26,9 @@ create table if not exists public.delivery_driver_monthly_targets (
   constraint delivery_driver_monthly_targets_driver_month_unique
     unique (driver_id, target_month)
 );
-
 create index if not exists delivery_driver_monthly_targets_month_idx
   on public.delivery_driver_monthly_targets(target_month);
-
 alter table public.delivery_driver_monthly_targets enable row level security;
-
 drop policy if exists delivery_driver_monthly_targets_select_policy on public.delivery_driver_monthly_targets;
 create policy delivery_driver_monthly_targets_select_policy
 on public.delivery_driver_monthly_targets
@@ -42,14 +39,12 @@ using (
   or public.current_app_role() in ('owner', 'supervisor')
   or driver_id = public.current_delivery_driver_id()
 );
-
 drop policy if exists delivery_driver_monthly_targets_insert_policy on public.delivery_driver_monthly_targets;
 create policy delivery_driver_monthly_targets_insert_policy
 on public.delivery_driver_monthly_targets
 for insert
 to authenticated
 with check (public.current_app_can_manage());
-
 drop policy if exists delivery_driver_monthly_targets_update_policy on public.delivery_driver_monthly_targets;
 create policy delivery_driver_monthly_targets_update_policy
 on public.delivery_driver_monthly_targets
@@ -57,17 +52,14 @@ for update
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists delivery_driver_monthly_targets_delete_policy on public.delivery_driver_monthly_targets;
 create policy delivery_driver_monthly_targets_delete_policy
 on public.delivery_driver_monthly_targets
 for delete
 to authenticated
 using (public.current_app_can_manage());
-
 revoke all on public.delivery_driver_monthly_targets from public, anon;
 grant select, insert, update, delete on public.delivery_driver_monthly_targets to authenticated, service_role;
-
 create or replace function public.app_driver_monthly_target_payload(
   p_driver_id uuid,
   p_target_month date default current_date
@@ -155,7 +147,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.app_driver_get_session()
 returns jsonb
 language plpgsql
@@ -232,9 +223,7 @@ begin
   );
 end;
 $$;
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -309,9 +298,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null
@@ -398,15 +385,12 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.app_driver_monthly_target_payload(uuid, date) from public, anon;
 revoke all on function public.app_driver_get_session() from public, anon;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
 revoke all on function public.app_driver_get_order_history(integer, text) from public, anon;
-
 grant execute on function public.app_driver_monthly_target_payload(uuid, date) to authenticated, service_role;
 grant execute on function public.app_driver_get_session() to authenticated, service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
 grant execute on function public.app_driver_get_order_history(integer, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

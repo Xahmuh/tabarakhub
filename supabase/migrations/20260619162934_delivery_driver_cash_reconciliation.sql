@@ -5,20 +5,16 @@ alter table public.delivery_orders
   add column if not exists driver_reconciled_at timestamptz,
   add column if not exists driver_reconciled_by uuid references auth.users(id) on delete set null,
   add column if not exists driver_reconciliation_note text;
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_driver_reconciliation_amounts_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_driver_reconciliation_amounts_check
   check (
     driver_reconciliation_expected_bhd >= 0
     and driver_reconciliation_returned_bhd >= 0
   ) not valid;
-
 alter table public.delivery_orders
   validate constraint delivery_orders_driver_reconciliation_amounts_check;
-
 create or replace function public.delivery_orders_normalize_payment_tracking()
 returns trigger
 language plpgsql
@@ -108,7 +104,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -310,10 +305,8 @@ begin
   return new;
 end;
 $$;
-
 drop function if exists public.app_delivery_reconcile_payment(uuid, numeric, text);
 drop function if exists public.app_delivery_reconcile_payment(uuid, numeric, text, numeric);
-
 create function public.app_delivery_reconcile_payment(
   p_order_id uuid,
   p_collected_amount_bhd numeric default null,
@@ -467,8 +460,6 @@ begin
   return v_order.id;
 end;
 $$;
-
 revoke all on function public.app_delivery_reconcile_payment(uuid, numeric, text, numeric) from public, anon;
 grant execute on function public.app_delivery_reconcile_payment(uuid, numeric, text, numeric) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

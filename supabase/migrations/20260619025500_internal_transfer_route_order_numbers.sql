@@ -9,12 +9,9 @@ create table if not exists public.delivery_internal_transfer_daily_sequences (
   constraint delivery_internal_transfer_daily_sequences_last_sequence_check check (last_sequence >= 0),
   constraint delivery_internal_transfer_daily_sequences_route_check check (from_branch_id <> to_branch_id)
 );
-
 alter table public.delivery_internal_transfer_daily_sequences enable row level security;
-
 revoke all on public.delivery_internal_transfer_daily_sequences from public, anon, authenticated;
 grant all on public.delivery_internal_transfer_daily_sequences to service_role;
-
 create or replace function public.delivery_order_branch_code(
   p_branch_id uuid
 )
@@ -38,7 +35,6 @@ begin
   return v_branch_code;
 end;
 $$;
-
 create or replace function public.delivery_format_internal_transfer_number(
   p_from_branch_id uuid,
   p_to_branch_id uuid,
@@ -71,7 +67,6 @@ begin
     || lpad(greatest(coalesce(p_sequence, 1), 1)::text, 3, '0');
 end;
 $$;
-
 create or replace function public.delivery_next_internal_transfer_number(
   p_from_branch_id uuid,
   p_to_branch_id uuid,
@@ -126,7 +121,6 @@ begin
   );
 end;
 $$;
-
 do $$
 begin
   execute 'alter table public.delivery_orders disable trigger user';
@@ -159,7 +153,6 @@ exception
     execute 'alter table public.delivery_orders enable trigger user';
     raise;
 end $$;
-
 insert into public.delivery_internal_transfer_daily_sequences (
   from_branch_id,
   to_branch_id,
@@ -185,10 +178,8 @@ on conflict (from_branch_id, to_branch_id, order_date)
 do update set
   last_sequence = greatest(public.delivery_internal_transfer_daily_sequences.last_sequence, excluded.last_sequence),
   updated_at = now();
-
 create index if not exists delivery_internal_transfer_daily_sequences_date_idx
   on public.delivery_internal_transfer_daily_sequences(order_date desc, from_branch_id, to_branch_id);
-
 create or replace function public.delivery_orders_assign_order_number()
 returns trigger
 language plpgsql
@@ -211,15 +202,12 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.delivery_order_branch_code(uuid) from public, anon, authenticated;
 revoke all on function public.delivery_format_internal_transfer_number(uuid, uuid, date, integer) from public, anon, authenticated;
 revoke all on function public.delivery_next_internal_transfer_number(uuid, uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_orders_assign_order_number() from public, anon, authenticated;
-
 grant execute on function public.delivery_order_branch_code(uuid) to service_role;
 grant execute on function public.delivery_format_internal_transfer_number(uuid, uuid, date, integer) to service_role;
 grant execute on function public.delivery_next_internal_transfer_number(uuid, uuid, date) to service_role;
 grant execute on function public.delivery_orders_assign_order_number() to service_role;
-
 notify pgrst, 'reload schema';

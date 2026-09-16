@@ -11,18 +11,15 @@
 
 alter table public.app_user_profiles
   drop constraint if exists app_user_profiles_role_check;
-
 alter table public.app_user_profiles
   add constraint app_user_profiles_role_check
   check (role in ('admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager'))
   not valid;
-
 update public.app_user_profiles
 set role = 'admin',
     branch_id = null,
     updated_at = now()
 where role = 'manager';
-
 with manager_defaults as (
   select feature_name, access_level, updated_by
   from public.role_permissions
@@ -35,7 +32,6 @@ on conflict (role, feature_name) do update
 set access_level = excluded.access_level,
     updated_at = now(),
     updated_by = excluded.updated_by;
-
 with features(feature_name) as (
   values
     ('command_center'),
@@ -67,12 +63,10 @@ select role_name, feature_name, default_access
 from roles
 cross join features
 on conflict (role, feature_name) do nothing;
-
 update public.role_permissions
 set access_level = 'edit',
     updated_at = now()
 where role = 'admin';
-
 create or replace function public.current_app_can_manage()
 returns boolean
 language sql
@@ -82,7 +76,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager'), false)
 $$;
-
 create or replace function public.current_app_is_admin()
 returns boolean
 language sql
@@ -92,7 +85,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager'), false)
 $$;
-
 create or replace function public.current_app_can_read_all()
 returns boolean
 language sql
@@ -102,7 +94,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager', 'owner', 'warehouse'), false)
 $$;
-
 create or replace function public.current_app_can_export_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -118,7 +109,6 @@ as $$
     false
   )
 $$;
-
 create table if not exists public.app_user_feature_permissions (
   user_id uuid not null references public.app_user_profiles(user_id) on delete cascade,
   feature_name text not null,
@@ -127,20 +117,16 @@ create table if not exists public.app_user_feature_permissions (
   updated_by uuid references auth.users(id) on delete set null,
   primary key (user_id, feature_name)
 );
-
 alter table public.app_user_feature_permissions enable row level security;
-
 revoke all on public.app_user_feature_permissions from anon;
 grant select, insert, update, delete on public.app_user_feature_permissions to authenticated;
 grant all on public.app_user_feature_permissions to service_role;
-
 drop policy if exists "app user feature permissions select" on public.app_user_feature_permissions;
 create policy "app user feature permissions select"
 on public.app_user_feature_permissions
 for select
 to authenticated
 using (user_id = auth.uid() or public.current_app_can_manage());
-
 drop policy if exists "app user feature permissions manage" on public.app_user_feature_permissions;
 create policy "app user feature permissions manage"
 on public.app_user_feature_permissions
@@ -148,7 +134,6 @@ for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 create or replace function public.app_admin_list_users()
 returns table (
   user_id uuid,
@@ -186,7 +171,6 @@ begin
   order by case when p.role = 'manager' then 'admin' else p.role end, coalesce(b.code, u.email::text);
 end;
 $$;
-
 create or replace function public.app_admin_set_user_role(
   target_user_id uuid,
   new_role text,
@@ -263,7 +247,6 @@ begin
   end if;
 end;
 $$;
-
 create or replace function public.app_admin_bootstrap_profile_for_email(target_email text)
 returns uuid
 language plpgsql
@@ -294,7 +277,6 @@ begin
   return target_user_id;
 end;
 $$;
-
 do $$
 begin
   if exists (
@@ -307,7 +289,6 @@ begin
     raise notice 'Admin Auth user ahmedelsherbiinii@gmail.com not found yet. Create the Auth user first, then run select public.app_admin_bootstrap_profile_for_email(''ahmedelsherbiinii@gmail.com''); as service_role.';
   end if;
 end $$;
-
 drop policy if exists "branch delivery profiles manage" on public.branch_delivery_profiles;
 create policy "branch delivery profiles manage"
 on public.branch_delivery_profiles
@@ -315,14 +296,12 @@ for all
 to authenticated
 using (public.current_app_can_manage() or public.current_app_role() = 'owner')
 with check (public.current_app_can_manage() or public.current_app_role() = 'owner');
-
 drop policy if exists "quality feedback questions select authenticated" on public.quality_feedback_questions;
 create policy "quality feedback questions select authenticated"
 on public.quality_feedback_questions
 for select
 to authenticated
 using (is_active = true or coalesce(public.current_app_role() in ('admin', 'manager', 'owner'), false));
-
 drop policy if exists "quality feedback questions manage managers" on public.quality_feedback_questions;
 create policy "quality feedback questions manage admins"
 on public.quality_feedback_questions
@@ -330,7 +309,6 @@ for all
 to authenticated
 using (coalesce(public.current_app_role() in ('admin', 'manager', 'owner'), false))
 with check (coalesce(public.current_app_role() in ('admin', 'manager', 'owner'), false));
-
 revoke all on function public.current_app_can_manage() from public, anon;
 revoke all on function public.current_app_is_admin() from public, anon;
 revoke all on function public.current_app_can_read_all() from public, anon;
@@ -338,7 +316,6 @@ revoke all on function public.current_app_can_export_branch(uuid) from public, a
 revoke all on function public.app_admin_list_users() from public, anon;
 revoke all on function public.app_admin_set_user_role(uuid, text, uuid, boolean) from public, anon;
 revoke all on function public.app_admin_bootstrap_profile_for_email(text) from public, anon, authenticated;
-
 grant execute on function public.current_app_can_manage() to authenticated, service_role;
 grant execute on function public.current_app_is_admin() to authenticated, service_role;
 grant execute on function public.current_app_can_read_all() to authenticated, service_role;
@@ -346,7 +323,6 @@ grant execute on function public.current_app_can_export_branch(uuid) to authenti
 grant execute on function public.app_admin_list_users() to authenticated, service_role;
 grant execute on function public.app_admin_set_user_role(uuid, text, uuid, boolean) to authenticated, service_role;
 grant execute on function public.app_admin_bootstrap_profile_for_email(text) to service_role;
-
 do $$
 declare
   active_admin_count int;
@@ -361,5 +337,4 @@ begin
     raise warning 'No active admin profile exists. Create an Auth user and run select public.app_admin_bootstrap_profile_for_email(''<admin-email>'') as service_role.';
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

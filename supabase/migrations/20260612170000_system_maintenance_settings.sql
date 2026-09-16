@@ -6,11 +6,9 @@ create table if not exists public.system_settings (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null
 );
-
 insert into public.system_settings (id)
 values ('global')
 on conflict (id) do nothing;
-
 create or replace function public.set_system_settings_updated_metadata()
 returns trigger
 language plpgsql
@@ -23,34 +21,27 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists system_settings_updated_metadata on public.system_settings;
 create trigger system_settings_updated_metadata
 before insert or update on public.system_settings
 for each row
 execute function public.set_system_settings_updated_metadata();
-
 alter table public.system_settings enable row level security;
-
 revoke all on public.system_settings from anon, authenticated;
 grant select on public.system_settings to anon, authenticated;
 grant insert, update on public.system_settings to authenticated;
 grant all on public.system_settings to service_role;
-
 drop policy if exists "system settings public read" on public.system_settings;
 drop policy if exists "system settings manage authenticated" on public.system_settings;
-
 create policy "system settings public read"
 on public.system_settings
 for select
 to anon, authenticated
 using (true);
-
 create policy "system settings manage authenticated"
 on public.system_settings
 for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 notify pgrst, 'reload schema';

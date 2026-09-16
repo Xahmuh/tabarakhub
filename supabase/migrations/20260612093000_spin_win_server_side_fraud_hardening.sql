@@ -15,7 +15,6 @@ drop function if exists public.generate_spin_session(uuid, boolean);
 drop function if exists public.validate_spin_token(text);
 drop function if exists public.execute_spin_transaction(text, text, text, text, text, text);
 drop function if exists public.redeem_spin_voucher(uuid, uuid);
-
 create or replace function public.generate_spin_session(
   p_branch_id uuid,
   p_is_multi_use boolean default false
@@ -98,7 +97,6 @@ begin
   return query select v_token, v_expires_at, v_now;
 end;
 $$;
-
 create or replace function public.validate_spin_token(p_token text)
 returns table (
   out_is_valid boolean,
@@ -158,7 +156,6 @@ begin
   return query select true, null::text, v_session.branch_id, v_session.branch_name, v_session.is_multi_use, v_session.google_maps_link;
 end;
 $$;
-
 create or replace function public.execute_spin_transaction(
   p_token text,
   p_phone text,
@@ -394,7 +391,6 @@ begin
   return query select v_spin_id, v_voucher_code, v_prize_id, v_prize_name, v_prize_type;
 end;
 $$;
-
 create or replace function public.redeem_spin_voucher(
   p_spin_id uuid,
   p_branch_id uuid
@@ -457,21 +453,17 @@ begin
   return next;
 end;
 $$;
-
 revoke all on function public.generate_spin_session(uuid, boolean) from public;
 revoke all on function public.validate_spin_token(text) from public;
 revoke all on function public.execute_spin_transaction(text, text, text, text, text, text) from public;
 revoke all on function public.redeem_spin_voucher(uuid, uuid) from public;
-
 grant execute on function public.generate_spin_session(uuid, boolean) to authenticated, service_role;
 grant execute on function public.validate_spin_token(text) to anon, authenticated, service_role;
 grant execute on function public.execute_spin_transaction(text, text, text, text, text, text) to anon, authenticated, service_role;
 grant execute on function public.redeem_spin_voucher(uuid, uuid) to authenticated, service_role;
-
 revoke insert, update, delete on table public.spins from anon, authenticated;
 revoke all privileges on table public.spin_sessions from anon, authenticated;
 grant select on table public.spins to authenticated;
 grant all privileges on table public.spins to service_role;
 grant all privileges on table public.spin_sessions to service_role;
-
 notify pgrst, 'reload schema';

@@ -14,7 +14,7 @@ import {
     Settings,
     Shield,
     CreditCard,
-    DollarSign,
+    Banknote,
     Briefcase,
     History,
     Activity,
@@ -390,7 +390,7 @@ const DashboardView: React.FC<{
                     label="Morning Cash"
                     value={stats.cashArriving}
                     sub="Arriving before 10 AM"
-                    icon={DollarSign}
+                    icon={Banknote}
                     color="emerald"
                 />
                 <StatCard

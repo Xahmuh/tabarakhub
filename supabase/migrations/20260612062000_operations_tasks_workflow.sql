@@ -24,7 +24,6 @@ create table if not exists public.operations_tasks (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create table if not exists public.operations_task_events (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.operations_tasks(id) on delete cascade,
@@ -35,7 +34,6 @@ create table if not exists public.operations_task_events (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
-
 create index if not exists operations_tasks_status_idx on public.operations_tasks(status);
 create index if not exists operations_tasks_severity_idx on public.operations_tasks(severity);
 create index if not exists operations_tasks_priority_idx on public.operations_tasks(priority);
@@ -53,7 +51,6 @@ on public.operations_tasks (
 )
 where status in ('open', 'in_progress');
 create index if not exists operations_task_events_task_id_idx on public.operations_task_events(task_id);
-
 create or replace function public.current_app_can_read_operations_task(target_branch_id uuid)
 returns boolean
 language sql
@@ -67,7 +64,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_can_update_operations_task(target_branch_id uuid)
 returns boolean
 language sql
@@ -85,12 +81,10 @@ as $$
     false
   )
 $$;
-
 revoke all on function public.current_app_can_read_operations_task(uuid) from public;
 revoke all on function public.current_app_can_update_operations_task(uuid) from public;
 grant execute on function public.current_app_can_read_operations_task(uuid) to authenticated, service_role;
 grant execute on function public.current_app_can_update_operations_task(uuid) to authenticated, service_role;
-
 create or replace function public.prepare_operations_task_insert()
 returns trigger
 language plpgsql
@@ -110,7 +104,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.enforce_operations_task_update()
 returns trigger
 language plpgsql
@@ -160,7 +153,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.prepare_operations_task_event_insert()
 returns trigger
 language plpgsql
@@ -202,26 +194,21 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.prepare_operations_task_insert() from public;
 revoke all on function public.enforce_operations_task_update() from public;
 revoke all on function public.prepare_operations_task_event_insert() from public;
-
 drop trigger if exists operations_tasks_before_insert on public.operations_tasks;
 create trigger operations_tasks_before_insert
 before insert on public.operations_tasks
 for each row execute function public.prepare_operations_task_insert();
-
 drop trigger if exists operations_tasks_before_update on public.operations_tasks;
 create trigger operations_tasks_before_update
 before update on public.operations_tasks
 for each row execute function public.enforce_operations_task_update();
-
 drop trigger if exists operations_task_events_before_insert on public.operations_task_events;
 create trigger operations_task_events_before_insert
 before insert on public.operations_task_events
 for each row execute function public.prepare_operations_task_event_insert();
-
 do $$
 begin
   if not exists (
@@ -236,46 +223,38 @@ begin
   end if;
 end;
 $$;
-
 alter table public.operations_tasks enable row level security;
 alter table public.operations_task_events enable row level security;
-
 revoke all on public.operations_tasks from anon;
 revoke all on public.operations_task_events from anon;
 revoke all on public.operations_tasks from authenticated;
 revoke all on public.operations_task_events from authenticated;
-
 grant select, insert, update on public.operations_tasks to authenticated;
 grant select, insert on public.operations_task_events to authenticated;
 grant all on public.operations_tasks to service_role;
 grant all on public.operations_task_events to service_role;
-
 drop policy if exists "operations tasks select scoped" on public.operations_tasks;
 drop policy if exists "operations tasks insert managers" on public.operations_tasks;
 drop policy if exists "operations tasks update scoped status" on public.operations_tasks;
 drop policy if exists "operations task events select scoped" on public.operations_task_events;
 drop policy if exists "operations task events insert scoped" on public.operations_task_events;
 drop policy if exists "operations task events insert task access" on public.operations_task_events;
-
 create policy "operations tasks select scoped"
 on public.operations_tasks
 for select
 to authenticated
 using (public.current_app_can_read_operations_task(branch_id));
-
 create policy "operations tasks insert managers"
 on public.operations_tasks
 for insert
 to authenticated
 with check (public.current_app_can_manage());
-
 create policy "operations tasks update scoped status"
 on public.operations_tasks
 for update
 to authenticated
 using (public.current_app_can_update_operations_task(branch_id))
 with check (public.current_app_can_update_operations_task(branch_id));
-
 create policy "operations task events select scoped"
 on public.operations_task_events
 for select
@@ -288,7 +267,6 @@ using (
       and public.current_app_can_read_operations_task(t.branch_id)
   )
 );
-
 create policy "operations task events insert scoped"
 on public.operations_task_events
 for insert
@@ -303,5 +281,4 @@ with check (
       and public.current_app_can_update_operations_task(t.branch_id)
   )
 );
-
 notify pgrst, 'reload schema';

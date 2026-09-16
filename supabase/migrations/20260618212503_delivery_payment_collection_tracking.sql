@@ -6,7 +6,6 @@ alter table public.delivery_orders
   add column if not exists amount_to_collect_bhd numeric(10,3),
   add column if not exists cash_handed_to_driver_bhd numeric(10,3),
   add column if not exists driver_payment_note text;
-
 do $$
 begin
   execute 'alter table public.delivery_orders disable trigger user';
@@ -30,7 +29,6 @@ exception
     raise;
 end;
 $$;
-
 alter table public.delivery_orders
   alter column payment_collection_status set default 'paid',
   alter column payment_collection_status set not null,
@@ -40,7 +38,6 @@ alter table public.delivery_orders
   alter column amount_to_collect_bhd set not null,
   alter column cash_handed_to_driver_bhd set default 0,
   alter column cash_handed_to_driver_bhd set not null;
-
 create or replace function public.delivery_orders_normalize_payment_tracking()
 returns trigger
 language plpgsql
@@ -89,15 +86,12 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists delivery_orders_normalize_payment_tracking_trigger on public.delivery_orders;
-
 create trigger delivery_orders_normalize_payment_tracking_trigger
 before insert or update
 on public.delivery_orders
 for each row
 execute function public.delivery_orders_normalize_payment_tracking();
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -219,16 +213,13 @@ begin
   return new;
 end;
 $$;
-
 alter table public.delivery_orders drop constraint if exists delivery_orders_payment_collection_status_check;
 alter table public.delivery_orders drop constraint if exists delivery_orders_payment_collection_amounts_check;
 alter table public.delivery_orders drop constraint if exists delivery_orders_payment_collection_math_check;
 alter table public.delivery_orders drop constraint if exists delivery_orders_payment_collection_state_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_payment_collection_status_check
   check (payment_collection_status in ('paid', 'collect_on_delivery', 'partial')) not valid;
-
 alter table public.delivery_orders
   add constraint delivery_orders_payment_collection_amounts_check
   check (
@@ -236,14 +227,12 @@ alter table public.delivery_orders
     and amount_to_collect_bhd >= 0
     and cash_handed_to_driver_bhd >= 0
   ) not valid;
-
 alter table public.delivery_orders
   add constraint delivery_orders_payment_collection_math_check
   check (
     coalesce(order_kind, 'actual_delivery') <> 'actual_delivery'
     or round((amount_received_bhd + amount_to_collect_bhd)::numeric, 3) = round(greatest(value_bhd, 0)::numeric, 3)
   ) not valid;
-
 alter table public.delivery_orders
   add constraint delivery_orders_payment_collection_state_check
   check (
@@ -254,19 +243,15 @@ alter table public.delivery_orders
       or (payment_collection_status = 'partial' and amount_received_bhd > 0 and amount_to_collect_bhd > 0)
     )
   ) not valid;
-
 alter table public.delivery_orders validate constraint delivery_orders_payment_collection_status_check;
 alter table public.delivery_orders validate constraint delivery_orders_payment_collection_amounts_check;
 alter table public.delivery_orders validate constraint delivery_orders_payment_collection_math_check;
 alter table public.delivery_orders validate constraint delivery_orders_payment_collection_state_check;
-
 create index if not exists delivery_orders_payment_collection_status_idx
   on public.delivery_orders(payment_collection_status, order_date desc)
   where payment_collection_status <> 'paid';
-
 drop function if exists public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text);
 drop function if exists public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text);
-
 create function public.app_delivery_record_and_assign_order(
   p_branch_id uuid,
   p_order_date date,
@@ -436,9 +421,7 @@ begin
   return v_order.id;
 end;
 $$;
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -521,9 +504,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text, text, date, date);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null,
@@ -630,13 +611,10 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text) from public, anon;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
 revoke all on function public.app_driver_get_order_history(integer, text, text, date, date) from public, anon;
-
 grant execute on function public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text, text, numeric, numeric, text) to authenticated, service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
 grant execute on function public.app_driver_get_order_history(integer, text, text, date, date) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

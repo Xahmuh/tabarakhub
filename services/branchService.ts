@@ -1,7 +1,7 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { Branch } from '../types';
 
-const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, branch_manager_name, lat, lng, duty_radius_m, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled';
+const BRANCH_COLUMNS = 'id, code, name, role, google_maps_link, whatsapp_number, nhra_license_no, cr_number, branch_manager_name, lat, lng, duty_radius_m, is_spin_enabled, is_items_entry_enabled, is_kpi_dashboard_enabled, region_id';
 
 const toBranch = (b: any): Branch => ({
   id: b.id,
@@ -18,7 +18,8 @@ const toBranch = (b: any): Branch => ({
   dutyRadiusM: b.duty_radius_m === null || b.duty_radius_m === undefined ? null : Number(b.duty_radius_m),
   isSpinEnabled: b.is_spin_enabled,
   isItemsEntryEnabled: b.is_items_entry_enabled,
-  isKPIDashboardEnabled: b.is_kpi_dashboard_enabled
+  isKPIDashboardEnabled: b.is_kpi_dashboard_enabled,
+  regionId: b.region_id
 });
 
 export const branchService = {
@@ -27,12 +28,16 @@ export const branchService = {
       const { data, error } = await supabaseClient
         .from('branches')
         .select(BRANCH_COLUMNS)
-        .eq('role', 'branch');
+        .or('role.eq.branch,role.is.null')
+        .order('code', { ascending: true });
       if (error) throw error;
       return data?.map(toBranch) || [];
     } catch (e) {
       return [];
     }
+  },
+  getBranches: async () => {
+    return branchService.list();
   },
   findByCode: async (code: string) => {
     try {
@@ -40,7 +45,7 @@ export const branchService = {
         .from('branches')
         .select(BRANCH_COLUMNS)
         .ilike('code', code)
-        .eq('role', 'branch')
+        .or('role.eq.branch,role.is.null')
         .maybeSingle();
       if (error) throw error;
       if (data) return toBranch(data);
@@ -61,7 +66,7 @@ export const branchService = {
 
     if (error || !data?.branch) return null;
     const branch = Array.isArray(data.branch) ? data.branch[0] : data.branch;
-    if (branch.role !== 'branch') return null;
+    if (branch.role && branch.role !== 'branch') return null;
     return toBranch(branch);
   },
   upsert: async (branch: Partial<Branch>) => {

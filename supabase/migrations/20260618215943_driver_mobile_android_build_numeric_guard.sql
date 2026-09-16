@@ -11,7 +11,6 @@ drop function if exists public.app_driver_end_shift();
 drop function if exists public.app_driver_get_session(integer);
 drop function if exists public.app_driver_get_session();
 drop function if exists public.app_driver_assert_minimum_android_build(integer);
-
 create or replace function public.app_driver_android_build_to_integer(
   p_android_build numeric default null
 )
@@ -35,7 +34,6 @@ begin
   return floor(p_android_build)::integer;
 end;
 $$;
-
 create function public.app_driver_assert_minimum_android_build(
   p_android_build numeric default null
 )
@@ -68,7 +66,6 @@ begin
   end if;
 end;
 $$;
-
 create function public.app_driver_get_session(
   p_android_build numeric default null
 )
@@ -149,7 +146,6 @@ begin
   );
 end;
 $$;
-
 create function public.app_driver_start_shift(
   p_lat numeric,
   p_lng numeric,
@@ -262,7 +258,6 @@ begin
   return public.app_driver_get_session(p_android_build);
 end;
 $$;
-
 create function public.app_driver_end_shift(
   p_android_build numeric default null
 )
@@ -314,17 +309,14 @@ begin
   return public.app_driver_get_session(p_android_build);
 end;
 $$;
-
 revoke all on function public.app_driver_android_build_to_integer(numeric) from public, anon, authenticated;
 revoke all on function public.app_driver_assert_minimum_android_build(numeric) from public, anon, authenticated;
 revoke all on function public.app_driver_get_session(numeric) from public, anon;
 revoke all on function public.app_driver_start_shift(numeric, numeric, numeric, numeric) from public, anon;
 revoke all on function public.app_driver_end_shift(numeric) from public, anon;
-
 grant execute on function public.app_driver_android_build_to_integer(numeric) to service_role;
 grant execute on function public.app_driver_get_session(numeric) to authenticated, service_role;
 grant execute on function public.app_driver_start_shift(numeric, numeric, numeric, numeric) to authenticated, service_role;
 grant execute on function public.app_driver_end_shift(numeric) to authenticated, service_role;
 grant execute on function public.app_driver_assert_minimum_android_build(numeric) to service_role;
-
 notify pgrst, 'reload schema';

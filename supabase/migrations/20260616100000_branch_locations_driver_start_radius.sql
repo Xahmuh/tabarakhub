@@ -2,14 +2,12 @@ alter table public.branches
   add column if not exists lat numeric(10, 8),
   add column if not exists lng numeric(11, 8),
   add column if not exists duty_radius_m integer not null default 50;
-
 alter table public.delivery_driver_shifts
   add column if not exists started_branch_id uuid references public.branches(id) on delete set null,
   add column if not exists started_lat numeric(10, 8),
   add column if not exists started_lng numeric(11, 8),
   add column if not exists started_accuracy_m numeric(8, 2),
   add column if not exists started_distance_m numeric(10, 2);
-
 do $$
 begin
   if not exists (
@@ -48,14 +46,11 @@ begin
       );
   end if;
 end $$;
-
 create index if not exists branches_lat_lng_idx
 on public.branches(lat, lng)
 where role = 'branch' and lat is not null and lng is not null;
-
 create index if not exists delivery_driver_shifts_started_branch_idx
 on public.delivery_driver_shifts(started_branch_id, started_at desc);
-
 with branch_locations(pharmacy_name, lat, lng, pharmacy_email, user_name, block_no) as (
   values
     ('Alhoda Pharmacy Tubli', 26.18777360::numeric, 50.55733560::numeric, 'tabarakph.h01@gmail.com', 'H001', '711'),
@@ -90,10 +85,8 @@ where b.role = 'branch'
     or upper(btrim(coalesce(b.code, ''))) = regexp_replace(bl.user_name, '^([A-Z])0([0-9]{2})$', '\1\2')
     or lower(btrim(coalesce(b.name, ''))) = lower(bl.pharmacy_name)
   );
-
 drop function if exists public.app_driver_start_shift();
 drop function if exists public.app_driver_start_shift(numeric, numeric, numeric);
-
 create function public.app_driver_start_shift(
   p_lat numeric,
   p_lng numeric,
@@ -203,6 +196,5 @@ begin
   return public.app_driver_get_session();
 end;
 $$;
-
 revoke all on function public.app_driver_start_shift(numeric, numeric, numeric) from public, anon;
 grant execute on function public.app_driver_start_shift(numeric, numeric, numeric) to authenticated, service_role;

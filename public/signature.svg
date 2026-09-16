@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 240" fill="none">
+  <defs>
+    <linearGradient id="arabicInk" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1b2e85"/>
+      <stop offset="50%" stop-color="#223899"/>
+      <stop offset="100%" stop-color="#121d5c"/>
+    </linearGradient>
+    <filter id="arabicGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0.5" dy="1" stdDeviation="0.6" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <g filter="url(#arabicGlow)">
+    <!-- Dots for 'F' and 'T' in فتحي -->
+    <ellipse cx="405" cy="42" rx="3.5" ry="3" fill="url(#arabicInk)"/>
+    <ellipse cx="365" cy="38" rx="3.2" ry="2.8" fill="url(#arabicInk)"/>
+    <ellipse cx="355" cy="36" rx="3.2" ry="2.8" fill="url(#arabicInk)"/>
+
+    <!-- Word 1: 'فتحي' (Fathy) -->
+    <path d="M 422 62 C 430 48, 402 42, 392 58 C 385 70, 400 78, 412 70 C 425 60, 380 62, 355 70 C 340 75, 332 92, 350 96 C 368 100, 382 86, 358 106 C 310 145, 230 205, 175 220 C 135 230, 115 190, 155 150 C 205 100, 310 65, 415 48" stroke="url(#arabicInk)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+    <!-- Word 2: 'سعد' (Saad) -->
+    <path d="M 285 78 C 275 65, 264 63, 258 76 C 251 65, 240 63, 232 77 C 224 67, 212 68, 202 82 C 193 94, 180 78, 168 90 C 158 100, 145 92, 132 112 C 122 127, 105 132, 92 108 C 82 88, 97 72, 107 102 C 115 122, 128 126, 138 112" stroke="url(#arabicInk)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+    <!-- Long Sweeping Baseline Tail from 'ي' under 'سعد' -->
+    <path d="M 160 175 Q 260 135, 395 105" stroke="url(#arabicInk)" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

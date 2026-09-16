@@ -2,20 +2,16 @@ alter table public.delivery_orders
   add column if not exists driver_payment_collected_at timestamptz,
   add column if not exists driver_payment_collected_by uuid references auth.users(id) on delete set null,
   add column if not exists driver_payment_collected_amount_bhd numeric(10,3);
-
 alter table public.delivery_orders
   drop constraint if exists delivery_orders_driver_payment_collected_amount_check;
-
 alter table public.delivery_orders
   add constraint delivery_orders_driver_payment_collected_amount_check
   check (
     driver_payment_collected_amount_bhd is null
     or driver_payment_collected_amount_bhd >= 0
   ) not valid;
-
 alter table public.delivery_orders
   validate constraint delivery_orders_driver_payment_collected_amount_check;
-
 create or replace function public.delivery_orders_normalize_payment_tracking()
 returns trigger
 language plpgsql
@@ -87,7 +83,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -277,7 +272,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.app_delivery_reconcile_payment(
   p_order_id uuid,
   p_collected_amount_bhd numeric default null,
@@ -393,12 +387,9 @@ begin
   return v_order.id;
 end;
 $$;
-
 revoke all on function public.app_delivery_reconcile_payment(uuid, numeric, text) from public, anon;
 grant execute on function public.app_delivery_reconcile_payment(uuid, numeric, text) to authenticated, service_role;
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -487,9 +478,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text, text, date, date);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null,
@@ -602,15 +591,12 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.delivery_orders_normalize_payment_tracking() from public, anon, authenticated;
 revoke all on function public.delivery_orders_guard_branch_update() from public, anon, authenticated;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
 revoke all on function public.app_driver_get_order_history(integer, text, text, date, date) from public, anon;
-
 grant execute on function public.delivery_orders_normalize_payment_tracking() to service_role;
 grant execute on function public.delivery_orders_guard_branch_update() to service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
 grant execute on function public.app_driver_get_order_history(integer, text, text, date, date) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

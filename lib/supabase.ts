@@ -10,6 +10,7 @@ import { systemSettingsService } from '../services/systemSettingsService';
 import { deliveryService } from '../services/deliveryService';
 import { benefitPayService } from '../services/benefitPayService';
 import { branchLoginApprovalService } from '../services/branchLoginApprovalService';
+import { expenseService } from '../services/expenseService';
 import { supabaseClient } from './supabaseClient';
 export { supabaseClient } from './supabaseClient';
 
@@ -34,5 +35,6 @@ export const supabase = {
   systemSettings: systemSettingsService,
   delivery: deliveryService,
   benefitPay: benefitPayService,
-  branchLoginApprovals: branchLoginApprovalService
+  branchLoginApprovals: branchLoginApprovalService,
+  expenses: expenseService
 };

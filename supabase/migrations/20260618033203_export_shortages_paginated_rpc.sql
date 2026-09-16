@@ -77,8 +77,6 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.export_shortages_paginated(uuid, date, date, uuid, int) from public, anon;
 grant execute on function public.export_shortages_paginated(uuid, date, date, uuid, int) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

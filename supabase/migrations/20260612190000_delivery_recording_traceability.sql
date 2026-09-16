@@ -13,7 +13,6 @@ create table if not exists public.delivery_blocks (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null
 );
-
 create table if not exists public.delivery_drivers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -24,11 +23,9 @@ create table if not exists public.delivery_drivers (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null
 );
-
 create unique index if not exists delivery_drivers_active_name_idx
 on public.delivery_drivers (lower(name))
 where is_active;
-
 create table if not exists public.branch_classifications (
   branch_id uuid primary key references public.branches(id) on delete cascade,
   area text,
@@ -39,7 +36,6 @@ create table if not exists public.branch_classifications (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null
 );
-
 create table if not exists public.delivery_cost_settings (
   id uuid primary key default gen_random_uuid(),
   driver_id uuid unique references public.delivery_drivers(id) on delete cascade,
@@ -51,7 +47,6 @@ create table if not exists public.delivery_cost_settings (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null
 );
-
 -- 2. Orders + audit -------------------------------------------------------------------
 
 create table if not exists public.delivery_orders (
@@ -63,10 +58,7 @@ create table if not exists public.delivery_orders (
   pharmacist_id uuid references public.pharmacists(id) on delete set null,
   pharmacist_name text,
   driver_id uuid references public.delivery_drivers(id) on delete set null,
-  -- Intentionally NOT a foreign key: branches may record blocks that are not in the
-  -- directory yet ("Save anyway" flow); the data-quality panel surfaces them as
-  -- "Unknown block" (block_number set, area_name null) for the manager to add.
-  block_number text,
+  block_number text references public.delivery_blocks(block_number) on update cascade,
   area_name text,
   governorate text,
   is_outside_governorate boolean not null default false,
@@ -78,7 +70,6 @@ create table if not exists public.delivery_orders (
   constraint delivery_orders_block_required_unless_talabat
     check (payment_type = 'TALABAT' or block_number is not null)
 );
-
 -- Existing deployments may already have an older delivery_orders table that
 -- used business_date/order_value/payment_method. CREATE TABLE IF NOT EXISTS
 -- does not add missing columns, so align that legacy shape before indexes,
@@ -91,7 +82,6 @@ alter table public.delivery_orders add column if not exists governorate text;
 alter table public.delivery_orders add column if not exists is_outside_governorate boolean not null default false;
 alter table public.delivery_orders add column if not exists created_by uuid references auth.users(id) on delete set null;
 alter table public.delivery_orders add column if not exists updated_by uuid references auth.users(id) on delete set null;
-
 do $$
 begin
   if exists (
@@ -137,20 +127,16 @@ begin
     execute 'alter table public.delivery_orders alter column order_type drop not null';
   end if;
 end $$;
-
 update public.delivery_orders set order_date = current_date where order_date is null;
 update public.delivery_orders set value_bhd = 0.001 where value_bhd is null;
 update public.delivery_orders set payment_type = 'CASH' where payment_type is null;
-
 alter table public.delivery_orders alter column order_date set default current_date;
 alter table public.delivery_orders alter column order_date set not null;
 alter table public.delivery_orders alter column value_bhd set not null;
 alter table public.delivery_orders alter column payment_type set not null;
 alter table public.delivery_orders alter column pharmacist_id drop not null;
 alter table public.delivery_orders alter column pharmacist_name drop not null;
-
 alter table public.delivery_orders drop constraint if exists delivery_orders_driver_id_fkey;
-
 do $$
 begin
   if not exists (
@@ -163,9 +149,15 @@ begin
       foreign key (driver_id) references public.delivery_drivers(id) on delete set null not valid;
   end if;
 
-  -- Unknown blocks must be recordable (data-quality flow), so block_number is not an FK.
-  -- Drop it if an earlier deployment created it.
-  alter table public.delivery_orders drop constraint if exists delivery_orders_block_number_fkey;
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'delivery_orders_block_number_fkey'
+      and conrelid = 'public.delivery_orders'::regclass
+  ) then
+    alter table public.delivery_orders
+      add constraint delivery_orders_block_number_fkey
+      foreign key (block_number) references public.delivery_blocks(block_number) on update cascade not valid;
+  end if;
 
   if not exists (
     select 1 from pg_constraint
@@ -197,7 +189,6 @@ begin
       check (payment_type = 'TALABAT' or block_number is not null) not valid;
   end if;
 end $$;
-
 create index if not exists delivery_orders_branch_date_idx on public.delivery_orders(branch_id, order_date);
 create index if not exists delivery_orders_date_idx on public.delivery_orders(order_date);
 create index if not exists delivery_orders_driver_idx on public.delivery_orders(driver_id);
@@ -205,7 +196,6 @@ create index if not exists delivery_orders_pharmacist_idx on public.delivery_ord
 create index if not exists delivery_orders_payment_idx on public.delivery_orders(payment_type);
 create index if not exists delivery_orders_block_idx on public.delivery_orders(block_number);
 create index if not exists delivery_orders_outside_idx on public.delivery_orders(is_outside_governorate) where is_outside_governorate;
-
 create table if not exists public.delivery_order_audit_logs (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null,
@@ -214,9 +204,7 @@ create table if not exists public.delivery_order_audit_logs (
   changed_by uuid,
   changed_at timestamptz not null default now()
 );
-
 create index if not exists delivery_order_audit_logs_order_idx on public.delivery_order_audit_logs(order_id);
-
 -- 3. Geo resolution + audit triggers ---------------------------------------------------
 
 create or replace function public.delivery_orders_resolve_geo()
@@ -260,12 +248,10 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists delivery_orders_resolve_geo_trigger on public.delivery_orders;
 create trigger delivery_orders_resolve_geo_trigger
 before insert or update on public.delivery_orders
 for each row execute function public.delivery_orders_resolve_geo();
-
 create or replace function public.delivery_orders_audit()
 returns trigger
 language plpgsql
@@ -285,12 +271,10 @@ begin
   return null;
 end;
 $$;
-
 drop trigger if exists delivery_orders_audit_trigger on public.delivery_orders;
 create trigger delivery_orders_audit_trigger
 after update or delete on public.delivery_orders
 for each row execute function public.delivery_orders_audit();
-
 -- 4. Seed block/area/governorate reference data ----------------------------------------
 
 insert into public.delivery_blocks (block_number, area_name, governorate) values
@@ -753,7 +737,6 @@ insert into public.delivery_blocks (block_number, area_name, governorate) values
   ('121', 'Hidd', 'Muharraq'),
   ('128', 'Hidd', 'Muharraq')
 on conflict (block_number) do nothing;
-
 -- 5. Row level security ----------------------------------------------------------------
 
 alter table public.delivery_blocks enable row level security;
@@ -762,81 +745,68 @@ alter table public.branch_classifications enable row level security;
 alter table public.delivery_cost_settings enable row level security;
 alter table public.delivery_orders enable row level security;
 alter table public.delivery_order_audit_logs enable row level security;
-
 revoke all on public.delivery_blocks from anon;
 revoke all on public.delivery_drivers from anon;
 revoke all on public.branch_classifications from anon;
 revoke all on public.delivery_cost_settings from anon;
 revoke all on public.delivery_orders from anon;
 revoke all on public.delivery_order_audit_logs from anon;
-
 grant select, insert, update, delete on public.delivery_blocks to authenticated;
 grant select, insert, update, delete on public.delivery_drivers to authenticated;
 grant select, insert, update, delete on public.branch_classifications to authenticated;
 grant select, insert, update, delete on public.delivery_cost_settings to authenticated;
 grant select, insert, update, delete on public.delivery_orders to authenticated;
 grant select on public.delivery_order_audit_logs to authenticated;
-
 grant all on public.delivery_blocks to service_role;
 grant all on public.delivery_drivers to service_role;
 grant all on public.branch_classifications to service_role;
 grant all on public.delivery_cost_settings to service_role;
 grant all on public.delivery_orders to service_role;
 grant all on public.delivery_order_audit_logs to service_role;
-
 -- Reference data: everyone authenticated can read active rows; manager manages.
 drop policy if exists "delivery blocks select" on public.delivery_blocks;
 create policy "delivery blocks select"
 on public.delivery_blocks for select to authenticated
 using (is_active or public.current_app_can_manage());
-
 drop policy if exists "delivery blocks manage" on public.delivery_blocks;
 create policy "delivery blocks manage"
 on public.delivery_blocks for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "delivery drivers select" on public.delivery_drivers;
 create policy "delivery drivers select"
 on public.delivery_drivers for select to authenticated
 using (is_active or public.current_app_can_manage());
-
 drop policy if exists "delivery drivers manage" on public.delivery_drivers;
 create policy "delivery drivers manage"
 on public.delivery_drivers for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "branch classifications select" on public.branch_classifications;
 create policy "branch classifications select"
 on public.branch_classifications for select to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 drop policy if exists "branch classifications manage" on public.branch_classifications;
 create policy "branch classifications manage"
 on public.branch_classifications for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 -- Cost settings: manager manages; owner may read for profitability reviews.
 drop policy if exists "delivery cost settings select" on public.delivery_cost_settings;
 create policy "delivery cost settings select"
 on public.delivery_cost_settings for select to authenticated
 using (public.current_app_can_manage() or public.current_app_role() = 'owner');
-
 drop policy if exists "delivery cost settings manage" on public.delivery_cost_settings;
 create policy "delivery cost settings manage"
 on public.delivery_cost_settings for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 -- Orders: branch users work on their own branch within a tight date window;
 -- managers have full control; owner/warehouse read all; supervisors read assigned branches.
 drop policy if exists "delivery orders select" on public.delivery_orders;
 create policy "delivery orders select"
 on public.delivery_orders for select to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 drop policy if exists "delivery orders insert" on public.delivery_orders;
 create policy "delivery orders insert"
 on public.delivery_orders for insert to authenticated
@@ -847,7 +817,6 @@ with check (
     and order_date between (current_date - 1) and current_date
   )
 );
-
 drop policy if exists "delivery orders update" on public.delivery_orders;
 create policy "delivery orders update"
 on public.delivery_orders for update to authenticated
@@ -862,7 +831,6 @@ with check (
     and order_date between (current_date - 1) and current_date
   )
 );
-
 drop policy if exists "delivery orders delete" on public.delivery_orders;
 create policy "delivery orders delete"
 on public.delivery_orders for delete to authenticated
@@ -870,13 +838,11 @@ using (
   public.current_app_can_manage()
   or (branch_id = public.current_app_branch_id() and order_date = current_date)
 );
-
 -- Audit logs: managers read; rows are written by the security definer trigger only.
 drop policy if exists "delivery audit select" on public.delivery_order_audit_logs;
 create policy "delivery audit select"
 on public.delivery_order_audit_logs for select to authenticated
 using (public.current_app_can_manage());
-
 -- 6. Post-migration checks --------------------------------------------------------------
 
 do $$
@@ -915,5 +881,4 @@ begin
     raise exception 'anon must not have privileges on delivery tables';
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

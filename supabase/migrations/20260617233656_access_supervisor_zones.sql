@@ -16,14 +16,11 @@ create table if not exists public.access_model_cleanup_backups (
   payload jsonb not null,
   captured_at timestamptz not null default now()
 );
-
 create unique index if not exists access_model_cleanup_backups_source_idx
 on public.access_model_cleanup_backups(source_table, source_pk);
-
 alter table public.access_model_cleanup_backups enable row level security;
 revoke all on public.access_model_cleanup_backups from public, anon, authenticated;
 grant all on public.access_model_cleanup_backups to service_role;
-
 create table if not exists public.branch_zones (
   id uuid primary key default gen_random_uuid(),
   code text not null,
@@ -36,17 +33,13 @@ create table if not exists public.branch_zones (
   updated_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null default auth.uid()
 );
-
 alter table public.branch_zones
   add column if not exists code text;
-
 update public.branch_zones
 set code = left(upper(regexp_replace(coalesce(nullif(btrim(code), ''), name, id::text), '[^A-Z0-9_-]', '-', 'g')), 32)
 where code is null or btrim(code) = '';
-
 alter table public.branch_zones
   alter column code set not null;
-
 do $$
 begin
   if not exists (
@@ -60,18 +53,14 @@ begin
       check (code ~ '^[A-Z0-9_-]{1,32}$');
   end if;
 end $$;
-
 create unique index if not exists branch_zones_active_code_idx
 on public.branch_zones (lower(code))
 where is_active;
-
 create unique index if not exists branch_zones_active_name_idx
 on public.branch_zones (lower(name))
 where is_active;
-
 create index if not exists branch_zones_supervisor_user_id_idx
 on public.branch_zones(supervisor_user_id);
-
 create table if not exists public.branch_zone_members (
   zone_id uuid not null references public.branch_zones(id) on delete cascade,
   branch_id uuid not null references public.branches(id) on delete cascade,
@@ -79,13 +68,10 @@ create table if not exists public.branch_zone_members (
   created_by uuid references auth.users(id) on delete set null default auth.uid(),
   primary key (zone_id, branch_id)
 );
-
 create unique index if not exists branch_zone_members_branch_id_idx
 on public.branch_zone_members(branch_id);
-
 create index if not exists branch_zone_members_zone_id_idx
 on public.branch_zone_members(zone_id);
-
 create table if not exists public.delivery_driver_branches (
   id uuid primary key default gen_random_uuid(),
   driver_id uuid not null references public.delivery_drivers(id) on delete cascade,
@@ -94,29 +80,22 @@ create table if not exists public.delivery_driver_branches (
   created_by uuid references auth.users(id) on delete set null default auth.uid(),
   unique (driver_id, branch_id)
 );
-
 create index if not exists delivery_driver_branches_driver_id_idx
 on public.delivery_driver_branches(driver_id);
-
 create index if not exists delivery_driver_branches_branch_id_idx
 on public.delivery_driver_branches(branch_id);
-
 alter table public.branch_zones enable row level security;
 alter table public.branch_zone_members enable row level security;
 alter table public.delivery_driver_branches enable row level security;
-
 revoke all on public.branch_zones from public, anon;
 revoke all on public.branch_zone_members from public, anon;
 revoke all on public.delivery_driver_branches from public, anon;
-
 grant select, insert, update, delete on public.branch_zones to authenticated;
 grant select, insert, update, delete on public.branch_zone_members to authenticated;
 grant select, insert, update, delete on public.delivery_driver_branches to authenticated;
-
 grant all on public.branch_zones to service_role;
 grant all on public.branch_zone_members to service_role;
 grant all on public.delivery_driver_branches to service_role;
-
 drop policy if exists "branch zones select" on public.branch_zones;
 create policy "branch zones select"
 on public.branch_zones for select to authenticated
@@ -125,13 +104,11 @@ using (
   or public.current_app_role() = 'owner'
   or supervisor_user_id = (select auth.uid())
 );
-
 drop policy if exists "branch zones manage" on public.branch_zones;
 create policy "branch zones manage"
 on public.branch_zones for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "branch zone members select" on public.branch_zone_members;
 create policy "branch zone members select"
 on public.branch_zone_members for select to authenticated
@@ -145,13 +122,11 @@ using (
       and zone.supervisor_user_id = (select auth.uid())
   )
 );
-
 drop policy if exists "branch zone members manage" on public.branch_zone_members;
 create policy "branch zone members manage"
 on public.branch_zone_members for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "delivery driver branches select" on public.delivery_driver_branches;
 create policy "delivery driver branches select"
 on public.delivery_driver_branches for select to authenticated
@@ -160,45 +135,38 @@ using (
   or public.current_app_can_access_branch(branch_id)
   or driver_id = public.current_delivery_driver_id()
 );
-
 drop policy if exists "delivery driver branches manage" on public.delivery_driver_branches;
 create policy "delivery driver branches manage"
 on public.delivery_driver_branches for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop policy if exists "pharmacist branches select authenticated" on public.pharmacist_branches;
 create policy "pharmacist branches select authenticated"
 on public.pharmacist_branches for select to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 drop policy if exists "pharmacist branches manage authenticated" on public.pharmacist_branches;
 create policy "pharmacist branches manage authenticated"
 on public.pharmacist_branches for all to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 drop trigger if exists ensure_branch_zone_members_operational_branch on public.branch_zone_members;
 create trigger ensure_branch_zone_members_operational_branch
 before insert or update of branch_id
 on public.branch_zone_members
 for each row
 execute function public.ensure_operational_branch_reference();
-
 drop trigger if exists ensure_delivery_driver_branches_operational_branch on public.delivery_driver_branches;
 create trigger ensure_delivery_driver_branches_operational_branch
 before insert or update of branch_id
 on public.delivery_driver_branches
 for each row
 execute function public.ensure_operational_branch_reference();
-
 insert into public.access_model_cleanup_backups (source_table, source_pk, payload)
 select 'delivery_areas', area.id::text, to_jsonb(area)
 from public.delivery_areas area
 where area.supervisor_id is not null
    or area.supervisor_user_id is not null
 on conflict (source_table, source_pk) do nothing;
-
 with supervisor_branch_candidates as (
   select distinct
     supervisor_branch.supervisor_user_id,
@@ -226,7 +194,6 @@ select
   null::uuid
 from numbered_candidates
 on conflict do nothing;
-
 insert into public.branch_zone_members (zone_id, branch_id, created_by)
 select distinct zone.id, supervisor_branch.branch_id, null::uuid
 from public.supervisor_branches supervisor_branch
@@ -240,7 +207,6 @@ join public.branches branch
  and branch.role = 'branch'
 where supervisor_branch.branch_id is not null
 on conflict (branch_id) do nothing;
-
 create or replace function public.app_sync_supervisor_zone_access()
 returns void
 language plpgsql
@@ -320,10 +286,8 @@ begin
     );
 end;
 $$;
-
-revoke all on function public.app_sync_supervisor_zone_access() from public, anon;
+revoke all on function public.app_sync_supervisor_zone_access() from public;
 grant execute on function public.app_sync_supervisor_zone_access() to authenticated, service_role;
-
 create or replace function public.handle_supervisor_zone_access_sync()
 returns trigger
 language plpgsql
@@ -335,27 +299,22 @@ begin
   return null;
 end;
 $$;
-
-revoke all on function public.handle_supervisor_zone_access_sync() from public, anon, authenticated;
-
+revoke all on function public.handle_supervisor_zone_access_sync() from public;
 drop trigger if exists sync_branch_zones_after_change on public.branch_zones;
 create trigger sync_branch_zones_after_change
 after insert or update or delete on public.branch_zones
 for each statement
 execute function public.handle_supervisor_zone_access_sync();
-
 drop trigger if exists sync_branch_zone_members_after_change on public.branch_zone_members;
 create trigger sync_branch_zone_members_after_change
 after insert or update or delete on public.branch_zone_members
 for each statement
 execute function public.handle_supervisor_zone_access_sync();
-
 drop trigger if exists sync_app_user_profiles_supervisor_zone_access_after_change on public.app_user_profiles;
 create trigger sync_app_user_profiles_supervisor_zone_access_after_change
 after update of role, is_active on public.app_user_profiles
 for each statement
 execute function public.handle_supervisor_zone_access_sync();
-
 create or replace function public.app_replace_branch_staff_assignments(
   p_branch_id uuid,
   p_pharmacist_ids uuid[] default '{}',
@@ -401,25 +360,18 @@ begin
    and driver_row.is_active;
 end;
 $$;
-
-revoke all on function public.app_replace_branch_staff_assignments(uuid, uuid[], uuid[]) from public, anon;
+revoke all on function public.app_replace_branch_staff_assignments(uuid, uuid[], uuid[]) from public;
 grant execute on function public.app_replace_branch_staff_assignments(uuid, uuid[], uuid[]) to authenticated, service_role;
-
 select public.app_sync_supervisor_zone_access();
-
 drop index if exists public.delivery_areas_supervisor_id_idx;
 drop index if exists public.delivery_areas_supervisor_user_id_idx;
-
 alter table public.delivery_areas
   drop constraint if exists delivery_areas_supervisor_id_fkey,
   drop constraint if exists delivery_areas_supervisor_user_id_fkey;
-
 alter table public.delivery_areas
   drop column if exists supervisor_id,
   drop column if exists supervisor_user_id;
-
 notify pgrst, 'reload schema';
-
 /*
 Post-apply validation SQL:
 
@@ -461,4 +413,4 @@ from information_schema.columns
 where table_schema = 'public'
   and table_name = 'delivery_areas'
   and column_name in ('supervisor_id', 'supervisor_user_id');
-*/
+*/;

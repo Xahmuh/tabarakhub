@@ -19,7 +19,11 @@ export type ClientModuleKey =
   | 'delivery'
   | 'benefitPayLedger'
   | 'deliveryCoverageAdvanced'
-  | 'aiInsights';
+  | 'aiInsights'
+  | 'operationalExpenses'
+  | 'operationalRenewals'
+  | 'dutyScheduler'
+  | 'leaveManagement';
 
 export type ClientConfig = {
   appName: string;
@@ -84,6 +88,10 @@ export const clientConfig: ClientConfig = {
     benefitPayLedger: readBoolean('VITE_MODULE_BENEFIT_PAY_LEDGER'),
     deliveryCoverageAdvanced: readBoolean('VITE_DELIVERY_COVERAGE_ADVANCED_ANALYTICS'),
     aiInsights: readBoolean('VITE_MODULE_AI_INSIGHTS', false),
+    operationalExpenses: readBoolean('VITE_MODULE_OPERATIONAL_EXPENSES'),
+    operationalRenewals: readBoolean('VITE_MODULE_OPERATIONAL_RENEWALS'),
+    dutyScheduler: readBoolean('VITE_MODULE_DUTY_SCHEDULER', true),
+    leaveManagement: readBoolean('VITE_MODULE_LEAVE_MANAGEMENT', true),
   },
 };
 

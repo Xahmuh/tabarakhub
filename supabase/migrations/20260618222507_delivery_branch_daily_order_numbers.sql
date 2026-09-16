@@ -1,6 +1,5 @@
 alter table public.delivery_orders
   add column if not exists order_number text;
-
 create table if not exists public.delivery_order_daily_sequences (
   branch_id uuid not null references public.branches(id) on delete cascade,
   order_date date not null,
@@ -10,12 +9,9 @@ create table if not exists public.delivery_order_daily_sequences (
   primary key (branch_id, order_date),
   constraint delivery_order_daily_sequences_last_sequence_check check (last_sequence >= 0)
 );
-
 alter table public.delivery_order_daily_sequences enable row level security;
-
 revoke all on public.delivery_order_daily_sequences from public, anon, authenticated;
 grant all on public.delivery_order_daily_sequences to service_role;
-
 create or replace function public.delivery_format_order_number(
   p_branch_id uuid,
   p_order_date date,
@@ -41,7 +37,6 @@ begin
   return '#' || v_branch_code || '-' || to_char(coalesce(p_order_date, current_date), 'DDMMYY') || '-' || lpad(greatest(coalesce(p_sequence, 1), 1)::text, 3, '0');
 end;
 $$;
-
 create or replace function public.delivery_next_order_number(
   p_branch_id uuid,
   p_order_date date
@@ -83,7 +78,6 @@ begin
   return public.delivery_format_order_number(p_branch_id, v_order_date, v_sequence);
 end;
 $$;
-
 do $$
 begin
   execute 'alter table public.delivery_orders disable trigger user';
@@ -114,7 +108,6 @@ exception
     execute 'alter table public.delivery_orders enable trigger user';
     raise;
 end $$;
-
 insert into public.delivery_order_daily_sequences (
   branch_id,
   order_date,
@@ -136,16 +129,12 @@ on conflict (branch_id, order_date)
 do update set
   last_sequence = greatest(public.delivery_order_daily_sequences.last_sequence, excluded.last_sequence),
   updated_at = now();
-
 alter table public.delivery_orders
   alter column order_number set not null;
-
 create unique index if not exists delivery_orders_order_number_uidx
   on public.delivery_orders(order_number);
-
 create index if not exists delivery_orders_branch_order_number_idx
   on public.delivery_orders(branch_id, order_date desc, order_number);
-
 create or replace function public.delivery_orders_assign_order_number()
 returns trigger
 language plpgsql
@@ -160,14 +149,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists delivery_orders_assign_order_number_trigger on public.delivery_orders;
 create trigger delivery_orders_assign_order_number_trigger
 before insert on public.delivery_orders
 for each row execute function public.delivery_orders_assign_order_number();
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -252,9 +238,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text, text, date, date);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null,
@@ -363,17 +347,14 @@ begin
   limit v_limit;
 end;
 $$;
-
 revoke all on function public.delivery_format_order_number(uuid, date, integer) from public, anon, authenticated;
 revoke all on function public.delivery_next_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_orders_assign_order_number() from public, anon, authenticated;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
 revoke all on function public.app_driver_get_order_history(integer, text, text, date, date) from public, anon;
-
 grant execute on function public.delivery_format_order_number(uuid, date, integer) to service_role;
 grant execute on function public.delivery_next_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_orders_assign_order_number() to service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
 grant execute on function public.app_driver_get_order_history(integer, text, text, date, date) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

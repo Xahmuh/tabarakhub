@@ -15,14 +15,12 @@ set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
 drop policy if exists "system branding assets public read" on storage.objects;
 create policy "system branding assets public read"
 on storage.objects
 for select
 to anon, authenticated
 using (bucket_id = 'system-branding-assets');
-
 drop policy if exists "system branding assets manager insert" on storage.objects;
 create policy "system branding assets manager insert"
 on storage.objects
@@ -32,7 +30,6 @@ with check (
   bucket_id = 'system-branding-assets'
   and public.current_app_can_manage()
 );
-
 drop policy if exists "system branding assets manager update" on storage.objects;
 create policy "system branding assets manager update"
 on storage.objects
@@ -46,7 +43,6 @@ with check (
   bucket_id = 'system-branding-assets'
   and public.current_app_can_manage()
 );
-
 drop policy if exists "system branding assets manager delete" on storage.objects;
 create policy "system branding assets manager delete"
 on storage.objects

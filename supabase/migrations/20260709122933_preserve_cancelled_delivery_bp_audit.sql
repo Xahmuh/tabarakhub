@@ -101,7 +101,6 @@ begin
   return new;
 end;
 $$;
-
 -- Backfill BP delivery orders that already have a received time but are missing
 -- from the Benefit Pay ledger, including cancelled deliveries kept for audit.
 insert into public.benefit_pay_transfers (
@@ -147,7 +146,6 @@ where bpt.id is null
   and round(greatest(coalesce(o.amount_received_bhd, o.value_bhd, 0), 0)::numeric, 3) > 0
 on conflict (delivery_order_id)
 do nothing;
-
 drop policy if exists "benefit pay transfers delete scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers delete scoped"
 on public.benefit_pay_transfers
@@ -161,7 +159,6 @@ using (
     or branch_id = public.current_app_branch_id()
   )
 );
-
 create or replace function public.app_benefit_pay_delete_transfer(p_transfer_id uuid)
 returns boolean
 language plpgsql
@@ -208,8 +205,6 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.app_benefit_pay_delete_transfer(uuid) from public, anon;
 grant execute on function public.app_benefit_pay_delete_transfer(uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

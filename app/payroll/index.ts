@@ -1,0 +1,1 @@
+export { PayrollModuleHub } from './PayrollModuleHub';

@@ -22,13 +22,10 @@ create table if not exists public.branch_delivery_profiles (
   constraint branch_delivery_profiles_radius_order
     check (core_radius_km <= standard_radius_km and standard_radius_km <= extended_radius_km)
 );
-
 create index if not exists branch_delivery_profiles_branch_id_idx
 on public.branch_delivery_profiles(branch_id);
-
 create index if not exists branch_delivery_profiles_origin_block_idx
 on public.branch_delivery_profiles(origin_block_number);
-
 create or replace function public.touch_branch_delivery_profile()
 returns trigger
 language plpgsql
@@ -44,24 +41,20 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists touch_branch_delivery_profile on public.branch_delivery_profiles;
 create trigger touch_branch_delivery_profile
 before insert or update on public.branch_delivery_profiles
 for each row execute function public.touch_branch_delivery_profile();
-
 alter table public.branch_delivery_profiles enable row level security;
 revoke all on public.branch_delivery_profiles from anon;
 grant select, insert, update, delete on public.branch_delivery_profiles to authenticated;
 grant all on public.branch_delivery_profiles to service_role;
-
 drop policy if exists "branch delivery profiles select" on public.branch_delivery_profiles;
 create policy "branch delivery profiles select"
 on public.branch_delivery_profiles
 for select
 to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 drop policy if exists "branch delivery profiles manage" on public.branch_delivery_profiles;
 create policy "branch delivery profiles manage"
 on public.branch_delivery_profiles
@@ -69,7 +62,6 @@ for all
 to authenticated
 using (public.current_app_role() in ('manager', 'owner'))
 with check (public.current_app_role() in ('manager', 'owner'));
-
 with branch_blocks(branch_code, origin_block_number) as (
   values
     ('H001', '711'),
@@ -126,7 +118,6 @@ do update set
   warning_delivery_minutes = excluded.warning_delivery_minutes,
   is_delivery_enabled = excluded.is_delivery_enabled,
   updated_at = now();
-
 do $$
 declare
   anon_grants int;
@@ -152,5 +143,4 @@ begin
     raise exception 'anon must not have branch_delivery_profiles privileges';
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

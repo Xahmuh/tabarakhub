@@ -5,6 +5,7 @@ export interface SelectOption {
   value: string;
   label: string;
   hint?: string;
+  data?: any;
 }
 
 interface SearchableSelectProps {
@@ -17,6 +18,8 @@ interface SearchableSelectProps {
   dir?: 'ltr' | 'rtl';
   searchPlaceholder?: string;
   noMatchesLabel?: string;
+  renderOption?: (option: SelectOption, isSelected: boolean) => React.ReactNode;
+  renderSelected?: (option: SelectOption) => React.ReactNode;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -28,7 +31,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   allowClear = true,
   dir = 'ltr',
   searchPlaceholder = 'Search...',
-  noMatchesLabel = 'No matches'
+  noMatchesLabel = 'No matches',
+  renderOption,
+  renderSelected
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -60,7 +65,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(o => !o)}
-        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors ${isRtl ? 'text-right' : 'text-left'} ${
+        className={`flex w-full min-h-[48px] items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition-colors ${isRtl ? 'text-right' : 'text-left'} ${
           disabled
             ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
             : isOpen
@@ -68,8 +73,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
               : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-brand/30'
         }`}
       >
-        <span className={`truncate ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
-          {selected ? selected.label : placeholder}
+        <span className={`truncate flex items-center ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
+          {selected ? (renderSelected ? renderSelected(selected) : selected.label) : placeholder}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {allowClear && selected && !disabled && (
@@ -94,7 +99,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
               className={`w-full rounded-md bg-slate-50 py-2 text-sm font-bold outline-none ${isRtl ? 'pl-3 pr-8 text-right' : 'pl-8 pr-3 text-left'}`}
             />
           </div>
-          <div className="max-h-52 overflow-y-auto">
+          <div className="max-h-60 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="p-3 text-center text-xs font-bold text-slate-400">{noMatchesLabel}</p>
             ) : filtered.map(option => (
@@ -102,12 +107,16 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 key={option.value}
                 type="button"
                 onClick={() => { onChange(option.value); setIsOpen(false); setQuery(''); }}
-                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm font-bold transition-colors hover:bg-brand/5 ${isRtl ? 'text-right' : 'text-left'} ${
+                className={`flex w-full items-center justify-between px-3 py-2 text-sm font-bold transition-colors hover:bg-brand/5 ${isRtl ? 'text-right' : 'text-left'} ${
                   option.value === value ? 'bg-brand/5 text-brand' : 'text-slate-700'
                 }`}
               >
-                <span className="truncate">{option.label}</span>
-                {option.hint && <span className={`${isRtl ? 'mr-2' : 'ml-2'} shrink-0 text-[10px] font-bold text-slate-400`}>{option.hint}</span>}
+                {renderOption ? renderOption(option, option.value === value) : (
+                  <>
+                    <span className="truncate">{option.label}</span>
+                    {option.hint && <span className={`${isRtl ? 'mr-2' : 'ml-2'} shrink-0 text-[10px] font-bold text-slate-400`}>{option.hint}</span>}
+                  </>
+                )}
               </button>
             ))}
           </div>

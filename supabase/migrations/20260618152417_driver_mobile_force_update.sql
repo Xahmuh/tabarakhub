@@ -11,17 +11,14 @@ alter table public.delivery_mobile_app_settings
   add column if not exists force_update_enabled boolean not null default false,
   add column if not exists force_update_title text not null default 'Update required',
   add column if not exists force_update_message text not null default 'A new driver app version is available. Please install the latest APK to continue.';
-
 alter table public.delivery_mobile_app_settings
   drop constraint if exists delivery_mobile_app_settings_android_builds_check;
-
 alter table public.delivery_mobile_app_settings
   add constraint delivery_mobile_app_settings_android_builds_check
   check (
     android_minimum_build >= 1
     and android_latest_build >= android_minimum_build
   );
-
 update public.delivery_mobile_app_settings
 set android_minimum_build = greatest(android_minimum_build, 1),
     android_latest_build = greatest(android_latest_build, android_minimum_build, 1),
@@ -29,14 +26,12 @@ set android_minimum_build = greatest(android_minimum_build, 1),
     force_update_title = coalesce(nullif(btrim(force_update_title), ''), 'Update required'),
     force_update_message = coalesce(nullif(btrim(force_update_message), ''), 'A new driver app version is available. Please install the latest APK to continue.')
 where id = 'global';
-
 drop function if exists public.app_driver_start_shift(numeric, numeric, numeric, integer);
 drop function if exists public.app_driver_start_shift(numeric, numeric, numeric);
 drop function if exists public.app_driver_end_shift(integer);
 drop function if exists public.app_driver_end_shift();
 drop function if exists public.app_driver_get_session(integer);
 drop function if exists public.app_driver_get_session();
-
 create or replace function public.app_driver_assert_minimum_android_build(
   p_android_build integer default null
 )
@@ -68,7 +63,6 @@ begin
   end if;
 end;
 $$;
-
 create function public.app_driver_get_session(
   p_android_build integer default null
 )
@@ -149,7 +143,6 @@ begin
   );
 end;
 $$;
-
 create function public.app_driver_start_shift(
   p_lat numeric,
   p_lng numeric,
@@ -262,7 +255,6 @@ begin
   return public.app_driver_get_session(p_android_build);
 end;
 $$;
-
 create function public.app_driver_end_shift(
   p_android_build integer default null
 )
@@ -314,15 +306,12 @@ begin
   return public.app_driver_get_session(p_android_build);
 end;
 $$;
-
 revoke all on function public.app_driver_assert_minimum_android_build(integer) from public, anon, authenticated;
 revoke all on function public.app_driver_get_session(integer) from public, anon;
 revoke all on function public.app_driver_start_shift(numeric, numeric, numeric, integer) from public, anon;
 revoke all on function public.app_driver_end_shift(integer) from public, anon;
-
 grant execute on function public.app_driver_get_session(integer) to authenticated, service_role;
 grant execute on function public.app_driver_start_shift(numeric, numeric, numeric, integer) to authenticated, service_role;
 grant execute on function public.app_driver_end_shift(integer) to authenticated, service_role;
 grant execute on function public.app_driver_assert_minimum_android_build(integer) to service_role;
-
 notify pgrst, 'reload schema';

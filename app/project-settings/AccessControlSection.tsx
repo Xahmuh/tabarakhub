@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
-import { Bike, Building2, Eye, EyeOff, KeyRound, LayoutGrid, Loader2, RefreshCcw, Shield, Trash2, UserCog, UserPlus, Users } from 'lucide-react';
+import { Bike, Building2, Clock, Copy, Download, Eye, EyeOff, Filter, GitFork, KeyRound, LayoutGrid, Loader2, Plus, RefreshCcw, Search, Shield, Sparkles, Trash2, Upload, UserCog, UserPlus, Users, Zap } from 'lucide-react';
 import { permissionService, branchService, deliveryService, pharmacistService } from '../../services';
-import { AppUser, Branch, BranchStaffAssignment, BranchZone, DeliveryDriver, MaintenanceSettings, Pharmacist, Role, RolePermission, SupervisorScopeMode } from '../../types';
+import { AppUser, Branch, BranchStaffAssignment, BranchZone, DeliveryDriver, FeaturePermission, MaintenanceSettings, Pharmacist, Role, RolePermission, SupervisorScopeMode } from '../../types';
 import { ROLE_LABELS } from '../../lib/access';
+import { getAllRoleDefinitions, getCustomRoles, saveCustomRoles, CustomRoleDefinition } from '../../lib/roleRegistry';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
 import { isModuleEnabled } from '../../config/clientConfig';
 
-const ASSIGNABLE_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver'];
-const MODULE_LAYOUT_ROLES: Role[] = ['admin', 'owner', 'supervisor', 'warehouse', 'accounts', 'branch'];
 
 const FEATURE_LABELS = getEnabledAccessFeatures().map(({ id, label }) => ({ id, label }));
 
@@ -70,7 +69,329 @@ export const AccessControlSection: React.FC<{
     const [supervisorAssignments, setSupervisorAssignments] = useState<Record<string, string[]>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [savingKey, setSavingKey] = useState<string | null>(null);
-    const [view, setView] = useState<'users' | 'zones' | 'staff' | 'matrix'>('users');
+    const [view, setView] = useState<'users' | 'zones' | 'staff' | 'matrix' | 'simulator' | 'branch_overrides'>('users');
+    const [userSearchTerm, setUserSearchTerm] = useState('');
+    const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
+    const [userBranchFilter, setUserBranchFilter] = useState<string>('all');
+    const [previewRoleFilter, setPreviewRoleFilter] = useState<string>('all');
+    const [expandedHiddenRoles, setExpandedHiddenRoles] = useState<Record<string, boolean>>({});
+    const [matrixSearchTerm, setMatrixSearchTerm] = useState('');
+    const [expandedMatrixModules, setExpandedMatrixModules] = useState<Record<string, boolean>>({});
+    const [customRoles, setCustomRoles] = useState<CustomRoleDefinition[]>(getCustomRoles());
+
+    // Branch Overrides State
+    const [selectedOverrideBranchId, setSelectedOverrideBranchId] = useState<string>('');
+    const [branchOverrides, setBranchOverrides] = useState<FeaturePermission[]>([]);
+    const [isLoadingBranchOverrides, setIsLoadingBranchOverrides] = useState<boolean>(false);
+
+    const ASSIGNABLE_ROLES = useMemo(() => {
+        return getAllRoleDefinitions().map(r => r.id as Role);
+    }, [customRoles]);
+
+    const handleCreateCustomRole = async () => {
+        const { value: formValues } = await Swal.fire({
+            title: 'Add New Custom Role',
+            html: `
+                <div class="space-y-3 text-left">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Role Identifier (Key)</label>
+                        <input id="swal-role-id" class="swal2-input !m-0 !w-full text-xs font-bold" placeholder="e.g. auditor, callcenter, hr" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Role Display Name</label>
+                        <input id="swal-role-label" class="swal2-input !m-0 !w-full text-xs font-bold" placeholder="e.g. Internal Auditor" />
+                    </div>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Create Role',
+            confirmButtonColor: '#0f172a',
+            preConfirm: () => {
+                const idInput = (document.getElementById('swal-role-id') as HTMLInputElement)?.value.trim().toLowerCase().replace(/\s+/g, '_');
+                const labelInput = (document.getElementById('swal-role-label') as HTMLInputElement)?.value.trim();
+
+                if (!idInput) {
+                    Swal.showValidationMessage('Role Identifier is required');
+                    return false;
+                }
+                if (!labelInput) {
+                    Swal.showValidationMessage('Role Display Name is required');
+                    return false;
+                }
+                if (ASSIGNABLE_ROLES.includes(idInput as Role)) {
+                    Swal.showValidationMessage('This Role ID already exists!');
+                    return false;
+                }
+                return { id: idInput, label: labelInput };
+            }
+        });
+
+        if (formValues) {
+            const newRole: CustomRoleDefinition = {
+                id: formValues.id,
+                label: formValues.label,
+                isSystem: false,
+                badgeClass: 'border-purple-200 bg-purple-50 text-purple-700'
+            };
+            const updated = [...customRoles, newRole];
+            setCustomRoles(updated);
+            saveCustomRoles(updated);
+            Swal.fire({
+                icon: 'success',
+                title: 'Role Created!',
+                text: `Role "${formValues.label}" is now active in matrix, simulator, and user forms.`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+    };
+
+    // 1. Clone Role Permissions Handler
+    const handleCloneRolePermissions = async () => {
+        const roleOptions = ASSIGNABLE_ROLES.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
+
+        const { value: formValues } = await Swal.fire({
+            title: 'Copy & Clone Role Permissions',
+            html: `
+                <div class="space-y-4 text-left">
+                    <p class="text-xs text-slate-500 font-medium leading-relaxed">
+                        Copy all module and sub-tool access levels from a source role to a target role instantly.
+                    </p>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Source Role (Copy From)</label>
+                        <select id="swal-source-role" class="swal2-select !m-0 !w-full text-xs font-bold">${roleOptions}</select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Target Role (Apply To)</label>
+                        <select id="swal-target-role" class="swal2-select !m-0 !w-full text-xs font-bold">${roleOptions}</select>
+                    </div>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Clone Permissions',
+            confirmButtonColor: '#0f172a',
+            preConfirm: () => {
+                const source = (document.getElementById('swal-source-role') as HTMLSelectElement)?.value;
+                const target = (document.getElementById('swal-target-role') as HTMLSelectElement)?.value;
+
+                if (source === target) {
+                    Swal.showValidationMessage('Source and Target roles must be different!');
+                    return false;
+                }
+                return { source, target };
+            }
+        });
+
+        if (formValues) {
+            const { source, target } = formValues;
+            const sourcePerms = roleDefaults.filter(p => p.role === source);
+            const targetPayload: RolePermission[] = FEATURE_LABELS.map(({ id }) => {
+                const match = sourcePerms.find(p => p.featureName === id);
+                return {
+                    role: target as Role,
+                    featureName: id,
+                    accessLevel: match ? match.accessLevel : 'none'
+                };
+            });
+
+            try {
+                await permissionService.batchUpsertRoleDefaults(targetPayload);
+                await load();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Permissions Cloned!',
+                    text: `All permissions from "${ROLE_LABELS[source as Role]}" were copied to "${ROLE_LABELS[target as Role]}".`,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (err: any) {
+                Swal.fire('Error', err.message || 'Failed to clone permissions', 'error');
+            }
+        }
+    };
+
+    // 2. Export & Import Matrix Handlers
+    const handleExportMatrix = () => {
+        const data = {
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+            customRoles: getCustomRoles(),
+            roleDefaults: roleDefaults
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tabarak_access_matrix_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportMatrix = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = async (e: any) => {
+            const file = e.target?.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const parsed = JSON.parse(event.target?.result as string);
+                    if (!parsed || !Array.isArray(parsed.roleDefaults)) {
+                        throw new Error('Invalid JSON format: missing roleDefaults array');
+                    }
+                    if (Array.isArray(parsed.customRoles)) {
+                        saveCustomRoles(parsed.customRoles);
+                        setCustomRoles(parsed.customRoles);
+                    }
+                    await permissionService.batchUpsertRoleDefaults(parsed.roleDefaults);
+                    await load();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Access Matrix Imported!',
+                        text: `Successfully updated role permissions and custom roles from file.`,
+                        timer: 2500,
+                        showConfirmButton: false
+                    });
+                } catch (err: any) {
+                    Swal.fire('Import Error', err.message || 'Could not parse JSON file.', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    };
+
+    // 3. Bulk Permission Action Handler
+    const handleBulkPermissionAction = async () => {
+        const roleOptions = [
+            '<option value="all">⚡ ALL ROLES</option>',
+            ...ASSIGNABLE_ROLES.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`)
+        ].join('');
+
+        const { value: formValues } = await Swal.fire({
+            title: 'Bulk Permission Action ⚡',
+            html: `
+                <div class="space-y-4 text-left">
+                    <p class="text-xs text-slate-500 font-medium leading-relaxed">
+                        Apply a single permission level across all modules for a selected role or all roles.
+                    </p>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Target Role(s)</label>
+                        <select id="swal-bulk-role" class="swal2-select !m-0 !w-full text-xs font-bold">${roleOptions}</select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Action to Apply</label>
+                        <select id="swal-bulk-level" class="swal2-select !m-0 !w-full text-xs font-bold">
+                            <option value="read">📖 Set All Read-Only (Read Access)</option>
+                            <option value="edit">✏️ Set All Edit Access (Full Edit)</option>
+                            <option value="none">🚫 Clear All Access (Set None)</option>
+                        </select>
+                    </div>
+                </div>
+            `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Apply Bulk Action',
+            confirmButtonColor: '#0f172a',
+            preConfirm: () => {
+                const targetRole = (document.getElementById('swal-bulk-role') as HTMLSelectElement)?.value;
+                const accessLevel = (document.getElementById('swal-bulk-level') as HTMLSelectElement)?.value as 'read' | 'edit' | 'none';
+                return { targetRole, accessLevel };
+            }
+        });
+
+        if (formValues) {
+            const { targetRole, accessLevel } = formValues;
+            const targetRoles = targetRole === 'all' ? ASSIGNABLE_ROLES : [targetRole as Role];
+            const payload: RolePermission[] = [];
+
+            for (const r of targetRoles) {
+                for (const feat of FEATURE_LABELS) {
+                    payload.push({
+                        role: r,
+                        featureName: feat.id,
+                        accessLevel: accessLevel
+                    });
+                }
+            }
+
+            try {
+                await permissionService.batchUpsertRoleDefaults(payload);
+                await load();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Bulk Action Applied!',
+                    text: `All permissions updated to "${accessLevel.toUpperCase()}" for target role(s).`,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (err: any) {
+                Swal.fire('Error', err.message || 'Failed to apply bulk permissions', 'error');
+            }
+        }
+    };
+
+    // 4. Branch Overrides Handlers
+    const loadBranchOverrides = async (branchId: string) => {
+        if (!branchId) {
+            setBranchOverrides([]);
+            return;
+        }
+        setIsLoadingBranchOverrides(true);
+        try {
+            const perms = await permissionService.listForBranch(branchId);
+            setBranchOverrides(perms);
+        } catch {
+            setBranchOverrides([]);
+        } finally {
+            setIsLoadingBranchOverrides(false);
+        }
+    };
+
+    const handleBranchOverrideToggle = async (branchId: string, featureName: string, currentLevel: 'inherit' | 'none' | 'read' | 'edit') => {
+        const nextCycle: Record<string, 'inherit' | 'none' | 'read' | 'edit'> = {
+            inherit: 'read',
+            read: 'edit',
+            edit: 'none',
+            none: 'inherit'
+        };
+        const nextLevel = nextCycle[currentLevel];
+        setSavingKey(`branch-override:${branchId}:${featureName}`);
+
+        try {
+            if (nextLevel === 'inherit') {
+                await permissionService.deleteForBranch(branchId, featureName);
+            } else {
+                await permissionService.upsert({
+                    branchId,
+                    featureName,
+                    accessLevel: nextLevel
+                });
+            }
+            await loadBranchOverrides(branchId);
+        } catch (err: any) {
+            Swal.fire('Error', err.message || 'Failed to update branch override', 'error');
+        } finally {
+            setSavingKey(null);
+        }
+    };
+
+    const filteredUsers = useMemo(() => {
+        return users.filter(user => {
+            const query = userSearchTerm.toLowerCase().trim();
+            const matchesSearch = !query ||
+                user.email.toLowerCase().includes(query) ||
+                (user.branchName && user.branchName.toLowerCase().includes(query)) ||
+                (user.branchCode && user.branchCode.toLowerCase().includes(query));
+            const matchesRole = userRoleFilter === 'all' || user.role === userRoleFilter;
+            const matchesBranch = userBranchFilter === 'all' || user.branchId === userBranchFilter;
+            return matchesSearch && matchesRole && matchesBranch;
+        });
+    }, [users, userSearchTerm, userRoleFilter, userBranchFilter]);
 
     const branchOptions = useMemo(
         () => branches.filter(b => b.role === 'branch').sort((a, b) => a.name.localeCompare(b.name)),
@@ -642,28 +963,96 @@ export const AccessControlSection: React.FC<{
         try {
             const current = await permissionService.listRawForUser(user.userId);
             const byFeature = new Map(current.map(permission => [permission.featureName, permission.accessLevel]));
+            const enabledFeatures = getEnabledAccessFeatures();
+
+            const allPermissionIds: string[] = [];
+            enabledFeatures.forEach(feature => {
+                allPermissionIds.push(feature.id);
+                if (feature.subFeatures) {
+                    feature.subFeatures.forEach(sub => allPermissionIds.push(sub.id));
+                }
+            });
+
             const { value } = await Swal.fire({
-                title: `<span class="text-xl font-black tracking-tight">Module access for ${escapeHtml(user.email)}</span>`,
+                title: `<span class="text-xl font-black tracking-tight">Module & Sub-Tool Access for ${escapeHtml(user.email)}</span>`,
                 html: `
-                  <div class="space-y-2 text-left">
+                  <div class="space-y-3 text-left">
+                    <div class="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3.5 space-y-2.5 shadow-sm">
+                      <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                          <svg class="w-3.5 h-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                          Quick Access Presets
+                        </span>
+                        <button type="button" id="btn-preset-save-custom" class="inline-flex items-center gap-1 text-[10px] font-black uppercase text-brand hover:text-brand/80 transition-colors">
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                          Save Current as My Preset
+                        </button>
+                      </div>
+                      <div class="flex flex-wrap gap-1.5">
+                        <button type="button" id="btn-preset-all-edit" class="inline-flex items-center gap-1.5 rounded-lg bg-purple-50 px-2.5 py-1.5 text-[11px] font-black text-purple-700 hover:bg-purple-100 transition-all border border-purple-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                          Full Admin (Edit All)
+                        </button>
+                        <button type="button" id="btn-preset-all-read" class="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-100 transition-all border border-blue-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                          Executive Viewer (Read All)
+                        </button>
+                        <button type="button" id="btn-preset-branch-std" class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-black text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                          Branch Ops
+                        </button>
+                        <button type="button" id="btn-preset-finance" class="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-black text-amber-700 hover:bg-amber-100 transition-all border border-amber-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                          Financial Auditor
+                        </button>
+                        <button type="button" id="btn-preset-apply-custom" class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-black text-rose-700 hover:bg-rose-100 transition-all border border-rose-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                          My Saved Preset
+                        </button>
+                        <button type="button" id="btn-preset-reset" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-black text-slate-600 hover:bg-slate-200 transition-all border border-slate-200/80 shadow-2xs">
+                          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                          Reset (Role Default)
+                        </button>
+                      </div>
+                    </div>
                     <p class="text-xs font-semibold leading-5 text-slate-500">
-                      Leave a module on Role default to inherit the role matrix. Pick None, Read, or Edit to override this user only.
-                      Owner users are capped at Read because Owner is a read-only executive role.
+                      Configure main module access or fine-tune individual sub-tools and tabs. Sub-tools set to "Inherit" follow the main module setting.
                     </p>
-                    <div class="max-h-[420px] space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
-                      ${FEATURE_LABELS.map(feature => {
-                        const selected = byFeature.get(feature.id) || '';
-                        const isOwnerUser = user.role === 'owner';
+                    <div class="max-h-[420px] space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-2.5">
+                      ${enabledFeatures.map(feature => {
+                        const parentSelected = byFeature.get(feature.id) || '';
+                        const hasSubs = feature.subFeatures && feature.subFeatures.length > 0;
                         return `
-                          <label class="grid grid-cols-[1fr_120px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                            <span class="text-sm font-bold text-slate-700">${escapeHtml(feature.label)}</span>
-                            <select id="swal-user-perm-${escapeHtml(feature.id)}" class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-black uppercase text-slate-600">
-                              <option value="" ${selected === '' ? 'selected' : ''}>Role default</option>
-                              <option value="none" ${selected === 'none' ? 'selected' : ''}>None</option>
-                              <option value="read" ${selected === 'read' ? 'selected' : ''}>Read</option>
-                              ${isOwnerUser ? '' : `<option value="edit" ${selected === 'edit' ? 'selected' : ''}>Edit</option>`}
-                            </select>
-                          </label>
+                          <div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                            <div class="flex items-center justify-between gap-3">
+                              <span class="text-sm font-black text-slate-900">${escapeHtml(feature.label)}</span>
+                              <select id="swal-user-perm-${escapeHtml(feature.id)}" class="rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-xs font-black uppercase text-slate-700 focus:border-brand">
+                                <option value="" ${parentSelected === '' ? 'selected' : ''}>Role default</option>
+                                <option value="none" ${parentSelected === 'none' ? 'selected' : ''}>None</option>
+                                <option value="read" ${parentSelected === 'read' ? 'selected' : ''}>Read</option>
+                                <option value="edit" ${parentSelected === 'edit' ? 'selected' : ''}>Edit</option>
+                              </select>
+                            </div>
+                            ${hasSubs ? `
+                              <div class="ml-2 pl-3 border-l-2 border-slate-200 space-y-2 pt-1.5">
+                                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Sub-Tools & Tabs</div>
+                                ${feature.subFeatures!.map(sub => {
+                                  const subSelected = byFeature.get(sub.id) || '';
+                                  return `
+                                    <div class="flex items-center justify-between gap-3 text-xs">
+                                      <span class="font-bold text-slate-600">↳ ${escapeHtml(sub.label)}</span>
+                                      <select id="swal-user-perm-${escapeHtml(sub.id)}" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
+                                        <option value="" ${subSelected === '' ? 'selected' : ''}>Inherit Module</option>
+                                        <option value="none" ${subSelected === 'none' ? 'selected' : ''}>None</option>
+                                        <option value="read" ${subSelected === 'read' ? 'selected' : ''}>Read</option>
+                                        <option value="edit" ${subSelected === 'edit' ? 'selected' : ''}>Edit</option>
+                                      </select>
+                                    </div>
+                                  `;
+                                }).join('')}
+                              </div>
+                            ` : ''}
+                          </div>
                         `;
                       }).join('')}
                     </div>
@@ -672,18 +1061,93 @@ export const AccessControlSection: React.FC<{
                 showCancelButton: true,
                 confirmButtonText: 'Save permissions',
                 confirmButtonColor: '#B91c1c',
-                width: 680,
-                preConfirm: () => FEATURE_LABELS
-                    .map(feature => ({
-                        featureName: feature.id,
-                        accessLevel: (document.getElementById(`swal-user-perm-${feature.id}`) as HTMLSelectElement).value as 'none' | 'read' | 'edit' | ''
+                width: 700,
+                didOpen: () => {
+                    document.getElementById('btn-preset-all-edit')?.addEventListener('click', () => {
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) select.value = 'edit';
+                        });
+                    });
+                    document.getElementById('btn-preset-all-read')?.addEventListener('click', () => {
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) select.value = 'read';
+                        });
+                    });
+                    document.getElementById('btn-preset-branch-std')?.addEventListener('click', () => {
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) {
+                                if (id.startsWith('lost_sales') || id.startsWith('shortages') || id.startsWith('delivery') || id.startsWith('workflow_todo')) {
+                                    select.value = 'edit';
+                                } else if (id.startsWith('spin_win') || id.startsWith('hr_requests') || id.startsWith('quality_feedback')) {
+                                    select.value = 'read';
+                                } else {
+                                    select.value = 'none';
+                                }
+                            }
+                        });
+                    });
+                    document.getElementById('btn-preset-finance')?.addEventListener('click', () => {
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) {
+                                if (id.startsWith('cash_flow') || id.startsWith('cash_tracker') || id.startsWith('benefit_pay_ledger') || id.startsWith('operational_expenses')) {
+                                    select.value = 'edit';
+                                } else {
+                                    select.value = 'read';
+                                }
+                            }
+                        });
+                    });
+                    document.getElementById('btn-preset-save-custom')?.addEventListener('click', () => {
+                        const customConfig: Record<string, string> = {};
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) customConfig[id] = select.value;
+                        });
+                        localStorage.setItem('tabarak_user_perm_custom_preset', JSON.stringify(customConfig));
+                        Swal.showValidationMessage('✅ Saved current settings as "My Saved Preset"!');
+                        setTimeout(() => Swal.resetValidationMessage(), 2500);
+                    });
+                    document.getElementById('btn-preset-apply-custom')?.addEventListener('click', () => {
+                        const saved = localStorage.getItem('tabarak_user_perm_custom_preset');
+                        if (!saved) {
+                            Swal.showValidationMessage('⚠️ No custom preset saved yet! Configure dropdowns and click "Save Current as My Preset".');
+                            setTimeout(() => Swal.resetValidationMessage(), 3000);
+                            return;
+                        }
+                        try {
+                            const customConfig = JSON.parse(saved) as Record<string, string>;
+                            allPermissionIds.forEach(id => {
+                                const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                                if (select && customConfig[id] !== undefined) {
+                                    select.value = customConfig[id];
+                                }
+                            });
+                        } catch {
+                            // ignore corrupt data
+                        }
+                    });
+                    document.getElementById('btn-preset-reset')?.addEventListener('click', () => {
+                        allPermissionIds.forEach(id => {
+                            const select = document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement;
+                            if (select) select.value = '';
+                        });
+                    });
+                },
+                preConfirm: () => allPermissionIds
+                    .map(id => ({
+                        featureName: id,
+                        accessLevel: (document.getElementById(`swal-user-perm-${id}`) as HTMLSelectElement)?.value as 'none' | 'read' | 'edit' | ''
                     }))
                     .filter((permission): permission is { featureName: string; accessLevel: 'none' | 'read' | 'edit' } => !!permission.accessLevel)
             });
 
             if (!value) return;
             await permissionService.replaceUserPermissions(user.userId, value);
-            Swal.fire('Permissions saved', 'User-level module overrides were updated.', 'success');
+            Swal.fire('Permissions saved', 'User-level module & sub-tool overrides were updated.', 'success');
         } catch (e: any) {
             Swal.fire('Permissions failed', e?.message || 'Could not update user permissions.', 'error');
         } finally {
@@ -693,6 +1157,12 @@ export const AccessControlSection: React.FC<{
 
     const getDefault = (role: Role, feature: string): 'none' | 'read' | 'edit' => {
         if (role === 'admin' || role === 'manager') return 'edit';
+        if (role === 'owner' && (feature === 'owner_dashboard' || feature === 'owner-dashboard')) return 'read';
+        if (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll')) return 'none';
+        if (role === 'branch' && (feature === 'operational_expenses' || feature === 'operational-expenses')) {
+            const configured = roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel;
+            return (configured as any) || 'edit';
+        }
         return (roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel as any) || 'none';
     };
 
@@ -703,9 +1173,15 @@ export const AccessControlSection: React.FC<{
 
     const roleModuleLayouts = useMemo(() => {
         const hasAccess = (role: Role, feature: string, minimum: 'read' | 'edit' = 'read') => {
-            const level = role === 'admin' || role === 'manager'
+            const level = (role === 'admin' || role === 'manager')
                 ? 'edit'
-                : (roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel as 'none' | 'read' | 'edit' | undefined) || 'none';
+                : (role === 'owner' && (feature === 'owner_dashboard' || feature === 'owner-dashboard'))
+                    ? 'read'
+                    : (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll'))
+                        ? 'none'
+                    : (role === 'branch' && (feature === 'operational_expenses' || feature === 'operational-expenses'))
+                        ? ((roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel as any) || 'edit')
+                    : (roleDefaults.find(p => p.role === role && p.featureName === feature)?.accessLevel as 'none' | 'read' | 'edit' | undefined) || 'none';
 
             if (minimum === 'edit') return level === 'edit';
             return level !== 'none';
@@ -738,9 +1214,9 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'owner-dashboard',
                     title: MODULE_DISPLAY_LABELS['owner-dashboard'],
-                    visible: isOwner,
-                    access: 'read',
-                    reason: 'Owner read-only executive dashboard.'
+                    visible: hasAccess(role, 'owner_dashboard'),
+                    access: getDefault(role, 'owner_dashboard'),
+                    reason: 'Needs Owner Dashboard permission.'
                 },
                 {
                     key: 'dashboard-manager',
@@ -759,7 +1235,7 @@ export const AccessControlSection: React.FC<{
                 {
                     key: 'hr-manager',
                     title: MODULE_DISPLAY_LABELS['hr-manager'],
-                    visible: isManager && canUseHr && hasAccess(role, 'hr_requests'),
+                    visible: canUseHr && (isManager || hasAccess(role, 'hr_requests')),
                     access: hasAccess(role, 'hr_requests') ? getDefault(role, 'hr_requests') : 'none',
                     reason: 'Admin HR request review.'
                 },
@@ -771,116 +1247,130 @@ export const AccessControlSection: React.FC<{
                     reason: 'Branch-style dashboard needs read access to Lost Sales or Shortages.'
                 },
                 {
+                    key: 'hr-directory',
+                    title: MODULE_DISPLAY_LABELS['hr-directory'],
+                    visible: canUseWorkforce && (isManager || hasAccess(role, 'hr_directory') || hasAccess(role, 'workforce')),
+                    access: getDefault(role, 'hr_directory'),
+                    reason: 'Central HR employee directory and workforce records.'
+                },
+                {
+                    key: 'driver-payroll',
+                    title: MODULE_DISPLAY_LABELS['driver-payroll'],
+                    visible: canUseWorkforce && (isManager || hasAccess(role, 'driver_payroll') || hasAccess(role, 'workforce')),
+                    access: getDefault(role, 'driver_payroll'),
+                    reason: 'Driver monthly salary matrix, delivery incentives, loans & deductions.'
+                },
+                {
                     key: 'workforce',
                     title: MODULE_DISPLAY_LABELS.workforce,
-                    visible: isManager && canUseWorkforce && hasAccess(role, 'workforce'),
+                    visible: canUseWorkforce && (isManager || hasAccess(role, 'workforce')),
                     access: getDefault(role, 'workforce'),
                     reason: 'Admin workforce planning module.'
                 },
                 {
                     key: 'hr',
                     title: MODULE_DISPLAY_LABELS.hr,
-                    visible: role === 'branch' && canUseHr && hasAccess(role, 'hr_requests'),
+                    visible: canUseHr && (role === 'branch' || hasAccess(role, 'hr_requests')),
                     access: getDefault(role, 'hr_requests'),
                     reason: 'Branch HR self-service.'
                 },
                 {
                     key: 'cash-flow',
                     title: MODULE_DISPLAY_LABELS['cash-flow'],
-                    visible: !isOwner && isModuleEnabled('cashFlow') && hasAccess(role, 'cash_flow'),
+                    visible: isModuleEnabled('cashFlow') && hasAccess(role, 'cash_flow'),
                     access: getDefault(role, 'cash_flow'),
                     reason: 'Needs Cash Flow access.'
                 },
                 {
                     key: 'cash-tracker',
                     title: MODULE_DISPLAY_LABELS['cash-tracker'],
-                    visible: !isManager && !isOwner && isModuleEnabled('cashTracker') && hasAccess(role, 'cash_tracker'),
+                    visible: isModuleEnabled('cashTracker') && hasAccess(role, 'cash_tracker'),
                     access: getDefault(role, 'cash_tracker'),
                     reason: 'Needs Branch Cash Tracker access.'
                 },
                 {
                     key: 'corporate-codex',
                     title: MODULE_DISPLAY_LABELS['corporate-codex'],
-                    visible: !isOwner && isModuleEnabled('corporateCodex') && hasAccess(role, 'corporate_codex'),
+                    visible: isModuleEnabled('corporateCodex') && hasAccess(role, 'corporate_codex'),
                     access: getDefault(role, 'corporate_codex'),
                     reason: 'Needs Corporate Codex access.'
                 },
                 {
-                    key: 'system-settings',
-                    title: MODULE_DISPLAY_LABELS['system-settings'],
-                    visible: isModuleEnabled('settings') && isManager,
+                    key: 'settings',
+                    title: MODULE_DISPLAY_LABELS['settings'],
+                    visible: isModuleEnabled('settings') && (isManager || hasAccess(role, 'settings')),
                     access: isManager ? 'edit' : getDefault(role, 'settings'),
-                    reason: 'System settings, branding, module layout, and branch setup control.'
-                },
-                {
-                    key: 'access-control',
-                    title: MODULE_DISPLAY_LABELS['access-control'],
-                    visible: isModuleEnabled('settings') && isManager,
-                    access: isManager ? 'edit' : getDefault(role, 'settings'),
-                    reason: 'Users, roles, branch permissions, and login approval control.'
+                    reason: 'Unified Control Center: System Settings, Access Control, Users & Operations.'
                 },
                 {
                     key: 'spin-win',
                     title: isManager ? 'Reward Control' : MODULE_DISPLAY_LABELS['spin-win'],
-                    visible: !isOwner && isModuleEnabled('spinWin') && hasAccess(role, 'spin_win'),
+                    visible: isModuleEnabled('spinWin') && hasAccess(role, 'spin_win'),
                     access: getDefault(role, 'spin_win'),
                     reason: 'Needs Spin & Win access.'
                 },
                 {
                     key: 'feedback-form',
                     title: MODULE_DISPLAY_LABELS['feedback-form'],
-                    visible: !isOwner && isModuleEnabled('qualityFeedback') && hasAccess(role, 'quality_feedback'),
+                    visible: isModuleEnabled('qualityFeedback') && hasAccess(role, 'quality_feedback'),
                     access: getDefault(role, 'quality_feedback'),
                     reason: 'Needs QA Insights access.'
                 },
                 {
                     key: 'feedback-admin',
                     title: MODULE_DISPLAY_LABELS['feedback-admin'],
-                    visible: isModuleEnabled('qualityFeedback') && hasAccess(role, 'feedback_admin', 'edit'),
+                    visible: isModuleEnabled('qualityFeedback') && hasAccess(role, 'feedback_admin'),
                     access: getDefault(role, 'feedback_admin'),
-                    reason: 'Admin-only by default; non-admin roles need Edit / Full Control for QA response analytics.'
+                    reason: 'QA response analytics and feedback admin.'
                 },
                 {
                     key: 'employee-contributions',
                     title: MODULE_DISPLAY_LABELS['employee-contributions'],
-                    visible: !isOwner && isModuleEnabled('employeeContributions') && hasAccess(role, 'employee_contributions'),
+                    visible: isModuleEnabled('employeeContributions') && hasAccess(role, 'employee_contributions'),
                     access: getDefault(role, 'employee_contributions'),
                     reason: 'Needs Team Contributions access.'
                 },
                 {
                     key: 'workflow-todo',
                     title: MODULE_DISPLAY_LABELS['workflow-todo'],
-                    visible: !isOwner && isModuleEnabled('workflowTodo') && hasAccess(role, 'workflow_todo'),
+                    visible: isModuleEnabled('workflowTodo') && hasAccess(role, 'workflow_todo'),
                     access: getDefault(role, 'workflow_todo'),
                     reason: 'Needs Workflow & Todo access for branch tasks, personal todos, and approvals.'
                 },
                 {
                     key: 'delivery',
                     title: MODULE_DISPLAY_LABELS.delivery,
-                    visible: !isOwner && isModuleEnabled('delivery') && hasAccess(role, 'delivery'),
+                    visible: isModuleEnabled('delivery') && hasAccess(role, 'delivery'),
                     access: getDefault(role, 'delivery'),
                     reason: 'None disables delivery, Read shows overview/map, Edit allows delivery recording.'
                 },
                 {
                     key: 'benefit-pay-ledger',
                     title: MODULE_DISPLAY_LABELS['benefit-pay-ledger'],
-                    visible: !isOwner && isModuleEnabled('benefitPayLedger') && hasAccess(role, 'benefit_pay_ledger'),
+                    visible: isModuleEnabled('benefitPayLedger') && hasAccess(role, 'benefit_pay_ledger'),
                     access: getDefault(role, 'benefit_pay_ledger'),
                     reason: 'None disables BP Ledger, Read shows dashboard, Edit allows manual BP transfer recording.'
                 },
                 {
-                    key: 'block-analyzer',
-                    title: MODULE_DISPLAY_LABELS['block-analyzer'],
-                    visible: isManager && hasAccess(role, 'block_analyzer'),
-                    access: getDefault(role, 'block_analyzer'),
-                    reason: 'Admin block analyzer.'
+                    key: 'products',
+                    title: MODULE_DISPLAY_LABELS['products'] || 'Product Catalogue',
+                    visible: isModuleEnabled('products') && (hasAccess(role, 'products') || hasAccess(role, 'products:catalogue') || hasAccess(role, 'products:search')),
+                    access: getDefault(role, 'products'),
+                    reason: 'Product catalogue view and price/item search access.'
                 },
                 {
-                    key: 'command-center',
-                    title: MODULE_DISPLAY_LABELS['command-center'],
-                    visible: !isOwner && hasAccess(role, 'command_center'),
-                    access: getDefault(role, 'command_center'),
-                    reason: 'Needs Daily Command Center access.'
+                    key: 'block-analyzer',
+                    title: MODULE_DISPLAY_LABELS['block-analyzer'],
+                    visible: hasAccess(role, 'block_analyzer'),
+                    access: getDefault(role, 'block_analyzer'),
+                    reason: 'Block analyzer module.'
+                },
+                {
+                    key: 'operational-expenses',
+                    title: MODULE_DISPLAY_LABELS['operational-expenses'],
+                    visible: isModuleEnabled('operationalExpenses') && hasAccess(role, 'operational_expenses'),
+                    access: getDefault(role, 'operational_expenses'),
+                    reason: 'Needs Operational Cash Expenses access.'
                 }
             ];
 
@@ -888,7 +1378,7 @@ export const AccessControlSection: React.FC<{
             return items.sort((a, b) => (orderByKey.get(a.key) ?? 9999) - (orderByKey.get(b.key) ?? 9999) || a.key.localeCompare(b.key));
         };
 
-        return MODULE_LAYOUT_ROLES.map(role => {
+        return ASSIGNABLE_ROLES.map(role => {
             const layout = buildLayoutForRole(role);
             return {
                 role,
@@ -896,12 +1386,12 @@ export const AccessControlSection: React.FC<{
                 hidden: layout.filter(item => !item.visible)
             };
         });
-    }, [moduleDisplayItems, roleDefaults]);
+    }, [moduleDisplayItems, roleDefaults, ASSIGNABLE_ROLES]);
 
     const cycleDefault = async (role: Role, feature: string) => {
         if (role === 'admin' || role === 'manager') return; // admin always has full access
         const current = getDefault(role, feature);
-        const cycle = role === 'owner' ? (['none', 'read'] as Array<'none' | 'read' | 'edit'>) : ACCESS_CYCLE;
+        const cycle = ACCESS_CYCLE;
         const next = cycle[(cycle.indexOf(current) + 1) % cycle.length] || 'none';
         setSavingKey(`${role}:${feature}`);
         try {
@@ -965,8 +1455,26 @@ export const AccessControlSection: React.FC<{
                     >
                         <Shield className="h-3.5 w-3.5" /> Role Permissions
                     </button>
+                    <button
+                        onClick={() => setView('simulator')}
+                        className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${view === 'simulator' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Eye className="h-3.5 w-3.5" /> Live Simulator
+                    </button>
+                    <button
+                        onClick={() => setView('branch_overrides')}
+                        className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${view === 'branch_overrides' ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <GitFork className="h-3.5 w-3.5" /> Branch Overrides
+                    </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={handleCreateCustomRole}
+                        className="btn-secondary text-[10px] uppercase tracking-widest text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
+                    >
+                        <Plus className="h-3.5 w-3.5 text-brand" /> Add Role
+                    </button>
                     <button
                         onClick={handleCreateUser}
                         disabled={savingKey === 'create-user'}
@@ -1019,11 +1527,47 @@ export const AccessControlSection: React.FC<{
                         )}
                     </section>
 
-                    {users.length === 0 ? (
+                    {/* User Search & Filter Bar */}
+                    <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search users by email or branch name..."
+                                value={userSearchTerm}
+                                onChange={e => setUserSearchTerm(e.target.value)}
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-xs font-bold text-slate-800 outline-none transition-all focus:border-brand focus:bg-white"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={userRoleFilter}
+                                onChange={e => setUserRoleFilter(e.target.value)}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand"
+                            >
+                                <option value="all">All Roles</option>
+                                {ASSIGNABLE_ROLES.map(role => (
+                                    <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={userBranchFilter}
+                                onChange={e => setUserBranchFilter(e.target.value)}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-brand"
+                            >
+                                <option value="all">All Branches</option>
+                                {branchOptions.map(b => (
+                                    <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {filteredUsers.length === 0 ? (
                         <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
                             <UserCog className="mx-auto h-9 w-9 text-slate-300" />
                             <p className="mt-3 text-sm font-black text-slate-800">No login users found</p>
-                            <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Create the first login user to start assigning roles and branch scopes.</p>
+                            <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">Try adjusting your search query or filters.</p>
                         </section>
                     ) : (
                         <section className="min-w-0 space-y-4">
@@ -1033,12 +1577,12 @@ export const AccessControlSection: React.FC<{
                                     <h4 className="mt-1 text-base font-black tracking-tight text-slate-950">Login accounts</h4>
                                 </div>
                                 <span className="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 sm:w-fit">
-                                    {users.length} account{users.length === 1 ? '' : 's'}
+                                    Showing {filteredUsers.length} of {users.length} account{users.length === 1 ? '' : 's'}
                                 </span>
                             </div>
 
                             <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-2">
-                                {users.map(user => {
+                                {filteredUsers.map(user => {
                                     const isSelf = user.userId === currentUserId;
                                     const isSaving = savingKey === user.userId;
                                     const isPermissionsSaving = savingKey === `permissions:${user.userId}`;
@@ -1069,18 +1613,32 @@ export const AccessControlSection: React.FC<{
                                             <div className="border-b border-slate-100 bg-slate-50/80 p-3 sm:p-4">
                                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                                     <div className="flex min-w-0 flex-1 items-start gap-3">
-                                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-white text-sm font-black uppercase text-brand shadow-sm sm:h-11 sm:w-11">
+                                                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-white text-sm font-black uppercase text-brand shadow-sm sm:h-11 sm:w-11">
                                                             {user.email.slice(0, 2)}
+                                                            {user.isActive && (
+                                                                <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
+                                                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                                                    <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="min-w-0 flex-1">
-                                                            <p className="break-all text-sm font-black leading-5 text-slate-950">{user.email}</p>
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <p className="break-all text-sm font-black leading-5 text-slate-950">{user.email}</p>
+                                                            </div>
                                                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                                                 <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${roleBadgeClass(user.role)}`}>
                                                                     {ROLE_LABELS[user.role] || user.role}
                                                                 </span>
-                                                                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${user.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                                                                <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${user.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400'}`}>
                                                                     {user.isActive ? 'Active' : 'Disabled'}
                                                                 </span>
+                                                                {user.createdAt && (
+                                                                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[9px] font-bold text-slate-400">
+                                                                        <Clock className="h-3 w-3" />
+                                                                        {new Date(user.createdAt).toLocaleDateString('en-GB')}
+                                                                    </span>
+                                                                )}
                                                                 {isSelf && (
                                                                     <span className="rounded-full border border-brand/10 bg-brand/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
                                                                         Current user
@@ -1573,119 +2131,486 @@ export const AccessControlSection: React.FC<{
                         )}
                     </div>
                 </div>
-            ) : (
+            ) : view === 'simulator' ? (
                 <div className="space-y-5">
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/10 bg-brand/5 text-brand">
-                                    <LayoutGrid className="h-5 w-5" />
+                    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-5 mb-5">
+                            <div className="flex items-start gap-3.5">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 text-brand ring-1 ring-brand/10 shadow-sm">
+                                    <LayoutGrid className="h-6 w-6" />
                                 </div>
-                                <div>
-                                    <h3 className="text-sm font-black tracking-tight text-slate-950">Module Layout per Role</h3>
-                                    <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-500">
-                                        Preview what each login role will see in the Operations Modules launcher. Order follows Module Layout; visibility follows module flags and role permissions.
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base font-black tracking-tight text-slate-950 uppercase">Module Layout per Role</h3>
+                                        <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-brand">Live Simulator</span>
+                                    </div>
+                                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500 max-w-2xl">
+                                        Simulate what each role sees in their Operations Launcher grid. Module sequence follows Module Layout; visibility respects global flags and role access levels.
                                     </p>
                                 </div>
                             </div>
-                            <span className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                <Eye className="h-3.5 w-3.5 text-brand" />
-                                Live launcher preview
-                            </span>
+
+                            {/* Filter Tabs for Roles */}
+                            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1.5 shadow-inner">
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewRoleFilter('all')}
+                                    className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        previewRoleFilter === 'all'
+                                            ? 'bg-slate-900 text-white shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
+                                    }`}
+                                >
+                                    All Roles
+                                </button>
+                                {ASSIGNABLE_ROLES.map(r => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => setPreviewRoleFilter(r)}
+                                        className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                            previewRoleFilter === r
+                                                ? 'bg-brand text-white shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
+                                        }`}
+                                    >
+                                        {ROLE_LABELS[r]}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-                            {roleModuleLayouts.map(roleLayout => (
-                                <article key={roleLayout.role} className="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-3">
-                                    <div className="mb-3 flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="break-words text-sm font-black leading-5 text-slate-950">{ROLE_LABELS[roleLayout.role]}</p>
-                                            <p className="mt-0.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                                {roleLayout.visible.length} visible
-                                            </p>
-                                        </div>
-                                        <span className="rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
-                                            {roleLayout.visible.length}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex-1 space-y-2">
-                                        {roleLayout.visible.length === 0 ? (
-                                            <div className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-center">
-                                                <EyeOff className="mx-auto h-5 w-5 text-slate-300" />
-                                                <p className="mt-2 text-xs font-bold text-slate-400">No modules visible</p>
-                                            </div>
-                                        ) : roleLayout.visible.map((module, index) => (
-                                            <div key={module.key} className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="break-words text-xs font-black leading-5 text-slate-800">{index + 1}. {module.title}</p>
-                                                        <p className="mt-0.5 break-all text-[9px] font-black uppercase tracking-widest text-slate-400">{module.key}</p>
+                        {/* Display Role Layouts Grid */}
+                        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                            {roleModuleLayouts
+                                .filter(layout => previewRoleFilter === 'all' || layout.role === previewRoleFilter)
+                                .map(roleLayout => {
+                                    const isExpanded = expandedHiddenRoles[roleLayout.role] || false;
+                                    return (
+                                        <article
+                                            key={roleLayout.role}
+                                            className="flex flex-col rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50/80 to-slate-100/30 p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md"
+                                        >
+                                            {/* Role Header Banner */}
+                                            <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white text-xs font-black">
+                                                        {ROLE_LABELS[roleLayout.role]?.[0] || 'R'}
                                                     </div>
-                                                    <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase ${accessBadgeClass(module.access || 'none')}`}>
-                                                        {module.access || 'show'}
-                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <p className="break-words text-sm font-black tracking-tight text-slate-900">{ROLE_LABELS[roleLayout.role]}</p>
+                                                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Launcher Simulator</p>
+                                                    </div>
                                                 </div>
+                                                <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                    {roleLayout.visible.length} Active
+                                                </span>
                                             </div>
-                                        ))}
-                                    </div>
 
-                                    <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                                <EyeOff className="h-3.5 w-3.5" />
-                                                Hidden
-                                            </span>
-                                            <span className="text-xs font-black tabular-nums text-slate-600">{roleLayout.hidden.length}</span>
-                                        </div>
-                                        {roleLayout.hidden.length > 0 && (
-                                            <p className="mt-1 break-words text-[10px] font-semibold leading-5 text-slate-400" title={roleLayout.hidden.map(item => item.title).join(', ')}>
-                                                {roleLayout.hidden.slice(0, 2).map(item => item.title).join(', ')}
-                                                {roleLayout.hidden.length > 2 ? ` +${roleLayout.hidden.length - 2} more` : ''}
-                                            </p>
-                                        )}
-                                    </div>
-                                </article>
-                            ))}
+                                            {/* 3x3 Mini Launcher Cards Grid */}
+                                            <div className="flex-1 space-y-3">
+                                                {roleLayout.visible.length === 0 ? (
+                                                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-inner">
+                                                        <EyeOff className="mx-auto h-7 w-7 text-slate-300" />
+                                                        <p className="mt-2 text-xs font-black text-slate-700 uppercase tracking-wider">No Launcher Modules Available</p>
+                                                        <p className="mt-1 text-[10px] font-semibold text-slate-400">Role has no active permissions or module flags are off.</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+                                                        {roleLayout.visible.map((module, index) => (
+                                                            <div
+                                                                key={module.key}
+                                                                className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-all hover:border-brand/40 hover:shadow-md hover:-translate-y-0.5"
+                                                            >
+                                                                <div className="flex items-start justify-between gap-1.5">
+                                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-black text-slate-500 group-hover:bg-brand group-hover:text-white transition-colors">
+                                                                        {index + 1}
+                                                                    </span>
+                                                                    <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${accessBadgeClass(module.access || 'none')}`}>
+                                                                        {module.access || 'show'}
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="mt-3 min-w-0">
+                                                                    <p className="break-words text-xs font-black leading-snug text-slate-800 group-hover:text-brand transition-colors">
+                                                                        {module.title}
+                                                                    </p>
+                                                                    <p className="mt-1 truncate text-[8px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                                                                        {module.key}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Hidden Modules Drawer Accordion */}
+                                            <div className="mt-4 border-t border-slate-200/60 pt-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedHiddenRoles(prev => ({ ...prev, [roleLayout.role]: !prev[roleLayout.role] }))}
+                                                    className="flex w-full items-center justify-between rounded-xl bg-white px-3 py-2 text-left border border-slate-200/60 shadow-sm transition-all hover:bg-slate-50"
+                                                >
+                                                    <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+                                                        Hidden ({roleLayout.hidden.length})
+                                                    </span>
+                                                    <span className="text-[9px] font-black uppercase text-brand">
+                                                        {isExpanded ? 'Collapse ▲' : 'Expand ▼'}
+                                                    </span>
+                                                </button>
+
+                                                {isExpanded && roleLayout.hidden.length > 0 && (
+                                                    <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar rounded-xl border border-slate-200/60 bg-white p-2.5 shadow-inner">
+                                                        {roleLayout.hidden.map(item => (
+                                                            <div key={item.key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 border border-slate-100">
+                                                                <div className="min-w-0">
+                                                                    <p className="text-[11px] font-bold text-slate-700 truncate">{item.title}</p>
+                                                                    <p className="text-[8px] font-semibold text-slate-400 truncate">{item.reason}</p>
+                                                                </div>
+                                                                <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[8px] font-black text-slate-500 uppercase">Hidden</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </article>
+                                    );
+                                })}
                         </div>
                     </section>
-                    <p className="text-sm font-medium text-slate-500">
-                        Default access per role. Tap a cell to cycle None → Read → Edit. Per-branch overrides (Access tab) win over these defaults. Admin always has full access.
-                    </p>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                </div>
+            ) : (
+                <div className="space-y-5">
+                    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex items-start gap-3.5">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 text-brand ring-1 ring-brand/10 shadow-sm">
+                                    <Shield className="h-6 w-6" />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base font-black tracking-tight text-slate-950 uppercase">Role Access Permissions Matrix</h3>
+                                        <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-brand">Hierarchical Control</span>
+                                    </div>
+                                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500 max-w-2xl">
+                                        Configure default permissions (None, Read, Edit) for system roles across main modules and sub-tools.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Matrix Controls & Search Bar */}
+                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search modules, sub-tools or tabs..."
+                                value={matrixSearchTerm}
+                                onChange={e => setMatrixSearchTerm(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 outline-none transition-all focus:border-brand focus:bg-white"
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const allFeatures = getEnabledAccessFeatures();
+                                    const allExpanded = allFeatures.every(f => expandedMatrixModules[f.id]);
+                                    const nextState: Record<string, boolean> = {};
+                                    allFeatures.forEach(f => { nextState[f.id] = !allExpanded; });
+                                    setExpandedMatrixModules(nextState);
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
+                            >
+                                <LayoutGrid className="h-3.5 w-3.5 text-brand" />
+                                {getEnabledAccessFeatures().every(f => expandedMatrixModules[f.id]) ? 'Collapse All' : 'Expand All'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCloneRolePermissions}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
+                                title="Clone all permissions from one role to another"
+                            >
+                                <Copy className="h-3.5 w-3.5 text-brand" /> Clone Role
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleBulkPermissionAction}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors shadow-2xs"
+                                title="Set all permissions for a role to Read, Edit, or None"
+                            >
+                                <Zap className="h-3.5 w-3.5 text-amber-600" /> Bulk Action ⚡
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleExportMatrix}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
+                                title="Export current permissions matrix to JSON"
+                            >
+                                <Download className="h-3.5 w-3.5 text-slate-600" /> Export JSON
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleImportMatrix}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs"
+                                title="Import permissions matrix from JSON file"
+                            >
+                                <Upload className="h-3.5 w-3.5 text-slate-600" /> Import JSON
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Visual Legend Bar */}
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-[11px] font-bold text-slate-600 shadow-2xs">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Legend:</span>
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block w-12 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-center text-[9px] font-black text-emerald-700 uppercase">EDIT</span>
+                            <span className="text-slate-500 font-normal">Full Edit</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block w-12 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-center text-[9px] font-black text-blue-700 uppercase">READ</span>
+                            <span className="text-slate-500 font-normal">View Only</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block w-12 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center text-[9px] font-black text-slate-400 uppercase">NONE</span>
+                            <span className="text-slate-500 font-normal">Disabled</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block w-12 rounded border border-dashed border-slate-300 bg-slate-50 px-1.5 py-0.5 text-center text-[9px] font-black text-slate-500 uppercase">Def</span>
+                            <span className="text-slate-500 font-normal">Inherits Module</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="inline-block rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-center text-[9px] font-black text-emerald-700 uppercase">EDIT ★</span>
+                            <span className="text-slate-500 font-normal">Explicit Sub-Tool Override</span>
+                        </div>
+                    </div>
+
+                    {/* Matrix Table with Sticky Header & Accordion */}
+                    <div className="max-h-[640px] overflow-auto rounded-xl border border-slate-200 shadow-sm custom-scrollbar">
                         <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-slate-50 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                    <th className="px-4 py-3">Feature</th>
+                            <thead className="sticky top-0 z-20 bg-slate-900 shadow-md">
+                                <tr className="text-left text-[10px] font-black uppercase tracking-widest text-white">
+                                    <th className="px-4 py-3.5 min-w-[260px] bg-slate-900">Module / Sub-Tool & Tab</th>
                                     {ASSIGNABLE_ROLES.map(r => (
-                                        <th key={r} className="px-3 py-3 text-center">{ROLE_LABELS[r]}</th>
+                                        <th key={r} className="px-3 py-3.5 text-center bg-slate-900">{ROLE_LABELS[r]}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {FEATURE_LABELS.map(feature => (
-                                    <tr key={feature.id} className="bg-white">
-                                        <td className="px-4 py-3 font-bold text-slate-800">{feature.label}</td>
-                                        {ASSIGNABLE_ROLES.map(r => {
-                                            const level = getDefault(r, feature.id);
-                                            const key = `${r}:${feature.id}`;
-                                            return (
-                                                <td key={r} className="px-3 py-2 text-center">
-                                                    <button
-                                                        onClick={() => cycleDefault(r, feature.id)}
-                                                        disabled={r === 'admin' || r === 'manager' || savingKey === key}
-                                                        className={`w-16 rounded-md border px-2 py-1.5 text-[10px] font-black uppercase transition-colors ${accessBadgeClass(level)} ${r === 'admin' || r === 'manager' ? 'opacity-60 cursor-not-allowed' : 'hover:border-brand/40'}`}
-                                                    >
-                                                        {savingKey === key ? '…' : level}
-                                                    </button>
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
+                                {getEnabledAccessFeatures()
+                                    .filter(feature => {
+                                        const query = matrixSearchTerm.toLowerCase().trim();
+                                        if (!query) return true;
+                                        const matchesParent = feature.label.toLowerCase().includes(query) || (feature.description && feature.description.toLowerCase().includes(query));
+                                        const matchesChild = feature.subFeatures && feature.subFeatures.some(s => s.label.toLowerCase().includes(query));
+                                        return matchesParent || matchesChild;
+                                    })
+                                    .map(feature => {
+                                        const hasSubs = feature.subFeatures && feature.subFeatures.length > 0;
+                                        const query = matrixSearchTerm.toLowerCase().trim();
+                                        const isExpanded = !!query || !!expandedMatrixModules[feature.id];
+
+                                        const filteredSubs = hasSubs ? feature.subFeatures!.filter(sub => {
+                                            if (!query) return true;
+                                            const matchesParent = feature.label.toLowerCase().includes(query);
+                                            const matchesSub = sub.label.toLowerCase().includes(query);
+                                            return matchesParent || matchesSub;
+                                        }) : [];
+
+                                        return (
+                                            <React.Fragment key={feature.id}>
+                                                {/* Parent Feature Row */}
+                                                <tr className="bg-slate-50/90 font-bold text-slate-900 border-t border-slate-200/80 hover:bg-slate-100/80 transition-colors">
+                                                    <td className="px-4 py-3 cursor-pointer" onClick={() => hasSubs && setExpandedMatrixModules(prev => ({ ...prev, [feature.id]: !prev[feature.id] }))}>
+                                                        <div className="flex items-center gap-2">
+                                                            {hasSubs && (
+                                                                <span className="text-slate-400 text-xs font-black transition-transform">
+                                                                    {isExpanded ? '▼' : '▶'}
+                                                                </span>
+                                                            )}
+                                                            <span className="font-black text-slate-950 text-xs tracking-tight">{feature.label}</span>
+                                                            {hasSubs && (
+                                                                <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[9px] font-black text-slate-600 uppercase">
+                                                                    {feature.subFeatures!.length} sub-tools
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {feature.description && (
+                                                            <p className="mt-0.5 text-[10px] font-medium text-slate-400 leading-tight pl-4">{feature.description}</p>
+                                                        )}
+                                                    </td>
+                                                    {ASSIGNABLE_ROLES.map(r => {
+                                                        const level = getDefault(r, feature.id);
+                                                        const key = `${r}:${feature.id}`;
+                                                        return (
+                                                            <td key={r} className="px-3 py-2 text-center align-middle">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => cycleDefault(r, feature.id)}
+                                                                    disabled={r === 'admin' || r === 'manager' || savingKey === key}
+                                                                    className={`w-16 rounded-md border px-2 py-1.5 text-[10px] font-black uppercase transition-all shadow-2xs ${accessBadgeClass(level)} ${r === 'admin' || r === 'manager' ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105 hover:shadow-xs'}`}
+                                                                >
+                                                                    {savingKey === key ? '…' : level}
+                                                                </button>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                                {/* Sub-Features Rows (Rendered if Expanded) */}
+                                                {hasSubs && isExpanded && filteredSubs.map(sub => (
+                                                    <tr key={sub.id} className="bg-white hover:bg-slate-50/70 transition-colors border-l-4 border-l-brand/30">
+                                                        <td className="pl-9 pr-4 py-2.5 text-xs">
+                                                            <span className="font-bold text-slate-700">↳ {sub.label}</span>
+                                                        </td>
+                                                        {ASSIGNABLE_ROLES.map(r => {
+                                                            const explicitLevel = roleDefaults.find(p => p.role === r && p.featureName === sub.id)?.accessLevel;
+                                                            const parentLevel = getDefault(r, feature.id);
+                                                            const displayLevel = explicitLevel || parentLevel;
+                                                            const isInherited = !explicitLevel;
+                                                            const key = `${r}:${sub.id}`;
+                                                            return (
+                                                                <td key={r} className="px-3 py-1.5 text-center align-middle">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => cycleDefault(r, sub.id)}
+                                                                        disabled={r === 'admin' || r === 'manager' || savingKey === key}
+                                                                        className={`w-16 rounded-md border px-2 py-1 text-[9px] font-black uppercase transition-all shadow-2xs ${
+                                                                            isInherited 
+                                                                                ? 'border-dashed border-slate-300 text-slate-500 bg-slate-50/70 hover:bg-slate-100 hover:border-slate-400' 
+                                                                                : accessBadgeClass(displayLevel)
+                                                                        } ${r === 'admin' || r === 'manager' ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105'}`}
+                                                                        title={isInherited ? `Inherits from main module default (${parentLevel}). Click to override specifically for this sub-tool.` : `Explicit sub-tool override`}
+                                                                    >
+                                                                        {savingKey === key ? '…' : (isInherited ? `${displayLevel}` : `${displayLevel} ★`)}
+                                                                    </button>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
+                                        );
+                                    })}
                             </tbody>
                         </table>
                     </div>
+                </div>
+            )}
+
+            {view === 'branch_overrides' && (
+                <div className="space-y-6">
+                    {/* Header Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                                    <Building2 className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black uppercase text-slate-950">Branch-Specific Permission Overrides</h3>
+                                    <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                                        Customize specific feature permissions for an individual branch. Branch-level overrides supersede role defaults.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="w-full md:w-72">
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Select Branch</label>
+                                <select
+                                    value={selectedOverrideBranchId}
+                                    onChange={e => {
+                                        const id = e.target.value;
+                                        setSelectedOverrideBranchId(id);
+                                        loadBranchOverrides(id);
+                                    }}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-brand"
+                                >
+                                    <option value="">-- Select a Branch --</option>
+                                    {branchOptions.map(b => (
+                                        <option key={b.id} value={b.id}>{b.name} ({b.code || 'No Code'})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {selectedOverrideBranchId ? (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                <div>
+                                    <h4 className="text-sm font-black uppercase text-slate-900">
+                                        Permissions for {branchOptions.find(b => b.id === selectedOverrideBranchId)?.name}
+                                    </h4>
+                                    <p className="text-xs text-slate-500 font-medium">
+                                        Tap any badge to cycle: <span className="font-bold text-slate-400">Inherit Default</span> ➔ <span className="font-bold text-blue-600">Read</span> ➔ <span className="font-bold text-emerald-600">Edit</span> ➔ <span className="font-bold text-slate-600">None</span>
+                                    </p>
+                                </div>
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+                                    {branchOverrides.length} Active Overrides
+                                </span>
+                            </div>
+
+                            {isLoadingBranchOverrides ? (
+                                <div className="p-8 text-center">
+                                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-brand" />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {getEnabledAccessFeatures().map(feature => {
+                                        const override = branchOverrides.find(p => p.featureName === feature.id);
+                                        const currentLevel: 'inherit' | 'none' | 'read' | 'edit' = override ? override.accessLevel : 'inherit';
+                                        const isSaving = savingKey === `branch-override:${selectedOverrideBranchId}:${feature.id}`;
+
+                                        return (
+                                            <div
+                                                key={feature.id}
+                                                onClick={() => !isSaving && handleBranchOverrideToggle(selectedOverrideBranchId, feature.id, currentLevel)}
+                                                className="flex items-center justify-between p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-brand/40 transition-all cursor-pointer shadow-2xs group"
+                                            >
+                                                <div className="min-w-0 pr-2">
+                                                    <p className="text-xs font-black text-slate-800 group-hover:text-brand transition-colors truncate">
+                                                        {feature.label}
+                                                    </p>
+                                                    <p className="text-[9px] font-mono text-slate-400 uppercase font-bold truncate">
+                                                        {feature.id}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {isSaving ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                                                    ) : (
+                                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                                            currentLevel === 'edit'
+                                                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                                : currentLevel === 'read'
+                                                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                                                    : currentLevel === 'none'
+                                                                        ? 'border-slate-200 bg-slate-100 text-slate-500'
+                                                                        : 'border-dashed border-slate-300 bg-white text-slate-400'
+                                                        }`}>
+                                                            {currentLevel === 'inherit' ? 'Inherit' : currentLevel}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
+                            <Building2 className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+                            <h4 className="text-sm font-black text-slate-700 uppercase">No Branch Selected</h4>
+                            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto font-medium">
+                                Please select a branch from the dropdown above to view and customize branch-level permission overrides.
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

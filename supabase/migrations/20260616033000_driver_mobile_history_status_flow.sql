@@ -4,9 +4,7 @@
 create index if not exists delivery_orders_driver_history_idx
   on public.delivery_orders(driver_id, order_date desc, created_at desc)
   where delivery_status in ('delivered', 'cancelled');
-
 drop function if exists public.app_driver_get_order_history(integer, text);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null
@@ -75,7 +73,6 @@ begin
   limit v_limit;
 end;
 $$;
-
 create or replace function public.app_driver_transition_order(
   p_order_id uuid,
   p_next_status text,
@@ -214,11 +211,8 @@ begin
   return v_event;
 end;
 $$;
-
 revoke all on function public.app_driver_get_order_history(integer, text) from public, anon;
 revoke all on function public.app_driver_transition_order(uuid, text, text, text) from public, anon;
-
 grant execute on function public.app_driver_get_order_history(integer, text) to authenticated, service_role;
 grant execute on function public.app_driver_transition_order(uuid, text, text, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

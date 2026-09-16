@@ -12,7 +12,6 @@
 update storage.buckets
 set public = false
 where id = 'contributions';
-
 drop policy if exists "Allow Public Select" on storage.objects;
 drop policy if exists "Allow Uploads" on storage.objects;
 drop policy if exists "contributions public select" on storage.objects;
@@ -21,13 +20,11 @@ drop policy if exists "contributions authenticated read" on storage.objects;
 drop policy if exists "contributions manager insert" on storage.objects;
 drop policy if exists "contributions manager update" on storage.objects;
 drop policy if exists "contributions manager delete" on storage.objects;
-
 create policy "contributions authenticated read"
 on storage.objects
 for select
 to authenticated
 using (bucket_id = 'contributions');
-
 create policy "contributions manager insert"
 on storage.objects
 for insert
@@ -36,7 +33,6 @@ with check (
   bucket_id = 'contributions'
   and public.current_app_can_manage()
 );
-
 create policy "contributions manager update"
 on storage.objects
 for update
@@ -49,7 +45,6 @@ with check (
   bucket_id = 'contributions'
   and public.current_app_can_manage()
 );
-
 create policy "contributions manager delete"
 on storage.objects
 for delete
@@ -58,7 +53,6 @@ using (
   bucket_id = 'contributions'
   and public.current_app_can_manage()
 );
-
 -- 2. Internal helper/RPC functions: direct anon/public execute is not needed.
 -- The dynamic loop makes the migration safe for projects where a later optional
 -- function has not been created yet.
@@ -144,7 +138,6 @@ begin
     end if;
   end loop;
 end $$;
-
 -- Public customer-flow allowlist. These remain anon-callable by design:
 -- - validate_spin_token(text): customer public Spin page validates a token.
 -- - execute_spin_transaction(text, text, text, text, text): customer public Spin page executes a spin on older linked schemas.
@@ -171,5 +164,4 @@ begin
     execute format('grant execute on function %s to anon, authenticated, service_role', fn.signature);
   end loop;
 end $$;
-
 notify pgrst, 'reload schema';

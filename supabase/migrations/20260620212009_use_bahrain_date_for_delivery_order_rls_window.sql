@@ -15,7 +15,6 @@ with check (
     and order_date <= ((now() at time zone 'Asia/Bahrain')::date)
   )
 );
-
 drop policy if exists "delivery orders update" on public.delivery_orders;
 create policy "delivery orders update"
 on public.delivery_orders

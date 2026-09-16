@@ -10,20 +10,16 @@
 
 alter table public.app_user_profiles
   drop constraint if exists app_user_profiles_role_check;
-
 alter table public.app_user_profiles
   add constraint app_user_profiles_role_check
   check (role in ('admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager', 'driver'))
   not valid;
-
 alter table public.role_permissions
   drop constraint if exists role_permissions_role_check;
-
 alter table public.role_permissions
   add constraint role_permissions_role_check
   check (role in ('admin', 'branch', 'supervisor', 'warehouse', 'accounts', 'owner', 'manager', 'driver'))
   not valid;
-
 insert into public.role_permissions (role, feature_name, access_level)
 select 'driver', feature_name, 'none'
 from (
@@ -45,7 +41,6 @@ from (
     ('settings')
 ) as features(feature_name)
 on conflict (role, feature_name) do nothing;
-
 create or replace function public.ensure_app_user_profile_branch_scope()
 returns trigger
 language plpgsql
@@ -73,22 +68,18 @@ begin
   return new;
 end;
 $$;
-
 alter table public.delivery_drivers
   add column if not exists auth_user_id uuid references auth.users(id) on delete set null,
   add column if not exists is_online boolean not null default false,
   add column if not exists status_changed_at timestamptz,
   add column if not exists expo_push_token text,
   add column if not exists last_seen_at timestamptz;
-
 create unique index if not exists delivery_drivers_auth_user_id_idx
 on public.delivery_drivers(auth_user_id)
 where auth_user_id is not null;
-
 create index if not exists delivery_drivers_online_idx
 on public.delivery_drivers(is_online)
 where is_active;
-
 create or replace function public.current_delivery_driver_id()
 returns uuid
 language sql
@@ -105,10 +96,8 @@ as $$
     and p.role = 'driver'
   limit 1
 $$;
-
 revoke all on function public.current_delivery_driver_id() from public, anon;
 grant execute on function public.current_delivery_driver_id() to authenticated, service_role;
-
 -- 2. Shift and daily stats tables ---------------------------------------------------
 
 create table if not exists public.delivery_driver_shifts (
@@ -127,17 +116,13 @@ create table if not exists public.delivery_driver_shifts (
   constraint delivery_driver_shifts_duration_nonnegative
     check (duration_minutes is null or duration_minutes >= 0)
 );
-
 create unique index if not exists delivery_driver_one_active_shift_idx
 on public.delivery_driver_shifts(driver_id)
 where ended_at is null;
-
 create index if not exists delivery_driver_shifts_driver_started_idx
 on public.delivery_driver_shifts(driver_id, started_at desc);
-
 create index if not exists delivery_driver_shifts_shift_date_idx
 on public.delivery_driver_shifts(shift_date);
-
 create table if not exists public.delivery_driver_daily_stats (
   driver_id uuid not null references public.delivery_drivers(id) on delete cascade,
   stat_date date not null,
@@ -159,17 +144,14 @@ create table if not exists public.delivery_driver_daily_stats (
       and cancelled_count >= 0
     )
 );
-
 alter table public.delivery_driver_shifts enable row level security;
 alter table public.delivery_driver_daily_stats enable row level security;
-
 revoke all on public.delivery_driver_shifts from anon;
 revoke all on public.delivery_driver_daily_stats from anon;
 grant select on public.delivery_driver_shifts to authenticated;
 grant select on public.delivery_driver_daily_stats to authenticated;
 grant all on public.delivery_driver_shifts to service_role;
 grant all on public.delivery_driver_daily_stats to service_role;
-
 drop policy if exists "delivery driver shifts select" on public.delivery_driver_shifts;
 create policy "delivery driver shifts select"
 on public.delivery_driver_shifts
@@ -179,7 +161,6 @@ using (
   public.current_app_can_manage()
   or driver_id = public.current_delivery_driver_id()
 );
-
 drop policy if exists "delivery driver daily stats select" on public.delivery_driver_daily_stats;
 create policy "delivery driver daily stats select"
 on public.delivery_driver_daily_stats
@@ -189,7 +170,6 @@ using (
   public.current_app_can_manage()
   or driver_id = public.current_delivery_driver_id()
 );
-
 -- Existing table policy extension for mobile driver self-scope.
 drop policy if exists "delivery drivers select" on public.delivery_drivers;
 create policy "delivery drivers select"
@@ -201,7 +181,6 @@ using (
   or public.current_app_can_manage()
   or auth_user_id = auth.uid()
 );
-
 drop policy if exists "delivery orders select" on public.delivery_orders;
 create policy "delivery orders select"
 on public.delivery_orders
@@ -211,7 +190,6 @@ using (
   public.current_app_can_access_branch(branch_id)
   or driver_id = public.current_delivery_driver_id()
 );
-
 drop policy if exists "delivery order events select" on public.delivery_order_events;
 create policy "delivery order events select"
 on public.delivery_order_events
@@ -221,7 +199,6 @@ using (
   public.current_app_can_access_branch(branch_id)
   or driver_id = public.current_delivery_driver_id()
 );
-
 -- 3. Shared stats/session helpers ---------------------------------------------------
 
 create or replace function public.delivery_driver_recompute_daily_stats(
@@ -300,7 +277,6 @@ begin
   return v_stats;
 end;
 $$;
-
 create or replace function public.app_driver_get_session()
 returns jsonb
 language plpgsql
@@ -374,7 +350,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -431,7 +406,6 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 -- 4. Driver mobile mutation RPCs ----------------------------------------------------
 
 create or replace function public.app_driver_register_push_token(p_token text)
@@ -457,7 +431,6 @@ begin
   return true;
 end;
 $$;
-
 create or replace function public.app_driver_start_shift()
 returns jsonb
 language plpgsql
@@ -488,7 +461,6 @@ begin
   return public.app_driver_get_session();
 end;
 $$;
-
 create or replace function public.app_driver_end_shift()
 returns jsonb
 language plpgsql
@@ -536,7 +508,6 @@ begin
   return public.app_driver_get_session();
 end;
 $$;
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -651,7 +622,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.app_driver_transition_order(
   p_order_id uuid,
   p_next_status text,
@@ -790,7 +760,6 @@ begin
   return v_event;
 end;
 $$;
-
 -- 5. Web recording: create and immediately assign -------------------------------
 
 create or replace function public.app_delivery_record_and_assign_order(
@@ -944,7 +913,6 @@ begin
   return v_order.id;
 end;
 $$;
-
 create or replace function public.app_delivery_delete_recorded_order(p_order_id uuid)
 returns boolean
 language plpgsql
@@ -1005,7 +973,6 @@ begin
   return true;
 end;
 $$;
-
 -- 6. Manager/admin role RPCs with driver support ----------------------------------
 
 create or replace function public.app_admin_set_user_role(
@@ -1099,7 +1066,6 @@ begin
   end if;
 end;
 $$;
-
 revoke all on function public.delivery_driver_recompute_daily_stats(uuid, date) from public, anon, authenticated;
 revoke all on function public.app_driver_get_session() from public, anon;
 revoke all on function public.app_driver_get_active_orders() from public, anon;
@@ -1110,7 +1076,6 @@ revoke all on function public.app_driver_transition_order(uuid, text, text, text
 revoke all on function public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text) from public, anon;
 revoke all on function public.app_delivery_delete_recorded_order(uuid) from public, anon;
 revoke all on function public.app_admin_set_user_role(uuid, text, uuid, boolean) from public, anon;
-
 grant execute on function public.delivery_driver_recompute_daily_stats(uuid, date) to service_role;
 grant execute on function public.app_driver_get_session() to authenticated, service_role;
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
@@ -1121,5 +1086,4 @@ grant execute on function public.app_driver_transition_order(uuid, text, text, t
 grant execute on function public.app_delivery_record_and_assign_order(uuid, date, numeric, text, uuid, uuid, text, text) to authenticated, service_role;
 grant execute on function public.app_delivery_delete_recorded_order(uuid) to authenticated, service_role;
 grant execute on function public.app_admin_set_user_role(uuid, text, uuid, boolean) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

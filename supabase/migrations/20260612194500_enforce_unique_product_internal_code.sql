@@ -67,5 +67,4 @@ begin
 
   execute 'create unique index if not exists products_internal_code_unique_idx on public.products (internal_code)';
 end $$;
-
 notify pgrst, 'reload schema';

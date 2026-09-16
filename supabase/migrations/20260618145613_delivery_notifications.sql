@@ -15,32 +15,24 @@ create table if not exists public.delivery_notifications (
   constraint delivery_notifications_type_check
     check (notification_type in ('delivery_delivered'))
 );
-
 create unique index if not exists delivery_notifications_event_id_idx
   on public.delivery_notifications(event_id);
-
 create index if not exists delivery_notifications_created_idx
   on public.delivery_notifications(created_at desc);
-
 create index if not exists delivery_notifications_unread_created_idx
   on public.delivery_notifications(is_read, created_at desc);
-
 create index if not exists delivery_notifications_branch_created_idx
   on public.delivery_notifications(branch_id, created_at desc);
-
 alter table public.delivery_notifications enable row level security;
-
 revoke all on public.delivery_notifications from public, anon, authenticated;
 grant select on public.delivery_notifications to authenticated;
 grant all on public.delivery_notifications to service_role;
-
 drop policy if exists "delivery notifications select" on public.delivery_notifications;
 create policy "delivery notifications select"
 on public.delivery_notifications
 for select
 to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 create or replace function public.app_enqueue_delivery_delivered_notification()
 returns trigger
 language plpgsql
@@ -134,16 +126,13 @@ begin
   return new;
 end;
 $$;
-
 revoke all on function public.app_enqueue_delivery_delivered_notification() from public, anon, authenticated;
 grant execute on function public.app_enqueue_delivery_delivered_notification() to service_role;
-
 drop trigger if exists enqueue_delivery_delivered_notification on public.delivery_order_events;
 create trigger enqueue_delivery_delivered_notification
 after insert on public.delivery_order_events
 for each row
 execute function public.app_enqueue_delivery_delivered_notification();
-
 create or replace function public.app_mark_delivery_notification_read(
   p_notification_id uuid,
   p_read boolean default true
@@ -187,7 +176,6 @@ begin
   return v_notification;
 end;
 $$;
-
 create or replace function public.app_mark_all_delivery_notifications_read()
 returns integer
 language plpgsql
@@ -216,12 +204,10 @@ begin
   return v_count;
 end;
 $$;
-
 revoke all on function public.app_mark_delivery_notification_read(uuid, boolean) from public, anon;
 revoke all on function public.app_mark_all_delivery_notifications_read() from public, anon;
 grant execute on function public.app_mark_delivery_notification_read(uuid, boolean) to authenticated, service_role;
 grant execute on function public.app_mark_all_delivery_notifications_read() to authenticated, service_role;
-
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
@@ -233,5 +219,4 @@ begin
     end;
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

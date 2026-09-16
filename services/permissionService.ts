@@ -114,6 +114,20 @@ export const permissionService = {
     if (error) throw error;
     return true;
   },
+  batchUpsertRoleDefaults: async (permissions: RolePermission[]) => {
+    if (!permissions.length) return true;
+    const payload = permissions.map(p => ({
+      role: p.role,
+      feature_name: p.featureName,
+      access_level: p.accessLevel,
+      updated_at: new Date().toISOString()
+    }));
+    const { error } = await supabaseClient
+      .from('role_permissions')
+      .upsert(payload, { onConflict: 'role,feature_name' });
+    if (error) throw error;
+    return true;
+  },
   listForUser: async (userId: string): Promise<FeaturePermission[]> => {
     const { data, error } = await supabaseClient
       .from('app_user_feature_permissions')

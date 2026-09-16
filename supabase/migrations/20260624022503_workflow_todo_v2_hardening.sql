@@ -10,7 +10,6 @@
 alter table public.workflow_task_templates
   add column if not exists deleted_at timestamptz,
   add column if not exists deleted_by uuid references auth.users(id) on delete set null;
-
 do $$
 begin
   if not exists (
@@ -24,13 +23,11 @@ begin
       check (ends_on is null or ends_on >= starts_on) not valid;
   end if;
 end $$;
-
 alter table public.workflow_tasks
   add column if not exists reviewed_at timestamptz,
   add column if not exists reviewed_by uuid references auth.users(id) on delete set null,
   add column if not exists review_outcome text,
   add column if not exists dismissed_by uuid references auth.users(id) on delete set null;
-
 do $$
 begin
   if not exists (
@@ -44,7 +41,6 @@ begin
       check (review_outcome is null or review_outcome in ('approved', 'rejected'));
   end if;
 end $$;
-
 do $$
 begin
   if exists (
@@ -66,7 +62,6 @@ begin
        or (review_outcome is null and status in ('approved', 'rejected'));
   end if;
 end $$;
-
 alter table public.workflow_tasks
   add column if not exists search_vector tsvector
     generated always as (
@@ -77,7 +72,6 @@ alter table public.workflow_tasks
         coalesce(branch_name, '')
       )
     ) stored;
-
 alter table public.workflow_task_templates
   add column if not exists search_vector tsvector
     generated always as (
@@ -88,17 +82,13 @@ alter table public.workflow_task_templates
         coalesce(branch_name, '')
       )
     ) stored;
-
 create index if not exists workflow_tasks_search_vector_idx
   on public.workflow_tasks using gin(search_vector);
-
 create index if not exists workflow_task_templates_search_vector_idx
   on public.workflow_task_templates using gin(search_vector);
-
 alter table public.workflow_task_attachments
   add column if not exists scan_status text not null default 'pending',
   add column if not exists scanned_at timestamptz;
-
 do $$
 begin
   if not exists (
@@ -112,7 +102,6 @@ begin
       check (scan_status in ('pending', 'clean', 'flagged', 'skipped'));
   end if;
 end $$;
-
 create table if not exists public.workflow_task_template_events (
   id uuid primary key default gen_random_uuid(),
   template_id uuid not null references public.workflow_task_templates(id) on delete cascade,
@@ -124,24 +113,19 @@ create table if not exists public.workflow_task_template_events (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
-
 create index if not exists workflow_task_template_events_template_idx
   on public.workflow_task_template_events(template_id, created_at desc);
-
 alter table public.workflow_task_template_events enable row level security;
-
 revoke all on public.workflow_task_template_events from anon;
 revoke all on public.workflow_task_template_events from authenticated;
 grant select on public.workflow_task_template_events to authenticated;
 grant all on public.workflow_task_template_events to service_role;
-
 drop policy if exists "workflow template events select managers" on public.workflow_task_template_events;
 create policy "workflow template events select managers"
 on public.workflow_task_template_events
 for select
 to authenticated
 using (public.current_app_can_manage());
-
 create or replace function public.current_app_can_read_workflow_task(
   target_branch_id uuid,
   target_assigned_to uuid,
@@ -174,7 +158,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.current_app_can_update_workflow_task(
   target_branch_id uuid,
   target_assigned_to uuid,
@@ -206,7 +189,6 @@ as $$
     false
   )
 $$;
-
 create or replace function public.prepare_workflow_task_template_update()
 returns trigger
 language plpgsql
@@ -225,7 +207,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.soft_delete_workflow_task_template()
 returns trigger
 language plpgsql
@@ -246,12 +227,10 @@ begin
   return null;
 end;
 $$;
-
 drop trigger if exists workflow_task_templates_before_delete on public.workflow_task_templates;
 create trigger workflow_task_templates_before_delete
 before delete on public.workflow_task_templates
 for each row execute function public.soft_delete_workflow_task_template();
-
 create or replace function public.deny_workflow_task_event_mutation()
 returns trigger
 language plpgsql
@@ -262,12 +241,10 @@ begin
   raise exception 'workflow_task_events rows are immutable: insert only';
 end;
 $$;
-
 drop trigger if exists workflow_task_events_immutability_guard on public.workflow_task_events;
 create trigger workflow_task_events_immutability_guard
 before update or delete on public.workflow_task_events
 for each row execute function public.deny_workflow_task_event_mutation();
-
 create or replace function public.deny_workflow_template_event_mutation()
 returns trigger
 language plpgsql
@@ -278,12 +255,10 @@ begin
   raise exception 'workflow_task_template_events rows are immutable: insert only';
 end;
 $$;
-
 drop trigger if exists workflow_template_events_immutability_guard on public.workflow_task_template_events;
 create trigger workflow_template_events_immutability_guard
 before update or delete on public.workflow_task_template_events
 for each row execute function public.deny_workflow_template_event_mutation();
-
 create or replace function public.record_workflow_task_template_created()
 returns trigger
 language plpgsql
@@ -298,12 +273,10 @@ begin
   return null;
 end;
 $$;
-
 drop trigger if exists workflow_task_templates_after_insert on public.workflow_task_templates;
 create trigger workflow_task_templates_after_insert
 after insert on public.workflow_task_templates
 for each row execute function public.record_workflow_task_template_created();
-
 create or replace function public.record_workflow_task_template_updated()
 returns trigger
 language plpgsql
@@ -426,12 +399,10 @@ begin
   return null;
 end;
 $$;
-
 drop trigger if exists workflow_task_templates_after_update on public.workflow_task_templates;
 create trigger workflow_task_templates_after_update
 after update on public.workflow_task_templates
 for each row execute function public.record_workflow_task_template_updated();
-
 create or replace function public.advance_template_next_due_on()
 returns trigger
 language plpgsql
@@ -484,14 +455,12 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists workflow_tasks_after_insert_advance_template on public.workflow_tasks;
 create trigger workflow_tasks_after_insert_advance_template
 after insert on public.workflow_tasks
 for each row
 when (new.template_id is not null and new.template_occurrence_date is not null)
 execute function public.advance_template_next_due_on();
-
 create or replace function public.prepare_workflow_task_insert()
 returns trigger
 language plpgsql
@@ -527,7 +496,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.enforce_workflow_task_update()
 returns trigger
 language plpgsql
@@ -616,7 +584,6 @@ begin
   return new;
 end;
 $$;
-
 insert into public.workflow_task_template_events
   (template_id, event_type, created_by, new_values, note, created_at)
 select t.id,
@@ -632,7 +599,6 @@ where not exists (
   where e.template_id = t.id
     and e.event_type = 'created'
 );
-
 drop policy if exists "workflow templates select scoped" on public.workflow_task_templates;
 create policy "workflow templates select scoped"
 on public.workflow_task_templates
@@ -648,7 +614,6 @@ using (
     )
   )
 );
-
 drop policy if exists "workflow templates select deleted managers" on public.workflow_task_templates;
 create policy "workflow templates select deleted managers"
 on public.workflow_task_templates
@@ -658,7 +623,6 @@ using (
   deleted_at is not null
   and public.current_app_can_manage()
 );
-
 drop policy if exists "workflow tasks insert scoped" on public.workflow_tasks;
 create policy "workflow tasks insert scoped"
 on public.workflow_tasks
@@ -687,11 +651,9 @@ with check (
     )
   )
 );
-
 create index if not exists workflow_task_templates_active_not_deleted_idx
   on public.workflow_task_templates(is_active, next_due_on)
   where is_active and deleted_at is null;
-
 revoke all on function public.soft_delete_workflow_task_template() from public, anon;
 revoke all on function public.deny_workflow_task_event_mutation() from public, anon;
 revoke all on function public.deny_workflow_template_event_mutation() from public, anon;
@@ -701,10 +663,8 @@ revoke all on function public.advance_template_next_due_on() from public, anon;
 revoke all on function public.prepare_workflow_task_template_update() from public, anon;
 revoke all on function public.prepare_workflow_task_insert() from public, anon;
 revoke all on function public.enforce_workflow_task_update() from public, anon;
-
 revoke all on function public.current_app_can_read_workflow_task(uuid, uuid, text, uuid, text) from public, anon;
 revoke all on function public.current_app_can_update_workflow_task(uuid, uuid, text, uuid, text) from public, anon;
 grant execute on function public.current_app_can_read_workflow_task(uuid, uuid, text, uuid, text) to authenticated, service_role;
 grant execute on function public.current_app_can_update_workflow_task(uuid, uuid, text, uuid, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

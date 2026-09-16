@@ -17,27 +17,20 @@ create table if not exists public.delivery_pickup_batches (
   constraint delivery_pickup_batches_order_count_check
     check (order_count >= 0)
 );
-
 alter table public.delivery_orders
   add column if not exists pickup_batch_id uuid references public.delivery_pickup_batches(id) on delete set null,
   add column if not exists batch_delivery_sequence integer;
-
 create index if not exists delivery_pickup_batches_driver_started_idx
   on public.delivery_pickup_batches(driver_id, started_at desc);
-
 create index if not exists delivery_pickup_batches_branch_started_idx
   on public.delivery_pickup_batches(branch_id, started_at desc);
-
 create index if not exists delivery_orders_pickup_batch_idx
   on public.delivery_orders(pickup_batch_id)
   where pickup_batch_id is not null;
-
 alter table public.delivery_pickup_batches enable row level security;
-
 revoke all on public.delivery_pickup_batches from public, anon, authenticated;
 grant select on public.delivery_pickup_batches to authenticated;
 grant all on public.delivery_pickup_batches to service_role;
-
 drop policy if exists "delivery pickup batches select" on public.delivery_pickup_batches;
 create policy "delivery pickup batches select"
 on public.delivery_pickup_batches
@@ -47,7 +40,6 @@ using (
   public.current_app_can_access_branch(branch_id)
   or driver_id = public.current_delivery_driver_id()
 );
-
 create or replace function public.delivery_orders_guard_branch_update()
 returns trigger
 language plpgsql
@@ -164,9 +156,7 @@ begin
   return new;
 end;
 $$;
-
 drop function if exists public.app_driver_get_active_orders();
-
 create function public.app_driver_get_active_orders()
 returns table (
   id uuid,
@@ -227,9 +217,7 @@ begin
   order by coalesce(o.assigned_at, o.created_at), o.created_at;
 end;
 $$;
-
 drop function if exists public.app_driver_get_order_history(integer, text);
-
 create function public.app_driver_get_order_history(
   p_limit integer default 50,
   p_status text default null
@@ -302,7 +290,6 @@ begin
   limit v_limit;
 end;
 $$;
-
 create or replace function public.app_driver_pickup_orders(
   p_order_ids uuid[],
   p_idempotency_key text default null
@@ -471,7 +458,6 @@ begin
   return v_batch_id;
 end;
 $$;
-
 create or replace function public.app_driver_transition_order(
   p_order_id uuid,
   p_next_status text,
@@ -648,15 +634,12 @@ begin
   return v_event;
 end;
 $$;
-
 revoke all on function public.app_driver_get_active_orders() from public, anon;
 revoke all on function public.app_driver_get_order_history(integer, text) from public, anon;
 revoke all on function public.app_driver_pickup_orders(uuid[], text) from public, anon;
 revoke all on function public.app_driver_transition_order(uuid, text, text, text) from public, anon;
-
 grant execute on function public.app_driver_get_active_orders() to authenticated, service_role;
 grant execute on function public.app_driver_get_order_history(integer, text) to authenticated, service_role;
 grant execute on function public.app_driver_pickup_orders(uuid[], text) to authenticated, service_role;
 grant execute on function public.app_driver_transition_order(uuid, text, text, text) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

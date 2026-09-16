@@ -23,12 +23,10 @@ begin
     raise exception 'Refusing to drop module_settings date columns because one or more values are non-null';
   end if;
 end $$;
-
 alter table public.delivery_orders
   drop column if exists order_value,
   drop column if exists payment_method,
   drop column if exists transfer_time;
-
 alter table public.module_settings
   drop column if exists open_date,
   drop column if exists close_date;

@@ -3,7 +3,6 @@
 
 comment on column public.delivery_drivers.driver_code is
   'Human-readable delivery driver ID assigned automatically on registration, e.g. D001.';
-
 do $$
 begin
   create temp table delivery_driver_code_rewrites on commit drop as
@@ -38,7 +37,6 @@ begin
   from delivery_driver_code_rewrites r
   where d.id = r.id;
 end $$;
-
 create or replace function public.assign_delivery_driver_code()
 returns trigger
 language plpgsql
@@ -62,7 +60,6 @@ begin
   return new;
 end;
 $$;
-
 do $$
 declare
   max_code bigint;
@@ -78,5 +75,4 @@ begin
     perform setval('public.delivery_driver_code_seq', 1, false);
   end if;
 end $$;
-
 notify pgrst, 'reload schema';

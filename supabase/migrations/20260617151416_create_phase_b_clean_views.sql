@@ -58,7 +58,6 @@ left join public.branches tf
 left join public.branches tt
   on tt.id = o.transfer_to_branch_id
 where o.deleted_at is null;
-
 create or replace view public.delivery_drivers_clean
 with (security_invoker = true)
 as
@@ -73,7 +72,6 @@ select
   d.created_at,
   d.updated_at
 from public.delivery_drivers d;
-
 create or replace view public.branches_clean
 with (security_invoker = true)
 as
@@ -104,22 +102,18 @@ left join public.branch_delivery_profiles p
   on p.branch_id = b.id
 where b.role = 'branch'
   and public.current_app_can_access_branch(b.id);
-
 revoke all on table public.delivery_orders_clean from public, anon, authenticated;
 revoke all on table public.delivery_drivers_clean from public, anon, authenticated;
 revoke all on table public.branches_clean from public, anon, authenticated;
-
 grant select on table public.delivery_orders_clean to authenticated;
 grant select on table public.delivery_drivers_clean to authenticated;
 grant select on table public.branches_clean to authenticated;
-
 comment on view public.delivery_orders_clean is
   'Phase B read-only clean delivery order view. Uses security_invoker=true and hides legacy order_value/payment_method/order_type/business_date/driver_name text fields.';
 comment on view public.delivery_drivers_clean is
   'Phase B read-only clean driver directory view. Uses security_invoker=true and hides auth_user_id, expo_push_token, phone, and notes.';
 comment on view public.branches_clean is
   'Phase B read-only clean operational branch view. Uses security_invoker=true and hides contact, regulatory, manager, notes, and credential fields.';
-
 -- Safe validation after explicit approval/apply:
 -- select count(*) from public.delivery_orders_clean;
 -- select count(*) from public.delivery_drivers_clean;
@@ -128,4 +122,4 @@ comment on view public.branches_clean is
 --        payment_type, block_number, area_name, governorate, driver_code
 -- from public.delivery_orders_clean
 -- order by created_at desc
--- limit 20;
+-- limit 20;;

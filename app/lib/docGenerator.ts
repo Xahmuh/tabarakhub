@@ -252,7 +252,7 @@ export const generateDocumentBlob = async (req: HRRequest, typeOverride?: string
             new Paragraph({
                 children: [
                     new TextRun({ text: "This is to certify that " }),
-                    new TextRun({ text: `Mr./Ms. ${employeeName}`, bold: true }),
+                    new TextRun({ text: employeeName, bold: true }),
                     new TextRun({ text: `, holding CPR Number ` }),
                     new TextRun({ text: req.cpr, bold: true }),
                     new TextRun({ text: `, is an employee of Tabarak Group.` }),
@@ -295,13 +295,14 @@ export const generateDocumentBlob = async (req: HRRequest, typeOverride?: string
                             new TableCell({
                                 children: [
                                     new Paragraph({ text: "______________________", alignment: AlignmentType.CENTER }),
-                                    new Paragraph({ text: "HR Manager", alignment: AlignmentType.CENTER, run: { bold: true } }),
+                                    new Paragraph({ text: "Dr. Fathy Saad Amin", alignment: AlignmentType.CENTER, run: { bold: true } }),
+                                    new Paragraph({ text: "CEO - المدير التنفيذي", alignment: AlignmentType.CENTER, run: { bold: true } }),
                                 ],
                             }),
                             new TableCell({
                                 children: [
                                     new Paragraph({ text: "______________________", alignment: AlignmentType.CENTER }),
-                                    new Paragraph({ text: "Official Stamp", alignment: AlignmentType.CENTER, run: { bold: true } }),
+                                    new Paragraph({ text: "Official Corporate Seal", alignment: AlignmentType.CENTER, run: { bold: true } }),
                                 ],
                             }),
                         ],

@@ -5,7 +5,6 @@ create table if not exists public.benefit_pay_daily_sequences (
   updated_at timestamptz not null default now(),
   primary key (branch_id, transfer_date)
 );
-
 create table if not exists public.benefit_pay_transfers (
   id uuid primary key default gen_random_uuid(),
   serial_number text not null unique,
@@ -30,19 +29,14 @@ create table if not exists public.benefit_pay_transfers (
       or (source = 'manual' and delivery_order_id is null)
     )
 );
-
 create unique index if not exists benefit_pay_transfers_branch_date_sequence_uidx
   on public.benefit_pay_transfers(branch_id, transfer_date, sequence_no);
-
 create index if not exists benefit_pay_transfers_branch_date_idx
   on public.benefit_pay_transfers(branch_id, transfer_date desc, transfer_time desc);
-
 create index if not exists benefit_pay_transfers_type_date_idx
   on public.benefit_pay_transfers(transfer_type, transfer_date desc);
-
 comment on table public.benefit_pay_transfers is
   'Benefit Pay Ledger: branch transfer records plus delivery BP auto-sync rows.';
-
 create or replace function public.benefit_pay_next_sequence(
   p_branch_id uuid,
   p_transfer_date date
@@ -76,7 +70,6 @@ begin
   return v_next;
 end;
 $$;
-
 create or replace function public.benefit_pay_assign_serial()
 returns trigger
 language plpgsql
@@ -143,13 +136,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists benefit_pay_assign_serial_trigger on public.benefit_pay_transfers;
 create trigger benefit_pay_assign_serial_trigger
 before insert or update of branch_id, transfer_date, transfer_type, value_bhd, pharmacist_id, pharmacist_name, notes
 on public.benefit_pay_transfers
 for each row execute function public.benefit_pay_assign_serial();
-
 create or replace function public.benefit_pay_sync_delivery_order()
 returns trigger
 language plpgsql
@@ -245,32 +236,26 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists benefit_pay_sync_delivery_order_trigger on public.delivery_orders;
 create trigger benefit_pay_sync_delivery_order_trigger
 after insert or update of branch_id, order_date, order_kind, payment_type, benefit_pay_received_time, amount_received_bhd, value_bhd, delivery_status, deleted_at, pharmacist_id, pharmacist_name, order_number
 or delete on public.delivery_orders
 for each row execute function public.benefit_pay_sync_delivery_order();
-
 alter table public.benefit_pay_daily_sequences enable row level security;
 alter table public.benefit_pay_transfers enable row level security;
-
 revoke all on public.benefit_pay_daily_sequences from anon;
 revoke all on public.benefit_pay_daily_sequences from authenticated;
 grant all on public.benefit_pay_daily_sequences to service_role;
-
 revoke all on public.benefit_pay_transfers from anon;
 revoke all on public.benefit_pay_transfers from authenticated;
 grant select, insert, update, delete on public.benefit_pay_transfers to authenticated;
 grant all on public.benefit_pay_transfers to service_role;
-
 drop policy if exists "benefit pay transfers select scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers select scoped"
 on public.benefit_pay_transfers
 for select
 to authenticated
 using (public.current_app_can_access_branch(branch_id));
-
 drop policy if exists "benefit pay transfers insert scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers insert scoped"
 on public.benefit_pay_transfers
@@ -283,7 +268,6 @@ with check (
     or branch_id = public.current_app_branch_id()
   )
 );
-
 drop policy if exists "benefit pay transfers update scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers update scoped"
 on public.benefit_pay_transfers
@@ -297,7 +281,6 @@ with check (
   public.current_app_can_manage()
   or (source = 'manual' and branch_id = public.current_app_branch_id())
 );
-
 drop policy if exists "benefit pay transfers delete scoped" on public.benefit_pay_transfers;
 create policy "benefit pay transfers delete scoped"
 on public.benefit_pay_transfers
@@ -307,12 +290,10 @@ using (
   public.current_app_can_manage()
   or (source = 'manual' and branch_id = public.current_app_branch_id())
 );
-
 revoke all on function public.benefit_pay_next_sequence(uuid, date) from public, anon, authenticated;
 revoke all on function public.benefit_pay_assign_serial() from public, anon, authenticated;
 revoke all on function public.benefit_pay_sync_delivery_order() from public, anon, authenticated;
 grant execute on function public.benefit_pay_next_sequence(uuid, date) to service_role;
 grant execute on function public.benefit_pay_assign_serial() to service_role;
 grant execute on function public.benefit_pay_sync_delivery_order() to service_role;
-
 notify pgrst, 'reload schema';

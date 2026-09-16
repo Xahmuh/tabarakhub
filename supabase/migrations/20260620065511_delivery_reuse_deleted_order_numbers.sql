@@ -80,7 +80,6 @@ begin
   return public.delivery_format_order_number(p_branch_id, v_order_date, v_sequence);
 end;
 $$;
-
 create or replace function public.delivery_next_talabat_order_number(
   p_branch_id uuid,
   p_order_date date
@@ -159,7 +158,6 @@ begin
   return public.delivery_format_talabat_order_number(p_branch_id, v_order_date, v_sequence);
 end;
 $$;
-
 create or replace function public.delivery_next_internal_transfer_number(
   p_from_branch_id uuid,
   p_to_branch_id uuid,
@@ -254,13 +252,10 @@ begin
   );
 end;
 $$;
-
 revoke all on function public.delivery_next_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_next_talabat_order_number(uuid, date) from public, anon, authenticated;
 revoke all on function public.delivery_next_internal_transfer_number(uuid, uuid, date) from public, anon, authenticated;
-
 grant execute on function public.delivery_next_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_next_talabat_order_number(uuid, date) to service_role;
 grant execute on function public.delivery_next_internal_transfer_number(uuid, uuid, date) to service_role;
-
 notify pgrst, 'reload schema';

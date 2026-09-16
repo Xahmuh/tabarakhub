@@ -10,20 +10,16 @@ create table if not exists public.role_permissions (
   updated_by uuid references auth.users(id) on delete set null,
   primary key (role, feature_name)
 );
-
 alter table public.role_permissions enable row level security;
-
 revoke all on public.role_permissions from anon;
 grant select, insert, update, delete on public.role_permissions to authenticated;
 grant all on public.role_permissions to service_role;
-
 drop policy if exists "role permissions select" on public.role_permissions;
 create policy "role permissions select"
 on public.role_permissions
 for select
 to authenticated
 using (true);
-
 drop policy if exists "role permissions manage" on public.role_permissions;
 create policy "role permissions manage"
 on public.role_permissions
@@ -31,7 +27,6 @@ for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 insert into public.role_permissions (role, feature_name, access_level) values
   ('branch', 'lost_sales', 'edit'),
   ('branch', 'shortages', 'edit'),
@@ -106,5 +101,4 @@ insert into public.role_permissions (role, feature_name, access_level) values
 on conflict (role, feature_name) do update
 set access_level = excluded.access_level,
     updated_at = now();
-
 notify pgrst, 'reload schema';

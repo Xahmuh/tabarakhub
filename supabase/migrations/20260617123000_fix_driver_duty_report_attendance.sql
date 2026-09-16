@@ -1,7 +1,6 @@
 -- Fix duty report RPC ambiguity and expose complete attendance fields.
 
 drop function if exists public.app_driver_get_duty_report(date, date, uuid);
-
 create function public.app_driver_get_duty_report(
   p_date_from date default current_date,
   p_date_to date default current_date,
@@ -211,8 +210,6 @@ begin
   order by rk.key_stat_date desc, ds.scoped_driver_name;
 end;
 $$;
-
 revoke all on function public.app_driver_get_duty_report(date, date, uuid) from public, anon;
 grant execute on function public.app_driver_get_duty_report(date, date, uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

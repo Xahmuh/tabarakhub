@@ -67,8 +67,6 @@ begin
   limit 1;
 end;
 $$;
-
 revoke all on function public.app_driver_get_nearby_start_branch(numeric, numeric, numeric) from public, anon;
 grant execute on function public.app_driver_get_nearby_start_branch(numeric, numeric, numeric) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

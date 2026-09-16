@@ -11,25 +11,20 @@ create table if not exists public.delivery_mobile_app_settings (
   updated_at timestamptz not null default now(),
   constraint delivery_mobile_app_settings_singleton_check check (id = 'global')
 );
-
 insert into public.delivery_mobile_app_settings (id)
 values ('global')
 on conflict (id) do nothing;
-
 alter table public.delivery_mobile_app_settings enable row level security;
-
 revoke all on public.delivery_mobile_app_settings from public, anon, authenticated;
 grant select on public.delivery_mobile_app_settings to anon, authenticated;
 grant insert, update on public.delivery_mobile_app_settings to authenticated;
 grant all on public.delivery_mobile_app_settings to service_role;
-
 drop policy if exists "delivery mobile app settings public read" on public.delivery_mobile_app_settings;
 create policy "delivery mobile app settings public read"
 on public.delivery_mobile_app_settings
 for select
 to anon, authenticated
 using (true);
-
 drop policy if exists "delivery mobile app settings manage" on public.delivery_mobile_app_settings;
 create policy "delivery mobile app settings manage"
 on public.delivery_mobile_app_settings
@@ -37,7 +32,6 @@ for all
 to authenticated
 using (public.current_app_can_manage())
 with check (public.current_app_can_manage());
-
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'driver-mobile-assets',
@@ -51,14 +45,12 @@ set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
 drop policy if exists "driver mobile assets public read" on storage.objects;
 create policy "driver mobile assets public read"
 on storage.objects
 for select
 to anon, authenticated
 using (bucket_id = 'driver-mobile-assets');
-
 drop policy if exists "driver mobile assets manager insert" on storage.objects;
 create policy "driver mobile assets manager insert"
 on storage.objects
@@ -68,7 +60,6 @@ with check (
   bucket_id = 'driver-mobile-assets'
   and public.current_app_can_manage()
 );
-
 drop policy if exists "driver mobile assets manager update" on storage.objects;
 create policy "driver mobile assets manager update"
 on storage.objects
@@ -82,7 +73,6 @@ with check (
   bucket_id = 'driver-mobile-assets'
   and public.current_app_can_manage()
 );
-
 drop policy if exists "driver mobile assets manager delete" on storage.objects;
 create policy "driver mobile assets manager delete"
 on storage.objects

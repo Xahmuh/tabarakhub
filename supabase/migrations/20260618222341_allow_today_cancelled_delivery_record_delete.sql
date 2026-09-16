@@ -74,8 +74,6 @@ begin
   return true;
 end;
 $$;
-
 revoke all on function public.app_delivery_delete_recorded_order(uuid) from public, anon;
 grant execute on function public.app_delivery_delete_recorded_order(uuid) to authenticated, service_role;
-
 notify pgrst, 'reload schema';

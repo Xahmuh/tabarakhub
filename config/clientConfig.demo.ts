@@ -37,6 +37,10 @@ export const demoClientConfig: ClientConfig = {
     benefitPayLedger: true,
     deliveryCoverageAdvanced: true,
     aiInsights: false,
+    operationalExpenses: true,
+    operationalRenewals: true,
+    dutyScheduler: true,
+    leaveManagement: true,
   },
 };
 

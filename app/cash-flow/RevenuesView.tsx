@@ -5,7 +5,7 @@ import {
     Plus,
     Search,
     Calendar,
-    DollarSign,
+    Banknote,
     CreditCard,
     ArrowRight,
     Target,
@@ -180,7 +180,7 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                                         onClick={handleAddActual}
                                         className="btn-primary w-full text-xs uppercase tracking-widest"
                                     >
-                                        <DollarSign className="w-5 h-5" />
+                                        <Banknote className="w-5 h-5" />
                                         <span>Log Daily Closing</span>
                                     </button>
                                 </div>
@@ -215,7 +215,7 @@ export const RevenuesView: React.FC<RevenuesViewProps> = ({ actual, expected, on
                             <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                                 <div className="flex items-center space-x-3">
                                     <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white shadow-sm">
-                                        <DollarSign className="w-4 h-4" />
+                                        <Banknote className="w-4 h-4" />
                                     </div>
                                     <span className="text-[10px] font-black text-slate-900 uppercase">Cash Reserve</span>
                                 </div>

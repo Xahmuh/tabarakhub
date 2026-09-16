@@ -10,9 +10,7 @@ create table if not exists public.app_user_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 alter table public.app_user_profiles alter column branch_id drop not null;
-
 do $$
 begin
   if not exists (
@@ -26,9 +24,7 @@ begin
       check (role <> 'branch' or branch_id is not null);
   end if;
 end $$;
-
 alter table public.app_user_profiles enable row level security;
-
 do $$
 begin
   if to_regclass('public.branches') is not null
@@ -61,9 +57,7 @@ begin
           captured_at = excluded.captured_at;
   end if;
 end $$;
-
 alter table if exists public.branches drop column if exists password;
-
 create or replace function public.current_app_role()
 returns text
 language sql
@@ -77,7 +71,6 @@ as $$
     and p.is_active
   limit 1
 $$;
-
 create or replace function public.current_app_branch_id()
 returns uuid
 language sql
@@ -91,7 +84,6 @@ as $$
     and p.is_active
   limit 1
 $$;
-
 create or replace function public.current_app_can_manage()
 returns boolean
 language sql
@@ -101,7 +93,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager'), false)
 $$;
-
 create or replace function public.current_app_is_admin()
 returns boolean
 language sql
@@ -111,7 +102,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() = 'admin', false)
 $$;
-
 create or replace function public.current_app_can_read_all()
 returns boolean
 language sql
@@ -121,7 +111,6 @@ set search_path = public
 as $$
   select coalesce(public.current_app_role() in ('admin', 'manager', 'accounts'), false)
 $$;
-
 create or replace function public.current_app_can_access_branch(target_branch_id uuid)
 returns boolean
 language sql
@@ -135,7 +124,6 @@ as $$
     false
   )
 $$;
-
 revoke all on function public.current_app_role() from public;
 revoke all on function public.current_app_branch_id() from public;
 revoke all on function public.current_app_can_manage() from public;
@@ -148,7 +136,6 @@ grant execute on function public.current_app_can_manage() to authenticated, serv
 grant execute on function public.current_app_is_admin() to authenticated, service_role;
 grant execute on function public.current_app_can_read_all() to authenticated, service_role;
 grant execute on function public.current_app_can_access_branch(uuid) to authenticated, service_role;
-
 drop policy if exists "app profiles select" on public.app_user_profiles;
 drop policy if exists "app profiles manage" on public.app_user_profiles;
 create policy "app profiles select"
@@ -156,18 +143,15 @@ on public.app_user_profiles
 for select
 to authenticated
 using (user_id = auth.uid() or public.current_app_can_manage());
-
 create policy "app profiles manage"
 on public.app_user_profiles
 for all
 to authenticated
 using (public.current_app_is_admin())
 with check (public.current_app_is_admin());
-
 grant select on public.app_user_profiles to authenticated;
 revoke insert, update, delete on public.app_user_profiles from authenticated;
 grant all on public.app_user_profiles to service_role;
-
 do $$
 declare
   table_name text;
@@ -403,7 +387,6 @@ begin
     end if;
   end loop;
 end $$;
-
 do $$
 begin
   if to_regclass('public.lost_sales_excel_export') is not null then
@@ -415,5 +398,4 @@ begin
     grant select on public.shortages_excel_export to authenticated;
   end if;
 end $$;
-
 notify pgrst, 'reload schema';
