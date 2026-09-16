@@ -84,9 +84,9 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
         enabledModuleCount += 1;
     }
 
-    // 8. System Settings + Access Control
+    // 8. Unified Control Center
     if (isModuleEnabled('settings') && (isManager || canApproveBranchLogins)) {
-        enabledModuleCount += 2;
+        enabledModuleCount += 1;
     }
 
     if (!isOwner && isModuleEnabled('qualityFeedback') && checkPermission('quality_feedback')) {

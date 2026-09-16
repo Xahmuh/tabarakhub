@@ -13,3 +13,5 @@ export * from './ProductSearch';
 export * from './RangeDatePicker';
 export * from './PaginationControls';
 export * from './TimeInput24';
+export { BahrainLicensePlate, FleetMotorcyclePlate, FleetMotorcyclesBar } from '../delivery/components/BahrainLicensePlate';
+export type { BahrainLicensePlateProps } from '../delivery/components/BahrainLicensePlate';

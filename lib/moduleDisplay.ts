@@ -15,8 +15,7 @@ export const DEFAULT_MODULE_DISPLAY_ITEMS: ModuleDisplayItemSetting[] = [
   { key: 'cash-flow', order: 80, badge: 'Finance', badgeStyle: 'hidden' },
   { key: 'cash-tracker', order: 90, badge: 'Finance', badgeStyle: 'hidden' },
   { key: 'corporate-codex', order: 100, badge: 'Knowledge', badgeStyle: 'hidden' },
-  { key: 'system-settings', order: 110, badge: 'System', badgeStyle: 'hidden' },
-  { key: 'access-control', order: 120, badge: 'Security', badgeStyle: 'hidden' },
+  { key: 'settings', order: 110, badge: 'Admin Suite', badgeStyle: 'hidden' },
   { key: 'spin-win', order: 130, badge: 'Rewards', badgeStyle: 'hidden' },
   { key: 'feedback-form', order: 140, badge: 'Feedback', badgeStyle: 'hidden' },
   { key: 'feedback-admin', order: 150, badge: 'Analytics', badgeStyle: 'hidden' },
@@ -40,9 +39,9 @@ export const MODULE_DISPLAY_LABELS: Record<string, string> = {
   'cash-flow': 'Cash Flow Planner',
   'cash-tracker': 'Branch Cash Tracker',
   'corporate-codex': 'Corporate Codex',
-  settings: 'Settings & Permissions',
-  'system-settings': 'System Settings',
-  'access-control': 'Access Control',
+  settings: 'Unified Control Center',
+  'system-settings': 'System Settings (Legacy)',
+  'access-control': 'Access Control (Legacy)',
   'spin-win': 'Spin & Win',
   'feedback-form': 'QA Insights',
   'feedback-admin': 'Feedback Admin',
@@ -68,7 +67,7 @@ export const normalizeModuleDisplaySettings = (value: unknown): ModuleDisplaySet
   const inputByKey = new Map(inputItems.map(item => [String(item?.key || ''), item]));
 
   const items = DEFAULT_MODULE_DISPLAY_ITEMS.map(defaultItem => {
-    const input = inputByKey.get(defaultItem.key);
+    const input = inputByKey.get(defaultItem.key) || (defaultItem.key === 'settings' ? (inputByKey.get('system-settings') || inputByKey.get('access-control')) : undefined);
     const parsedOrder = Number(input?.order);
 
     return {

@@ -7,6 +7,7 @@ import { ROLE_LABELS } from '../../lib/access';
 import { getEnabledAccessFeatures } from '../../lib/moduleRegistry';
 import { MODULE_DISPLAY_LABELS, normalizeModuleDisplaySettings } from '../../lib/moduleDisplay';
 import { isModuleEnabled } from '../../config/clientConfig';
+import { BahrainLicensePlate } from '../delivery/components/BahrainLicensePlate';
 
 const ASSIGNABLE_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver'];
 const MODULE_LAYOUT_ROLES: Role[] = ['admin', 'owner', 'supervisor', 'warehouse', 'accounts', 'branch'];
@@ -1541,15 +1542,22 @@ export const AccessControlSection: React.FC<{
 
                                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                                             <div className="flex items-center justify-between gap-3">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drivers</p>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Drivers & Fleet Plates</p>
                                                 <Bike className="h-4 w-4 text-cyan-700" />
                                             </div>
                                             <p className="mt-1 text-lg font-black text-slate-900 tabular-nums">{assignedDrivers.length}</p>
-                                            <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-5 text-slate-400" title={assignedDrivers.map(driver => driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name).join(', ')}>
-                                                {assignedDrivers.length > 0
-                                                    ? assignedDrivers.slice(0, 4).map(driver => driver.driverCode || driver.name).join(', ')
-                                                    : 'No drivers assigned'}
-                                            </p>
+                                            {assignedDrivers.length > 0 ? (
+                                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                                    {assignedDrivers.map(d => (
+                                                        <div key={d.id} className="flex items-center gap-1 rounded bg-white p-1 border border-slate-200 shadow-2xs">
+                                                            <BahrainLicensePlate plateNumber={d.notes?.trim() || '39717'} size="xs" />
+                                                            <span className="text-[10px] font-bold text-slate-800">{d.name}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="mt-1 text-[10px] font-bold leading-5 text-slate-400">No drivers assigned</p>
+                                            )}
                                         </div>
                                     </div>
 

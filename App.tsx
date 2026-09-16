@@ -13,7 +13,7 @@ import { deliveryNotificationService } from './services/deliveryNotificationServ
 import {
   LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage,
   HRRequestsSection, WorkforcePage, SuitePage,
-  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
+  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, ControlCenter, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
   CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, DailyCommandCenter, MaintenancePage,
   FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, WorkflowTodoPage, DeliveryHub, BenefitPayLedger, DeliveryNotificationsPage, OwnerDashboardPage
 } from './app/index';
@@ -989,11 +989,11 @@ const App: React.FC = () => {
             onBack={() => handleTabChange('selector')}
           />
         ) : activeTab === 'settings' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
+          <ControlCenter onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
         ) : activeTab === 'system-settings' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="system" />
+          <ControlCenter onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="system" />
         ) : activeTab === 'access-control' ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="access" />
+          <ControlCenter onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} mode="access" />
         ) : activeTab === 'feedback-form' ? (
           <FeedbackForm onBack={() => handleTabChange('selector')} />
         ) : activeTab === 'feedback-admin' ? (

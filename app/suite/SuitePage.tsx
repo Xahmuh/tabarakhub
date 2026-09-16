@@ -346,24 +346,15 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'knowledge'
     },
     {
-      key: 'system-settings',
+      key: 'settings',
       visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
-      title: 'System Settings',
-      description: 'Maintenance mode, branding, module layout, delivery zones, and branch operating setup.',
+      title: 'Unified Control Center',
+      description: 'System settings, user accounts, role matrix, branch infrastructure, and granular sub-tools.',
       icon: <Settings2 className="h-5 w-5" />,
-      onClick: () => handleTabChange('system-settings'),
+      onClick: () => handleTabChange('settings'),
       isPending,
-      badge: 'System'
-    },
-    {
-      key: 'access-control',
-      visible: isModuleEnabled('settings') && ((isManager && checkPermission('settings', 'edit')) || canOpenApprovalQueue),
-      title: 'Access Control',
-      description: 'Users, roles, read/edit module permissions, people records, and login approvals.',
-      icon: <ShieldCheck className="h-5 w-5" />,
-      onClick: () => handleTabChange('access-control'),
-      isPending,
-      badge: 'Security'
+      badge: 'Admin Suite',
+      tone: 'feature'
     },
     {
       key: 'spin-win',

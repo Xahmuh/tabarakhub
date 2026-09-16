@@ -6,6 +6,7 @@ import { SearchableSelect } from './components/SearchableSelect';
 import { toDateKey } from './utils';
 import { exportDriverDutyToExcel, printDriverDutyReport } from './exports';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
+import { BahrainLicensePlate } from './components/BahrainLicensePlate';
 
 interface DriverDutyReportProps {
   selfOnly?: boolean;
@@ -436,12 +437,17 @@ export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = f
       </div>
 
       <section className="operational-panel overflow-hidden">
-        <div className="flex flex-col gap-2 border-b border-slate-100 p-4 md:flex-row md:items-center md:justify-between md:p-5">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-center md:justify-between md:p-5">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">Monthly archive</p>
             <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">{formatMonthLabel(range.from)}</h3>
           </div>
-          <p className="text-xs font-bold text-slate-500">{exportDriverLabel} - {range.from} to {range.to}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {selectedDriver && (
+              <BahrainLicensePlate plateNumber={selectedDriver.notes || '39717'} size="xs" />
+            )}
+            <p className="text-xs font-bold text-slate-500">{exportDriverLabel} — {range.from} to {range.to}</p>
+          </div>
         </div>
 
         {isLoading ? (

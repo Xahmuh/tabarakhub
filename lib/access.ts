@@ -29,31 +29,75 @@ export const isIdentityRole = (role?: Role | string | null): boolean => role !==
 
 export type AccessLevel = 'edit' | 'read' | 'none';
 
+export type PermissionLike = {
+  featureName: string;
+  accessLevel: 'read' | 'edit' | 'none';
+  role?: Role;
+};
+
 /**
- * Effective feature access: branch/user override -> role default -> none.
- * Admins always have edit access.
+ * Effective feature & sub-tool access with 4-tier zero-conflict resolution:
+ * 1. Explicit User/Branch Sub-Feature Override  (e.g., user: 'operational_expenses:new-expense' => 'none')
+ * 2. Explicit User/Branch Module Override       (e.g., user: 'operational_expenses' => 'edit')
+ * 3. Standard Role Sub-Feature Default          (e.g., role: 'branch' + 'operational_expenses:new-expense')
+ * 4. Standard Role Module Default               (e.g., role: 'branch' + 'operational_expenses')
+ *
+ * Admins always have edit access. Owner role 'edit' permissions are capped at 'read'.
  */
 export const resolveAccessLevel = (
   feature: string,
   role: Role | undefined,
-  overrides: FeaturePermission[] | undefined,
-  roleDefaults: RolePermission[] | undefined
+  overrides: PermissionLike[] | undefined,
+  roleDefaults: (RolePermission | PermissionLike)[] | undefined
 ): AccessLevel => {
   if (isAdminRole(role)) return 'edit';
-  const override = overrides?.find(p => p.featureName === feature);
-  if (override) return role === 'owner' && override.accessLevel === 'edit' ? 'read' : override.accessLevel;
-  const roleDefault = roleDefaults?.find(p => p.featureName === feature);
-  if (roleDefault) return role === 'owner' && roleDefault.accessLevel === 'edit' ? 'read' : roleDefault.accessLevel;
+
+  const isSubFeature = feature.includes(':');
+  const parentModule = isSubFeature ? feature.split(':')[0] : feature;
+
+  // 1. Explicit User/Branch Sub-Feature Override
+  if (isSubFeature && overrides) {
+    const subOverride = overrides.find(p => p.featureName === feature);
+    if (subOverride && subOverride.accessLevel) {
+      return role === 'owner' && subOverride.accessLevel === 'edit' ? 'read' : subOverride.accessLevel;
+    }
+  }
+
+  // 2. Explicit User/Branch Module Override
+  if (overrides) {
+    const moduleOverride = overrides.find(p => p.featureName === parentModule);
+    if (moduleOverride && moduleOverride.accessLevel) {
+      return role === 'owner' && moduleOverride.accessLevel === 'edit' ? 'read' : moduleOverride.accessLevel;
+    }
+  }
+
+  // 3. Standard Role Sub-Feature Default
+  if (isSubFeature && roleDefaults) {
+    const roleSubDefault = roleDefaults.find(p => p.featureName === feature && (p.role ? p.role === role : true));
+    if (roleSubDefault && roleSubDefault.accessLevel) {
+      return role === 'owner' && roleSubDefault.accessLevel === 'edit' ? 'read' : roleSubDefault.accessLevel;
+    }
+  }
+
+  // 4. Standard Role Module Default
+  if (roleDefaults) {
+    const roleModuleDefault = roleDefaults.find(p => p.featureName === parentModule && (p.role ? p.role === role : true));
+    if (roleModuleDefault && roleModuleDefault.accessLevel) {
+      return role === 'owner' && roleModuleDefault.accessLevel === 'edit' ? 'read' : roleModuleDefault.accessLevel;
+    }
+  }
+
   return 'none';
 };
 
-/** Convenience checker mirroring the legacy checkPermission(feature) boolean style. */
+/** Convenience checker mirroring the legacy checkPermission(feature) boolean style with sub-tool support. */
 export const buildPermissionChecker = (
   role: Role | undefined,
-  overrides: FeaturePermission[] | undefined,
-  roleDefaults: RolePermission[] | undefined
+  overrides: PermissionLike[] | undefined,
+  roleDefaults: (RolePermission | PermissionLike)[] | undefined
 ) => (feature: string, minimum: AccessLevel = 'read'): boolean => {
   const level = resolveAccessLevel(feature, role, overrides, roleDefaults);
   if (minimum === 'edit') return level === 'edit';
   return level !== 'none';
 };
+
