@@ -6,8 +6,10 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  Calendar,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Database,
   Edit2,
   Eye,
@@ -74,6 +76,8 @@ import { clientConfig } from '../../config/clientConfig';
 import { BackToModulesButton } from '../shared';
 import { useControlCenter } from './useControlCenter';
 import { SubToolPermissionModal } from './SubToolPermissionModal';
+import { EmployeeComplianceModal, EmployeeComplianceTarget, getExpiryStatus } from './EmployeeComplianceModal';
+import { EmployeeComplianceCard, type EmployeeComplianceCardData } from './EmployeeComplianceCard';
 import { BranchLoginApprovalsSection } from './BranchLoginApprovalsSection';
 import { DeliveryZonesSection } from './DeliveryZonesSection';
 import { ModuleDisplaySettingsSection } from './ModuleDisplaySettingsSection';
@@ -282,10 +286,13 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
 }) => {
   const {
     users,
+    setUsers,
     branches,
     zones,
     drivers,
+    setDrivers,
     pharmacists,
+    setPharmacists,
     branchStaffAssignments,
     roleDefaults,
     supervisorAssignments,
@@ -313,8 +320,43 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
   });
 
   const [activeSubToolUser, setActiveSubToolUser] = useState<AppUser | null>(null);
+  const [complianceTarget, setComplianceTarget] = useState<EmployeeComplianceTarget | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadingSlot, setUploadingSlot] = useState<SystemBrandingAssetSlot | null>(null);
+
+  const handleSaveComplianceSuccess = (updated: EmployeeComplianceTarget) => {
+    if (updated.type === 'pharmacist') {
+      setPharmacists(prev => prev.map(p => p.id === updated.id ? {
+        ...p,
+        name: updated.name,
+        passportNumber: updated.passportNumber,
+        ppExpiryDate: updated.ppExpiryDate,
+        wpExpiryDate: updated.wpExpiryDate,
+        sponsor: updated.sponsor,
+        lmraMonthlyFee: updated.lmraMonthlyFee
+      } : p));
+    } else if (updated.type === 'driver') {
+      setDrivers(prev => prev.map(d => d.id === updated.id ? {
+        ...d,
+        name: updated.name,
+        passportNumber: updated.passportNumber,
+        ppExpiryDate: updated.ppExpiryDate,
+        wpExpiryDate: updated.wpExpiryDate,
+        sponsor: updated.sponsor,
+        lmraMonthlyFee: updated.lmraMonthlyFee
+      } : d));
+    } else if (updated.type === 'user') {
+      setUsers(prev => prev.map(u => u.userId === updated.id ? {
+        ...u,
+        fullName: updated.fullName,
+        passportNumber: updated.passportNumber,
+        ppExpiryDate: updated.ppExpiryDate,
+        wpExpiryDate: updated.wpExpiryDate,
+        sponsor: updated.sponsor,
+        lmraMonthlyFee: updated.lmraMonthlyFee
+      } : u));
+    }
+  };
 
   // Branch Modal State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -480,6 +522,131 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
         (b.branchManagerName && b.branchManagerName.toLowerCase().includes(q))
     );
   }, [branchOptions, branchStaffByBranchId, branchWorkersByBranchId, branchStaffFilter, searchTerm]);
+
+  const [directoryView, setDirectoryView] = useState<'branch-cards' | 'employee-cards'>('branch-cards');
+
+  // Map all workforce personnel to rich EmployeeComplianceCardData
+  const allEmployeeCards = useMemo<EmployeeComplianceCardData[]>(() => {
+    const cards: EmployeeComplianceCardData[] = [];
+    const branchMap = new Map<string, Branch>();
+    branches.forEach(b => branchMap.set(b.id, b));
+
+    // 1. Delivery Drivers (D)
+    drivers.forEach(driver => {
+      const assignedBranchIds = branchStaffAssignments
+        .filter(a => a.driverIds.includes(driver.id))
+        .map(a => a.branchId);
+      const branchNames = assignedBranchIds
+        .map(id => branchMap.get(id)?.name)
+        .filter(Boolean)
+        .join(', ');
+
+      cards.push({
+        id: driver.id,
+        name: driver.name,
+        code: driver.driverCode,
+        roleCategory: 'driver',
+        roleLabel: 'Fleet Vehicle Driver',
+        branchName: branchNames || 'Delivery Fleet',
+        plateNumber: driver.notes?.trim() || '39717',
+        passportNumber: driver.passportNumber,
+        ppExpiryDate: driver.ppExpiryDate,
+        wpExpiryDate: driver.wpExpiryDate,
+        sponsor: driver.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+        lmraMonthlyFee: driver.lmraMonthlyFee ?? 10.0,
+        phone: driver.phone
+      });
+    });
+
+    // 2. Clinical Pharmacists (E)
+    pharmacists.forEach(p => {
+      const assignedBranchIds = branchStaffAssignments
+        .filter(a => a.pharmacistIds.includes(p.id))
+        .map(a => a.branchId);
+      const branchNames = assignedBranchIds
+        .map(id => branchMap.get(id)?.name)
+        .filter(Boolean)
+        .join(', ');
+
+      cards.push({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        roleCategory: 'pharmacist',
+        roleLabel: 'Clinical Pharmacist',
+        branchName: branchNames || (p.branchId ? branchMap.get(p.branchId)?.name : 'Registered Branches'),
+        passportNumber: p.passportNumber,
+        ppExpiryDate: p.ppExpiryDate,
+        wpExpiryDate: p.wpExpiryDate,
+        sponsor: p.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+        lmraMonthlyFee: p.lmraMonthlyFee ?? 10.0
+      });
+    });
+
+    // 3. Workers & Logistics (W)
+    users
+      .filter(u => u.role === 'warehouse' || u.role === 'accounts')
+      .forEach(w => {
+        cards.push({
+          id: w.userId,
+          name: w.fullName || w.email.split('@')[0],
+          code: w.role.toUpperCase(),
+          roleCategory: 'worker',
+          roleLabel: w.role === 'warehouse' ? 'Warehouse & Logistics' : 'Accounts Staff',
+          branchName: w.branchName || (w.branchId ? branchMap.get(w.branchId)?.name : 'Logistics Hub'),
+          branchCode: w.branchCode,
+          passportNumber: w.passportNumber,
+          ppExpiryDate: w.ppExpiryDate,
+          wpExpiryDate: w.wpExpiryDate,
+          sponsor: w.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+          lmraMonthlyFee: w.lmraMonthlyFee ?? 10.0
+        });
+      });
+
+    // 4. Branch Management (M)
+    users
+      .filter(u => u.role === 'admin' || u.role === 'manager' || u.role === 'owner' || u.role === 'supervisor')
+      .forEach(m => {
+        cards.push({
+          id: m.userId,
+          name: m.fullName || m.email.split('@')[0],
+          code: m.role.toUpperCase(),
+          roleCategory: 'management',
+          roleLabel:
+            m.role === 'manager'
+              ? 'Branch Manager'
+              : m.role === 'supervisor'
+              ? 'Zone Supervisor'
+              : 'Management Executive',
+          branchName: m.branchName || (m.branchId ? branchMap.get(m.branchId)?.name : 'Headquarters'),
+          branchCode: m.branchCode,
+          passportNumber: m.passportNumber,
+          ppExpiryDate: m.ppExpiryDate,
+          wpExpiryDate: m.wpExpiryDate,
+          sponsor: m.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+          lmraMonthlyFee: m.lmraMonthlyFee ?? 10.0
+        });
+      });
+
+    return cards;
+  }, [drivers, pharmacists, users, branchStaffAssignments, branches]);
+
+  const filteredEmployeeCards = useMemo(() => {
+    let list = allEmployeeCards;
+    if (branchStaffFilter !== 'all') {
+      list = list.filter(c => c.roleCategory === branchStaffFilter);
+    }
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return list;
+    return list.filter(
+      c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.code && c.code.toLowerCase().includes(q)) ||
+        (c.passportNumber && c.passportNumber.toLowerCase().includes(q)) ||
+        (c.branchName && c.branchName.toLowerCase().includes(q)) ||
+        c.roleLabel.toLowerCase().includes(q)
+    );
+  }, [allEmployeeCards, branchStaffFilter, searchTerm]);
 
   // --- Handlers ---
 
@@ -1339,6 +1506,29 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
+                                onClick={() =>
+                                  setComplianceTarget({
+                                    type: user.role === 'driver' ? 'driver' : 'user',
+                                    id: user.userId,
+                                    name: user.fullName || user.email.split('@')[0],
+                                    fullName: user.fullName,
+                                    code: user.role.toUpperCase(),
+                                    roleLabel: ROLE_LABELS[user.role] || user.role,
+                                    passportNumber: user.passportNumber,
+                                    ppExpiryDate: user.ppExpiryDate,
+                                    wpExpiryDate: user.wpExpiryDate,
+                                    sponsor: user.sponsor,
+                                    lmraMonthlyFee: user.lmraMonthlyFee
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 transition hover:border-brand/40 hover:text-brand"
+                                title="Employee Edit"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                                Edit
+                              </button>
+
+                              <button
                                 onClick={() => setActiveSubToolUser(user)}
                                 className="inline-flex items-center gap-1 rounded-lg border border-brand/20 bg-brand/5 px-2.5 py-1 text-xs font-bold text-brand transition hover:bg-brand/10"
                                 title="Open Sub-Tool Permissions Modal"
@@ -1662,229 +1852,86 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
                 </div>
               </div>
 
-              {/* Branch Directory Cards Grid */}
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                {filteredBranches.map(branch => {
-                  const assignment = branchStaffByBranchId.get(branch.id) || {
-                    branchId: branch.id,
-                    pharmacistIds: [],
-                    driverIds: []
-                  };
-                  const assignedDrivers = drivers.filter(driver => assignment.driverIds.includes(driver.id));
-                  const assignedPharmacists = pharmacists.filter(p => assignment.pharmacistIds.includes(p.id));
-                  const assignedWorkers = branchWorkersByBranchId.get(branch.id) || [];
-                  const isGeofenced = Boolean(branch.lat && branch.lng);
-                  const radius = branch.dutyRadiusM || DEFAULT_BRANCH_DUTY_RADIUS_M;
-                  const totalPersonnel = assignedPharmacists.length + assignedDrivers.length + assignedWorkers.length;
+              {/* Directory View Mode Switcher */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+                <div className="inline-flex rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryView('branch-cards')}
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition ${
+                      directoryView === 'branch-cards'
+                        ? 'bg-white text-slate-950 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Store className="h-4 w-4 text-brand" />
+                    Branch Geofence Rosters
+                    <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                      {filteredBranches.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryView('employee-cards')}
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition ${
+                      directoryView === 'employee-cards'
+                        ? 'bg-white text-slate-950 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <UserCheck className="h-4 w-4 text-emerald-600" />
+                    All Employee Cards
+                    <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                      {filteredEmployeeCards.length}
+                    </span>
+                  </button>
+                </div>
 
-                  return (
-                    <article
-                      key={branch.id}
-                      className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:border-brand/30 hover:shadow-md"
-                    >
-                      <div className="space-y-4">
-                        {/* Card Header */}
-                        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-lg font-black tracking-tight text-slate-950">{branch.name}</h4>
-                              <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-700">
-                                {branch.code}
-                              </span>
-                              {isGeofenced ? (
-                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">
-                                  <RadioTower className="h-3 w-3 text-emerald-600 animate-pulse" />
-                                  Geofenced ({radius}m)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  GPS Pending
-                                </span>
-                              )}
-                            </div>
+                <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-black text-emerald-800">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    Passport & Visa Compliance Sync Active
+                  </span>
+                </div>
+              </div>
 
-                            {/* Manager & Geofence Coordinates */}
-                            <div className="mt-2.5 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
-                              <div className="flex items-center gap-1.5">
-                                <ManagementAvatar size="xs" className="shrink-0" />
-                                <span>
-                                  Manager: <strong className="text-slate-900">{branch.branchManagerName || 'Not assigned'}</strong>
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                                <MapPinned className="h-3.5 w-3.5 text-slate-400" />
-                                <span>
-                                  {isGeofenced ? `${branch.lat?.toFixed(4)}, ${branch.lng?.toFixed(4)}` : 'Coordinates not set'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              onClick={() => handleBranchStaffEditor(branch)}
-                              className="btn-secondary text-[10px] uppercase tracking-widest"
-                              title="Assign Pharmacists & Delivery Drivers"
-                            >
-                              <Users className="h-3.5 w-3.5" />
-                              Staff ({totalPersonnel})
-                            </button>
-                            <button
-                              onClick={() => {
-                                setBranchForm({ ...branch });
-                                setIsBranchModalOpen(true);
-                              }}
-                              className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 transition"
-                              title="Edit Branch Geofence & Details"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBranch(branch.id)}
-                              className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 hover:bg-red-100 transition"
-                              title="Remove Branch"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Workforce Roster: Drivers (D) & Pharmacists (E) & Workers (W) */}
-                        <div className="space-y-3 pt-1">
-                          {/* 1. Fleet Vehicles & Delivery Drivers (D with Helmet) */}
-                          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-1.5">
-                                <DriverAvatar size="xs" className="shrink-0" />
-                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                                  FLEET VEHICLES (D):
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-bold text-slate-400">
-                                {assignedDrivers.length} {assignedDrivers.length === 1 ? 'vehicle' : 'vehicles'}
-                              </span>
-                            </div>
-
-                            {assignedDrivers.length > 0 ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {assignedDrivers.map(driver => (
-                                  <div
-                                    key={driver.id}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-2xs"
-                                  >
-                                    <FleetVehiclePlate
-                                      plateNumber={driver.notes?.trim() || '39717'}
-                                      size="xs"
-                                    />
-                                    <span className="text-[11px] font-bold text-slate-800">
-                                      {driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs font-semibold text-slate-400">
-                                No delivery vehicles assigned to this geofenced location.
-                              </p>
-                            )}
-                          </div>
-
-                          {/* 2. Clinical Pharmacists (E) */}
-                          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-1.5">
-                                <PharmacistAvatar size="xs" className="shrink-0" />
-                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                                  PHARMACISTS (E):
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-bold text-slate-400">
-                                {assignedPharmacists.length} on duty
-                              </span>
-                            </div>
-
-                            {assignedPharmacists.length > 0 ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {assignedPharmacists.map(p => (
-                                  <div
-                                    key={p.id}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-2xs"
-                                  >
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                                    <span className="rounded bg-emerald-50 px-1 py-0.2 text-[9px] font-black text-emerald-700">E</span>
-                                    <span>{p.code ? `${p.code} - ${p.name}` : p.name}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs font-semibold text-slate-400">
-                                No active pharmacists assigned to this branch.
-                              </p>
-                            )}
-                          </div>
-
-                          {/* 3. Branch Workers & Logistics (W) */}
-                          {(assignedWorkers.length > 0 || branchStaffFilter === 'worker') && (
-                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-1.5">
-                                  <WorkerAvatar size="xs" className="shrink-0" />
-                                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                                    WORKERS & LOGISTICS (W):
-                                  </span>
-                                </div>
-                                <span className="text-[10px] font-bold text-slate-400">
-                                  {assignedWorkers.length} {assignedWorkers.length === 1 ? 'worker' : 'workers'}
-                                </span>
-                              </div>
-
-                              {assignedWorkers.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {assignedWorkers.map(w => (
-                                    <div
-                                      key={w.id}
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-2xs"
-                                    >
-                                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
-                                      <span className="rounded bg-blue-50 px-1 py-0.2 text-[9px] font-black text-blue-700">W</span>
-                                      <span>{w.email.split('@')[0]}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-xs font-semibold text-slate-400">
-                                  No warehouse or logistics workers linked to this branch.
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Card Footer Quick Prompt */}
-                      {totalPersonnel === 0 && (
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-[11px] font-medium text-slate-400">Workforce roster unassigned</span>
-                          <button
-                            onClick={() => handleBranchStaffEditor(branch)}
-                            className="text-[11px] font-black uppercase tracking-wider text-brand hover:underline"
-                          >
-                            + Assign Personnel
-                          </button>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-
-                {filteredBranches.length === 0 && (
-                  <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-xs">
-                    <Store className="mx-auto h-10 w-10 text-slate-300" />
-                    <h4 className="mt-3 text-base font-black text-slate-900">No matching branch locations found</h4>
+              {/* VIEW 1: ALL EMPLOYEE CARDS (Grid of Executive Identity & Compliance Cards) */}
+              {directoryView === 'employee-cards' ? (
+                filteredEmployeeCards.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {filteredEmployeeCards.map(emp => (
+                      <EmployeeComplianceCard
+                        key={`${emp.roleCategory}-${emp.id}`}
+                        employee={emp}
+                        compact={false}
+                        onEdit={() =>
+                          setComplianceTarget({
+                            type:
+                              emp.roleCategory === 'driver'
+                                ? 'driver'
+                                : emp.roleCategory === 'pharmacist'
+                                ? 'pharmacist'
+                                : 'user',
+                            id: emp.id,
+                            name: emp.name,
+                            code: emp.code,
+                            roleLabel: emp.roleLabel,
+                            passportNumber: emp.passportNumber,
+                            ppExpiryDate: emp.ppExpiryDate,
+                            wpExpiryDate: emp.wpExpiryDate,
+                            sponsor: emp.sponsor,
+                            lmraMonthlyFee: emp.lmraMonthlyFee
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-xs">
+                    <Users className="mx-auto h-10 w-10 text-slate-300" />
+                    <h4 className="mt-3 text-base font-black text-slate-900">No matching employee cards found</h4>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      Try adjusting your role filter or search term to view registered branches.
+                      Try adjusting your 5-role filter (ALL, E, D, W, M) or search query.
                     </p>
                     <button
                       onClick={() => {
@@ -1896,8 +1943,352 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
                       Clear Filters
                     </button>
                   </div>
-                )}
-              </div>
+                )
+              ) : (
+                /* VIEW 2: BRANCH GEOFENCE ROSTERS */
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  {filteredBranches.map(branch => {
+                    const assignment = branchStaffByBranchId.get(branch.id) || {
+                      branchId: branch.id,
+                      pharmacistIds: [],
+                      driverIds: []
+                    };
+                    const assignedDrivers = drivers.filter(driver => assignment.driverIds.includes(driver.id));
+                    const assignedPharmacists = pharmacists.filter(p => assignment.pharmacistIds.includes(p.id));
+                    const assignedWorkers = branchWorkersByBranchId.get(branch.id) || [];
+                    const isGeofenced = Boolean(branch.lat && branch.lng);
+                    const radius = branch.dutyRadiusM || DEFAULT_BRANCH_DUTY_RADIUS_M;
+                    const totalPersonnel = assignedPharmacists.length + assignedDrivers.length + assignedWorkers.length;
+
+                    const branchManager = users.find(
+                      u =>
+                        (branch.branchManagerName &&
+                          (u.fullName === branch.branchManagerName || u.email.split('@')[0] === branch.branchManagerName)) ||
+                        (u.branchId === branch.id && (u.role === 'manager' || u.role === 'supervisor'))
+                    );
+
+                    return (
+                      <article
+                        key={branch.id}
+                        className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:border-brand/30 hover:shadow-md"
+                      >
+                        <div className="space-y-4">
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-lg font-black tracking-tight text-slate-950">{branch.name}</h4>
+                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black uppercase text-slate-700">
+                                  {branch.code}
+                                </span>
+                                {isGeofenced ? (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-800">
+                                    <RadioTower className="h-3 w-3 text-emerald-600 animate-pulse" />
+                                    Geofenced ({radius}m)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    GPS Pending
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Manager & Geofence Coordinates */}
+                              <div className="mt-2.5 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
+                                {branchManager ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setComplianceTarget({
+                                        type: 'user',
+                                        id: branchManager.userId,
+                                        name: branchManager.fullName || branch.branchManagerName || 'Manager',
+                                        fullName: branchManager.fullName,
+                                        code: branchManager.role.toUpperCase(),
+                                        roleLabel: 'Branch Manager',
+                                        passportNumber: branchManager.passportNumber,
+                                        ppExpiryDate: branchManager.ppExpiryDate,
+                                        wpExpiryDate: branchManager.wpExpiryDate,
+                                        sponsor: branchManager.sponsor,
+                                        lmraMonthlyFee: branchManager.lmraMonthlyFee
+                                      })
+                                    }
+                                    className="group flex items-center gap-1.5 text-left hover:text-brand transition cursor-pointer"
+                                    title="Click to view and update manager compliance"
+                                  >
+                                    <ManagementAvatar size="xs" className="shrink-0" />
+                                    <span>
+                                      Manager:{' '}
+                                      <strong className="text-slate-900 underline decoration-slate-300 group-hover:text-brand group-hover:decoration-brand">
+                                        {branch.branchManagerName || branchManager.fullName || 'Assigned'}
+                                      </strong>
+                                    </span>
+                                    <Edit2 className="h-2.5 w-2.5 text-slate-300 group-hover:text-brand transition" />
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <ManagementAvatar size="xs" className="shrink-0" />
+                                    <span>
+                                      Manager: <strong className="text-slate-900">{branch.branchManagerName || 'Not assigned'}</strong>
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                                  <MapPinned className="h-3.5 w-3.5 text-slate-400" />
+                                  <span>
+                                    {isGeofenced ? `${branch.lat?.toFixed(4)}, ${branch.lng?.toFixed(4)}` : 'Coordinates not set'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => handleBranchStaffEditor(branch)}
+                                className="btn-secondary text-[10px] uppercase tracking-widest"
+                                title="Assign Pharmacists & Delivery Drivers"
+                              >
+                                <Users className="h-3.5 w-3.5" />
+                                Staff ({totalPersonnel})
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setBranchForm({ ...branch });
+                                  setIsBranchModalOpen(true);
+                                }}
+                                className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 transition"
+                                title="Edit Branch Geofence & Details"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBranch(branch.id)}
+                                className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 hover:bg-red-100 transition"
+                                title="Remove Branch"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Workforce Roster: Drivers (D) & Pharmacists (E) & Workers (W) */}
+                          <div className="space-y-3 pt-1">
+                            {/* 1. Fleet Vehicles & Delivery Drivers (D with Helmet) */}
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                              <div className="flex items-center justify-between mb-2.5">
+                                <div className="flex items-center gap-1.5">
+                                  <DriverAvatar size="xs" className="shrink-0" />
+                                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                    FLEET VEHICLES (D):
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  {assignedDrivers.length} {assignedDrivers.length === 1 ? 'vehicle' : 'vehicles'}
+                                </span>
+                              </div>
+
+                              {assignedDrivers.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  {assignedDrivers.map(driver => (
+                                    <EmployeeComplianceCard
+                                      key={driver.id}
+                                      compact={true}
+                                      employee={{
+                                        id: driver.id,
+                                        name: driver.name,
+                                        code: driver.driverCode,
+                                        roleCategory: 'driver',
+                                        roleLabel: 'Fleet Driver',
+                                        plateNumber: driver.notes?.trim() || '39717',
+                                        passportNumber: driver.passportNumber,
+                                        ppExpiryDate: driver.ppExpiryDate,
+                                        wpExpiryDate: driver.wpExpiryDate,
+                                        sponsor: driver.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+                                        lmraMonthlyFee: driver.lmraMonthlyFee ?? 10.0,
+                                        phone: driver.phone
+                                      }}
+                                      onEdit={() =>
+                                        setComplianceTarget({
+                                          type: 'driver',
+                                          id: driver.id,
+                                          name: driver.name,
+                                          code: driver.driverCode,
+                                          roleLabel: 'Fleet Driver',
+                                          passportNumber: driver.passportNumber,
+                                          ppExpiryDate: driver.ppExpiryDate,
+                                          wpExpiryDate: driver.wpExpiryDate,
+                                          sponsor: driver.sponsor,
+                                          lmraMonthlyFee: driver.lmraMonthlyFee
+                                        })
+                                      }
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs font-semibold text-slate-400">
+                                  No delivery vehicles assigned to this geofenced location.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* 2. Clinical Pharmacists (E) */}
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                              <div className="flex items-center justify-between mb-2.5">
+                                <div className="flex items-center gap-1.5">
+                                  <PharmacistAvatar size="xs" className="shrink-0" />
+                                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                    PHARMACISTS (E):
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  {assignedPharmacists.length} on duty
+                                </span>
+                              </div>
+
+                              {assignedPharmacists.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  {assignedPharmacists.map(p => (
+                                    <EmployeeComplianceCard
+                                      key={p.id}
+                                      compact={true}
+                                      employee={{
+                                        id: p.id,
+                                        name: p.name,
+                                        code: p.code,
+                                        roleCategory: 'pharmacist',
+                                        roleLabel: 'Clinical Pharmacist',
+                                        passportNumber: p.passportNumber,
+                                        ppExpiryDate: p.ppExpiryDate,
+                                        wpExpiryDate: p.wpExpiryDate,
+                                        sponsor: p.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+                                        lmraMonthlyFee: p.lmraMonthlyFee ?? 10.0
+                                      }}
+                                      onEdit={() =>
+                                        setComplianceTarget({
+                                          type: 'pharmacist',
+                                          id: p.id,
+                                          name: p.name,
+                                          code: p.code,
+                                          roleLabel: 'Clinical Pharmacist',
+                                          passportNumber: p.passportNumber,
+                                          ppExpiryDate: p.ppExpiryDate,
+                                          wpExpiryDate: p.wpExpiryDate,
+                                          sponsor: p.sponsor,
+                                          lmraMonthlyFee: p.lmraMonthlyFee
+                                        })
+                                      }
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs font-semibold text-slate-400">
+                                  No active pharmacists assigned to this branch.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* 3. Branch Workers & Logistics (W) */}
+                            {(assignedWorkers.length > 0 || branchStaffFilter === 'worker') && (
+                              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                                <div className="flex items-center justify-between mb-2.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <WorkerAvatar size="xs" className="shrink-0" />
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                      WORKERS & LOGISTICS (W):
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    {assignedWorkers.length} {assignedWorkers.length === 1 ? 'worker' : 'workers'}
+                                  </span>
+                                </div>
+
+                                {assignedWorkers.length > 0 ? (
+                                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    {assignedWorkers.map(w => {
+                                      const displayName = w.fullName || w.email.split('@')[0];
+                                      return (
+                                        <EmployeeComplianceCard
+                                          key={w.userId}
+                                          compact={true}
+                                          employee={{
+                                            id: w.userId,
+                                            name: displayName,
+                                            code: w.role.toUpperCase(),
+                                            roleCategory: 'worker',
+                                            roleLabel: `Worker (${w.role})`,
+                                            passportNumber: w.passportNumber,
+                                            ppExpiryDate: w.ppExpiryDate,
+                                            wpExpiryDate: w.wpExpiryDate,
+                                            sponsor: w.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+                                            lmraMonthlyFee: w.lmraMonthlyFee ?? 10.0
+                                          }}
+                                          onEdit={() =>
+                                            setComplianceTarget({
+                                              type: 'user',
+                                              id: w.userId,
+                                              name: displayName,
+                                              fullName: w.fullName,
+                                              code: w.role.toUpperCase(),
+                                              roleLabel: `Worker (${w.role})`,
+                                              passportNumber: w.passportNumber,
+                                              ppExpiryDate: w.ppExpiryDate,
+                                              wpExpiryDate: w.wpExpiryDate,
+                                              sponsor: w.sponsor,
+                                              lmraMonthlyFee: w.lmraMonthlyFee
+                                            })
+                                          }
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs font-semibold text-slate-400">
+                                    No warehouse or logistics workers linked to this branch.
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Footer Quick Prompt */}
+                        {totalPersonnel === 0 && (
+                          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-slate-400">Workforce roster unassigned</span>
+                            <button
+                              onClick={() => handleBranchStaffEditor(branch)}
+                              className="text-[11px] font-black uppercase tracking-wider text-brand hover:underline"
+                            >
+                              + Assign Personnel
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+
+                  {filteredBranches.length === 0 && (
+                    <div className="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-xs">
+                      <Store className="mx-auto h-10 w-10 text-slate-300" />
+                      <h4 className="mt-3 text-base font-black text-slate-900">No matching branch locations found</h4>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Try adjusting your role filter or search term to view registered branches.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setBranchStaffFilter('all');
+                          setSearchTerm('');
+                        }}
+                        className="mt-4 btn-secondary text-xs font-bold"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2204,6 +2595,14 @@ export const ControlCenter: React.FC<ControlCenterProps> = ({
         user={activeSubToolUser}
         roleDefaults={roleDefaults}
         onSaveSuccess={reload}
+      />
+
+      {/* Employee Compliance & Identity Modal */}
+      <EmployeeComplianceModal
+        isOpen={Boolean(complianceTarget)}
+        onClose={() => setComplianceTarget(null)}
+        target={complianceTarget}
+        onSaveSuccess={handleSaveComplianceSuccess}
       />
 
       {/* Branch Modal */}

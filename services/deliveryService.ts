@@ -80,7 +80,12 @@ const toDriver = (row: any, branchIds: string[] = []): DeliveryDriver => ({
   statusChangedAt: row.status_changed_at || null,
   lastSeenAt: row.last_seen_at || null,
   createdAt: row.created_at || null,
-  updatedAt: row.updated_at || null
+  updatedAt: row.updated_at || null,
+  passportNumber: row.passport_number || null,
+  ppExpiryDate: row.pp_expiry_date || null,
+  wpExpiryDate: row.wp_expiry_date || null,
+  sponsor: row.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+  lmraMonthlyFee: row.lmra_monthly_fee !== null && row.lmra_monthly_fee !== undefined ? Number(row.lmra_monthly_fee) : 10.000
 });
 
 const toArea = (row: any): DeliveryArea => {
@@ -808,6 +813,21 @@ export const deliveryService = {
         updated_at: new Date().toISOString()
       };
       if (driver.id) payload.id = driver.id;
+      if (driver.passportNumber !== undefined) {
+        payload.passport_number = driver.passportNumber?.trim() || null;
+      }
+      if (driver.ppExpiryDate !== undefined) {
+        payload.pp_expiry_date = driver.ppExpiryDate || null;
+      }
+      if (driver.wpExpiryDate !== undefined) {
+        payload.wp_expiry_date = driver.wpExpiryDate || null;
+      }
+      if (driver.sponsor !== undefined) {
+        payload.sponsor = driver.sponsor?.trim() || 'Tabarak Pharmacy W.L.L (CR: 71234)';
+      }
+      if (driver.lmraMonthlyFee !== undefined) {
+        payload.lmra_monthly_fee = driver.lmraMonthlyFee;
+      }
       const { data, error } = await supabaseClient.from('delivery_drivers').upsert(payload).select().single();
       if (error) throw error;
       return toDriver(data);

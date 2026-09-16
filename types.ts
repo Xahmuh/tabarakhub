@@ -90,6 +90,11 @@ export interface Pharmacist {
   code?: string;
   name: string;
   isActive: boolean;
+  passportNumber?: string | null;
+  ppExpiryDate?: string | null;
+  wpExpiryDate?: string | null;
+  sponsor?: string | null;
+  lmraMonthlyFee?: number | null;
 }
 
 export interface Product {
@@ -507,6 +512,12 @@ export interface AppUser {
   supervisorScopeMode?: SupervisorScopeMode | null;
   isActive: boolean;
   createdAt?: string;
+  fullName?: string | null;
+  passportNumber?: string | null;
+  ppExpiryDate?: string | null;
+  wpExpiryDate?: string | null;
+  sponsor?: string | null;
+  lmraMonthlyFee?: number | null;
 }
 
 export interface SupervisorBranchAssignment {
@@ -590,6 +601,11 @@ export interface DeliveryDriver {
   lastSeenAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  passportNumber?: string | null;
+  ppExpiryDate?: string | null;
+  wpExpiryDate?: string | null;
+  sponsor?: string | null;
+  lmraMonthlyFee?: number | null;
 }
 
 export type DeliveryLifecycleStatus = 'recorded' | 'assigned' | 'picked_up' | 'delivered' | 'cancelled';

@@ -175,8 +175,37 @@ export const permissionService = {
       branchName: u.branch_name,
       supervisorScopeMode: u.supervisor_scope_mode || (u.role === 'supervisor' ? 'assigned_zones' : null),
       isActive: u.is_active,
-      createdAt: u.created_at
+      createdAt: u.created_at,
+      fullName: u.full_name || null,
+      passportNumber: u.passport_number || null,
+      ppExpiryDate: u.pp_expiry_date || null,
+      wpExpiryDate: u.wp_expiry_date || null,
+      sponsor: u.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+      lmraMonthlyFee: u.lmra_monthly_fee !== null && u.lmra_monthly_fee !== undefined ? Number(u.lmra_monthly_fee) : 10.000
     }));
+  },
+  adminUpdateUserCompliance: async (
+    userId: string,
+    input: {
+      passportNumber?: string | null;
+      ppExpiryDate?: string | null;
+      wpExpiryDate?: string | null;
+      fullName?: string | null;
+      sponsor?: string | null;
+      lmraMonthlyFee?: number | null;
+    }
+  ) => {
+    const { error } = await supabaseClient.rpc('app_admin_update_user_compliance', {
+      target_user_id: userId,
+      p_passport_number: input.passportNumber ?? null,
+      p_pp_expiry_date: input.ppExpiryDate ?? null,
+      p_wp_expiry_date: input.wpExpiryDate ?? null,
+      p_full_name: input.fullName ?? null,
+      p_sponsor: input.sponsor ?? null,
+      p_lmra_monthly_fee: input.lmraMonthlyFee ?? null
+    });
+    if (error) throw error;
+    return true;
   },
   adminSetUserRole: async (userId: string, role: Role, branchId?: string | null, isActive = true) => {
     const { error } = await supabaseClient.rpc('app_admin_set_user_role', {

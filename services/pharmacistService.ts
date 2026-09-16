@@ -1,7 +1,7 @@
 import { supabaseClient } from '../lib/supabaseClient';
 import { Pharmacist } from '../types';
 
-const PHARMACIST_COLUMNS = 'id, code, name, is_active';
+const PHARMACIST_COLUMNS = 'id, code, name, is_active, passport_number, pp_expiry_date, wp_expiry_date, sponsor, lmra_monthly_fee';
 
 const normalizePharmacistCode = (code?: string | null) => code?.trim().toUpperCase() || '';
 
@@ -10,7 +10,12 @@ const toPharmacist = (p: any, branchId?: string): Pharmacist => ({
   branchId: branchId || p.branch_id || '',
   code: p.code || '',
   name: p.name,
-  isActive: p.is_active
+  isActive: p.is_active,
+  passportNumber: p.passport_number || null,
+  ppExpiryDate: p.pp_expiry_date || null,
+  wpExpiryDate: p.wp_expiry_date || null,
+  sponsor: p.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+  lmraMonthlyFee: p.lmra_monthly_fee !== null && p.lmra_monthly_fee !== undefined ? Number(p.lmra_monthly_fee) : 10.000
 });
 
 export const pharmacistService = {
@@ -76,6 +81,22 @@ export const pharmacistService = {
       name: pharmacist.name,
       is_active: pharmacist.isActive ?? true
     };
+
+    if (pharmacist.passportNumber !== undefined) {
+      payload.passport_number = pharmacist.passportNumber?.trim() || null;
+    }
+    if (pharmacist.ppExpiryDate !== undefined) {
+      payload.pp_expiry_date = pharmacist.ppExpiryDate || null;
+    }
+    if (pharmacist.wpExpiryDate !== undefined) {
+      payload.wp_expiry_date = pharmacist.wpExpiryDate || null;
+    }
+    if (pharmacist.sponsor !== undefined) {
+      payload.sponsor = pharmacist.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)';
+    }
+    if (pharmacist.lmraMonthlyFee !== undefined) {
+      payload.lmra_monthly_fee = pharmacist.lmraMonthlyFee;
+    }
 
     if (pharmacist.id && pharmacist.id.length > 5) {
       payload.id = pharmacist.id;

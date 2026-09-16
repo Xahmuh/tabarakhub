@@ -205,6 +205,33 @@ export const DeliverySettings: React.FC = () => {
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Phone (optional)</label>
             <input id="swal-phone" value="${escapeHtml(driver?.phone)}" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold">
           </div>
+          <div class="border-t border-slate-100 pt-2 space-y-2">
+            <span class="block text-[10px] font-black text-slate-500 uppercase tracking-wider">LMRA EMS Sponsor & Financial Data</span>
+            <div>
+              <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sponsor / Company CR</label>
+              <input id="swal-sponsor" value="${escapeHtml(driver?.sponsor || 'Tabarak Pharmacy W.L.L (CR: 71234)')}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Passport No.</label>
+                <input id="swal-passport" value="${escapeHtml(driver?.passportNumber || '')}" placeholder="e.g. A12345678" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold font-mono uppercase">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">PP Expiry Date</label>
+                <input id="swal-pp-expiry" type="date" value="${escapeHtml(driver?.ppExpiryDate || '')}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">WP Expiry (Visa Expiry)</label>
+                <input id="swal-wp-expiry" type="date" value="${escapeHtml(driver?.wpExpiryDate || '')}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
+              </div>
+              <div>
+                <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">LMRA Monthly Fee (BHD)</label>
+                <input id="swal-lmra-fee" type="number" step="0.5" value="${driver?.lmraMonthlyFee ?? 10.0}" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold">
+              </div>
+            </div>
+          </div>
         </div>`,
       showCancelButton: true,
       confirmButtonText: 'Save',
@@ -212,7 +239,12 @@ export const DeliverySettings: React.FC = () => {
       preConfirm: () => ({
         name: (document.getElementById('swal-name') as HTMLInputElement).value.trim(),
         phone: (document.getElementById('swal-phone') as HTMLInputElement).value.trim(),
-        notes: (document.getElementById('swal-plate') as HTMLInputElement).value.trim() || undefined
+        notes: (document.getElementById('swal-plate') as HTMLInputElement).value.trim() || undefined,
+        passportNumber: (document.getElementById('swal-passport') as HTMLInputElement)?.value.trim() || null,
+        ppExpiryDate: (document.getElementById('swal-pp-expiry') as HTMLInputElement)?.value || null,
+        wpExpiryDate: (document.getElementById('swal-wp-expiry') as HTMLInputElement)?.value || null,
+        sponsor: (document.getElementById('swal-sponsor') as HTMLInputElement)?.value.trim() || 'Tabarak Pharmacy W.L.L (CR: 71234)',
+        lmraMonthlyFee: Number((document.getElementById('swal-lmra-fee') as HTMLInputElement)?.value) || 10.0
       })
     });
     if (!value?.name) return;
@@ -222,6 +254,11 @@ export const DeliverySettings: React.FC = () => {
         name: value.name,
         phone: value.phone || undefined,
         notes: value.notes || undefined,
+        passportNumber: value.passportNumber,
+        ppExpiryDate: value.ppExpiryDate,
+        wpExpiryDate: value.wpExpiryDate,
+        sponsor: value.sponsor,
+        lmraMonthlyFee: value.lmraMonthlyFee,
         isActive: driver?.isActive ?? true
       });
       await load();
@@ -794,6 +831,37 @@ export const DeliverySettings: React.FC = () => {
                         </p>
                         {driver.phone && <p className="mt-0.5 text-[11px] font-bold text-slate-400">{driver.phone}</p>}
                         {driver.authUserId && <p className="mt-0.5 text-[10px] font-bold text-cyan-600">✓ Linked Login</p>}
+                        {(driver.passportNumber || driver.ppExpiryDate || driver.wpExpiryDate) && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[9.5px]">
+                            {driver.passportNumber && (
+                              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-bold text-slate-700">
+                                PP: {driver.passportNumber}
+                              </span>
+                            )}
+                            {driver.ppExpiryDate && (
+                              <span className={`rounded px-1.5 py-0.5 font-bold ${
+                                new Date(driver.ppExpiryDate).getTime() < Date.now()
+                                  ? 'bg-red-100 text-red-700'
+                                  : new Date(driver.ppExpiryDate).getTime() < Date.now() + 60 * 86400000
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-emerald-50 text-emerald-700'
+                              }`}>
+                                PP: {driver.ppExpiryDate}
+                              </span>
+                            )}
+                            {driver.wpExpiryDate && (
+                              <span className={`rounded px-1.5 py-0.5 font-bold ${
+                                new Date(driver.wpExpiryDate).getTime() < Date.now()
+                                  ? 'bg-red-100 text-red-700'
+                                  : new Date(driver.wpExpiryDate).getTime() < Date.now() + 60 * 86400000
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-50 text-blue-700'
+                              }`}>
+                                WP: {driver.wpExpiryDate}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
