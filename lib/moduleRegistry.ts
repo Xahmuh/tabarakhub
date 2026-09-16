@@ -90,6 +90,31 @@ export const ACCESS_FEATURES: AccessFeature[] = [
       { id: 'leave_management:view_rest_compliance', label: 'View Weekly Rest Compliance', description: 'View weekly rest compliance reconciliation report' }
     ]
   },
+  {
+    id: 'operational_expenses',
+    label: 'Operational Cash Expenses',
+    module: 'operationalExpenses',
+    description: 'Track and record branch operational cash expenses (Fuel, Maintenance, Supplies, Other).',
+    subFeatures: [
+      { id: 'operational_expenses:new-expense', label: 'Record New Expense', description: 'Record a new cash expense transaction' },
+      { id: 'operational_expenses:expenses', label: 'Expenses List', description: 'View and filter recorded operational expenses' },
+      { id: 'operational_expenses:dashboard', label: 'Expense Dashboard', description: 'KPI cards and monthly expense calendar' },
+      { id: 'operational_expenses:reports', label: 'Expense Reports', description: 'Detailed category and vehicle expense reports' },
+      { id: 'operational_expenses:vehicle-actions', label: 'Actions & Renewals', description: 'Fleet vehicle registration and service alerts' },
+      { id: 'operational_expenses:fuel-leaderboard', label: 'Fuel Leaderboard', description: 'Driver and vehicle fuel efficiency leaderboard' }
+    ]
+  },
+  {
+    id: 'operational_renewals',
+    label: 'Operational Alert & Renewals',
+    module: 'operationalRenewals',
+    description: 'Track Commercial Registrations, NHRA pharmacy licenses, and employee work permit renewals.',
+    subFeatures: [
+      { id: 'operational_renewals:view', label: 'View Renewals & Alerts', description: 'Read-only access to renewal alerts and tariffs' },
+      { id: 'operational_renewals:manage', label: 'Manage Renewals', description: 'Add, renew, and update compliance items' },
+      { id: 'operational_renewals:archive', label: 'Renewals Archive', description: 'Browse expired and historical renewal records' }
+    ]
+  },
   { id: 'settings', label: 'Admin Control', module: 'settings', description: 'Controls System Settings and Access Control modules.' }
 ];
 

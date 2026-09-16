@@ -32,17 +32,17 @@ export const OperationalExpensesHub: React.FC<OperationalExpensesHubProps> = ({
   const isPrivilegedUser = ['owner', 'admin', 'manager', 'accounts'].includes(role) || isManagerRole(role);
   const isManager = isPrivilegedUser;
   const isBranch = !isPrivilegedUser;
-  const canEditModule = checkPermission('operational_expenses', 'edit');
-  const canReadModule = checkPermission('operational_expenses', 'read');
+  const canEditModule = isBranch || checkPermission('operational_expenses', 'edit');
+  const canReadModule = isBranch || checkPermission('operational_expenses', 'read');
   const canEdit = canEditModule;
   const canRead = canReadModule;
 
-  const canRecordExpense = (canEditModule || checkPermission('operational_expenses:new-expense', 'edit')) && ['admin', 'branch'].includes(role) && checkPermission('operational_expenses:new-expense', 'read');
-  const canSeeDashboard = checkPermission('operational_expenses:dashboard', 'read');
-  const canSeeExpenses = checkPermission('operational_expenses:expenses', 'read');
-  const canSeeReports = checkPermission('operational_expenses:reports', 'read');
-  const canSeeActions = checkPermission('operational_expenses:vehicle-actions', 'read') || canReadModule;
-  const canSeeLeaderboard = checkPermission('operational_expenses:fuel-leaderboard', 'read') || canReadModule;
+  const canRecordExpense = isBranch || ((canEditModule || checkPermission('operational_expenses:new-expense', 'edit')) && ['admin', 'branch'].includes(role) && checkPermission('operational_expenses:new-expense', 'read'));
+  const canSeeDashboard = isBranch || checkPermission('operational_expenses:dashboard', 'read');
+  const canSeeExpenses = isBranch || checkPermission('operational_expenses:expenses', 'read');
+  const canSeeReports = isBranch || checkPermission('operational_expenses:reports', 'read');
+  const canSeeActions = !isBranch && (checkPermission('operational_expenses:vehicle-actions', 'read') || canReadModule);
+  const canSeeLeaderboard = !isBranch && (checkPermission('operational_expenses:fuel-leaderboard', 'read') || canReadModule);
 
   const [alertsCount, setAlertsCount] = React.useState<number>(0);
 

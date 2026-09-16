@@ -55,27 +55,45 @@ export const resolveAccessLevel = (
 ): AccessLevel => {
   if (isAdminRole(role)) return 'edit';
 
-  // 1. Explicit user override for this feature
+  // 1. Explicit user override for this feature takes highest precedence
   const override = overrides?.find(p => p.featureName === feature);
   if (override) return override.accessLevel;
 
+  // Hard boundary: Branch role must never access payroll
+  if (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll' || feature.startsWith('payroll:'))) {
+    return 'none';
+  }
+
+  // Hard boundary: Branch role access for Operational Cash Expenses
+  if (role === 'branch') {
+    if (feature === 'operational_expenses' || feature === 'operational-expenses' || feature === 'operationalExpenses') {
+      return 'edit';
+    }
+    if (feature === 'operational_expenses:new-expense' || feature === 'operational_expenses:expenses') {
+      return 'edit';
+    }
+    if (feature === 'operational_expenses:dashboard' || feature === 'operational_expenses:reports') {
+      return 'read';
+    }
+    if (
+      feature === 'operational_expenses:vehicle-actions' ||
+      feature === 'operational_expenses:fuel-leaderboard' ||
+      feature === 'operational_expenses:vehicles'
+    ) {
+      return 'none';
+    }
+    if (feature.startsWith('operational_expenses:')) {
+      return 'edit';
+    }
+  }
+
   // 2. Role default for this feature
-  const roleDefault = roleDefaults?.find(p => p.featureName === feature);
+  const roleDefault = roleDefaults?.find(p => (!p.role || p.role === role) && p.featureName === feature);
   if (roleDefault) return roleDefault.accessLevel;
 
   // Fallback for Owner / Executive on Owner Dashboard
   if (role === 'owner' && (feature === 'owner_dashboard' || feature === 'owner-dashboard')) {
     return 'read';
-  }
-
-  // Branch role must not access payroll or driver payroll
-  if (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll')) {
-    return 'none';
-  }
-
-  // Fallback for Branch on Operational Expenses
-  if (role === 'branch' && (feature === 'operational_expenses' || feature === 'operational-expenses' || feature.startsWith('operational_expenses:'))) {
-    return 'edit';
   }
 
   // 3. Sub-feature: fall back to parent
