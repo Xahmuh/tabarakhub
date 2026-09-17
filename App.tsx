@@ -252,6 +252,7 @@ const App: React.FC = () => {
       case 'spin-win':
         return isModuleEnabled('spinWin') && canUseFeature('spin_win', 'read', role, permissionState);
       case 'hr':
+        return isModuleEnabled('hr') && (role === 'branch' || canUseFeature('hr_requests', 'read', role, permissionState));
       case 'hr-manager':
         return isModuleEnabled('hr') && canUseFeature('hr_requests', 'read', role, permissionState);
       case 'hr-directory':

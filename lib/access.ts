@@ -96,6 +96,11 @@ export const resolveAccessLevel = (
     return 'read';
   }
 
+  // Fallback for Branch on HR Self-Service
+  if (role === 'branch' && (feature === 'hr_requests' || feature === 'hr-requests' || feature === 'hr')) {
+    return 'edit';
+  }
+
   // 3. Sub-feature: fall back to parent
   if (feature.includes(':')) {
     const parentFeature = feature.split(':')[0];
