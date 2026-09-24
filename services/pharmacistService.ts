@@ -14,13 +14,17 @@ const toPharmacist = (p: any, branchId?: string): Pharmacist => ({
 });
 
 export const pharmacistService = {
-  listAll: async () => {
+  listAll: async (options?: { includeInactive?: boolean }) => {
     try {
-      const { data, error } = await supabaseClient
+      let query = supabaseClient
         .from('pharmacists')
-        .select(PHARMACIST_COLUMNS)
-        .eq('is_active', true)
-        .order('code');
+        .select(PHARMACIST_COLUMNS);
+
+      if (!options?.includeInactive) {
+        query = query.eq('is_active', true);
+      }
+
+      const { data, error } = await query.order('name');
       if (error) throw error;
       return (data || []).map(p => toPharmacist(p));
     } catch (e) {
@@ -108,5 +112,28 @@ export const pharmacistService = {
       .eq('id', id);
     if (error) throw error;
     return true;
+  },
+  listAllAssignments: async (): Promise<Array<{ pharmacist_id: string; branch_id: string }>> => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pharmacist_branches')
+        .select('pharmacist_id, branch_id');
+      if (error) throw error;
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+  listBranchIdsForPharmacist: async (pharmacistId: string): Promise<string[]> => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pharmacist_branches')
+        .select('branch_id')
+        .eq('pharmacist_id', pharmacistId);
+      if (error) throw error;
+      return (data || []).map((row: any) => row.branch_id);
+    } catch {
+      return [];
+    }
   }
 };

@@ -173,15 +173,15 @@ export const BranchDashboard: React.FC<BranchDashboardProps> = ({ branch, onBack
                     filter: `branch_id=eq.${branch.id}`
                 },
                 async (payload) => {
-                    const [customer, prize] = await Promise.all([
-                        supabaseClient.from('customers').select('first_name, phone').eq('id', payload.new.customer_id).single(),
-                        supabaseClient.from('spin_prizes').select('name').eq('id', payload.new.prize_id).single()
-                    ]);
+                    const details = await spinWinService.getSpinNotificationDetails(
+                        payload.new.customer_id,
+                        payload.new.prize_id
+                    );
 
                     setNotification({
-                        name: customer.data?.first_name || 'New Customer',
-                        phone: customer.data?.phone,
-                        prize: prize.data?.name,
+                        name: details.customerName || 'New Customer',
+                        phone: details.phone,
+                        prize: details.prizeName,
                         vCode: payload.new.voucher_code
                     });
 

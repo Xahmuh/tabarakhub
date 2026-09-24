@@ -14,7 +14,7 @@ import {
   VehicleOdometerHistory
 } from '../types';
 import { toBhdStorageValue } from '../utils/money';
-import { calculateVehicleAlertStatus } from '../app/operational-expenses/utils/vehicleAlertUtils';
+import { calculateVehicleAlertStatus } from '../utils/vehicleAlertUtils';
 
 // --- Mappers ---
 
@@ -372,6 +372,21 @@ export const expenseService = {
       }
 
       return { reading: 0, date: null };
+    },
+
+    getExpenseTransactionCount: async (vehicleId: string): Promise<number> => {
+      try {
+        const { count, error } = await supabaseClient
+          .from('expense_transactions')
+          .select('id', { count: 'exact', head: true })
+          .eq('vehicle_id', vehicleId)
+          .is('deleted_at', null);
+        if (error) throw error;
+        return count || 0;
+      } catch (e) {
+        console.warn('Error fetching expense transaction count for vehicle:', e);
+        return 0;
+      }
     },
 
     getOdometerHistory: async (vehicleId: string): Promise<VehicleOdometerHistory[]> => {

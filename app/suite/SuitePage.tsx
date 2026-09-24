@@ -253,6 +253,19 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'feature'
     },
     {
+      key: 'tqph',
+      visible: true,
+      title: 'Tabarak Quality & Performance Hub (TQPH)',
+      description: 'National NHRA compliance simulated audits, 20-branch ranking leaderboard, 6-pillar staff appraisals, and 48h CAPA action center.',
+      icon: <ShieldCheck className="h-5 w-5 text-emerald-400" />,
+      onClick: () => handleTabChange('tqph'),
+      isPending,
+      badge: 'Quality Hub',
+      cta: 'Open Quality Hub',
+      tone: 'feature',
+      badgeStyle: 'red'
+    },
+    {
       key: 'dashboard-manager',
       visible: isManager && canOpenDashboard,
       title: 'Performance Dashboard',

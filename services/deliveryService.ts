@@ -411,6 +411,7 @@ const ORDER_SELECT = `
 
 export interface DeliveryOrderFilters {
   branchId?: string;
+  branchIds?: string[];
   dateFrom?: string;
   dateTo?: string;
   paymentType?: string;
@@ -440,7 +441,11 @@ export const deliveryService = {
       // Supabase query builders are mutable, so build a fresh one per page.
       const buildQuery = () => {
         let query = supabaseClient.from('delivery_orders').select(ORDER_SELECT);
-        if (filters.branchId && filters.branchId !== 'all') query = query.eq('branch_id', filters.branchId);
+        if (filters.branchIds && filters.branchIds.length > 0) {
+          query = query.in('branch_id', filters.branchIds);
+        } else if (filters.branchId && filters.branchId !== 'all') {
+          query = query.eq('branch_id', filters.branchId);
+        }
         if (filters.dateFrom) query = query.gte('order_date', filters.dateFrom);
         if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
         if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);

@@ -34,3 +34,7 @@ export const toBhdStorageValue = (value: number | string | null | undefined) =>
 
 export const formatBhdWithCurrency = (value: number | string | null | undefined) =>
   `${formatBhdAmount(value)} BHD`;
+
+export const formatBhd = formatBhdWithCurrency;
+export const formatBhdCurrency = formatBhdWithCurrency;
+

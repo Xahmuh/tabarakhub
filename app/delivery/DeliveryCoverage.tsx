@@ -4,19 +4,25 @@ import {
   AlertTriangle, ArrowUpRight, BarChart3, Building2, CheckCircle2, FileDown, Grid3x3, Info, Layers, LayoutDashboard, Lightbulb, Map as MapIcon, MapPinned, Package, Printer, ShieldAlert, Target, TrendingDown, TrendingUp
 } from 'lucide-react';
 import { deliveryCoverageService } from '../../services/deliveryCoverageService';
+import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { operationsTaskService } from '../../services/operationsTaskService';
 import {
-  Branch, BranchDeliveryProfile, DeliveryAdvancedCoverage, DeliveryBlockMetric, DeliveryBlockZoneAnalysis, DeliveryCoverageRecommendation, DeliveryCoverageSummary, DeliveryZoneQualityMetrics, Governorate
+  Branch, BranchDeliveryProfile, DeliveryAdvancedCoverage, DeliveryBlock, DeliveryBlockMetric, DeliveryBlockZoneAnalysis, DeliveryCoverageRecommendation, DeliveryCoverageSummary, DeliveryZoneQualityMetrics, Governorate,
+  NoOrderBlockAnalysis
 } from '../../types';
 import { SearchableSelect } from './components/SearchableSelect';
+import { SearchableMultiSelect } from './components/SearchableMultiSelect';
 import { BlockCoverageMap, BlockCoverageMapLoading } from './components/BlockCoverageMap';
 import {
   BranchCatchmentSection, BranchOverlapSection, CampaignOpportunitiesSection, CapacityPressureSection,
-  CoverageTaskRequest, DemandTrendSection, ExpansionReviewSection, FieldAvailabilitySection, WhiteSpaceSection
+  ContestedTerritorySection, CoverageTaskRequest, DemandTrendSection, ExpansionReviewSection,
+  FieldAvailabilitySection, NoOrdersBreakdownSection, WhiteSpaceSection
 } from './components/CoverageSections';
 import { BlockGeometryDataset, calculateDistanceKm, classifyDistanceZone, getBlockCentroid, loadBahrainBlockGeometry } from './bahrainBlockGeometry';
+import { LEGACY_BLOCK_AREA_NAMES, LEGACY_BLOCK_PHARMACY_MAP } from '../block-analyzer/legacyCoverageData';
+import { evaluateNoOrderBlocks } from './utils/noOrdersClassification';
 import { exportBreakdownToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { formatBhd } from './utils';
@@ -129,11 +135,12 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   const [preset, setPreset] = useState<CoveragePreset>('30d');
   const [customFrom, setCustomFrom] = useState(toDateKey(new Date()));
   const [customTo, setCustomTo] = useState(toDateKey(new Date()));
-  const [branchFilter, setBranchFilter] = useState<string | null>(lockedBranchId || null);
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(lockedBranchId ? [lockedBranchId] : []);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [summary, setSummary] = useState<DeliveryCoverageSummary | null>(null);
   const [advanced, setAdvanced] = useState<DeliveryAdvancedCoverage | null>(null);
   const [branchProfiles, setBranchProfiles] = useState<BranchDeliveryProfile[]>([]);
+  const [directoryBlocks, setDirectoryBlocks] = useState<DeliveryBlock[]>([]);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<DeliveryBlockMetric | null>(null);
@@ -145,14 +152,22 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   const [busyInsightId, setBusyInsightId] = useState<string | null>(null);
 
   const range = presetRange(preset, customFrom, customTo);
-  const effectiveBranchFilter = lockedBranchId || branchFilter || null;
-  const selectedBranch = useMemo(
-    () => branches.find(branch => branch.id === effectiveBranchFilter) || null,
-    [branches, effectiveBranchFilter]
+  const effectiveBranchIds = useMemo(
+    () => lockedBranchId ? [lockedBranchId] : selectedBranchIds,
+    [lockedBranchId, selectedBranchIds]
   );
-  const activeScopeLabel = selectedBranch
-    ? `${selectedBranch.code} - ${selectedBranch.name}`
-    : 'All branches';
+  const selectedBranch = useMemo(
+    () => effectiveBranchIds.length === 1 ? branches.find(b => b.id === effectiveBranchIds[0]) || null : null,
+    [branches, effectiveBranchIds]
+  );
+  const activeScopeLabel = useMemo(() => {
+    if (effectiveBranchIds.length === 0) return 'All branches';
+    if (effectiveBranchIds.length === 1) {
+      const b = branches.find(branch => branch.id === effectiveBranchIds[0]);
+      return b ? `${b.code} - ${b.name}` : '1 branch';
+    }
+    return `${effectiveBranchIds.length} branches selected`;
+  }, [branches, effectiveBranchIds]);
   const branchOptions = useMemo(
     () => branches
       .slice()
@@ -161,10 +176,10 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     [branches]
   );
   const visibleBranchProfiles = useMemo(
-    () => effectiveBranchFilter
-      ? branchProfiles.filter(profile => profile.branchId === effectiveBranchFilter)
+    () => effectiveBranchIds.length > 0
+      ? branchProfiles.filter(profile => effectiveBranchIds.includes(profile.branchId))
       : branchProfiles,
-    [branchProfiles, effectiveBranchFilter]
+    [branchProfiles, effectiveBranchIds]
   );
   const activeBranchProfiles = useMemo(
     () => visibleBranchProfiles.filter(profile => profile.isDeliveryEnabled !== false),
@@ -178,7 +193,15 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
   }, []);
 
   useEffect(() => {
-    if (lockedBranchId) setBranchFilter(lockedBranchId);
+    let cancelled = false;
+    deliveryService.blocks.list()
+      .then(list => { if (!cancelled) setDirectoryBlocks(list); })
+      .catch(e => console.warn('Could not load directory blocks for coverage', e));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (lockedBranchId) setSelectedBranchIds([lockedBranchId]);
   }, [lockedBranchId]);
 
   useEffect(() => {
@@ -227,13 +250,13 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     deliveryCoverageService.getDeliveryCoverageBundle({
       dateFrom: range.from,
       dateTo: range.to,
-      branchId: effectiveBranchFilter || undefined
+      branchIds: effectiveBranchIds.length > 0 ? effectiveBranchIds : undefined
     })
       .then(bundle => { if (!cancelled) { setSummary(bundle.summary); setAdvanced(bundle.advanced); } })
       .catch(e => { console.error('Coverage load failed', e); if (!cancelled) { setSummary(null); setAdvanced(null); } })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, effectiveBranchFilter]);
+  }, [range.from, range.to, effectiveBranchIds]);
 
   const coverageSections = useMemo(
     () => ([
@@ -427,6 +450,56 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
     return { metrics, byBlock };
   }, [activeBranchProfiles, geometry, profileByBranch, summary]);
 
+  const noOrdersResult = useMemo(() => {
+    if (!geometry?.available) {
+      return {
+        summary: {
+          totalNoOrderBlocks: 0,
+          contestedCount: 0,
+          contestedSingleCompetitorCount: 0,
+          whiteSpaceCount: 0,
+          saturatedCount: 0,
+          outsideServiceAreaCount: 0,
+          contestedBlocks: [],
+          whiteSpaceBlocks: [],
+          saturatedBlocks: [],
+          outsideServiceAreaBlocks: []
+        },
+        analysisMap: new Map<string, NoOrderBlockAnalysis>()
+      };
+    }
+
+    const servedMap = new Map<string, DeliveryBlockMetric>((summary?.blocks || []).map(b => [b.blockNumber.trim(), b]));
+    const candidateBlocks: DeliveryBlockMetric[] = [];
+
+    for (const [blockNum, feat] of geometry.byBlock.entries()) {
+      const served = servedMap.get(blockNum);
+      if (served) {
+        candidateBlocks.push(served);
+      } else {
+        const area = (LEGACY_BLOCK_AREA_NAMES as Record<string, string>)[blockNum] ||
+          (feat.raw?.area_name as string) || (feat.raw?.area as string) || null;
+        candidateBlocks.push({
+          blockNumber: blockNum,
+          areaName: area,
+          governorate: null,
+          unresolved: false,
+          orderCount: 0,
+          branchBreakdown: [],
+          shareOfTotal: 0,
+          trend: 'insufficient_data'
+        });
+      }
+    }
+
+    return evaluateNoOrderBlocks({
+      blocks: candidateBlocks,
+      branchProfiles: activeBranchProfiles,
+      dataset: geometry,
+      competitorMap: LEGACY_BLOCK_PHARMACY_MAP
+    });
+  }, [geometry, summary, activeBranchProfiles]);
+
   const handlePeriodChange = (nextPreset: CoveragePreset, from?: string, to?: string) => {
     setPreset(nextPreset);
     if (from !== undefined) setCustomFrom(from);
@@ -495,13 +568,13 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                     Branch scope
                   </span>
                   <span className="max-w-[9rem] truncate text-right text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    {selectedBranch?.code || 'All'}
+                    {effectiveBranchIds.length === 0 ? 'All' : `${effectiveBranchIds.length} selected`}
                   </span>
                 </div>
-                <SearchableSelect
+                <SearchableMultiSelect
                   options={branchOptions}
-                  value={branchFilter}
-                  onChange={setBranchFilter}
+                  selectedValues={selectedBranchIds}
+                  onChange={setSelectedBranchIds}
                   placeholder="All branches"
                 />
               </div>
@@ -645,6 +718,8 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                 selectedBlock={selectedBlock}
                 highlightedGovernorate={selectedGovernorate}
                 geometryStats={geoMatch}
+                noOrderAnalysis={noOrdersResult.analysisMap}
+                directoryBlocks={directoryBlocks}
                 onSelect={setSelectedBlock}
                 onOpenMatrix={() => setView('matrix')}
               />
@@ -1006,6 +1081,12 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
 
           {section === 'overview' && !branchView && (
           <>
+          {/* No-Orders Breakdown (Competitor-Aware) */}
+          <NoOrdersBreakdownSection
+            summary={noOrdersResult.summary}
+            onViewContested={() => setSection('campaign')}
+            onViewExpansion={() => setSection('expansion')}
+          />
           {/* Recommendations */}
           <section className="operational-panel p-4 md:p-5">
             <div className="mb-3 flex items-center gap-2">
@@ -1038,13 +1119,21 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           )}
 
           {section === 'campaign' && advancedEnabled && advanced && (
-            <CampaignOpportunitiesSection
-              items={advanced.campaignOpportunities}
-              suppressed={summary.mappableOrders < 10 || summary.unknownBlockRate >= 0.4}
-              canCreateTask={canCreateTask}
-              onCreateTask={handleCreateTask}
-              busyInsightId={busyInsightId}
-            />
+            <>
+              <CampaignOpportunitiesSection
+                items={advanced.campaignOpportunities}
+                suppressed={summary.mappableOrders < 10 || summary.unknownBlockRate >= 0.4}
+                canCreateTask={canCreateTask}
+                onCreateTask={handleCreateTask}
+                busyInsightId={busyInsightId}
+              />
+              <ContestedTerritorySection
+                items={noOrdersResult.summary.contestedBlocks}
+                canCreateTask={canCreateTask}
+                onCreateTask={handleCreateTask}
+                busyInsightId={busyInsightId}
+              />
+            </>
           )}
 
           {section === 'overlap' && advancedEnabled && advanced && (
@@ -1056,7 +1145,13 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
           )}
 
           {section === 'expansion' && advancedEnabled && advanced && (
-            <ExpansionReviewSection items={advanced.expansionCandidates} canCreateTask={canCreateTask} onCreateTask={handleCreateTask} busyInsightId={busyInsightId} />
+            <ExpansionReviewSection
+              items={advanced.expansionCandidates}
+              outsideBlocks={noOrdersResult.summary.outsideServiceAreaBlocks}
+              canCreateTask={canCreateTask}
+              onCreateTask={handleCreateTask}
+              busyInsightId={busyInsightId}
+            />
           )}
 
           {section === 'quality' && (

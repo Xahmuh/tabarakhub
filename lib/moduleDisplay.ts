@@ -30,7 +30,8 @@ export const DEFAULT_MODULE_DISPLAY_ITEMS: ModuleDisplayItemSetting[] = [
   { key: 'operational-expenses', order: 185, badge: 'Finance', badgeStyle: 'hidden' },
   { key: 'operational-renewals', order: 188, badge: 'Compliance', badgeStyle: 'red' },
   { key: 'duty-scheduler', order: 190, badge: 'Beta', badgeStyle: 'hidden' },
-  { key: 'leave-management', order: 195, badge: 'Compliance', badgeStyle: 'red' }
+  { key: 'leave-management', order: 195, badge: 'Compliance', badgeStyle: 'red' },
+  { key: 'tqph', order: 198, badge: 'Quality Hub', badgeStyle: 'red' }
 ];
 
 export const MODULE_DISPLAY_LABELS: Record<string, string> = {
@@ -62,7 +63,8 @@ export const MODULE_DISPLAY_LABELS: Record<string, string> = {
   'operational-expenses': 'Operational Cash Expenses',
   'operational-renewals': 'Operational Alert & Renewals',
   'duty-scheduler': 'Automated Duty Scheduler',
-  'leave-management': 'Leave Management & Compliance'
+  'leave-management': 'Leave Management & Compliance',
+  tqph: 'Tabarak Quality & Performance Hub (TQPH)'
 };
 
 const normalizeBadgeStyle = (value: unknown): ModuleDisplayItemSetting['badgeStyle'] =>

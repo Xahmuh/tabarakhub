@@ -5,6 +5,7 @@ import { SpinWheelMark } from './SpinWheelMark';
 import { spinWinService } from '../../services/spinWin';
 import { SpinPrize, SpinSession, Customer, Branch } from '../../types';
 import { clientConfig, isDemoMode } from '../../config/clientConfig';
+import { getSpinDeviceFingerprint } from '../../lib/deviceFingerprint';
 import {
     Phone,
     Mail,
@@ -279,11 +280,23 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
             setCustomer(cust);
             saveFlowDraft({ hasClickedRate: false, step: 'info' });
 
-            if (isDemoMode) {
-                const dailyCount = await spinWinService.spins.getDailyCount(cust.id, 'customer');
+            const deviceFp = await getSpinDeviceFingerprint();
 
-                if (dailyCount >= 2) {
-                    setError(`Daily limit reached for this demo customer (2 spins).`);
+            if (isDemoMode) {
+                const settings = await spinWinService.settings.get();
+                const dailyLimit = settings.dailySpinsPerMobile || 1;
+
+                const [dailyCustomerCount, dailyDeviceCount] = await Promise.all([
+                    spinWinService.spins.getDailyCount(cust.id, 'customer'),
+                    spinWinService.spins.getDailyCount(deviceFp, 'device')
+                ]);
+
+                if (dailyCustomerCount >= dailyLimit) {
+                    setError(`عفواً، تم استنفاد الحد اليومي للمحاولات لهذا الرقم (${dailyLimit} محاولة). يرجى زيارتنا غداً! / Daily limit reached for this number (${dailyLimit} spins).`);
+                    return;
+                }
+                if (dailyDeviceCount >= dailyLimit) {
+                    setError(`عفواً، تم استنفاد الحد اليومي للمحاولات لهذا الجهاز (${dailyLimit} محاولة). يرجى زيارتنا غداً! / Daily limit reached for this device (${dailyLimit} spins).`);
                     return;
                 }
             }
@@ -341,12 +354,13 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
         }
 
         try {
+            const deviceFp = await getSpinDeviceFingerprint();
             const result = await spinWinService.spins.play(token, {
                 phone: `${countryCode}${phone}`,
                 firstName,
                 lastName,
                 email
-            });
+            }, deviceFp);
 
             setWinningPrize(result.prize);
             setVoucherCode(result.voucherCode);
@@ -359,7 +373,12 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                 clearSpinRecovery();
                 setError('This session is no longer valid. Please ask the pharmacist for a new QR code.');
             }
-            else if (msg.includes('SPIN_DAILY_LIMIT_REACHED')) setError('You have already played today. Please visit us again tomorrow.');
+            else if (msg.includes('SPIN_DEVICE_DAILY_LIMIT_REACHED')) {
+                setError('عفواً، تم استنفاد الحد اليومي للمحاولات المسموح بها لهذا الجهاز اليوم. يرجى زيارتنا غداً! / This device has reached its daily spin limit for today.');
+            }
+            else if (msg.includes('SPIN_DAILY_LIMIT_REACHED')) {
+                setError('عفواً، تم استنفاد الحد اليومي للمحاولات المسموح بها لهذا الرقم اليوم. يرجى زيارتنا غداً! / This phone number has reached its daily spin limit for today.');
+            }
             else if (msg.includes('NO_PRIZES_CONFIGURED')) setError('No prizes are available right now.');
             else setError('We could not complete the spin right now. Please ask the branch team for help.');
         } finally {

@@ -27,9 +27,11 @@ export default defineConfig(() => {
               if (moduleId.includes('/app/owner-dashboard/')) return 'module-owner-dashboard';
               if (moduleId.includes('/app/modules/quality-feedback/')) return 'module-quality-feedback';
               if (moduleId.includes('/app/project-settings/')) return 'module-settings';
+              if (moduleId.includes('/app/tqph/')) return 'module-tqph';
               if (!id.includes('node_modules')) return undefined;
               if (moduleId.includes('/@supabase/')) return 'vendor-supabase';
               if (moduleId.includes('/react/') || moduleId.includes('/react-dom/')) return 'vendor-react';
+              if (moduleId.includes('/@react-pdf/')) return 'vendor-react-pdf';
               if (moduleId.includes('/pdfjs-dist/')) return 'vendor-pdf';
               if (moduleId.includes('/exceljs/') || moduleId.includes('/file-saver/')) return 'vendor-excel';
               if (moduleId.includes('/lucide-react/')) return 'vendor-icons';

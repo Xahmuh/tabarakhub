@@ -110,10 +110,36 @@ const priorityWeight: Record<ActionQueueStatus | 'low' | 'medium' | 'high' | 'cr
   critical: 4
 };
 
+const memoryStore = new Map<string, string>();
+
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch {
+      // ignore
+    }
+    return memoryStore.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    memoryStore.set(key, value);
+  }
+};
+
 const readDemoArray = <T>(key: string): T[] => {
   if (!isDemoMode) return [];
   try {
-    return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+    return JSON.parse(safeStorage.getItem(key) || '[]') as T[];
   } catch {
     return [];
   }
@@ -121,7 +147,129 @@ const readDemoArray = <T>(key: string): T[] => {
 
 const writeDemoArray = <T>(key: string, value: T[]) => {
   if (!isDemoMode) return;
-  localStorage.setItem(key, JSON.stringify(value));
+  safeStorage.setItem(key, JSON.stringify(value));
+};
+
+const mapPriorityToWorkflowPriority = (p: CommandCenterSeverity): 'low' | 'medium' | 'high' | 'urgent' => {
+  if (p === 'critical') return 'urgent';
+  return p;
+};
+
+const mapStatusToWorkflowStatus = (s: ActionQueueStatus): 'open' | 'in_progress' | 'done' | 'dismissed' => {
+  if (s === 'resolved') return 'done';
+  return s;
+};
+
+const validWorkflowRoles = new Set(['admin', 'manager', 'owner', 'accounts', 'supervisor', 'warehouse', 'branch']);
+const mapRoleToWorkflowRole = (role?: string | null): string | null => {
+  if (!role) return null;
+  const lower = role.toLowerCase().trim();
+  return validWorkflowRoles.has(lower) ? lower : null;
+};
+
+const mirrorToWorkflowTasks = async (task: OperationsTask, input: CreateOperationsTaskInput, originNote: string): Promise<void> => {
+  try {
+    await supabaseClient
+      .from('workflow_tasks')
+      .insert([{
+        task_kind: 'work',
+        title: task.title,
+        description: task.description || task.recommendedAction || null,
+        priority: mapPriorityToWorkflowPriority(task.priority),
+        status: mapStatusToWorkflowStatus(task.status),
+        branch_id: task.branchId || null,
+        branch_name: task.branchName || null,
+        assignee_role: mapRoleToWorkflowRole(task.ownerRole),
+        assigned_to: task.assignedTo || null,
+        review_required: false,
+        due_at: task.dueAt || null,
+        metadata: {
+          sourceModule: task.sourceModule,
+          operationsTaskId: task.id,
+          originNote,
+          recommendedAction: task.recommendedAction || null,
+          nextStep: task.nextStep || null,
+          relatedRecordId: task.relatedRecordId || null,
+          relatedRecordType: task.relatedRecordType || null
+        }
+      }]);
+  } catch {
+    // Non-blocking mirror - ignore failure
+  }
+
+  if (isDemoMode) {
+    try {
+      const demoWfTasks = readDemoArray<any>('tabarak_demo_workflow_tasks');
+      const now = new Date().toISOString();
+      const demoWfTask = {
+        id: crypto.randomUUID(),
+        taskKind: 'work',
+        title: task.title,
+        description: task.description || task.recommendedAction || null,
+        priority: mapPriorityToWorkflowPriority(task.priority),
+        status: mapStatusToWorkflowStatus(task.status),
+        branchId: task.branchId || null,
+        branchName: task.branchName || null,
+        assigneeRole: mapRoleToWorkflowRole(task.ownerRole),
+        assignedTo: task.assignedTo || null,
+        reviewRequired: false,
+        dueAt: task.dueAt || null,
+        metadata: {
+          sourceModule: task.sourceModule,
+          operationsTaskId: task.id,
+          originNote,
+          recommendedAction: task.recommendedAction || null,
+          nextStep: task.nextStep || null,
+          relatedRecordId: task.relatedRecordId || null,
+          relatedRecordType: task.relatedRecordType || null
+        },
+        createdAt: now,
+        updatedAt: now,
+        lastActivityAt: now
+      };
+      writeDemoArray('tabarak_demo_workflow_tasks', [demoWfTask, ...demoWfTasks]);
+    } catch {
+      // ignore
+    }
+  }
+};
+
+const mirrorStatusToWorkflowTasks = async (taskId: string, status: ActionQueueStatus): Promise<void> => {
+  const wfStatus = mapStatusToWorkflowStatus(status);
+
+  try {
+    await supabaseClient
+      .from('workflow_tasks')
+      .update({ status: wfStatus, last_activity_at: new Date().toISOString() })
+      .contains('metadata', { operationsTaskId: taskId });
+  } catch {
+    // Non-blocking mirror - ignore failure
+  }
+
+  if (isDemoMode) {
+    try {
+      const demoWfTasks = readDemoArray<any>('tabarak_demo_workflow_tasks');
+      let changed = false;
+      const updatedDemoWf = demoWfTasks.map(wt => {
+        if (wt?.metadata?.operationsTaskId === taskId) {
+          changed = true;
+          return {
+            ...wt,
+            status: wfStatus,
+            resolvedAt: ['done', 'dismissed'].includes(wfStatus) ? new Date().toISOString() : null,
+            updatedAt: new Date().toISOString(),
+            lastActivityAt: new Date().toISOString()
+          };
+        }
+        return wt;
+      });
+      if (changed) {
+        writeDemoArray('tabarak_demo_workflow_tasks', updatedDemoWf);
+      }
+    } catch {
+      // ignore
+    }
+  }
 };
 
 const getErrorMessage = (error: unknown) => {
@@ -306,6 +454,7 @@ export const operationsTaskService = {
         .from('operations_task_events')
         .insert([{ task_id: task.id, event_type: 'created', new_status: task.status, comment: `Task created from ${originNote}` }]);
       if (eventError) throw eventError;
+      await mirrorToWorkflowTasks(task, input, originNote);
       return task;
     } catch (error) {
       throwUnlessDemoMode(error, 'Unable to create operations task');
@@ -336,6 +485,7 @@ export const operationsTaskService = {
       writeDemoArray(TASKS_KEY, [task, ...tasks]);
       const events = readDemoArray<OperationsTaskEvent>(EVENTS_KEY);
       writeDemoArray(EVENTS_KEY, [makeDemoEvent({ taskId: task.id, eventType: 'created', comment: `Demo task created from ${originNote}` }), ...events]);
+      await mirrorToWorkflowTasks(task, input, originNote);
       return task;
     }
   },
@@ -382,6 +532,7 @@ export const operationsTaskService = {
           comment: `Task created from computed alert: ${alert.type}`
         }]);
       if (eventError) throw eventError;
+      await mirrorToWorkflowTasks(task, input, `alert: ${alert.type}`);
       return task;
     } catch (error) {
       throwUnlessDemoMode(error, 'Unable to create operations task');
@@ -416,6 +567,7 @@ export const operationsTaskService = {
         makeDemoEvent({ taskId: task.id, eventType: 'created', comment: 'Demo task created from alert' }),
         ...events
       ]);
+      await mirrorToWorkflowTasks(task, input, `alert: ${alert.type}`);
       return task;
     }
   },
@@ -448,6 +600,7 @@ export const operationsTaskService = {
           comment: comment || null
         }]);
       if (eventError) throw eventError;
+      await mirrorStatusToWorkflowTasks(taskId, status);
       return task;
     } catch (error) {
       throwUnlessDemoMode(error, 'Unable to update operations task status');
@@ -468,6 +621,7 @@ export const operationsTaskService = {
         makeDemoEvent({ taskId, eventType: 'status_changed', oldStatus, newStatus: status, comment }),
         ...events
       ]);
+      await mirrorStatusToWorkflowTasks(taskId, status);
       return tasks[idx];
     }
   },
@@ -497,7 +651,7 @@ export const operationsTaskService = {
   listTaskEvents: async (taskId: string): Promise<OperationsTaskEvent[]> => {
     try {
       const { data, error } = await supabaseClient
-        .from('operations_tasks')
+        .from('operations_task_events')
         .select('*')
         .eq('task_id', taskId)
         .order('created_at', { ascending: false });

@@ -53,10 +53,36 @@ const addFrequency = (value: string, frequency: WorkflowTaskTemplate['recurrence
   return dateKey(date);
 };
 
+const memoryStore = new Map<string, string>();
+
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch {
+      // ignore
+    }
+    return memoryStore.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    memoryStore.set(key, value);
+  }
+};
+
 const readDemoArray = <T>(key: string): T[] => {
   if (!isDemoMode) return [];
   try {
-    return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+    return JSON.parse(safeStorage.getItem(key) || '[]') as T[];
   } catch {
     return [];
   }
@@ -64,7 +90,7 @@ const readDemoArray = <T>(key: string): T[] => {
 
 const writeDemoArray = <T>(key: string, value: T[]) => {
   if (!isDemoMode) return;
-  localStorage.setItem(key, JSON.stringify(value));
+  safeStorage.setItem(key, JSON.stringify(value));
 };
 
 const getErrorMessage = (error: unknown) => {

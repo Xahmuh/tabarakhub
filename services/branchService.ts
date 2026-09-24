@@ -54,6 +54,21 @@ export const branchService = {
       return undefined;
     }
   },
+  findById: async (id: string): Promise<Branch | undefined> => {
+    if (!id) return undefined;
+    try {
+      const { data, error } = await supabaseClient
+        .from('branches')
+        .select(BRANCH_COLUMNS)
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) return toBranch(data);
+      return undefined;
+    } catch (e) {
+      return undefined;
+    }
+  },
   getCurrent: async () => {
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session?.user) return null;

@@ -1,26 +1,39 @@
-
 import React, { useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
-import { Pharmacist, AuthState, Branch, BranchLoginApproval, BenefitPayTransfer, DeliveryNotification, DeliveryOrder, MaintenanceSettings } from './types';
+import {
+  AuthState,
+  Branch,
+  BranchLoginApproval,
+  BenefitPayTransfer,
+  DeliveryNotification,
+  MaintenanceSettings
+} from './types';
 import { supabase } from './lib/supabase';
 import { buildPermissionChecker, isManagerRole } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { spinWinService } from './services/spinWin';
-import { getSystemSettingsErrorMessage } from './services/systemSettingsService';
 import { branchLoginApprovalService } from './services/branchLoginApprovalService';
-import { deliveryNotificationService } from './services/deliveryNotificationService';
-import {
-  LoginPage, SelectPharmacistPage, POSPage, DashboardPage, HRPortalPage,
-  HRRequestsSection, WorkforcePage, SuitePage, WorkforceDirectory,
-  CustomerFlow, SpinWinHub, CorporateCodex, ProjectSettings, AppHeader, BackToModulesButton, ModuleHelpButton, Footer, POSGuidelineModal,
-  CashFlowPlanner, BranchCashTrackerPage, BlockCoverageAnalyzer, MaintenancePage,
-  FeedbackForm, QualityFeedbackAdmin, EmployeeContributionsPage, WorkflowTodoPage, DeliveryHub, BenefitPayLedger, OperationalExpensesHub, DeliveryNotificationsPage, OwnerDashboardPage, PayrollModuleHub,
-  OfficialHrLetterGenerator, OperationalRenewalsHub, DutySchedulerHub, LeaveManagementHub,
-  AttendanceHub
-} from './app/index';
-import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 
+// --- Shared Shell & Frame Views ---
+import { LoginPage } from './app/login';
+import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
+import { SelectPharmacistPage } from './app/select-pharmacist';
+import { SuitePage } from './app/suite';
+import { CustomerFlow } from './app/spin-win';
+import { AppHeader, Footer, POSGuidelineModal, ModuleHelpButton } from './app/shared';
+import { BlockCoverageAnalyzer } from './app/block-analyzer';
+import { MaintenancePage } from './app/maintenance';
+
+// --- Router & Hooks ---
+import {
+  AppRouter,
+  AppTab,
+  DeliveryFocusTarget,
+  BenefitPayFocusTarget
+} from './AppRouter';
+import { useDeliveryAlerts } from './hooks/useDeliveryAlerts';
+import { useSystemMaintenance } from './hooks/useSystemMaintenance';
 
 // --- Icons ---
 import {
@@ -29,9 +42,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-type AppTab = 'owner-dashboard' | 'pos' | 'dashboard' | 'selector' | 'spin-win' | 'hr' | 'hr-manager' | 'hr-directory' | 'hr-letter' | 'workforce' | 'cash-flow' | 'cash-tracker' | 'corporate-codex' | 'settings' | 'system-settings' | 'access-control' | 'feedback-form' | 'feedback-admin' | 'employee-contributions' | 'workflow-todo' | 'block-analyzer' | 'delivery' | 'benefit-pay-ledger' | 'operational-expenses' | 'operational-renewals' | 'duty-scheduler' | 'leave-management' | 'notifications' | 'payroll' | 'attendance';
-type DeliveryFocusTarget = { orderId: string; orderDate?: string | null; branchId?: string | null };
-type BenefitPayFocusTarget = { deliveryOrderId: string; transferDate?: string | null; branchId?: string | null };
 const APP_TABS: AppTab[] = [
   'owner-dashboard',
   'pos',
@@ -62,8 +72,10 @@ const APP_TABS: AppTab[] = [
   'leave-management',
   'notifications',
   'payroll',
-  'attendance'
+  'attendance',
+  'tqph'
 ];
+
 const ACTIVE_TAB_STORAGE_KEY = 'tabarak_active_tab';
 const SPIN_RETURN_KEY = 'tabarak_spinwin_return';
 const SPIN_DRAFT_KEY = 'tabarak_spinwin_customer_draft';
@@ -166,39 +178,19 @@ const SystemSettingsWarning: React.FC<{ message: string | null; showDetails?: bo
   );
 };
 
-const hexToRgbParts = (value: string, fallback: string) => {
-  const normalized = value.trim().replace('#', '');
-  const hex = normalized.length === 3
-    ? normalized.split('').map(char => char + char).join('')
-    : normalized;
-
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return fallback;
-
-  const red = parseInt(hex.slice(0, 2), 16);
-  const green = parseInt(hex.slice(2, 4), 16);
-  const blue = parseInt(hex.slice(4, 6), 16);
-  return `${red} ${green} ${blue}`;
-};
-
-const updateBrowserIcon = (iconUrl: string) => {
-  const href = iconUrl.trim() || clientConfig.logoUrl;
-  let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (!icon) {
-    icon = document.createElement('link');
-    icon.rel = 'icon';
-    document.head.appendChild(icon);
-  }
-  icon.href = href;
-  icon.type = href.endsWith('.svg') ? 'image/svg+xml' : 'image/jpeg';
-};
-
 const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ user: null, pharmacist: null });
   const [activeTab, setActiveTab] = useState<AppTab | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings | null>(null);
-  const [maintenanceSettingsError, setMaintenanceSettingsError] = useState<string | null>(null);
-  const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(true);
+
+  // System maintenance settings and branding hook
+  const {
+    maintenanceSettings,
+    setMaintenanceSettings,
+    maintenanceSettingsError,
+    isMaintenanceLoading
+  } = useSystemMaintenance();
+
   const [isMaintenanceAdminLoginOpen, setIsMaintenanceAdminLoginOpen] = useState(false);
   const [pendingBranchApproval, setPendingBranchApproval] = useState<BranchLoginApproval | null>(null);
   const [pendingBranchAuthState, setPendingBranchAuthState] = useState<AuthState | null>(null);
@@ -208,8 +200,6 @@ const App: React.FC = () => {
   const [showPharmacistSelector, setShowPharmacistSelector] = useState(false);
   const [customerFlowError, setCustomerFlowError] = useState<string | null>(null);
   const [activePOSBranch, setActivePOSBranch] = useState<Branch | null>(null);
-  const [deliveryNotificationUnreadCount, setDeliveryNotificationUnreadCount] = useState(0);
-  const [hasDeliveryNotificationAlert, setHasDeliveryNotificationAlert] = useState(false);
   const [deliveryFocusTarget, setDeliveryFocusTarget] = useState<DeliveryFocusTarget | null>(null);
   const [benefitPayFocusTarget, setBenefitPayFocusTarget] = useState<BenefitPayFocusTarget | null>(null);
   const [hrLetterInitialData, setHrLetterInitialData] = useState<any>(null);
@@ -232,9 +222,21 @@ const App: React.FC = () => {
     permissionState: Pick<AuthState, 'permissions' | 'rolePermissions'> = authState
   ) =>
     buildPermissionChecker(role, permissionState.permissions, permissionState.rolePermissions)(feature, minimum);
+
   const canReceiveDeliveryNotifications = !!authState.user && isModuleEnabled('delivery') && canUseFeature('delivery', 'read');
   const shouldShowPOSGuideline = () => maintenanceSettings?.posGuidelineEnabled !== false;
   const isBranchLoginApprovalRequired = maintenanceSettings?.branchLoginApprovalRequired !== false;
+
+  // Real-time delivery notification & alert audio hook
+  const {
+    deliveryNotificationUnreadCount,
+    setDeliveryNotificationUnreadCount,
+    hasDeliveryNotificationAlert,
+  } = useDeliveryAlerts({
+    userId: authState.user?.id,
+    canReceiveDeliveryNotifications,
+    activeTab
+  });
 
   const isTabEnabled = (
     tab: AppTab | null,
@@ -308,16 +310,6 @@ const App: React.FC = () => {
     const savedTab = getStoredActiveTab();
     return savedTab && isTabEnabled(savedTab, state.user?.role, state) ? savedTab : 'selector';
   };
-
-  const playDeliveryNotificationSound = useCallback(() => {
-    try {
-      const audio = new Audio('/sounds/pharmacy.mp3');
-      audio.volume = 0.8;
-      void audio.play().catch(() => undefined);
-    } catch {
-      // Browser audio can be unavailable until the first user gesture.
-    }
-  }, []);
 
   const handleTabChange = (tab: AppTab | null) => {
     if (!isTabEnabled(tab)) {
@@ -467,95 +459,6 @@ const App: React.FC = () => {
     return cleanPath.toLowerCase() === '/bh_analyzer' || params.get('bh_analyzer') === '1';
   });
 
-  useEffect(() => {
-    document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
-    const root = document.documentElement;
-    root.style.setProperty('--client-primary-color', clientConfig.primaryColor);
-    root.style.setProperty('--client-primary-hover-color', clientConfig.primaryHoverColor);
-    root.style.setProperty('--client-primary-dark-color', clientConfig.primaryDarkColor);
-    root.style.setProperty('--client-primary-muted-color', clientConfig.primaryMutedColor);
-    root.style.setProperty('--client-accent-color', clientConfig.accentColor);
-    root.style.setProperty('--client-primary-rgb', hexToRgbParts(clientConfig.primaryColor, '185 28 28'));
-    root.style.setProperty('--client-primary-hover-rgb', hexToRgbParts(clientConfig.primaryHoverColor, '153 27 27'));
-    root.style.setProperty('--client-primary-dark-rgb', hexToRgbParts(clientConfig.primaryDarkColor, '127 29 29'));
-  }, []);
-
-  useEffect(() => {
-    document.title = `${clientConfig.clientName} | ${clientConfig.appName}`;
-    updateBrowserIcon(
-      maintenanceSettings?.browserIconUrl?.trim() ||
-      maintenanceSettings?.pharmacyLogoUrl?.trim() ||
-      clientConfig.logoUrl
-    );
-  }, [maintenanceSettings?.browserIconUrl, maintenanceSettings?.pharmacyLogoUrl]);
-
-  useEffect(() => {
-    if (!canReceiveDeliveryNotifications) {
-      setDeliveryNotificationUnreadCount(0);
-      setHasDeliveryNotificationAlert(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const refreshUnreadCount = async () => {
-      try {
-        const count = await deliveryNotificationService.getUnreadCount();
-        if (isMounted) setDeliveryNotificationUnreadCount(count);
-      } catch (error) {
-        console.warn('Delivery notification count failed:', error);
-      }
-    };
-
-    void refreshUnreadCount();
-
-    const unsubscribe = deliveryNotificationService.subscribeToNew(notification => {
-      if (!isMounted) return;
-      setDeliveryNotificationUnreadCount(count => count + 1);
-      setHasDeliveryNotificationAlert(true);
-      playDeliveryNotificationSound();
-      window.dispatchEvent(new CustomEvent('tabarak_delivery_notification_received', { detail: notification }));
-    });
-    const intervalId = window.setInterval(refreshUnreadCount, 60000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
-      unsubscribe();
-    };
-  }, [authState.user?.id, canReceiveDeliveryNotifications, playDeliveryNotificationSound]);
-
-  useEffect(() => {
-    if (activeTab === 'notifications') setHasDeliveryNotificationAlert(false);
-  }, [activeTab]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadMaintenanceSettings = async () => {
-      try {
-        const settings = await supabase.systemSettings.getMaintenanceSettings();
-        if (isMounted) {
-          setMaintenanceSettings(settings);
-          setMaintenanceSettingsError(null);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setMaintenanceSettings(null);
-          setMaintenanceSettingsError(getSystemSettingsErrorMessage(error));
-        }
-      } finally {
-        if (isMounted) setIsMaintenanceLoading(false);
-      }
-    };
-
-    loadMaintenanceSettings();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   // Legacy static branch QR links are exchanged server-side for short-lived secure tokens.
   useEffect(() => {
     if (isBhAnalyzerPage) return;
@@ -584,6 +487,7 @@ const App: React.FC = () => {
     handleStaticToken();
   }, [customerToken, isBhAnalyzerPage]);
 
+  // Session recovery on initial mount
   useEffect(() => {
     if (isBhAnalyzerPage) {
       setIsInitializing(false);
@@ -655,7 +559,6 @@ const App: React.FC = () => {
               currentSession.rolePermissions = rolePerms;
             } catch (pErr) {
               console.error("Init permission fetch error:", pErr);
-              // Fallback: ensure permissions is at least an empty array if undefined
               if (!currentSession.permissions) currentSession.permissions = [];
               if (!currentSession.rolePermissions) currentSession.rolePermissions = [];
             }
@@ -707,28 +610,33 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSelectPharmacist = (pharmacist: Pharmacist) => {
-    const newState = { ...authState, pharmacist };
-    setAuthState(newState);
-    const savedTab = getStoredActiveTab();
-    if (savedTab && savedTab !== 'selector' && isTabEnabled(savedTab, newState.user?.role, newState)) {
-      startTransition(() => setActiveTab(savedTab));
-    } else {
-      handleTabChange('selector');
-    }
+  const logout = async () => {
+    clearStoredActiveTab();
+    storeBranchLoginApprovalRequest(null);
+    await supabase.auth.signOut();
+    setAuthState({ user: null, pharmacist: null, permissions: [] });
+    setActivePOSBranch(null);
+    setDeliveryNotificationUnreadCount(0);
+    setActiveTab(null);
+    setIsMaintenanceAdminLoginOpen(false);
   };
 
-  const handleOpenBenefitPayFromDelivery = (order: DeliveryOrder) => {
+  const handleBackToPharmacist = () => {
+    const newState = { ...authState, pharmacist: null };
+    setAuthState(newState);
+    setShowPharmacistSelector(true);
+  };
+
+  const handleOpenBenefitPayFromDelivery = (transfer: BenefitPayTransfer) => {
     setBenefitPayFocusTarget({
-      deliveryOrderId: order.id,
-      transferDate: order.orderDate,
-      branchId: order.branchId
+      deliveryOrderId: transfer.deliveryOrderId,
+      transferDate: transfer.transferDate,
+      branchId: transfer.branchId
     });
     handleTabChange('benefit-pay-ledger');
   };
 
   const handleOpenDeliveryFromBenefitPay = (transfer: BenefitPayTransfer) => {
-    if (!transfer.deliveryOrderId) return;
     setDeliveryFocusTarget({
       orderId: transfer.deliveryOrderId,
       orderDate: transfer.transferDate,
@@ -744,24 +652,6 @@ const App: React.FC = () => {
       branchId: notification.branchId || notification.payload.branchId || null
     });
     handleTabChange('delivery');
-  };
-
-  const logout = async () => {
-    clearStoredActiveTab();
-    storeBranchLoginApprovalRequest(null);
-    await supabase.auth.signOut();
-    setAuthState({ user: null, pharmacist: null, permissions: [] });
-    setActivePOSBranch(null);
-    setDeliveryNotificationUnreadCount(0);
-    setHasDeliveryNotificationAlert(false);
-    setActiveTab(null);
-    setIsMaintenanceAdminLoginOpen(false);
-  };
-
-  const handleBackToPharmacist = () => {
-    const newState = { ...authState, pharmacist: null };
-    setAuthState(newState);
-    setShowPharmacistSelector(true);
   };
 
   const isMaintenanceEnabled = maintenanceSettings?.isMaintenanceModeEnabled === true;
@@ -962,169 +852,36 @@ const App: React.FC = () => {
         <div className="mb-4 flex justify-end print:hidden">
           <ModuleHelpButton moduleKey={activeTab === 'selector' ? null : activeTab} />
         </div>
-        {activeTab === 'owner-dashboard' ? (
-          <OwnerDashboardPage user={authState.user!} onBack={() => handleTabChange('selector')} />
-        ) : activeTab === 'pos' ? (
-          <POSPage branch={activePOSBranch || authState.user!} pharmacist={authState.pharmacist!} permissions={authState.permissions || []} onBackToPharmacist={handleBackToPharmacist} />
-        ) : activeTab === 'spin-win' ? (
-          <SpinWinHub
-            branch={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            userRole={authState.user?.role || 'branch'}
-          />
-        ) : activeTab === 'hr' ? (
-          <HRPortalPage onBack={() => handleTabChange('selector')} logoUrl={pharmacyLogoUrl} />
-        ) : activeTab === 'hr-manager' ? (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tighter">HR Admin Portal</h2>
-                <p className="text-slate-500 font-medium">Manage employee requests and approvals</p>
-              </div>
-              <BackToModulesButton onClick={() => handleTabChange('selector')} />
-            </div>
-            <HRRequestsSection
-              onOpenInLetterGenerator={(request, lang = 'ar') => {
-                setHrLetterInitialData({ ...request, initialLang: lang });
-                handleTabChange('hr-letter');
-              }}
-            />
-          </div>
-        ) : activeTab === 'hr-directory' ? (
-          <WorkforceDirectory lang="en" onBack={() => handleTabChange('selector')} />
-        ) : activeTab === 'hr-letter' ? (
-          <OfficialHrLetterGenerator
-            initialEmployee={hrLetterInitialData}
-            onBack={() => {
-              const target = hrLetterInitialData ? 'hr-manager' : 'selector';
-              setHrLetterInitialData(null);
-              handleTabChange(target);
-            }}
-            standalone={true}
-          />
-        ) : activeTab === 'workforce' ? (
-          <WorkforcePage onBack={() => handleTabChange('selector')} />
-        ) : activeTab === 'cash-flow' ? (
-          <CashFlowPlanner
-            onBack={() => handleTabChange('selector')}
-            branchId={authState.user?.id}
-            userRole={authState.user?.role}
-            pharmacistName={authState.pharmacist?.name}
-            initialTab="dashboard"
-          />
-        ) : activeTab === 'cash-tracker' ? (
-          <BranchCashTrackerPage
-            onBack={() => handleTabChange('selector')}
-            branchId={authState.user?.id}
-            userRole={authState.user?.role}
-            pharmacistName={authState.pharmacist?.name}
-          />
-        ) : activeTab === 'corporate-codex' ? (
-          <CorporateCodex
-            userRole={authState.user?.role || 'branch'}
-            onBack={() => handleTabChange('selector')}
-          />
-        ) : (activeTab === 'settings' || activeTab === 'system-settings' || activeTab === 'access-control') ? (
-          <ProjectSettings onBack={() => handleTabChange('selector')} onSettingsChange={setMaintenanceSettings} currentRole={authState.user?.role} />
-        ) : activeTab === 'feedback-form' ? (
-          <FeedbackForm onBack={() => handleTabChange('selector')} />
-        ) : activeTab === 'feedback-admin' ? (
-          <QualityFeedbackAdmin
-            userRole={authState.user?.role}
-            onBack={() => handleTabChange('selector')}
-          />
-        ) : activeTab === 'employee-contributions' ? (
-          <EmployeeContributionsPage
-            userRole={authState.user?.role}
-            branchCode={authState.user?.code}
-            onBack={() => handleTabChange('selector')}
-          />
-        ) : activeTab === 'workflow-todo' ? (
-          <WorkflowTodoPage
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-          />
-        ) : activeTab === 'block-analyzer' ? (
-          <BlockCoverageAnalyzer onBack={() => handleTabChange('selector')} />
-        ) : activeTab === 'delivery' ? (
-          <DeliveryHub
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-            focusTarget={deliveryFocusTarget}
-            onFocusConsumed={() => setDeliveryFocusTarget(null)}
-            onOpenBenefitPayTransfer={handleOpenBenefitPayFromDelivery}
-          />
-        ) : activeTab === 'benefit-pay-ledger' ? (
-          <BenefitPayLedger
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-            focusTarget={benefitPayFocusTarget}
-            onFocusConsumed={() => setBenefitPayFocusTarget(null)}
-            onOpenDeliveryOrder={handleOpenDeliveryFromBenefitPay}
-          />
-        ) : activeTab === 'operational-expenses' ? (
-          <OperationalExpensesHub
-            user={authState.user!}
-            pharmacist={authState.pharmacist}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-          />
-        ) : activeTab === 'operational-renewals' ? (
-          <OperationalRenewalsHub
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-          />
-        ) : activeTab === 'duty-scheduler' ? (
-          <DutySchedulerHub
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-            onNavigateToLeave={() => handleTabChange('leave-management')}
-          />
-        ) : activeTab === 'leave-management' ? (
-          <LeaveManagementHub
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-            onNavigateToScheduler={() => handleTabChange('duty-scheduler')}
-          />
-        ) : activeTab === 'notifications' ? (
-          <DeliveryNotificationsPage
-            onBack={() => handleTabChange('selector')}
-            onUnreadCountChange={setDeliveryNotificationUnreadCount}
-            onOpenDeliveryOrder={handleOpenDeliveryFromNotification}
-          />
-        ) : activeTab === 'payroll' ? (
-          <PayrollModuleHub
-            user={authState.user!}
-            onBack={() => handleTabChange('selector')}
-            checkPermission={checkPermission}
-          />
-        ) : activeTab === 'attendance' ? (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <BackToModulesButton onClick={() => handleTabChange('selector')} />
-            </div>
-            <AttendanceHub
-              currentUserId={authState.user?.id || 'admin'}
-              currentUserRole={authState.user?.role || 'Admin'}
-            />
-          </div>
-        ) : (
-          <DashboardPage
-            user={authState.user!}
-            permissions={authState.permissions || []}
-            onBack={() => handleTabChange('selector')}
-          />
-        )}
+        <AppRouter
+          activeTab={activeTab}
+          authState={authState}
+          activePOSBranch={activePOSBranch}
+          pharmacyLogoUrl={pharmacyLogoUrl}
+          hrLetterInitialData={hrLetterInitialData}
+          deliveryFocusTarget={deliveryFocusTarget}
+          benefitPayFocusTarget={benefitPayFocusTarget}
+          checkPermission={checkPermission}
+          onTabChange={handleTabChange}
+          onBackToPharmacist={handleBackToPharmacist}
+          onSetDeliveryFocusTarget={setDeliveryFocusTarget}
+          onSetBenefitPayFocusTarget={setBenefitPayFocusTarget}
+          onSetHrLetterInitialData={setHrLetterInitialData}
+          onDeliveryNotificationUnreadCountChange={setDeliveryNotificationUnreadCount}
+          onOpenBenefitPayFromDelivery={handleOpenBenefitPayFromDelivery}
+          onOpenDeliveryFromBenefitPay={handleOpenDeliveryFromBenefitPay}
+          onOpenDeliveryFromNotification={handleOpenDeliveryFromNotification}
+          onSettingsChange={setMaintenanceSettings}
+        />
       </main>
 
       <div className="print:hidden">
-        <Footer onNavigate={handleTabChange} permissions={authState.permissions} rolePermissions={authState.rolePermissions} user={authState.user} settings={maintenanceSettings} />
+        <Footer
+          onNavigate={handleTabChange}
+          permissions={authState.permissions}
+          rolePermissions={authState.rolePermissions}
+          user={authState.user}
+          settings={maintenanceSettings}
+        />
       </div>
 
       <POSGuidelineModal

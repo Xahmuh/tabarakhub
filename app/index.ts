@@ -32,3 +32,4 @@ export * from './operational-renewals';
 export { OfficialHrLetterGenerator } from './hr-letter-generator/OfficialHrLetterGenerator';
 export * from './attendance/AttendanceHub';
 export * from './attendance/AttendancePenaltyConfigPanel';
+export * from './tqph';

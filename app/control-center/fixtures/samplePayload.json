@@ -1,0 +1,217 @@
+{
+  "branch": {
+    "id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+    "branch_code": "T005",
+    "name_en": "Tabarak Pharmacy - West Riffa",
+    "name_ar": "صيدلية تبارك - الرفاع الغربي",
+    "operational_name": "West Riffa Branch",
+    "cr_id": "c0000000-0000-4000-8000-000000000005",
+    "governorate_id": "a0000000-0000-4000-8000-000000000004",
+    "area_id": "a1000000-0000-4000-8000-000000000002",
+    "zone_id": "a2000000-0000-4000-8000-000000000022",
+    "block_number": "929",
+    "road_number": "2912",
+    "building_number": "84",
+    "shop_number": "2",
+    "latitude": 26.13124500,
+    "longitude": 50.55214000,
+    "start_shift_radius_meters": 120,
+    "branch_manager_id": "87041928-3000-4000-a000-000000000001",
+    "in_charge_pharmacist_id": "87041928-3000-4000-a000-000000000001",
+    "phone_landline": "+97317760124",
+    "phone_mobile": "+97339841255",
+    "branch_email": "tabarakph.t005@gmail.com",
+    "is_24_hours": false,
+    "is_active": true,
+    "created_at": "2026-01-15T08:00:00.000Z",
+    "updated_at": "2026-09-18T10:30:00.000Z"
+  },
+  "commercial_registration": {
+    "id": "c0000000-0000-4000-8000-000000000005",
+    "cr_number": "127506-05",
+    "is_main_group_cr": false,
+    "legal_name_en": "Tabarak Pharmacy W.L.L. - Branch 5",
+    "legal_name_ar": "صيدلية تبارك ذ.م.م - فرع 5",
+    "vat_account_number": "200012750600002",
+    "cr_expiry_date": "2027-08-31",
+    "nhra_cr_license_no": "32000695",
+    "nhra_cr_expiry_date": "2027-04-15",
+    "bcci_expiry_date": "2027-08-31",
+    "logo_url": "https://cdn.tabarakhub.com/branding/tabarak-pharmacy-logo-v2.png",
+    "ceo_signature_url": "https://cdn.tabarakhub.com/signatures/ceo-dr-fathy-saad-amin.png",
+    "official_seal_stamp_url": "https://cdn.tabarakhub.com/stamps/cr-127506-official-seal.png",
+    "created_at": "2025-05-10T12:00:00.000Z",
+    "updated_at": "2026-08-20T14:15:00.000Z"
+  },
+  "governorate": {
+    "id": "a0000000-0000-4000-8000-000000000004",
+    "code": "SOUTHERN",
+    "name_en": "Southern Governorate",
+    "name_ar": "المحافظة الجنوبية",
+    "is_active": true,
+    "created_at": "2025-01-01T00:00:00.000Z",
+    "updated_at": "2025-01-01T00:00:00.000Z"
+  },
+  "operational_area": {
+    "id": "a1000000-0000-4000-8000-000000000002",
+    "code": "AREA-2",
+    "name_en": "Area 2 (Muharraq & Southern)",
+    "name_ar": "المنطقة الثانية (المحرق والجنوبية)",
+    "supervisor_id": "b455e337-3202-4835-8d81-508729195268",
+    "description": "Supervises Muharraq, Riffa, Sanad, and Southern district dispensaries",
+    "is_active": true,
+    "supervisor": {
+      "id": "b455e337-3202-4835-8d81-508729195268",
+      "name": "Dr. Noor Al-Haddad",
+      "cpr": "891048293",
+      "email": "noor.alhaddad@tabarakhub.com",
+      "mobile": "+97339120482",
+      "role": "supervisor"
+    },
+    "created_at": "2026-02-01T00:00:00.000Z",
+    "updated_at": "2026-09-01T09:00:00.000Z"
+  },
+  "operational_zone": {
+    "id": "a2000000-0000-4000-8000-000000000022",
+    "area_id": "a1000000-0000-4000-8000-000000000002",
+    "code": "ZONE-2B",
+    "name_en": "Zone 2B - Riffa & Sanad Hub",
+    "name_ar": "زون 2ب - قطاع الرفاع وسند",
+    "default_shift_schedule_id": "s0000000-0000-4000-8000-000000000002",
+    "coverage_parameters": {
+      "minimum_pharmacists_on_duty": 1,
+      "rush_hours_overlap_enabled": true,
+      "friday_coverage_required": true
+    },
+    "shift_rules": [
+      {
+        "shift_name": "Morning Shift",
+        "start_time": "08:00",
+        "end_time": "16:00",
+        "duration_hours": 8
+      },
+      {
+        "shift_name": "Evening Shift",
+        "start_time": "16:00",
+        "end_time": "00:00",
+        "duration_hours": 8
+      }
+    ],
+    "is_active": true,
+    "created_at": "2026-02-01T00:00:00.000Z",
+    "updated_at": "2026-09-01T09:00:00.000Z"
+  },
+  "delivery_zone": {
+    "id": "d0000000-0000-4000-8000-000000000005",
+    "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+    "origin_block": "929",
+    "core_km": 3.50,
+    "standard_km": 7.50,
+    "extended_km": 16.00,
+    "target_min": 25,
+    "warning_min": 40,
+    "is_active": true,
+    "created_at": "2026-03-01T00:00:00.000Z",
+    "updated_at": "2026-09-10T11:20:00.000Z"
+  },
+  "staff_assignments": [
+    {
+      "id": "sa000000-0000-4000-8000-000000000001",
+      "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+      "user_id": "87041928-3000-4000-a000-000000000001",
+      "role": "Pharmacist",
+      "assignment_type": "Primary Base",
+      "start_date": "2026-01-01",
+      "end_date": null,
+      "is_active": true,
+      "user": {
+        "id": "87041928-3000-4000-a000-000000000001",
+        "name": "Dr. AYMAN KHALIL",
+        "cpr": "870419283",
+        "code": "P-005",
+        "email": "ayman.khalil@tabarakhub.com",
+        "mobile": "+97336128491",
+        "role": "branch_manager",
+        "nhra_license_no": "PH-NHRA-8841"
+      }
+    },
+    {
+      "id": "sa000000-0000-4000-8000-000000000002",
+      "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+      "user_id": "65b2cc82-055a-4552-8fec-82cd8b40ae25",
+      "role": "Pharmacist",
+      "assignment_type": "Primary Base",
+      "start_date": "2026-02-15",
+      "end_date": null,
+      "is_active": true,
+      "user": {
+        "id": "65b2cc82-055a-4552-8fec-82cd8b40ae25",
+        "name": "Dr. AHMED ELKHOULY",
+        "cpr": "930918294",
+        "code": "P-018",
+        "email": "ahmed.elkhouly@tabarakhub.com",
+        "mobile": "+97338902144",
+        "role": "pharmacist",
+        "nhra_license_no": "PH-NHRA-9412"
+      }
+    },
+    {
+      "id": "sa000000-0000-4000-8000-000000000003",
+      "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+      "user_id": "a3000000-0000-4000-8000-000000000003",
+      "role": "Driver",
+      "assignment_type": "Primary Base",
+      "start_date": "2026-03-01",
+      "end_date": null,
+      "is_active": true,
+      "user": {
+        "id": "a3000000-0000-4000-8000-000000000003",
+        "name": "Ali Hassan Al-Balooshi",
+        "cpr": "960518293",
+        "code": "DRV-005",
+        "email": "ali.balooshi@tabarakhub.com",
+        "mobile": "+97334519283",
+        "role": "driver"
+      }
+    },
+    {
+      "id": "sa000000-0000-4000-8000-000000000004",
+      "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+      "user_id": "a4000000-0000-4000-8000-000000000004",
+      "role": "Worker",
+      "assignment_type": "Primary Base",
+      "start_date": "2026-04-01",
+      "end_date": null,
+      "is_active": true,
+      "user": {
+        "id": "a4000000-0000-4000-8000-000000000004",
+        "name": "Kumar Rajan",
+        "cpr": "910219482",
+        "code": "WRK-005",
+        "email": "kumar.rajan@tabarakhub.com",
+        "mobile": "+97332194821",
+        "role": "worker"
+      }
+    },
+    {
+      "id": "sa000000-0000-4000-8000-000000000005",
+      "branch_id": "2cb10ffc-fa88-49c9-9b72-a13089c51879",
+      "user_id": "43ccc615-b329-4d26-b868-c032983e9b59",
+      "role": "Pharmacist",
+      "assignment_type": "Floating / Relief Cover",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "is_active": true,
+      "user": {
+        "id": "43ccc615-b329-4d26-b868-c032983e9b59",
+        "name": "Dr. EBRAHIM AYOUB",
+        "cpr": "940618291",
+        "code": "P-001",
+        "email": "ebrahim.ayoub@tabarakhub.com",
+        "mobile": "+97339182746",
+        "role": "pharmacist",
+        "nhra_license_no": "PH-NHRA-8501"
+      }
+    }
+  ]
+}

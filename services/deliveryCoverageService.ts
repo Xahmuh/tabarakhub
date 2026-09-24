@@ -38,6 +38,7 @@ export interface DeliveryCoverageFilters {
   dateFrom?: string;
   dateTo?: string;
   branchId?: string | null;
+  branchIds?: string[] | null;
   governorate?: Governorate | 'Unknown' | 'all' | null;
   paymentType?: DeliveryPaymentType | 'all' | null;
   /** Reserved: include orders with no block number in the bucketed view. Default true. */
@@ -808,7 +809,8 @@ export const deliveryCoverageService = {
       : defaultRange();
     const [orders, branches, directory, paymentTypes] = await Promise.all([
       deliveryService.orders.list({
-        branchId: filters.branchId || undefined,
+        branchId: (!filters.branchIds || filters.branchIds.length === 0) ? (filters.branchId || undefined) : undefined,
+        branchIds: filters.branchIds && filters.branchIds.length > 0 ? filters.branchIds : undefined,
         dateFrom: range.from,
         dateTo: range.to,
         paymentType: filters.paymentType || undefined,
@@ -834,7 +836,8 @@ export const deliveryCoverageService = {
 
     const [orders, branches, directory, paymentTypes] = await Promise.all([
       deliveryService.orders.list({
-        branchId: filters.branchId || undefined,
+        branchId: (!filters.branchIds || filters.branchIds.length === 0) ? (filters.branchId || undefined) : undefined,
+        branchIds: filters.branchIds && filters.branchIds.length > 0 ? filters.branchIds : undefined,
         dateFrom: range.from,
         dateTo: range.to,
         paymentType: filters.paymentType || undefined,

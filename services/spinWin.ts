@@ -1,24 +1,51 @@
 
 import { supabaseClient } from '../lib/supabaseClient';
-import { SpinPrize, SpinSession, Spin, Customer, BranchReview, VoucherShare, Branch } from '../types';
+import { SpinPrize, SpinSession, Spin, Customer, BranchReview, VoucherShare, Branch, SpinSettings } from '../types';
 import { isDemoMode } from '../config/clientConfig';
 
 const CUSTOMERS_KEY = 'tabarak_spinwin_customers';
 const SPINS_KEY = 'tabarak_spinwin_spins';
 const PRIZES_KEY = 'tabarak_spinwin_prizes';
 const SESSIONS_KEY = 'tabarak_spinwin_sessions';
+const SETTINGS_KEY = 'tabarak_spinwin_settings';
+
+const memoryStore = new Map<string, string>();
+
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch {
+      // ignore
+    }
+    return memoryStore.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    memoryStore.set(key, value);
+  }
+};
 
 const getLocal = <T = Record<string, unknown>>(key: string): T[] => {
     if (!isDemoMode) return [];
     try {
-        return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+        return JSON.parse(safeStorage.getItem(key) || '[]') as T[];
     } catch {
         return [];
     }
 };
 const saveLocal = <T>(key: string, data: T[]) => {
     if (!isDemoMode) return;
-    localStorage.setItem(key, JSON.stringify(data));
+    safeStorage.setItem(key, JSON.stringify(data));
 };
 const throwUnlessDemoMode = (error: unknown) => {
     if (!isDemoMode) throw error;
@@ -74,6 +101,33 @@ const DEFAULT_PRIZES: SpinPrize[] = [
 ];
 
 export const spinWinService = {
+    getSpinNotificationDetails: async (
+        customerId: string,
+        prizeId: string
+    ): Promise<{ customerName: string; phone?: string; prizeName?: string }> => {
+        try {
+            const [customerRes, prizeRes] = await Promise.all([
+                supabaseClient.from('customers').select('first_name, phone').eq('id', customerId).maybeSingle(),
+                supabaseClient.from('spin_prizes').select('name').eq('id', prizeId).maybeSingle()
+            ]);
+            return {
+                customerName: customerRes.data?.first_name || 'New Customer',
+                phone: customerRes.data?.phone,
+                prizeName: prizeRes.data?.name
+            };
+        } catch {
+            const customers = getLocal<Customer>(CUSTOMERS_KEY);
+            const prizes = getLocal<SpinPrize>(PRIZES_KEY);
+            const customer = customers.find(c => c.id === customerId);
+            const prize = prizes.find(p => p.id === prizeId);
+            return {
+                customerName: customer?.firstName || (customer as any)?.first_name || 'New Customer',
+                phone: customer?.phone,
+                prizeName: prize?.name
+            };
+        }
+    },
+
     prizes: {
         list: async () => {
             try {
@@ -385,7 +439,7 @@ export const spinWinService = {
     },
 
     spins: {
-        play: async (token: string, customerInfo: { phone: string, firstName: string, lastName: string, email: string }) => {
+        play: async (token: string, customerInfo: { phone: string, firstName: string, lastName: string, email: string }, deviceFingerprint?: string) => {
             try {
                 // EXECUTING ATOMIC BACKEND TRANSACTION
                 const { data, error } = await supabaseClient.rpc('execute_spin_transaction', {
@@ -394,9 +448,8 @@ export const spinWinService = {
                     p_first_name: customerInfo.firstName,
                     p_last_name: customerInfo.lastName,
                     p_email: customerInfo.email,
-                    // Backwards-compatible RPC argument. Fraud limits are computed
-                    // server-side from customers/spins, not from client IP data.
-                    p_ip_address: null
+                    p_ip_address: null,
+                    p_device_fingerprint: deviceFingerprint || null
                 });
 
                 if (error) {
@@ -461,7 +514,7 @@ export const spinWinService = {
                 return getLocal(SPINS_KEY);
             }
         },
-        getDailyCount: async (identifier: string, type: 'ip' | 'customer' = 'customer') => {
+        getDailyCount: async (identifier: string, type: 'ip' | 'customer' | 'device' = 'customer') => {
             try {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -473,6 +526,8 @@ export const spinWinService = {
 
                 if (type === 'ip') {
                     query = query.eq('ip_address', identifier);
+                } else if (type === 'device') {
+                    query = query.eq('device_fingerprint', identifier);
                 } else {
                     query = query.eq('customer_id', identifier);
                 }
@@ -485,6 +540,9 @@ export const spinWinService = {
                 // Demo fallback only; production fraud/rate checks must run server-side.
                 const today = new Date().toISOString().split('T')[0];
                 const spins = getLocal<Spin>(SPINS_KEY);
+                if (type === 'device') {
+                    return spins.filter(s => s.deviceFingerprint === identifier && s.createdAt.startsWith(today)).length;
+                }
                 return spins.filter(s => s.customerId === identifier && s.createdAt.startsWith(today)).length;
             }
         },
@@ -776,6 +834,81 @@ export const spinWinService = {
 
                 if (error) throw error;
                 return data;
+            }
+        }
+    },
+
+    settings: {
+        get: async (): Promise<SpinSettings> => {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('spin_settings')
+                    .select('id, daily_spins_per_mobile, updated_at, updated_by')
+                    .eq('id', 'global')
+                    .maybeSingle();
+
+                if (error) throw error;
+                if (data) {
+                    return {
+                        dailySpinsPerMobile: Math.max(1, Number(data.daily_spins_per_mobile || 1)),
+                        updatedAt: data.updated_at,
+                        updatedBy: data.updated_by
+                    };
+                }
+                return { dailySpinsPerMobile: 1 };
+            } catch (err: any) {
+                try {
+                    const local = localStorage.getItem(SETTINGS_KEY);
+                    if (local) return JSON.parse(local);
+                } catch {}
+                return { dailySpinsPerMobile: 1 };
+            }
+        },
+        update: async (settings: Partial<SpinSettings>): Promise<SpinSettings> => {
+            const limit = Math.max(1, Math.min(100, Math.floor(Number(settings.dailySpinsPerMobile || 1))));
+            try {
+                const { data, error } = await supabaseClient
+                    .from('spin_settings')
+                    .upsert({
+                        id: 'global',
+                        daily_spins_per_mobile: limit,
+                        updated_at: new Date().toISOString()
+                    })
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                const result: SpinSettings = {
+                    dailySpinsPerMobile: Number(data.daily_spins_per_mobile),
+                    updatedAt: data.updated_at,
+                    updatedBy: data.updated_by
+                };
+
+                try {
+                    localStorage.setItem(SETTINGS_KEY, JSON.stringify(result));
+                } catch {}
+
+                return result;
+            } catch (err: any) {
+                const isSchemaCacheError = 
+                    err?.code === 'PGRST205' || 
+                    String(err?.message || '').toLowerCase().includes('schema cache') || 
+                    String(err?.message || '').toLowerCase().includes('spin_settings');
+
+                const localResult: SpinSettings = {
+                    dailySpinsPerMobile: limit,
+                    updatedAt: new Date().toISOString()
+                };
+                try {
+                    localStorage.setItem(SETTINGS_KEY, JSON.stringify(localResult));
+                } catch {}
+
+                if (isSchemaCacheError) {
+                    throw new Error('SCHEMA_NOT_APPLIED');
+                }
+                throwUnlessDemoMode(err);
+                return localResult;
             }
         }
     }

@@ -1,5 +1,5 @@
 import { supabaseClient } from '../lib/supabaseClient';
-import { generateCrStampSvg, DEFAULT_GROUP_LOGO, DEFAULT_SIGNATURE } from '../app/lib/crEntities';
+import { generateCrStampSvg, DEFAULT_GROUP_LOGO, DEFAULT_SIGNATURE } from '../lib/crEntities';
 
 export interface RegisteredCr {
   id: string;

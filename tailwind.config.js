@@ -28,7 +28,14 @@ export default {
                     800: '#9f1239',
                     900: '#B91c1c',
                     950: '#4c0519',
-                }
+                },
+                // TQPH Design System Tokens (Section 3)
+                'accent-lime': '#D9F99D',
+                'accent-lime-mid': '#A3E635',
+                'accent-green': '#10B981',
+                'surface-950': '#020617',
+                'surface-900': '#0F172A',
+                'surface-border': '#1E293B',
             },
             fontFamily: {
                 sans: ['Inter', 'sans-serif'],

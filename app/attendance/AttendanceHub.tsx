@@ -210,16 +210,18 @@ export const AttendanceHub: React.FC<Props> = ({
         icon: 'error',
         title: 'Outside Geofence Area',
         html: `
-          <div class="text-left text-xs space-y-2">
-            <p class="text-sm font-semibold text-rose-400">Clock-in is strictly blocked outside your assigned branch perimeter.</p>
-            <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-1">
-              <div>• Assigned Branch: <b class="text-white">${nearestBranch?.branchName || 'Assigned Branch'}</b></div>
-              <div>• Current Distance: <b class="text-rose-400">${nearestBranch?.distance ?? 0}m</b></div>
-              <div>• Allowed Radius: <b class="text-emerald-400">${nearestBranch?.radius ?? 50}m</b></div>
+          <div class="text-left text-xs space-y-2 text-slate-700">
+            <p class="text-sm font-bold text-red-700">Clock-in is strictly blocked outside your assigned branch perimeter.</p>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+              <div>• Assigned Branch: <b class="text-slate-950 font-black">${nearestBranch?.branchName || 'Assigned Branch'}</b></div>
+              <div>• Current Distance: <b class="text-red-700 font-bold">${nearestBranch?.distance ?? 0}m</b></div>
+              <div>• Allowed Radius: <b class="text-emerald-700 font-bold">${nearestBranch?.radius ?? 50}m</b></div>
             </div>
-            <p class="text-slate-400 mt-2">You must be physically present inside the branch perimeter to record your attendance.</p>
+            <p class="text-slate-500 mt-2">You must be physically present inside the branch perimeter to record your attendance.</p>
           </div>
         `,
+        background: '#ffffff',
+        color: '#0f172a',
         confirmButtonColor: '#b91c1c',
         confirmButtonText: 'Understood'
       });
@@ -244,10 +246,19 @@ export const AttendanceHub: React.FC<Props> = ({
         title: 'Clocked In Successfully',
         text: `Time: ${new Date(res.punch.punchTime).toLocaleTimeString()} • Geofence: ${res.punch.geofenceValidation}`,
         timer: 2500,
-        showConfirmButton: false
+        showConfirmButton: false,
+        background: '#ffffff',
+        color: '#0f172a'
       });
     } catch (e: any) {
-      Swal.fire('Clock In Blocked', e.message || 'Could not record punch', 'error');
+      Swal.fire({
+        title: 'Clock In Blocked',
+        text: e.message || 'Could not record punch',
+        icon: 'error',
+        confirmButtonColor: '#b91c1c',
+        background: '#ffffff',
+        color: '#0f172a'
+      });
     } finally {
       setIsPunching(false);
     }
@@ -264,16 +275,18 @@ export const AttendanceHub: React.FC<Props> = ({
         icon: 'error',
         title: 'Outside Geofence Area',
         html: `
-          <div class="text-left text-xs space-y-2">
-            <p class="text-sm font-semibold text-rose-400">Clock-out is strictly blocked outside your assigned branch perimeter.</p>
-            <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-1">
-              <div>• Assigned Branch: <b class="text-white">${nearestBranch?.branchName || 'Assigned Branch'}</b></div>
-              <div>• Current Distance: <b class="text-rose-400">${nearestBranch?.distance ?? 0}m</b></div>
-              <div>• Allowed Radius: <b class="text-emerald-400">${nearestBranch?.radius ?? 50}m</b></div>
+          <div class="text-left text-xs space-y-2 text-slate-700">
+            <p class="text-sm font-bold text-red-700">Clock-out is strictly blocked outside your assigned branch perimeter.</p>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+              <div>• Assigned Branch: <b class="text-slate-950 font-black">${nearestBranch?.branchName || 'Assigned Branch'}</b></div>
+              <div>• Current Distance: <b class="text-red-700 font-bold">${nearestBranch?.distance ?? 0}m</b></div>
+              <div>• Allowed Radius: <b class="text-emerald-700 font-bold">${nearestBranch?.radius ?? 50}m</b></div>
             </div>
-            <p class="text-slate-400 mt-2">You must be physically present inside the branch perimeter to clock out.</p>
+            <p class="text-slate-500 mt-2">You must be physically present inside the branch perimeter to clock out.</p>
           </div>
         `,
+        background: '#ffffff',
+        color: '#0f172a',
         confirmButtonColor: '#b91c1c',
         confirmButtonText: 'Understood'
       });
@@ -298,10 +311,19 @@ export const AttendanceHub: React.FC<Props> = ({
         title: 'Clocked Out Successfully',
         text: `Shift ended at ${new Date(res.punch.punchTime).toLocaleTimeString()}`,
         timer: 2500,
-        showConfirmButton: false
+        showConfirmButton: false,
+        background: '#ffffff',
+        color: '#0f172a'
       });
     } catch (e: any) {
-      Swal.fire('Clock Out Blocked', e.message || 'Could not record punch', 'error');
+      Swal.fire({
+        title: 'Clock Out Blocked',
+        text: e.message || 'Could not record punch',
+        icon: 'error',
+        confirmButtonColor: '#b91c1c',
+        background: '#ffffff',
+        color: '#0f172a'
+      });
     } finally {
       setIsPunching(false);
     }
@@ -372,8 +394,11 @@ export const AttendanceHub: React.FC<Props> = ({
       input: 'textarea',
       inputPlaceholder: 'e.g. Traffic accident documented with police report / Approved emergency by HR',
       showCancelButton: true,
-      confirmButtonColor: '#0284c7',
+      confirmButtonColor: '#b91c1c',
+      cancelButtonColor: '#64748b',
       confirmButtonText: 'Confirm Waiver',
+      background: '#ffffff',
+      color: '#0f172a',
       preConfirm: reason => {
         if (!reason || !reason.trim()) {
           Swal.showValidationMessage('Waiver reason is mandatory for audit compliance.');
@@ -384,7 +409,14 @@ export const AttendanceHub: React.FC<Props> = ({
       if (res.isConfirmed && res.value) {
         attendancePenaltyEngine.waivePenalty(penaltyId, currentUserId, res.value);
         loadPenalties();
-        Swal.fire('Waived', 'The penalty has been waived and deducted amount nullified.', 'success');
+        Swal.fire({
+          icon: 'success',
+          title: 'Waived',
+          text: 'The penalty has been waived and deducted amount nullified.',
+          background: '#ffffff',
+          color: '#0f172a',
+          confirmButtonColor: '#b91c1c'
+        });
       }
     });
   };
@@ -396,37 +428,38 @@ export const AttendanceHub: React.FC<Props> = ({
     const browserFp = attendanceService.captureBrowserFingerprint();
 
     const { value: formValues } = await Swal.fire({
-      title: `<div class="flex items-center justify-center gap-2 text-lg font-black text-white"><span class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">⚡</span> Edit Registered Fingerprint</div>`,
+      title: `<div class="flex items-center justify-center gap-2 text-lg font-black text-slate-950"><span class="w-8 h-8 rounded-lg bg-red-50 text-red-700 border border-red-200 flex items-center justify-center">⚡</span> Edit Registered Fingerprint</div>`,
       html: `
-        <div class="text-left text-xs space-y-3 font-sans text-slate-300 mt-2">
-          <div class="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
-            <div class="text-slate-400 text-xs">Staff Member: <b class="text-white font-semibold text-sm">${empName}</b></div>
-            <div class="text-slate-400 text-xs">Status: ${
+        <div class="text-left text-xs space-y-3 font-sans text-slate-700 mt-2">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+            <div class="text-slate-500 text-xs">Staff Member: <b class="text-slate-950 font-black text-sm">${empName}</b></div>
+            <div class="text-slate-500 text-xs">Status: ${
               currentFp
-                ? `<span class="inline-block px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-bold">${currentFp}</span>`
-                : `<span class="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold">Not Registered</span>`
+                ? `<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold">${currentFp}</span>`
+                : `<span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold">Not Registered</span>`
             }</div>
           </div>
           <div>
-            <label class="block text-slate-300 font-bold mb-1 text-xs">Registered Biometric / Device Token:</label>
-            <input id="swal-fp-input" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2.5 font-mono text-sm uppercase focus:outline-none focus:border-sky-500" value="${currentFp || suggestedToken}" placeholder="e.g. FP-9A4B12 or BIO-001" />
+            <label class="block text-slate-800 font-bold mb-1 text-xs">Registered Biometric / Device Token:</label>
+            <input id="swal-fp-input" class="w-full bg-white border border-slate-200 text-slate-900 rounded-lg p-2.5 font-mono text-sm uppercase focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600" value="${currentFp || suggestedToken}" placeholder="e.g. FP-9A4B12 or BIO-001" />
           </div>
           <div class="flex gap-2">
-            <button type="button" id="swal-fp-gen" class="flex-1 py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-sky-400 rounded-lg font-bold transition flex items-center justify-center gap-1">
+            <button type="button" id="swal-fp-gen" class="flex-1 py-2 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] text-red-700 rounded-lg font-bold transition flex items-center justify-center gap-1">
               ⚡ Generate Token
             </button>
-            <button type="button" id="swal-fp-browser" class="flex-1 py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-emerald-400 rounded-lg font-bold transition flex items-center justify-center gap-1">
+            <button type="button" id="swal-fp-browser" class="flex-1 py-2 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] text-slate-700 rounded-lg font-bold transition flex items-center justify-center gap-1">
               📱 Capture Device
             </button>
           </div>
           <p class="text-[11px] text-slate-500">Admins can bind an employee to a specific mobile device hash or biometric scanner token. Punches will be audited against this token.</p>
         </div>
       `,
-      background: '#0f172a',
-      color: '#ffffff',
+      background: '#ffffff',
+      color: '#0f172a',
       showCancelButton: true,
       confirmButtonText: 'Save Fingerprint',
-      confirmButtonColor: '#0284c7',
+      confirmButtonColor: '#b91c1c',
+      cancelButtonColor: '#64748b',
       cancelButtonText: 'Cancel',
       didOpen: () => {
         const input = document.getElementById('swal-fp-input') as HTMLInputElement;
@@ -463,7 +496,9 @@ export const AttendanceHub: React.FC<Props> = ({
         title: 'Fingerprint Registered',
         text: `Registered fingerprint for ${empName} updated to ${formValues.toUpperCase()}.`,
         timer: 2000,
-        showConfirmButton: false
+        showConfirmButton: false,
+        background: '#ffffff',
+        color: '#0f172a'
       });
     }
   };
@@ -472,28 +507,36 @@ export const AttendanceHub: React.FC<Props> = ({
   const handleDeleteFingerprint = async (empId: string, empName: string) => {
     const currentFp = registeredFingerprints[empId] || attendanceService.getRegisteredFingerprint(empId);
     if (!currentFp) {
-      Swal.fire('No Fingerprint', `${empName} does not have a registered fingerprint.`, 'info');
+      Swal.fire({
+        icon: 'info',
+        title: 'No Fingerprint',
+        text: `${empName} does not have a registered fingerprint.`,
+        background: '#ffffff',
+        color: '#0f172a',
+        confirmButtonColor: '#b91c1c'
+      });
       return;
     }
 
     const res = await Swal.fire({
       title: 'Delete Registered Fingerprint?',
       html: `
-        <div class="text-left text-xs space-y-2 text-slate-300">
-          <p class="text-rose-400 font-bold text-sm">Are you sure you want to remove the registered biometric device token for ${empName}?</p>
-          <div class="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1 my-2">
-            <div class="text-slate-400">Employee: <b class="text-white">${empName}</b></div>
-            <div class="text-slate-400">Current Token: <span class="font-mono text-amber-400 font-bold">${currentFp}</span></div>
+        <div class="text-left text-xs space-y-2 text-slate-700">
+          <p class="text-red-700 font-bold text-sm">Are you sure you want to remove the registered biometric device token for ${empName}?</p>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 my-2">
+            <div class="text-slate-500">Employee: <b class="text-slate-950 font-black">${empName}</b></div>
+            <div class="text-slate-500">Current Token: <span class="font-mono text-red-700 font-bold">${currentFp}</span></div>
           </div>
-          <p class="text-slate-400">Once deleted, the employee will no longer have a trusted device/terminal bound to their profile until registered again.</p>
+          <p class="text-slate-500">Once deleted, the employee will no longer have a trusted device/terminal bound to their profile until registered again.</p>
         </div>
       `,
-      background: '#0f172a',
-      color: '#ffffff',
+      background: '#ffffff',
+      color: '#0f172a',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, Delete Fingerprint',
-      confirmButtonColor: '#e11d48',
+      confirmButtonColor: '#b91c1c',
+      cancelButtonColor: '#64748b',
       cancelButtonText: 'Cancel'
     });
 
@@ -510,7 +553,9 @@ export const AttendanceHub: React.FC<Props> = ({
         title: 'Fingerprint Deleted',
         text: `Registered fingerprint for ${empName} has been removed.`,
         timer: 2000,
-        showConfirmButton: false
+        showConfirmButton: false,
+        background: '#ffffff',
+        color: '#0f172a'
       });
     }
   };
@@ -857,23 +902,23 @@ export const AttendanceHub: React.FC<Props> = ({
   const selectedEmp = employees.find(e => e.id === selectedEmployeeId);
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md p-6 rounded-2xl border border-slate-800 shadow-xl">
+    <div className="space-y-6 font-sans">
+      {/* Top Header Ribbon */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand to-red-800 flex items-center justify-center text-white shadow-lg shadow-brand/25">
-            <Compass className="w-6 h-6 animate-spin-slow" />
+          <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-700 shadow-sm">
+            <Compass className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-white tracking-tight">
+              <h1 className="text-2xl font-black text-slate-950 tracking-tight">
                 Attendance &amp; Geofencing Engine
               </h1>
-              <span className="text-[10px] bg-brand/20 text-red-300 px-2.5 py-0.5 rounded-full border border-brand/30 font-bold uppercase tracking-wider">
+              <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-0.5 rounded-full border border-red-200 font-black uppercase tracking-wider">
                 Bahrain GCC v1.0
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1 font-medium">
               GPS Radius Validation • Disciplinary Escalation Engine • Supabase Authority
             </p>
           </div>
@@ -882,13 +927,13 @@ export const AttendanceHub: React.FC<Props> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-2 border border-slate-700 transition shadow hover:border-brand/40"
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl flex items-center gap-2 border border-slate-200 transition shadow-sm hover:border-red-300"
           >
-            <Sliders className="w-4 h-4 text-brand" /> Disciplinary Settings &amp; Rules
+            <Sliders className="w-4 h-4 text-red-700" /> Disciplinary Settings &amp; Rules
           </button>
           <button
             onClick={loadInitialData}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition"
+            className="p-2 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-xl border border-slate-200 transition shadow-sm"
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4" />
@@ -897,32 +942,33 @@ export const AttendanceHub: React.FC<Props> = ({
       </div>
 
       {/* Main Navigation Tabs */}
-      <div className="flex border border-slate-800 bg-slate-900/60 p-1.5 rounded-2xl gap-2 shadow-lg backdrop-blur-md">
+      <div className="flex border border-slate-200 bg-slate-100 p-1.5 rounded-2xl gap-2 shadow-sm">
         <button
           onClick={() => setActiveTab('self')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
             activeTab === 'self'
-              ? 'bg-brand text-white shadow-lg shadow-brand/25 border border-brand/40 ring-1 ring-white/10'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              ? 'bg-white text-slate-950 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
-          <Navigation className={`w-4 h-4 ${activeTab === 'self' ? 'text-white' : 'text-slate-400'}`} /> Self-Service Clock In/Out
+          <Navigation className={`w-4 h-4 ${activeTab === 'self' ? 'text-red-700' : 'text-slate-400'}`} />
+          <span>Self-Service Clock In/Out</span>
         </button>
         <button
           onClick={() => setActiveTab('team')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
             activeTab === 'team'
-              ? 'bg-brand text-white shadow-lg shadow-brand/25 border border-brand/40 ring-1 ring-white/10'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              ? 'bg-white text-slate-950 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
-          <Users className={`w-4 h-4 ${activeTab === 'team' ? 'text-white' : 'text-slate-400'}`} />
+          <Users className={`w-4 h-4 ${activeTab === 'team' ? 'text-red-700' : 'text-slate-400'}`} />
           <span>Team Live Board</span>
           <span
-            className={`text-[11px] px-2 py-0.5 rounded-full font-bold transition-colors ${
+            className={`text-[11px] px-2 py-0.5 rounded-full font-black transition-colors ${
               activeTab === 'team'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-800 text-slate-400'
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-slate-200 text-slate-600'
             }`}
           >
             {dailyRecords.length}
@@ -930,29 +976,30 @@ export const AttendanceHub: React.FC<Props> = ({
         </button>
         <button
           onClick={() => setActiveTab('reports')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
             activeTab === 'reports'
-              ? 'bg-brand text-white shadow-lg shadow-brand/25 border border-brand/40 ring-1 ring-white/10'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              ? 'bg-white text-slate-950 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
-          <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'reports' ? 'text-white' : 'text-slate-400'}`} /> Monthly Reports & Audit
+          <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'reports' ? 'text-red-700' : 'text-slate-400'}`} />
+          <span>Monthly Reports &amp; Audit</span>
         </button>
         <button
           onClick={() => setActiveTab('penalties')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
+          className={`flex-1 py-3 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 ${
             activeTab === 'penalties'
-              ? 'bg-brand text-white shadow-lg shadow-brand/25 border border-brand/40 ring-1 ring-white/10'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              ? 'bg-white text-slate-950 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
-          <ShieldAlert className={`w-4 h-4 ${activeTab === 'penalties' ? 'text-white' : 'text-slate-400'}`} />
+          <ShieldAlert className={`w-4 h-4 ${activeTab === 'penalties' ? 'text-red-700' : 'text-slate-400'}`} />
           <span>Penalty Ledger</span>
           <span
-            className={`text-[11px] px-2 py-0.5 rounded-full font-bold transition-colors ${
+            className={`text-[11px] px-2 py-0.5 rounded-full font-black transition-colors ${
               activeTab === 'penalties'
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-800 text-slate-400'
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-slate-200 text-slate-600'
             }`}
           >
             {penalties.length}
@@ -966,17 +1013,17 @@ export const AttendanceHub: React.FC<Props> = ({
       {activeTab === 'self' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Clock-In Card */}
-          <div className="lg:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between">
-            <div className="flex items-center justify-between">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-8 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-700">
                   Employee Self-Service Kiosk
                 </span>
-                <div className="mt-1">
+                <div className="mt-1.5">
                   <select
                     value={selectedEmployeeId}
                     onChange={e => setSelectedEmployeeId(e.target.value)}
-                    className="bg-slate-800 border border-slate-700 text-white text-sm font-semibold rounded-lg px-3 py-2"
+                    className="bg-white border border-slate-200 text-slate-900 text-sm font-bold rounded-xl px-3.5 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                   >
                     {employees
                       .filter(e => e.status === 'Active')
@@ -992,12 +1039,12 @@ export const AttendanceHub: React.FC<Props> = ({
               {/* Status Badge */}
               <div>
                 <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wide border ${
                     geofenceStatus === 'INSIDE'
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : geofenceStatus === 'OUTSIDE'
-                      ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
-                      : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
                   }`}
                 >
                   {geofenceStatus === 'INSIDE' && <CheckCircle2 className="w-4 h-4" />}
@@ -1009,11 +1056,11 @@ export const AttendanceHub: React.FC<Props> = ({
             </div>
 
             {/* Big Live Digital Clock Display */}
-            <div className="my-8 text-center">
-              <div className="text-6xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-slate-100 to-slate-400 tracking-tight font-mono">
+            <div className="my-10 text-center">
+              <div className="text-6xl md:text-7xl font-black text-slate-950 tracking-tight font-mono">
                 {currentTime.toLocaleTimeString('en-GB', { hour12: false })}
               </div>
-              <div className="text-sm font-medium text-slate-400 mt-2">
+              <div className="text-sm font-bold text-slate-500 mt-2">
                 {currentTime.toLocaleDateString('en-GB', {
                   weekday: 'long',
                   year: 'numeric',
@@ -1025,20 +1072,20 @@ export const AttendanceHub: React.FC<Props> = ({
 
             {/* Geofence Perimeter Indicator */}
             {nearestBranch && (
-              <div className="bg-slate-950/60 rounded-xl p-4 border border-slate-800 flex items-center justify-between mb-6">
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 flex items-center justify-between mb-6 shadow-sm">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                  <div className="w-9 h-9 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-red-700">
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-400 font-medium">Assigned Geofence Center</div>
-                    <div className="text-sm font-bold text-white">{nearestBranch.branchName}</div>
+                    <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider">Assigned Geofence Center</div>
+                    <div className="text-sm font-black text-slate-950">{nearestBranch.branchName}</div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-slate-400">Distance to Center</div>
-                  <div className="text-sm font-bold text-sky-300">
-                    {nearestBranch.distance}m <span className="text-slate-500 font-normal">/ {nearestBranch.radius}m max</span>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase">Distance to Center</div>
+                  <div className="text-sm font-black text-slate-950">
+                    {nearestBranch.distance}m <span className="text-slate-400 font-normal">/ {nearestBranch.radius}m max</span>
                   </div>
                 </div>
               </div>
@@ -1046,10 +1093,10 @@ export const AttendanceHub: React.FC<Props> = ({
 
             {/* Geofence Perimeter Warning Banner if Outside */}
             {geofenceStatus === 'OUTSIDE' && (
-              <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3.5 flex items-center gap-3 text-rose-300 mb-4">
-                <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 animate-pulse" />
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center gap-3 text-red-900 mb-4 shadow-sm">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-red-700 animate-pulse" />
                 <div className="text-xs">
-                  <span className="font-bold">Punch Locked (Outside Geofence):</span> You cannot clock in or clock out while outside your assigned branch perimeter ({nearestBranch?.distance ?? 0}m away / max radius {nearestBranch?.radius ?? 50}m).
+                  <span className="font-bold text-red-800">Punch Locked (Outside Geofence):</span> You cannot clock in or clock out while outside your assigned branch perimeter ({nearestBranch?.distance ?? 0}m away / max radius {nearestBranch?.radius ?? 50}m).
                 </div>
               </div>
             )}
@@ -1062,13 +1109,13 @@ export const AttendanceHub: React.FC<Props> = ({
                   disabled={isPunching || isAcquiringGps || geofenceStatus === 'OUTSIDE'}
                   className={`flex-1 py-4 font-black text-lg rounded-2xl shadow-xl flex items-center justify-center gap-3 transition transform active:scale-98 ${
                     geofenceStatus === 'OUTSIDE'
-                      ? 'bg-slate-800/90 text-rose-400/80 border border-rose-800/50 cursor-not-allowed shadow-none'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white shadow-emerald-500/25 disabled:opacity-50'
+                      ? 'bg-slate-100 text-red-700/80 border border-red-200 cursor-not-allowed shadow-none'
+                      : 'bg-red-700 hover:bg-red-800 text-white shadow-red-700/20 disabled:opacity-50'
                   }`}
                 >
                   {geofenceStatus === 'OUTSIDE' ? (
                     <>
-                      <ShieldAlert className="w-6 h-6 text-rose-400" />
+                      <ShieldAlert className="w-6 h-6 text-red-700" />
                       Cannot Clock In (Outside Area)
                     </>
                   ) : (
@@ -1084,13 +1131,13 @@ export const AttendanceHub: React.FC<Props> = ({
                   disabled={isPunching || isAcquiringGps || geofenceStatus === 'OUTSIDE'}
                   className={`flex-1 py-4 font-black text-lg rounded-2xl shadow-xl flex items-center justify-center gap-3 transition transform active:scale-98 ${
                     geofenceStatus === 'OUTSIDE'
-                      ? 'bg-slate-800/90 text-rose-400/80 border border-rose-800/50 cursor-not-allowed shadow-none'
-                      : 'bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white shadow-rose-500/25 disabled:opacity-50'
+                      ? 'bg-slate-100 text-red-700/80 border border-red-200 cursor-not-allowed shadow-none'
+                      : 'bg-slate-900 hover:bg-black text-white shadow-slate-900/20 disabled:opacity-50'
                   }`}
                 >
                   {geofenceStatus === 'OUTSIDE' ? (
                     <>
-                      <ShieldAlert className="w-6 h-6 text-rose-400" />
+                      <ShieldAlert className="w-6 h-6 text-red-700" />
                       Cannot Clock Out (Outside Area)
                     </>
                   ) : (
@@ -1101,7 +1148,7 @@ export const AttendanceHub: React.FC<Props> = ({
                   )}
                 </button>
               ) : (
-                <div className="flex-1 py-4 bg-slate-800 text-slate-400 font-bold text-center rounded-2xl border border-slate-700">
+                <div className="flex-1 py-4 bg-slate-50 text-slate-500 font-bold text-center rounded-2xl border border-slate-200">
                   Daily Punches Completed for Today
                 </div>
               )}
@@ -1109,11 +1156,11 @@ export const AttendanceHub: React.FC<Props> = ({
               <button
                 onClick={acquireGpsPosition}
                 disabled={isAcquiringGps}
-                className="px-5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 flex flex-col items-center justify-center gap-1 transition"
+                className="px-5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-2xl border border-slate-200 flex flex-col items-center justify-center gap-1 transition shadow-sm"
                 title="Recalibrate GPS"
               >
-                <Compass className={`w-5 h-5 ${isAcquiringGps ? 'animate-spin' : ''}`} />
-                <span className="text-[10px] font-semibold">Recalibrate</span>
+                <Compass className={`w-5 h-5 text-red-700 ${isAcquiringGps ? 'animate-spin' : ''}`} />
+                <span className="text-[10px] font-bold">Recalibrate</span>
               </button>
             </div>
           </div>
@@ -1121,73 +1168,73 @@ export const AttendanceHub: React.FC<Props> = ({
           {/* Right Column: Shift Details & Punches Timeline */}
           <div className="space-y-6">
             {/* Shift Card */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-sky-400" /> Scheduled Duty Shift
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+              <h3 className="text-sm font-black text-slate-950 mb-4 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-red-700" /> Scheduled Duty Shift
               </h3>
               <div className="space-y-3 text-xs">
-                <div className="flex justify-between py-2 border-b border-slate-800">
-                  <span className="text-slate-400">Shift Code</span>
-                  <span className="font-bold text-white">{todayRecord?.scheduledShiftCode || 'REGULAR'}</span>
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <span className="text-slate-500 font-semibold">Shift Code</span>
+                  <span className="font-black text-slate-900">{todayRecord?.scheduledShiftCode || 'REGULAR'}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-slate-800">
-                  <span className="text-slate-400">Scheduled Hours</span>
-                  <span className="font-bold text-sky-400">
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <span className="text-slate-500 font-semibold">Scheduled Hours</span>
+                  <span className="font-mono font-bold text-slate-900">
                     {todayRecord?.scheduledStartTime || '08:00'} — {todayRecord?.scheduledEndTime || '16:00'}
                   </span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-slate-800">
-                  <span className="text-slate-400">Current Status</span>
-                  <span className="font-bold text-emerald-400 uppercase">
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <span className="text-slate-500 font-semibold">Current Status</span>
+                  <span className="font-black text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px]">
                     {todayRecord?.status || 'SCHEDULED'}
                   </span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">Late Minutes</span>
-                  <span className="font-bold text-amber-400">{todayRecord?.lateMinutes || 0} mins</span>
+                  <span className="text-slate-500 font-semibold">Late Minutes</span>
+                  <span className="font-black text-amber-700 font-mono">{todayRecord?.lateMinutes || 0} mins</span>
                 </div>
               </div>
             </div>
 
             {/* Today Punches Timeline */}
-            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-sky-400" /> Today's GPS Punch Log
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+              <h3 className="text-sm font-black text-slate-950 mb-4 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-red-700" /> Today's GPS Punch Log
               </h3>
               {todayPunches.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-xs">No punches recorded yet today.</div>
+                <div className="text-center py-6 text-slate-400 text-xs font-semibold">No punches recorded yet today.</div>
               ) : (
                 <div className="space-y-3">
                   {todayPunches.map(p => (
                     <div
                       key={p.id}
-                      className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs"
+                      className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs shadow-sm"
                     >
                       <div className="flex items-center gap-2.5">
                         <span
-                          className={`w-2 h-2 rounded-full ${
-                            p.punchType === 'CLOCK_IN' ? 'bg-emerald-400' : 'bg-rose-400'
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            p.punchType === 'CLOCK_IN' ? 'bg-emerald-600' : 'bg-slate-900'
                           }`}
                         />
                         <div>
-                          <div className="font-bold text-white">{p.punchType.replace('_', ' ')}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="font-black text-slate-900">{p.punchType.replace('_', ' ')}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
                             {new Date(p.punchTime).toLocaleTimeString()}
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                          className={`text-[10px] px-2 py-0.5 rounded font-black uppercase border ${
                             p.geofenceValidation === 'INSIDE'
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-rose-500/20 text-rose-300'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-red-50 text-red-700 border-red-200'
                           }`}
                         >
                           {p.geofenceValidation}
                         </span>
                         {p.accuracy && (
-                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">±{Math.round(p.accuracy)}m</div>
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">±{Math.round(p.accuracy)}m</div>
                         )}
                       </div>
                     </div>
@@ -1205,21 +1252,21 @@ export const AttendanceHub: React.FC<Props> = ({
       {activeTab === 'team' && (
         <div className="space-y-6">
           {/* Filters Bar */}
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={e => setSelectedDate(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 />
               </div>
               <div>
                 <select
                   value={teamBranchFilter}
                   onChange={e => setTeamBranchFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 >
                   <option value="ALL">All Branches</option>
                   {branches.map(b => (
@@ -1233,7 +1280,7 @@ export const AttendanceHub: React.FC<Props> = ({
                 <select
                   value={teamCategoryFilter}
                   onChange={e => setTeamCategoryFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 >
                   <option value="ALL">All Categories</option>
                   <option value="Pharmacist">Pharmacist</option>
@@ -1246,7 +1293,7 @@ export const AttendanceHub: React.FC<Props> = ({
                 <select
                   value={teamFingerprintFilter}
                   onChange={e => setTeamFingerprintFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 >
                   <option value="ALL">All Fingerprints</option>
                   <option value="REGISTERED">Registered Only</option>
@@ -1260,7 +1307,7 @@ export const AttendanceHub: React.FC<Props> = ({
                   placeholder="Search staff or token..."
                   value={teamSearchQuery}
                   onChange={e => setTeamSearchQuery(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 pl-9 pr-3 py-2 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                  className="bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-lg text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                 />
               </div>
             </div>
@@ -1268,7 +1315,7 @@ export const AttendanceHub: React.FC<Props> = ({
             <div>
               <button
                 onClick={() => setShowManualModal(true)}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-sky-500/20"
+                className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-black rounded-xl flex items-center gap-2 shadow-lg shadow-red-700/20 transition"
               >
                 <Plus className="w-3.5 h-3.5" /> Manual Attendance Entry
               </button>
@@ -1276,102 +1323,102 @@ export const AttendanceHub: React.FC<Props> = ({
           </div>
 
           {/* Table */}
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 uppercase tracking-wider text-[11px] text-slate-500 font-black border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Branch</th>
-                    <th className="py-3 px-4">Shift</th>
-                    <th className="py-3 px-4">Clock In</th>
-                    <th className="py-3 px-4">Clock Out</th>
-                    <th className="py-3 px-4">Geofence</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Late Mins</th>
-                    <th className="py-3 px-4 text-right">Net Hours</th>
-                    <th className="py-3 px-4">Registered Fingerprint</th>
-                    <th className="py-3 px-4 text-center">Actions</th>
+                    <th className="py-3.5 px-4">Employee</th>
+                    <th className="py-3.5 px-4">Category</th>
+                    <th className="py-3.5 px-4">Branch</th>
+                    <th className="py-3.5 px-4">Shift</th>
+                    <th className="py-3.5 px-4">Clock In</th>
+                    <th className="py-3.5 px-4">Clock Out</th>
+                    <th className="py-3.5 px-4">Geofence</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4">Late Mins</th>
+                    <th className="py-3.5 px-4 text-right">Net Hours</th>
+                    <th className="py-3.5 px-4">Registered Fingerprint</th>
+                    <th className="py-3.5 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredTeamRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-8 text-center text-slate-500">
+                      <td colSpan={12} className="py-8 text-center text-slate-400 font-medium">
                         No attendance records found for this date and filter criteria.
                       </td>
                     </tr>
                   ) : (
                     filteredTeamRecords.map(rec => (
-                      <tr key={rec.id} className="hover:bg-slate-800/30 transition">
-                        <td className="py-3 px-4 font-bold text-white">
+                      <tr key={rec.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3.5 px-4 font-black text-slate-950">
                           <div>{rec.employeeName || 'Staff'}</div>
-                          <div className="text-[10px] text-slate-500 font-mono">{rec.employeeCode}</div>
+                          <div className="text-[10px] text-slate-400 font-mono font-normal">{rec.employeeCode}</div>
                         </td>
-                        <td className="py-3 px-4">
-                          <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-semibold border border-slate-700">
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">
                             {rec.category || 'Staff'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-400">{rec.scheduledBranchName || '—'}</td>
-                        <td className="py-3 px-4 font-mono text-slate-300">
+                        <td className="py-3.5 px-4 text-slate-600 font-medium">{rec.scheduledBranchName || '—'}</td>
+                        <td className="py-3.5 px-4 font-mono text-slate-700 font-bold">
                           {rec.scheduledStartTime || '—'} - {rec.scheduledEndTime || '—'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-emerald-400">
+                        <td className="py-3.5 px-4 font-mono font-bold text-emerald-700">
                           {rec.actualClockIn ? new Date(rec.actualClockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-rose-400">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
                           {rec.actualClockOut ? new Date(rec.actualClockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3.5 px-4">
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            className={`text-[10px] px-2 py-0.5 rounded font-black border ${
                               rec.clockInGeofence === 'INSIDE'
-                                ? 'bg-emerald-500/20 text-emerald-400'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : rec.clockInGeofence === 'OUTSIDE'
-                                ? 'bg-rose-500/20 text-rose-400'
-                                : 'bg-slate-800 text-slate-400'
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
                             }`}
                           >
                             {rec.clockInGeofence}
                           </span>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3.5 px-4">
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${
                               rec.status === 'PRESENT'
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : rec.status === 'LATE'
-                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : rec.status === 'ABSENT'
-                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                ? 'bg-red-50 text-red-700 border-red-200'
                                 : rec.status === 'ON_LEAVE'
-                                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                                : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
                             }`}
                           >
                             {rec.status}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-bold text-amber-400">
+                        <td className="py-3.5 px-4 font-black text-amber-700 font-mono">
                           {rec.lateMinutes > 0 ? `${rec.lateMinutes}m` : '—'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-right text-slate-200 font-bold">
+                        <td className="py-3.5 px-4 font-mono text-right text-slate-900 font-black">
                           {(rec.netWorkedMinutes / 60).toFixed(1)}h
                         </td>
 
                         {/* Registered Fingerprint */}
-                        <td className="py-3 px-4">
+                        <td className="py-3.5 px-4">
                           {(() => {
                             const fp = registeredFingerprints[rec.employeeId] || rec.registeredFingerprint;
                             return fp ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                                <Fingerprint className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold bg-slate-50 text-slate-900 border border-slate-200 shadow-sm">
+                                <Fingerprint className="w-3.5 h-3.5 text-red-700" />
                                 {fp}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-slate-500 border border-dashed border-slate-700">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-slate-400 border border-dashed border-slate-300">
                                 Not Registered
                               </span>
                             );
@@ -1379,19 +1426,19 @@ export const AttendanceHub: React.FC<Props> = ({
                         </td>
 
                         {/* Admin Edit / Delete Actions */}
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => handleEditFingerprint(rec.employeeId, rec.employeeName || 'Staff')}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/30 transition shadow-sm"
+                              className="p-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 transition shadow-sm"
                               title="Edit / Register Fingerprint"
                             >
-                              <Edit3 className="w-3.5 h-3.5" />
+                              <Edit3 className="w-3.5 h-3.5 text-red-700" />
                             </button>
                             {(registeredFingerprints[rec.employeeId] || rec.registeredFingerprint) && (
                               <button
                                 onClick={() => handleDeleteFingerprint(rec.employeeId, rec.employeeName || 'Staff')}
-                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition shadow-sm"
+                                className="p-1.5 rounded-lg bg-white hover:bg-red-50 text-slate-600 hover:text-red-700 border border-slate-200 hover:border-red-200 transition shadow-sm"
                                 title="Delete Registered Fingerprint"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1414,23 +1461,23 @@ export const AttendanceHub: React.FC<Props> = ({
       {/* ========================================================================= */}
       {activeTab === 'reports' && (
         <div className="space-y-6">
-          <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-400">Month:</label>
+                <label className="text-xs font-bold text-slate-600">Month:</label>
                 <input
                   type="month"
                   value={reportMonth}
                   onChange={e => setReportMonth(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-400">Category:</label>
+                <label className="text-xs font-bold text-slate-600">Category:</label>
                 <select
                   value={reportCategoryFilter}
                   onChange={e => setReportCategoryFilter(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 text-white text-xs font-semibold rounded-lg px-3 py-2"
+                  className="bg-white border border-slate-200 text-slate-900 text-xs font-bold rounded-lg px-3 py-2 shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 >
                   <option value="ALL">All Categories</option>
                   <option value="Pharmacist">Pharmacist</option>
@@ -1446,14 +1493,14 @@ export const AttendanceHub: React.FC<Props> = ({
                   placeholder="Search staff..."
                   value={reportSearch}
                   onChange={e => setReportSearch(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 pl-9 pr-3 py-2 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                  className="bg-white border border-slate-200 pl-9 pr-3 py-2 rounded-lg text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                 />
               </div>
             </div>
             <button
               onClick={handleExportExcel}
               disabled={isExporting}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition"
+              className="px-5 py-2.5 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white text-xs font-black rounded-xl flex items-center gap-2 shadow-lg shadow-red-700/20 transition"
               title="Export official Excel workbook with dedicated tab for each role category"
             >
               {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -1461,62 +1508,62 @@ export const AttendanceHub: React.FC<Props> = ({
             </button>
           </div>
 
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 uppercase tracking-wider text-[11px] text-slate-500 font-black border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4">Staff Member</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4 text-center">Scheduled</th>
-                    <th className="py-3 px-4 text-center">Present</th>
-                    <th className="py-3 px-4 text-center">Late</th>
-                    <th className="py-3 px-4 text-center">Absent</th>
-                    <th className="py-3 px-4 text-center">Attendance %</th>
-                    <th className="py-3 px-4 text-center">Punctuality Score</th>
-                    <th className="py-3 px-4 text-right">Penalties (BHD)</th>
+                    <th className="py-3.5 px-4">Staff Member</th>
+                    <th className="py-3.5 px-4">Category</th>
+                    <th className="py-3.5 px-4 text-center">Scheduled</th>
+                    <th className="py-3.5 px-4 text-center">Present</th>
+                    <th className="py-3.5 px-4 text-center">Late</th>
+                    <th className="py-3.5 px-4 text-center">Absent</th>
+                    <th className="py-3.5 px-4 text-center">Attendance %</th>
+                    <th className="py-3.5 px-4 text-center">Punctuality Score</th>
+                    <th className="py-3.5 px-4 text-right">Penalties (BHD)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {filteredMonthlyReports.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                      <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
                         No monthly records found for the selected criteria.
                       </td>
                     </tr>
                   ) : (
                     filteredMonthlyReports.map(rep => (
-                      <tr key={rep.employeeId} className="hover:bg-slate-800/30 transition">
-                        <td className="py-3 px-4 font-bold text-white">
+                      <tr key={rep.employeeId} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3.5 px-4 font-black text-slate-950">
                           <div>{rep.employeeName}</div>
-                          <div className="text-[10px] text-slate-500 font-mono">{rep.employeeCode}</div>
+                          <div className="text-[10px] text-slate-400 font-mono font-normal">{rep.employeeCode}</div>
                         </td>
-                        <td className="py-3 px-4">
-                          <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-semibold border border-slate-700">
+                        <td className="py-3.5 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">
                             {rep.category}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center font-bold">{rep.scheduledDays}</td>
-                        <td className="py-3 px-4 text-center text-emerald-400 font-bold">{rep.presentDays}</td>
-                        <td className="py-3 px-4 text-center text-amber-400 font-bold">{rep.lateDays}</td>
-                        <td className="py-3 px-4 text-center text-rose-400 font-bold">{rep.absentDays}</td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center font-bold text-slate-800">{rep.scheduledDays}</td>
+                        <td className="py-3.5 px-4 text-center text-emerald-700 font-bold">{rep.presentDays}</td>
+                        <td className="py-3.5 px-4 text-center text-amber-700 font-bold">{rep.lateDays}</td>
+                        <td className="py-3.5 px-4 text-center text-red-700 font-bold">{rep.absentDays}</td>
+                        <td className="py-3.5 px-4 text-center">
                           <span
                             className={`font-black text-xs ${
                               rep.attendancePercentage >= 95
-                                ? 'text-emerald-400'
+                                ? 'text-emerald-700'
                                 : rep.attendancePercentage >= 85
-                                ? 'text-amber-400'
-                                : 'text-rose-400'
+                                ? 'text-amber-700'
+                                : 'text-red-700'
                             }`}
                           >
                             {rep.attendancePercentage}%
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="font-bold text-sky-300">{rep.punctualityScore}/100</span>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="font-black text-slate-900">{rep.punctualityScore}/100</span>
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-amber-400 font-mono">
+                        <td className="py-3.5 px-4 text-right font-black text-red-700 font-mono">
                           {rep.totalPenaltiesBhd.toFixed(3)} BHD
                         </td>
                       </tr>
@@ -1534,58 +1581,58 @@ export const AttendanceHub: React.FC<Props> = ({
       {/* ========================================================================= */}
       {activeTab === 'penalties' && (
         <div className="space-y-6">
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 uppercase tracking-wider text-[11px] text-slate-500 font-black border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Violation Rule</th>
-                    <th className="py-3 px-4">Tier / Action</th>
-                    <th className="py-3 px-4">Occurrence</th>
-                    <th className="py-3 px-4 text-right">Deduction (BHD)</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3.5 px-4">Date</th>
+                    <th className="py-3.5 px-4">Employee</th>
+                    <th className="py-3.5 px-4">Violation Rule</th>
+                    <th className="py-3.5 px-4">Tier / Action</th>
+                    <th className="py-3.5 px-4">Occurrence</th>
+                    <th className="py-3.5 px-4 text-right">Deduction (BHD)</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {penalties.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                      <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                         No disciplinary violations recorded in the ledger.
                       </td>
                     </tr>
                   ) : (
                     penalties.map(pen => (
-                      <tr key={pen.id} className="hover:bg-slate-800/30 transition">
-                        <td className="py-3 px-4 font-mono text-slate-400">{pen.date}</td>
-                        <td className="py-3 px-4 font-bold text-white">{pen.employeeName || pen.employeeId}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-200">{pen.ruleName}</td>
-                        <td className="py-3 px-4">
-                          <span className="text-amber-300 font-bold">{pen.action.replace(/_/g, ' ')}</span>
-                          <span className="text-[10px] text-slate-500 ml-1.5">(Tier {pen.tier})</span>
+                      <tr key={pen.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3.5 px-4 font-mono text-slate-500 font-medium">{pen.date}</td>
+                        <td className="py-3.5 px-4 font-black text-slate-950">{pen.employeeName || pen.employeeId}</td>
+                        <td className="py-3.5 px-4 font-bold text-slate-800">{pen.ruleName}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="text-slate-900 font-black">{pen.action.replace(/_/g, ' ')}</span>
+                          <span className="text-[10px] text-slate-400 ml-1.5 font-bold">(Tier {pen.tier})</span>
                         </td>
-                        <td className="py-3 px-4 text-slate-400 font-semibold">#{pen.occurrenceNumber}</td>
-                        <td className="py-3 px-4 text-right font-black font-mono text-amber-400">
+                        <td className="py-3.5 px-4 text-slate-600 font-bold">#{pen.occurrenceNumber}</td>
+                        <td className="py-3.5 px-4 text-right font-black font-mono text-red-700">
                           {pen.calculatedDeductionBhd.toFixed(3)} BHD
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center">
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase border ${
                               pen.isWaived
-                                ? 'bg-slate-800 text-slate-400 line-through'
-                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                ? 'bg-slate-100 text-slate-400 line-through border-slate-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
                             }`}
                           >
                             {pen.isWaived ? 'Waived' : 'Active'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right">
                           {!pen.isWaived && (
                             <button
                               onClick={() => handleWaivePenalty(pen.id)}
-                              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition"
+                              className="px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-lg text-xs font-bold border border-slate-200 shadow-sm transition"
                             >
                               Waive
                             </button>
@@ -1605,15 +1652,15 @@ export const AttendanceHub: React.FC<Props> = ({
       {/* MODAL: MANUAL ATTENDANCE OVERRIDE */}
       {/* ========================================================================= */}
       {showManualModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-sky-400" /> Record Manual Attendance Punch
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-950 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-red-700" /> Record Manual Attendance Punch
               </h3>
               <button
                 onClick={() => setShowManualModal(false)}
-                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white"
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1621,11 +1668,11 @@ export const AttendanceHub: React.FC<Props> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Select Employee</label>
+                <label className="block text-slate-700 mb-1 font-bold">Select Employee</label>
                 <select
                   value={manualEmpId}
                   onChange={e => setManualEmpId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs"
+                  className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-xs font-bold shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 >
                   <option value="">-- Choose Staff Member --</option>
                   {employees.map(e => (
@@ -1637,60 +1684,60 @@ export const AttendanceHub: React.FC<Props> = ({
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">Date</label>
+                <label className="block text-slate-700 mb-1 font-bold">Date</label>
                 <input
                   type="date"
                   value={manualDate}
                   onChange={e => setManualDate(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs"
+                  className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-xs font-bold shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Clock In Time</label>
+                  <label className="block text-slate-700 mb-1 font-bold">Clock In Time</label>
                   <input
                     type="time"
                     value={manualClockIn}
                     onChange={e => setManualClockIn(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs"
+                    className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-xs font-bold shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Clock Out Time</label>
+                  <label className="block text-slate-700 mb-1 font-bold">Clock Out Time</label>
                   <input
                     type="time"
                     value={manualClockOut}
                     onChange={e => setManualClockOut(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs"
+                    className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-xs font-bold shadow-sm focus:ring-2 focus:ring-red-600/20 focus:border-red-600"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1 font-semibold">
-                  Manager Justification / Override Rationale <span className="text-rose-400">*</span>
+                <label className="block text-slate-700 mb-1 font-bold">
+                  Manager Justification / Override Rationale <span className="text-red-700">*</span>
                 </label>
                 <textarea
                   rows={3}
                   value={manualReason}
                   onChange={e => setManualReason(e.target.value)}
                   placeholder="e.g. Employee forgot phone at home / System GPS outage reported"
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-sky-500"
+                  className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg p-3 text-xs font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setShowManualModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg"
+                className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 shadow-sm transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleManualSubmit}
-                className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold rounded-lg shadow-lg shadow-sky-500/20"
+                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-black rounded-xl shadow-lg shadow-red-700/20 transition"
               >
                 Record Manual Punch
               </button>
@@ -1703,7 +1750,7 @@ export const AttendanceHub: React.FC<Props> = ({
       {/* MODAL: DISCIPLINARY SETTINGS & RULES CONFIG (Fixed Wide Size) */}
       {/* ========================================================================= */}
       {showConfigModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-hidden">
           <div className="w-full max-w-[96vw] 2xl:max-w-[1550px] h-[88vh] min-h-[620px] max-h-[88vh] flex flex-col my-auto transition-all duration-200">
             <AttendancePenaltyConfigPanel onClose={() => setShowConfigModal(false)} />
           </div>

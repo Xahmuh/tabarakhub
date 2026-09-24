@@ -10,7 +10,9 @@ import {
   DeliveryCoverageInsightSeverity,
   DeliveryCoverageInsightType,
   DeliveryExpansionCandidate,
-  DeliveryWhiteSpace
+  DeliveryWhiteSpace,
+  NoOrderBlockAnalysis,
+  NoOrdersBreakdownSummary
 } from '../../../types';
 
 export interface CoverageTaskRequest {
@@ -99,6 +101,160 @@ export const CampaignOpportunitiesSection: React.FC<SectionCommon & { items: Del
         ))}
       </div>
     )}
+  </section>
+);
+
+// ---- Contested Territory (Phase 4 - Competitor-Aware No-Orders) ----
+export const ContestedTerritorySection: React.FC<SectionCommon & { items: NoOrderBlockAnalysis[] }> = ({ items, ...common }) => (
+  <section className="operational-panel p-4 md:p-5">
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Target className="h-4 w-4 text-amber-600" />
+        <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Contested Territory (Zero Orders)</h3>
+      </div>
+      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 border border-amber-200">
+        {items.length} Target Blocks
+      </span>
+    </div>
+    <p className="mb-3 text-[11px] font-medium text-slate-500">
+      Blocks within branch delivery range where Tabarak has zero orders, but 1–2 competitor pharmacies actively operate. Prioritized by fewest competitors first (1 competitor = prime win-back target).
+    </p>
+
+    {items.length === 0 ? (
+      <Empty>No contested zero-order territory detected inside active service zones.</Empty>
+    ) : (
+      <div className="space-y-2">
+        {items.map(item => {
+          const isSingleCompetitor = item.competitorCount === 1;
+          return (
+            <div
+              key={item.blockNumber}
+              className={`rounded-lg border p-3 transition-colors ${
+                isSingleCompetitor
+                  ? 'border-amber-200 bg-amber-50/40 hover:bg-amber-50/70'
+                  : 'border-slate-200 bg-white hover:bg-slate-50/70'
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-black text-slate-800">
+                      Block #{item.blockNumber}{item.areaName ? ` · ${item.areaName}` : ''}
+                      {item.governorate ? ` (${item.governorate})` : ''}
+                    </p>
+                    <span
+                      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                        isSingleCompetitor
+                          ? 'border-amber-300 bg-amber-100 text-amber-900 font-extrabold'
+                          : 'border-slate-200 bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {isSingleCompetitor ? '★ Prime Target (1 Competitor)' : 'Contested (2 Competitors)'}
+                    </span>
+                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-700">
+                      Inside Delivery Reach
+                    </span>
+                  </div>
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">Competitors:</span>
+                    {item.competitors.map((comp, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center rounded bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200/80 shadow-2xs"
+                      >
+                        {comp.name}{comp.group ? ` · ${comp.group}` : ''}
+                      </span>
+                    ))}
+                  </div>
+
+                  <p className="mt-1.5 text-[11px] font-bold leading-5 text-slate-600">
+                    → {item.actionRecommendation}
+                  </p>
+                </div>
+
+                <CreateTaskButton
+                  {...common}
+                  req={{
+                    insightId: `contested:${item.blockNumber}`,
+                    insightType: 'campaign_opportunity',
+                    relatedRecordType: 'delivery_block',
+                    relatedRecordId: item.blockNumber,
+                    title: `Contested territory campaign for Block ${item.blockNumber} (${item.competitorCount} competitor${item.competitorCount > 1 ? 's' : ''})`,
+                    description: `Block ${item.blockNumber} has 0 Tabarak orders and ${item.competitorCount} competitor(s) (${item.competitors.map(c => c.name).join(', ')}). ${item.actionRecommendation}`,
+                    severity: isSingleCompetitor ? 'high' : 'medium',
+                    blockNumber: item.blockNumber,
+                    recommendedAction: item.actionRecommendation
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </section>
+);
+
+// ---- No-Orders Overview Breakdown Cards ----
+export const NoOrdersBreakdownSection: React.FC<{
+  summary: NoOrdersBreakdownSummary;
+  onViewContested?: () => void;
+  onViewExpansion?: () => void;
+}> = ({ summary, onViewContested, onViewExpansion }) => (
+  <section className="operational-panel p-4 md:p-5">
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <div>
+        <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
+          No-Orders Block Breakdown (Competitor-Aware)
+        </h3>
+        <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+          Evaluates {summary.totalNoOrderBlocks} blocks with 0 orders against branch delivery reach and competitor presence.
+        </p>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        onClick={onViewContested}
+        className="group relative cursor-pointer rounded-xl border border-amber-200 bg-amber-50/50 p-4 transition-all hover:bg-amber-50 hover:shadow-xs"
+      >
+        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Contested Territory</p>
+        <p className="mt-1 text-2xl font-black text-amber-950 tabular-nums">{summary.contestedCount}</p>
+        <p className="mt-1 text-[11px] font-bold text-amber-800">
+          {summary.contestedSingleCompetitorCount} prime (1 competitor)
+        </p>
+        <p className="mt-0.5 text-[10px] text-amber-600 font-semibold group-hover:underline">
+          View in Campaign Tab →
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">White Space</p>
+        <p className="mt-1 text-2xl font-black text-emerald-950 tabular-nums">{summary.whiteSpaceCount}</p>
+        <p className="mt-1 text-[11px] font-bold text-emerald-800">0 competitors</p>
+        <p className="mt-0.5 text-[10px] text-emerald-600 font-medium">Hold for residential validation</p>
+      </div>
+
+      <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-rose-700">Saturated Markets</p>
+        <p className="mt-1 text-2xl font-black text-rose-950 tabular-nums">{summary.saturatedCount}</p>
+        <p className="mt-1 text-[11px] font-bold text-rose-800">3+ competitors</p>
+        <p className="mt-0.5 text-[10px] text-rose-600 font-medium">Low marketing priority / monitor</p>
+      </div>
+
+      <div
+        onClick={onViewExpansion}
+        className="group relative cursor-pointer rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all hover:bg-slate-100 hover:shadow-xs"
+      >
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Outside Service Area</p>
+        <p className="mt-1 text-2xl font-black text-slate-800 tabular-nums">{summary.outsideServiceAreaCount}</p>
+        <p className="mt-1 text-[11px] font-bold text-slate-600">Beyond delivery radius</p>
+        <p className="mt-0.5 text-[10px] text-slate-500 font-semibold group-hover:underline">
+          Route to Expansion Tab →
+        </p>
+      </div>
+    </div>
   </section>
 );
 
@@ -259,7 +415,7 @@ export const CapacityPressureSection: React.FC<SectionCommon & { items: Delivery
 );
 
 // ---- Expansion Review ----
-export const ExpansionReviewSection: React.FC<SectionCommon & { items: DeliveryExpansionCandidate[] }> = ({ items, ...common }) => (
+export const ExpansionReviewSection: React.FC<SectionCommon & { items: DeliveryExpansionCandidate[]; outsideBlocks?: NoOrderBlockAnalysis[] }> = ({ items, outsideBlocks, ...common }) => (
   <section className="operational-panel p-4 md:p-5">
     <div className="mb-1 flex items-center gap-2">
       <ArrowUpRight className="h-4 w-4 text-brand" />
@@ -299,6 +455,38 @@ export const ExpansionReviewSection: React.FC<SectionCommon & { items: DeliveryE
             </div>
           </div>
         ))}
+      </div>
+    )}
+
+    {outsideBlocks && outsideBlocks.length > 0 && (
+      <div className="mt-5 border-t border-slate-200 pt-4">
+        <div className="mb-2">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+            Unserved Out-of-Range Blocks ({outsideBlocks.length})
+          </h4>
+          <p className="text-[11px] font-medium text-slate-500">
+            Blocks beyond current branch delivery radius. Excluded from marketing campaigns; routed to branch network expansion and new hub planning.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+          {outsideBlocks.slice(0, 60).map(b => (
+            <span
+              key={b.blockNumber}
+              title={`Block ${b.blockNumber}${b.areaName ? ` (${b.areaName})` : ''} — ${b.competitorCount} competitor(s)`}
+              className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 shadow-2xs"
+            >
+              #{b.blockNumber}{b.areaName ? ` ${b.areaName}` : ''}
+              {b.competitorCount > 0 && (
+                <span className="ml-1 text-[9px] text-slate-400">({b.competitorCount} comp)</span>
+              )}
+            </span>
+          ))}
+          {outsideBlocks.length > 60 && (
+            <span className="inline-flex items-center px-2 py-1 text-[10px] font-bold text-slate-400">
+              +{outsideBlocks.length - 60} more blocks
+            </span>
+          )}
+        </div>
       </div>
     )}
   </section>

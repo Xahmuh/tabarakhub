@@ -14,7 +14,7 @@ const PROFILE_COLUMNS = `
   notes,
   created_at,
   updated_at,
-  branch:branches(id, code, name, role)
+  branch:branches(id, code, name, role, lat, lng)
 `;
 
 const num = (value: unknown, fallback: number) => {
@@ -24,11 +24,15 @@ const num = (value: unknown, fallback: number) => {
 
 const toProfile = (row: any): BranchDeliveryProfile => {
   const branch = Array.isArray(row.branch) ? row.branch[0] : row.branch;
+  const lat = branch?.lat !== null && branch?.lat !== undefined && Number.isFinite(Number(branch.lat)) ? Number(branch.lat) : null;
+  const lng = branch?.lng !== null && branch?.lng !== undefined && Number.isFinite(Number(branch.lng)) ? Number(branch.lng) : null;
   return {
     id: row.id,
     branchId: row.branch_id,
     branchCode: branch?.code || null,
     branchName: branch?.name || null,
+    lat,
+    lng,
     originBlockNumber: row.origin_block_number,
     coreRadiusKm: num(row.core_radius_km, 3),
     standardRadiusKm: num(row.standard_radius_km, 5),

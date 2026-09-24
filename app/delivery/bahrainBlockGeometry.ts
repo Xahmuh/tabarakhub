@@ -240,9 +240,29 @@ export const getBlockCentroid = (
 export const getBranchMarkerPoint = (
   dataset: BlockGeometryDataset,
   branchCode: string,
-  originBlockNumber: string | null | undefined
+  originBlockNumber: string | null | undefined,
+  coordinates?: { lat?: number | null; lng?: number | null } | null
 ): BranchMarkerPoint => {
   const block = normalizeBlockKey(originBlockNumber);
+
+  // If accurate branch GPS coordinates within Bahrain are explicitly recorded in DB, prioritize them
+  const hasValidGps = (
+    coordinates?.lat !== null && coordinates?.lat !== undefined &&
+    coordinates?.lng !== null && coordinates?.lng !== undefined &&
+    Number.isFinite(coordinates.lat) && Number.isFinite(coordinates.lng) &&
+    coordinates.lat >= 25.5 && coordinates.lat <= 26.6 &&
+    coordinates.lng >= 50.3 && coordinates.lng <= 50.9
+  );
+
+  if (hasValidGps) {
+    return {
+      branchCode,
+      originBlockNumber: block,
+      point: { lat: coordinates!.lat!, lng: coordinates!.lng! },
+      status: 'mapped'
+    };
+  }
+
   if (!block) {
     return { branchCode, originBlockNumber: '', point: null, status: 'unmapped', reason: 'missing origin block' };
   }

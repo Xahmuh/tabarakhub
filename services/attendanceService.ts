@@ -221,6 +221,49 @@ function minutesBetween(start: string, end: string): number {
   return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
 }
 
+// In-memory fallback store for Node.js test runners and non-browser environments
+const memoryStorage = new Map<string, string>();
+
+const safeStorage = {
+  getItem(key: string): string | null {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') {
+        return window.localStorage.getItem(key);
+      }
+      if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+        return localStorage.getItem(key);
+      }
+    } catch { /* ignore */ }
+    return memoryStorage.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.setItem === 'function') {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+      if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+        localStorage.setItem(key, value);
+        return;
+      }
+    } catch { /* ignore */ }
+    memoryStorage.set(key, value);
+  },
+  removeItem(key: string): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.removeItem === 'function') {
+        window.localStorage.removeItem(key);
+        return;
+      }
+      if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+        localStorage.removeItem(key);
+        return;
+      }
+    } catch { /* ignore */ }
+    memoryStorage.delete(key);
+  }
+};
+
 // ============================================================================
 // ATTENDANCE SERVICE
 // ============================================================================
@@ -233,7 +276,7 @@ export const attendanceService = {
 
   getConfig(): AttendanceModuleConfig {
     try {
-      const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
+      const stored = safeStorage.getItem(CONFIG_STORAGE_KEY);
       if (stored) return JSON.parse(stored);
     } catch { /* ignore */ }
     return { ...DEFAULT_ATTENDANCE_CONFIG };
@@ -241,7 +284,9 @@ export const attendanceService = {
 
   saveConfig(config: AttendanceModuleConfig): void {
     config.updatedAt = new Date().toISOString();
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+    try {
+      safeStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+    } catch { /* ignore */ }
   },
 
   // ------------------------------------------------------------------
@@ -251,25 +296,29 @@ export const attendanceService = {
   /** Get all punches (confirmed) from local cache */
   getAllPunches(): AttendancePunch[] {
     try {
-      const raw = localStorage.getItem(PUNCHES_STORAGE_KEY);
+      const raw = safeStorage.getItem(PUNCHES_STORAGE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   },
 
   savePunches(punches: AttendancePunch[]): void {
-    localStorage.setItem(PUNCHES_STORAGE_KEY, JSON.stringify(punches));
+    try {
+      safeStorage.setItem(PUNCHES_STORAGE_KEY, JSON.stringify(punches));
+    } catch { /* ignore */ }
   },
 
   /** Get pending sync queue (offline punches awaiting server validation) */
   getPendingSyncQueue(): AttendancePunch[] {
     try {
-      const raw = localStorage.getItem(PENDING_QUEUE_KEY);
+      const raw = safeStorage.getItem(PENDING_QUEUE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   },
 
   savePendingSyncQueue(queue: AttendancePunch[]): void {
-    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+    try {
+      safeStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+    } catch { /* ignore */ }
   },
 
   // ------------------------------------------------------------------
@@ -278,13 +327,15 @@ export const attendanceService = {
 
   getAllDailyRecords(): AttendanceDailyRecord[] {
     try {
-      const raw = localStorage.getItem(DAILY_RECORDS_STORAGE_KEY);
+      const raw = safeStorage.getItem(DAILY_RECORDS_STORAGE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch { return []; }
   },
 
   saveDailyRecords(records: AttendanceDailyRecord[]): void {
-    localStorage.setItem(DAILY_RECORDS_STORAGE_KEY, JSON.stringify(records));
+    try {
+      safeStorage.setItem(DAILY_RECORDS_STORAGE_KEY, JSON.stringify(records));
+    } catch { /* ignore */ }
   },
 
   // ------------------------------------------------------------------
@@ -548,14 +599,14 @@ export const attendanceService = {
     // In production, this queries Supabase duty_schedule_assignments.
     // For now, we look up localStorage-cached assignments from the scheduler.
     try {
-      const schedRaw = localStorage.getItem('tabarak_duty_schedule_assignments_v2');
+      const schedRaw = safeStorage.getItem('tabarak_duty_schedule_assignments_v2');
       if (!schedRaw) return null;
       const allAssignments: DutyScheduleAssignment[] = JSON.parse(schedRaw);
       const match = allAssignments.find(a => a.employeeId === employeeId && a.date === date);
       if (!match) return null;
 
       // Resolve shift times from branch shift types
-      const shiftTypesRaw = localStorage.getItem('tabarak_duty_scheduler_shift_types_v2');
+      const shiftTypesRaw = safeStorage.getItem('tabarak_duty_scheduler_shift_types_v2');
       const shiftTypes: BranchShiftType[] = shiftTypesRaw ? JSON.parse(shiftTypesRaw) : [];
       const shiftDef = shiftTypes.find(
         s => s.branchId === match.branchId && s.code === match.shiftCode
@@ -845,7 +896,7 @@ export const attendanceService = {
 
   getRegisteredFingerprintsMap(): Record<string, { employeeId: string; fingerprint: string; registeredAt: string; registeredBy?: string; deviceName?: string }> {
     try {
-      const raw = localStorage.getItem('tabarak_attendance_registered_fingerprints_v1');
+      const raw = safeStorage.getItem('tabarak_attendance_registered_fingerprints_v1');
       if (raw) return JSON.parse(raw);
     } catch { /* ignore */ }
 
@@ -867,7 +918,7 @@ export const attendanceService = {
       }
     };
     try {
-      localStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(initialMap));
+      safeStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(initialMap));
     } catch { /* ignore */ }
     return initialMap;
   },
@@ -879,7 +930,7 @@ export const attendanceService = {
     }
     // Fallback: check workforce directory
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         const emps: Employee[] = JSON.parse(raw);
         const emp = emps.find(e => e.id === employeeId);
@@ -900,7 +951,7 @@ export const attendanceService = {
       }
     }
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         const emps: Employee[] = JSON.parse(raw);
         emps.forEach(e => {
@@ -929,19 +980,19 @@ export const attendanceService = {
       deviceName: deviceName || 'Biometric Scanner / Device'
     };
     try {
-      localStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(map));
+      safeStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(map));
     } catch { /* ignore */ }
 
     // Sync with workforce directory
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         const emps: Employee[] = JSON.parse(raw);
         const emp = emps.find(e => e.id === employeeId);
         if (emp) {
           emp.registered_fingerprint = cleanFp;
           emp.device_fingerprint = cleanFp;
-          localStorage.setItem('tabarak_hr_workforce_directory_v1', JSON.stringify(emps));
+          safeStorage.setItem('tabarak_hr_workforce_directory_v1', JSON.stringify(emps));
         }
       }
     } catch { /* ignore */ }
@@ -960,19 +1011,19 @@ export const attendanceService = {
     const map = this.getRegisteredFingerprintsMap();
     delete map[employeeId];
     try {
-      localStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(map));
+      safeStorage.setItem('tabarak_attendance_registered_fingerprints_v1', JSON.stringify(map));
     } catch { /* ignore */ }
 
     // Clear from workforce directory
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         const emps: Employee[] = JSON.parse(raw);
         const emp = emps.find(e => e.id === employeeId);
         if (emp) {
           emp.registered_fingerprint = null;
           emp.device_fingerprint = null;
-          localStorage.setItem('tabarak_hr_workforce_directory_v1', JSON.stringify(emps));
+          safeStorage.setItem('tabarak_hr_workforce_directory_v1', JSON.stringify(emps));
         }
       }
     } catch { /* ignore */ }
@@ -1049,7 +1100,7 @@ export const attendanceService = {
 
     let assignments: EmployeeBranchAssignment[] = [];
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         const emps: Employee[] = JSON.parse(raw);
         const emp = emps.find(e => e.id === employeeId);
@@ -1071,7 +1122,7 @@ export const attendanceService = {
       employee = employeeOrId;
     } else {
       try {
-        const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+        const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
         if (raw) {
           const emps: Employee[] = JSON.parse(raw);
           employee = emps.find(e => e.id === empId) || null;
@@ -1127,7 +1178,7 @@ export const attendanceService = {
     let records = this.getAllDailyRecords().filter(r => r.date === date);
     if (records.length === 0) {
       try {
-        const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+        const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
         if (raw) {
           const emps: Employee[] = JSON.parse(raw);
           const active = emps.filter(e => e.status === 'Active');
@@ -1150,7 +1201,7 @@ export const attendanceService = {
   async getTeamMonthlyReport(month: string): Promise<AttendanceMonthlyReport[]> {
     let employees: Employee[] = [];
     try {
-      const raw = localStorage.getItem('tabarak_hr_workforce_directory_v1');
+      const raw = safeStorage.getItem('tabarak_hr_workforce_directory_v1');
       if (raw) {
         employees = JSON.parse(raw);
       }

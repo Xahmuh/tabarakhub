@@ -1113,7 +1113,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
     while (true) {
       let query = applyExportFilters(
-        supabase.client.from('lost_sales_excel_export').select('*'),
+        supabase.sales.queryExportView(),
         scope,
         branchIdOverride
       );

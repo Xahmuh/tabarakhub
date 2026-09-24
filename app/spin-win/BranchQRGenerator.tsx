@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toPng } from 'html-to-image';
 import { spinWinService } from '../../services/spinWin';
-import { supabaseClient } from '../../lib/supabaseClient';
+import { branchService } from '../../services/branchService';
 import { SpinSession, Branch } from '../../types';
 import {
     QrCode,
@@ -532,12 +532,8 @@ Free delivery to all areas of Bahrain`);
 
     useEffect(() => {
         const checkPermission = async () => {
-            const { data } = await supabaseClient
-                .from('branches')
-                .select('is_spin_enabled')
-                .eq('id', branch.id)
-                .single();
-            if (data && data.is_spin_enabled === false) setIsLocked(true);
+            const data = await branchService.findById(branch.id);
+            if (data && data.isSpinEnabled === false) setIsLocked(true);
         };
         checkPermission();
     }, [branch.id]);

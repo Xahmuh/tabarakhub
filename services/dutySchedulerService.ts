@@ -22,6 +22,48 @@ export const dutySchedulerService = {
   // Leave Records (Union of Annual Leave Requests + Interim Sick/Other)
   // ==========================================
 
+  async getAssignmentsForPeriod(startDate: string, endDate: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabaseClient
+        .from('duty_schedule_assignments')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate);
+      if (error) throw error;
+      return data || [];
+    } catch (e) {
+      console.error('Error fetching duty schedule assignments for period:', e);
+      return [];
+    }
+  },
+
+  async getApprovedLeaveRecordsForPeriod(startDate: string, endDate: string): Promise<{ annualLeaves: any[]; interimLeaves: any[] }> {
+    try {
+      const annualPromise = supabaseClient
+        .from('annual_leave_requests')
+        .select('*')
+        .eq('status', 'APPROVED')
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+
+      const interimPromise = supabaseClient
+        .from('duty_scheduler_leave_records')
+        .select('*')
+        .eq('status', 'APPROVED')
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+
+      const [annualRes, interimRes] = await Promise.all([annualPromise, interimPromise]);
+      return {
+        annualLeaves: annualRes.data || [],
+        interimLeaves: interimRes.data || []
+      };
+    } catch (e) {
+      console.error('Error fetching approved leave records for period:', e);
+      return { annualLeaves: [], interimLeaves: [] };
+    }
+  },
+
   async getApprovedLeaveForEmployee(employeeId: string, startDate: string, endDate: string): Promise<DutySchedulerLeaveRecord[]> {
     // 1. Fetch approved annual leave requests
     const annualPromise = supabaseClient

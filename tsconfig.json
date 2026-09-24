@@ -39,7 +39,6 @@
   "exclude": [
     "dist",
     "node_modules",
-    "supabase/functions",
-    "app/api"
+    "supabase/functions"
   ]
 }

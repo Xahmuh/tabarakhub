@@ -1,4 +1,3 @@
-import { supabaseClient } from '../../lib/supabaseClient';
 import { workforceService, Employee } from '../../services/workforceService';
 import { branchService } from '../../services/branchService';
 import { dutySchedulerService } from '../../services/dutySchedulerService';
@@ -36,6 +35,7 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import { formatBhd } from '../../utils/money';
 
 export interface StaffPayrollRow {
   employeeId: string;
@@ -88,10 +88,6 @@ const DEFAULT_SETTINGS: StaffPayrollSettings = {
   gosiPercentage: 1.0
 };
 
-const formatBhd = (val: number) => {
-  const safe = Number.isFinite(val) ? val : 0;
-  return `${safe.toFixed(3)} BHD`;
-};
 
 export const StaffPayrollHub: React.FC = () => {
   const now = new Date();
@@ -148,26 +144,10 @@ export const StaffPayrollHub: React.FC = () => {
       const monthEnd = `${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`;
 
       // 1. Fetch duty schedule assignments for this month
-      const { data: assignments } = await supabaseClient
-        .from('duty_schedule_assignments')
-        .select('*')
-        .gte('date', monthStart)
-        .lte('date', monthEnd);
+      const assignments = await dutySchedulerService.getAssignmentsForPeriod(monthStart, monthEnd);
 
       // 2. Fetch approved annual leaves and interim leaves
-      const { data: annualLeaves } = await supabaseClient
-        .from('annual_leave_requests')
-        .select('*')
-        .eq('status', 'APPROVED')
-        .lte('start_date', monthEnd)
-        .gte('end_date', monthStart);
-
-      const { data: interimLeaves } = await supabaseClient
-        .from('duty_scheduler_leave_records')
-        .select('*')
-        .eq('status', 'APPROVED')
-        .lte('start_date', monthEnd)
-        .gte('end_date', monthStart);
+      const { annualLeaves, interimLeaves } = await dutySchedulerService.getApprovedLeaveRecordsForPeriod(monthStart, monthEnd);
 
       // Build rows for non-drivers (drivers have DriverPayrollHub)
       const rows: StaffPayrollRow[] = fetchedEmployees

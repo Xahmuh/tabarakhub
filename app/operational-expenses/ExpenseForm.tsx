@@ -6,7 +6,6 @@ import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
 import { pharmacistService } from '../../services/pharmacistService';
 import { workforceService, Employee } from '../../services/workforceService';
-import { supabaseClient } from '../../lib/supabaseClient';
 import { isManagerRole } from '../../lib/access';
 import { formatBhdAmount } from '../../utils/money';
 import { SearchableSelect, SelectOption } from '../delivery/components/SearchableSelect';
@@ -184,21 +183,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ user, pharmacist, edit
           pharms = await pharmacistService.listAll();
         }
 
-        // 3. Direct DB query fallback
+        // 3. Fallback to all pharmacists including inactive if needed
         if (!pharms || pharms.length === 0) {
-          const { data: dbPharms } = await supabaseClient
-            .from('pharmacists')
-            .select('id, code, name, is_active')
-            .order('name');
-          if (dbPharms && dbPharms.length > 0) {
-            pharms = dbPharms.map((p: any) => ({
-              id: p.id,
-              branchId: user.id,
-              code: p.code || '',
-              name: p.name,
-              isActive: p.is_active ?? true
-            }));
-          }
+          pharms = await pharmacistService.listAll({ includeInactive: true });
         }
 
         // 4. Prepend active logged-in pharmacist if not already listed

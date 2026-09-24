@@ -4,7 +4,6 @@ import { AlertCircle, AlertTriangle, CheckCircle2, CheckSquare, Clock, Download,
 import { Vehicle, VehicleOdometerHistory, VehicleOwnershipType } from '../../types';
 import { expenseService } from '../../services/expenseService';
 import { workforceService, Employee } from '../../services/workforceService';
-import { supabaseClient } from '../../lib/supabaseClient';
 import { formatBhdWithCurrency } from '../../utils/money';
 import { exportVehicleOdometerToExcel } from './utils/exportExpenses';
 import { downloadVehicleCsvTemplate, exportVehiclesToCsv } from './utils/vehicleCsvUtils';
@@ -292,16 +291,7 @@ export const VehicleManager: React.FC = () => {
       const linkedEmps = getLinkedEmployeesForVehicle(vehicle);
       const odoLogs = await expenseService.vehicles.getOdometerHistory(vehicle.id).catch(() => []);
       
-      let expCount = 0;
-      try {
-        const { count } = await supabaseClient
-          .from('expense_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('vehicle_id', vehicle.id);
-        expCount = count || 0;
-      } catch (e) {
-        console.warn(e);
-      }
+      const expCount = await expenseService.vehicles.getExpenseTransactionCount(vehicle.id);
 
       setLinkedInfo({
         employees: linkedEmps,

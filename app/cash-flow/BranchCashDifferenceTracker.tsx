@@ -145,7 +145,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
                     setPharmacists(data.map(p => p.name));
 
                     if (role === 'branch') {
-                        const { data: bData } = await supabase.client.from('branches').select('name').eq('id', branchId).single();
+                        const bData = await supabase.branches.findById(branchId);
                         if (bData) setCurrentBranchName(bData.name);
                     }
                 } catch (e) {

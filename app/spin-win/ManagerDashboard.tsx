@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { spinWinService } from '../../services/spinWin';
-import { SpinPrize, Spin, Branch } from '../../types';
+import { SpinPrize, Spin, Branch, SpinSettings } from '../../types';
 import {
     Trophy,
     Settings,
@@ -29,13 +29,14 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronDown,
-    MessageCircle
+    MessageCircle,
+    Smartphone,
+    Loader2
 } from 'lucide-react';
 import { BackToModulesButton, RangeDatePicker } from '../shared';
 import { SpinHeatmapCalendar } from './SpinHeatmapCalendar';
 import { formatCurrency } from '../../utils/calculations';
 import { mapBranchName } from '../../utils/excelUtils';
-import { supabaseClient } from '../../lib/supabaseClient';
 
 interface ManagerDashboardProps {
     onBack: () => void;
@@ -106,6 +107,10 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
     const [rewardStatusFilter, setRewardStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
     const [rewardSort, setRewardSort] = useState<'weight-desc' | 'weight-asc' | 'name-asc'>('weight-desc');
 
+    const [spinSettings, setSpinSettings] = useState<SpinSettings>({ dailySpinsPerMobile: 1 });
+    const [dailyLimitInput, setDailyLimitInput] = useState<number>(1);
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+
     const [isAddingBranch, setIsAddingBranch] = useState(false);
     const [newBranch, setNewBranch] = useState({
         name: '',
@@ -145,18 +150,21 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
     const loadData = async () => {
         setIsSyncing(true);
         try {
-            const [prizeList, spinList, branchList] = await Promise.all([
+            const [prizeList, spinList, branchList, currentSettings] = await Promise.all([
                 spinWinService.prizes.list(),
                 spinWinService.spins.list({
                     branchId: filters.branchId === 'all' ? undefined : filters.branchId,
                     startDate: filters.startDate,
                     endDate: filters.endDate
                 }),
-                spinWinService.management.branches.list()
+                spinWinService.management.branches.list(),
+                spinWinService.settings.get()
             ]);
             setPrizes(prizeList);
             setSpins(spinList);
             setBranches(branchList);
+            setSpinSettings(currentSettings);
+            setDailyLimitInput(currentSettings.dailySpinsPerMobile || 1);
         } catch (err) {
             console.error('Error loading manager data', err);
         } finally {
@@ -348,6 +356,31 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
             showNotification('success', 'Prize updated');
         } catch (err) {
             showNotification('error', 'Error updating prize');
+        }
+    };
+
+    const handleSaveDailyLimit = async (limitToSave?: number) => {
+        const val = limitToSave !== undefined ? limitToSave : dailyLimitInput;
+        if (isNaN(val) || val < 1) {
+            showNotification('error', 'Please enter a valid number of attempts (minimum 1).');
+            return;
+        }
+        setIsSavingSettings(true);
+        try {
+            const updated = await spinWinService.settings.update({ dailySpinsPerMobile: val });
+            setSpinSettings(updated);
+            setDailyLimitInput(updated.dailySpinsPerMobile);
+            showNotification('success', `Daily limit updated to ${updated.dailySpinsPerMobile} attempt${updated.dailySpinsPerMobile > 1 ? 's' : ''} per mobile/device!`);
+        } catch (err: any) {
+            if (err?.message === 'SCHEMA_NOT_APPLIED') {
+                setSpinSettings({ dailySpinsPerMobile: val });
+                setDailyLimitInput(val);
+                showNotification('error', `تم حفظ الإعداد محلياً (${val}). لتطبيقه على السيرفر لجميع الأجهزة، يرجى تشغيل كود SQL في Supabase.`);
+            } else {
+                showNotification('error', `Failed to update daily limit: ${err?.message || 'Unknown error'}`);
+            }
+        } finally {
+            setIsSavingSettings(false);
         }
     };
 
@@ -791,14 +824,90 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ onBack }) =>
                                                 </div>
                                             </div>
                                             <div className="rounded-xl border border-slate-200 bg-white p-4">
-                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Top Weight</p>
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Daily Limit</p>
                                                 <div className="mt-2 min-w-0">
-                                                    <p className="truncate text-sm font-black text-slate-950">{rewardControlMetrics.highestWeightPrize?.name || 'No rewards'}</p>
-                                                    <p className="mt-1 text-xs font-bold tabular-nums text-red-600">
-                                                        {rewardControlMetrics.highestWeightPrize ? `Weight ${rewardControlMetrics.highestWeightPrize.probabilityWeight}` : '0'}
+                                                    <p className="truncate text-xl font-black text-slate-950 tabular-nums">
+                                                        {spinSettings.dailySpinsPerMobile} <span className="text-xs font-bold text-slate-500">{spinSettings.dailySpinsPerMobile === 1 ? 'spin' : 'spins'}</span>
                                                     </p>
+                                                    <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-emerald-600">Per Mobile/Device</p>
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* DAILY SPIN LIMIT & FRAUD CONTROL PANEL */}
+                            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+                                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 border border-red-100">
+                                            <Smartphone className="h-6 w-6" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 border border-emerald-200/60">
+                                                    <ShieldCheck className="h-3 w-3" />
+                                                    Device & Phone Anti-Fraud
+                                                </span>
+                                                <span className="text-xs font-bold text-slate-300">•</span>
+                                                <span className="text-xs font-black tabular-nums text-slate-700">
+                                                    الحالي: {spinSettings.dailySpinsPerMobile} {spinSettings.dailySpinsPerMobile === 1 ? 'محاولة واحدة' : spinSettings.dailySpinsPerMobile === 2 ? 'محاولتان' : `${spinSettings.dailySpinsPerMobile} محاولات`} / يوم
+                                                </span>
+                                            </div>
+                                            <h4 className="mt-1 text-lg font-black tracking-tight text-slate-950">
+                                                Daily Spin Limit Per Mobile / الحد اليومي للمحاولات لكل موبايل
+                                            </h4>
+                                            <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-slate-500">
+                                                تحكم في عدد المحاولات المسموح بها لكل رقم هاتف ولكل جهاز في اليوم الواحد عبر جميع الفروع. (1 = محاولة واحدة لكل موبايل، 2 = محاولتان، وهكذا).
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
+                                        <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                            {[1, 2, 3, 5].map((preset) => (
+                                                <button
+                                                    key={preset}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setDailyLimitInput(preset);
+                                                        handleSaveDailyLimit(preset);
+                                                    }}
+                                                    className={`rounded-lg px-3 py-1.5 text-xs font-black transition-all ${
+                                                        dailyLimitInput === preset
+                                                            ? 'bg-slate-950 text-white shadow-sm'
+                                                            : 'text-slate-600 hover:bg-white hover:text-slate-950'
+                                                    }`}
+                                                >
+                                                    {preset} {preset === 1 ? 'مرة (افتراضي)' : preset === 2 ? 'مرتان' : 'مرات'}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={100}
+                                                value={dailyLimitInput}
+                                                onChange={(e) => setDailyLimitInput(Math.max(1, parseInt(e.target.value) || 1))}
+                                                className="h-10 w-20 rounded-xl border border-slate-200 bg-slate-50 px-3 text-center text-sm font-black tabular-nums text-slate-900 outline-none transition-all focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+                                                aria-label="Custom daily spin limit"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSaveDailyLimit(dailyLimitInput)}
+                                                disabled={isSavingSettings}
+                                                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-xs font-black uppercase tracking-wider text-white shadow-sm shadow-red-900/10 transition-all hover:bg-red-700 active:scale-[0.98] disabled:opacity-60"
+                                            >
+                                                {isSavingSettings ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-4 w-4" />
+                                                )}
+                                                <span>{isSavingSettings ? 'جاري الحفظ...' : 'حفظ / Save'}</span>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

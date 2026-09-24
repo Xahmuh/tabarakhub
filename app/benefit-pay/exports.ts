@@ -86,11 +86,70 @@ const totalsByType = (rows: BenefitPayTransfer[]) => rows.reduce((acc, row) => {
   count: 0
 });
 
-const activeTransferTypes = (rows: BenefitPayTransfer[], totals: ReturnType<typeof totalsByType>) =>
-  TRANSFER_TYPES.filter(type =>
+const activeTransferTypes = (rows: BenefitPayTransfer[], totals: ReturnType<typeof totalsByType>) => {
+  const active = TRANSFER_TYPES.filter(type =>
     totals[type] > 0
     || rows.some(row => row.transferType === type && Number(row.valueBhd || 0) > 0)
   );
+  return active.length > 0 ? active : TRANSFER_TYPES;
+};
+
+export interface BenefitPayCrDefinition {
+  name: string;
+  isMatch: (row: BenefitPayTransfer) => boolean;
+}
+
+const normalizeBranchCode = (row: BenefitPayTransfer): string => {
+  if (row.branchCode) return row.branchCode.trim().toUpperCase();
+  if (row.serialNumber) {
+    const match = /^BP-([A-Z0-9]+)-/i.exec(row.serialNumber.trim());
+    if (match) return match[1].toUpperCase();
+  }
+  if (row.branchName) {
+    const match = /\b([HTSD]\d{2,3})\b/i.exec(row.branchName);
+    if (match) return match[1].toUpperCase();
+  }
+  return '';
+};
+
+export const BENEFIT_PAY_CR_DEFINITIONS: BenefitPayCrDefinition[] = [
+  {
+    name: 'Alhoda CR BP',
+    isMatch: (row: BenefitPayTransfer) => {
+      const code = normalizeBranchCode(row);
+      if (code) return /^H0*(?:[1-5])$/i.test(code);
+      const name = (row.branchName || '').toLowerCase();
+      return (name.includes('alhoda') || name.includes('alnahar') || name.includes('al nahar')) && !name.includes('sanad');
+    }
+  },
+  {
+    name: 'Tabarak CR BP',
+    isMatch: (row: BenefitPayTransfer) => {
+      const code = normalizeBranchCode(row);
+      if (code) return /^T0*(?:[1-9]|10)$/i.test(code);
+      const name = (row.branchName || '').toLowerCase();
+      return name.includes('tabarak');
+    }
+  },
+  {
+    name: 'Sanad CR BP',
+    isMatch: (row: BenefitPayTransfer) => {
+      const code = normalizeBranchCode(row);
+      if (code) return /^S0*(?:[1-4])$/i.test(code);
+      const name = (row.branchName || '').toLowerCase();
+      return (name.includes('sanad') || name.includes('jamila') || name.includes('janabiya square')) && !name.includes('alhoda');
+    }
+  },
+  {
+    name: 'Damistan CR BP',
+    isMatch: (row: BenefitPayTransfer) => {
+      const code = normalizeBranchCode(row);
+      if (code) return /^D0*2$/i.test(code);
+      const name = (row.branchName || '').toLowerCase();
+      return name.includes('damistan');
+    }
+  }
+];
 
 const compareByTime = (a: BenefitPayTransfer, b: BenefitPayTransfer) =>
   b.transferDate.localeCompare(a.transferDate)
@@ -313,6 +372,20 @@ export const exportBenefitPayToExcel = async (
     addLedgerSheet(workbook, 'Consolidated', rows, title, {
       includeBranch: true,
       sortMode: options.sortMode
+    });
+
+    BENEFIT_PAY_CR_DEFINITIONS.forEach(cr => {
+      const crRows = rows.filter(cr.isMatch);
+      addLedgerSheet(
+        workbook,
+        cr.name,
+        crRows,
+        `${cr.name} - Benefit Pay Ledger`,
+        {
+          includeBranch: true,
+          sortMode: options.sortMode
+        }
+      );
     });
 
     const sortedBranchGroups = sortRows(rows, 'branch').reduce((acc, row) => {

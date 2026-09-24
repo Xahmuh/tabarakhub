@@ -45,10 +45,13 @@ import {
     LayoutGrid as LayoutGridIcon,
     Calendar,
     CalendarCheck,
-    LayoutDashboard
+    LayoutDashboard,
+    Layers,
+    Shield,
+    ArrowRightLeft
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission } from '../../types';
+import { Branch, BranchClassification, Pharmacist, FeaturePermission, MaintenanceSettings, Role, RolePermission, BranchDeliveryProfile, BranchDeliveryProfileInput } from '../../types';
 import Swal from 'sweetalert2';
 import { AccessControlSection } from './AccessControlSection';
 import { AccessFeatureId, getEnabledAccessFeatures } from '../../lib/moduleRegistry';
@@ -59,6 +62,10 @@ import { ModuleDisplaySettingsSection } from './ModuleDisplaySettingsSection';
 import { RegisteredCrsSection } from './RegisteredCrsSection';
 import { ContractTypesSection } from './ContractTypesSection';
 import { OperationalRenewalsSettingsSection } from './OperationalRenewalsSettingsSection';
+import { OperationalAreasZonesSection } from './OperationalAreasZonesSection';
+import { BranchStaffAllocationSection } from './BranchStaffAllocationSection';
+import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
+import { controlCenterService } from '../control-center/services/controlCenterService';
 import { VehicleManager } from '../operational-expenses/VehicleManager';
 import { DeliverySettings } from '../delivery/DeliverySettings';
 import { ProductManagementSection, BackToModulesButton } from '../shared';
@@ -102,7 +109,7 @@ const DEFAULT_HUB_LOGO_URL = '/tabarak-logo.svg';
 const DEFAULT_PHARMACY_LOGO_URL = clientConfig.logoUrl;
 const DEFAULT_LOADING_SPINNER_URL = '/spinner.svg';
 
-type SettingsTab = 'registered-crs' | 'contract-types' | 'branches' | 'module-layout' | 'products' | 'delivery-zones' | 'delivery-settings' | 'vehicles' | 'operational-alerts' | 'pharmacists' | 'access-control' | 'login-approvals' | 'system';
+type SettingsTab = 'registered-crs' | 'operational-hierarchy' | 'branches' | 'staff-assignments' | 'contract-types' | 'module-layout' | 'products' | 'delivery-zones' | 'delivery-settings' | 'vehicles' | 'operational-alerts' | 'pharmacists' | 'access-control' | 'login-approvals' | 'system';
 type SettingsMode = 'combined' | 'system' | 'access';
 type BrandingLogoSettingKey = 'pharmacyLogoUrl' | 'hubLogoUrl' | 'browserIconUrl' | 'loadingSpinnerUrl' | 'footerLogoUrl';
 
@@ -115,9 +122,9 @@ const BRANDING_ASSET_FIELD_BY_SLOT: Record<SystemBrandingAssetSlot, BrandingLogo
 };
 
 const SETTINGS_MODE_TABS: Record<SettingsMode, SettingsTab[]> = {
-    combined: ['registered-crs', 'contract-types', 'branches', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts', 'pharmacists', 'access-control', 'login-approvals', 'system'],
-    system: ['system', 'registered-crs', 'contract-types', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts', 'branches'],
-    access: ['access-control', 'contract-types', 'pharmacists', 'login-approvals']
+    combined: ['registered-crs', 'operational-hierarchy', 'branches', 'staff-assignments', 'contract-types', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts', 'pharmacists', 'access-control', 'login-approvals', 'system'],
+    system: ['system', 'registered-crs', 'operational-hierarchy', 'branches', 'staff-assignments', 'contract-types', 'module-layout', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts'],
+    access: ['access-control', 'staff-assignments', 'contract-types', 'pharmacists', 'login-approvals']
 };
 
 const SETTINGS_MODE_META: Record<SettingsMode, {
@@ -165,15 +172,25 @@ const TAB_META: Record<SettingsTab, {
         description: 'Main corporate CR & sub-CR branch assignments',
         icon: Building2
     },
-    'contract-types': {
-        label: 'Contract Types & Hours',
-        description: '8 Hrs, 10 Hrs, and 12 Hrs shift contract templates',
-        icon: Clock
+    'operational-hierarchy': {
+        label: 'Areas, Zones & Shifts',
+        description: 'Area 1 & 2 supervisors, operational zones & duty shift tables',
+        icon: Layers
     },
     branches: {
         label: 'Branches',
         description: 'Operational pharmacy branches only',
         icon: Building2
+    },
+    'staff-assignments': {
+        label: 'Staff Allocation',
+        description: 'Dynamic staff assignment: Pharmacists, Drivers & Workers per branch',
+        icon: Users
+    },
+    'contract-types': {
+        label: 'Contract Types & Hours',
+        description: '8 Hrs, 10 Hrs, and 12 Hrs shift contract templates',
+        icon: Clock
     },
     'module-layout': {
         label: 'Module Layout',
@@ -238,8 +255,8 @@ const PILLARS: Pillar[] = [
     {
         id: 'infrastructure',
         title: 'Operational Infrastructure',
-        description: 'Registered CRs, pharmacy branches, product catalogue, delivery zones & vehicle fleet',
-        tabs: ['registered-crs', 'branches', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts']
+        description: 'Registered CRs, areas & zones, branches, staff allocations, delivery zones & vehicle fleet',
+        tabs: ['registered-crs', 'operational-hierarchy', 'branches', 'staff-assignments', 'products', 'delivery-zones', 'delivery-settings', 'vehicles', 'operational-alerts']
     },
     {
         id: 'identity',
@@ -258,6 +275,33 @@ const PILLARS: Pillar[] = [
         title: 'Domain & Maintenance',
         description: 'Domain maintenance & system flags',
         tabs: ['system']
+    }
+];
+
+const PILLAR_META: Record<string, { icon: React.ElementType }> = {
+    infrastructure: { icon: Building2 },
+    identity: { icon: Shield },
+    experience: { icon: LayoutGrid },
+    maintenance: { icon: Wrench }
+};
+
+const INFRASTRUCTURE_GROUPS: Array<{
+    title: string;
+    subtitle: string;
+    badge: string;
+    tabs: SettingsTab[];
+}> = [
+    {
+        title: 'Core Pharmacy & Staffing',
+        subtitle: 'Commercial registrations, supervisory areas, zones, branch geofencing & workforce allocations',
+        badge: 'Core Network',
+        tabs: ['registered-crs', 'operational-hierarchy', 'branches', 'staff-assignments']
+    },
+    {
+        title: 'Logistics, Fleet & Products',
+        subtitle: 'Delivery rings, SLA targets, delivery vehicle fleet, product catalogue & compliance alerts',
+        badge: 'Logistics & Supply',
+        tabs: ['delivery-zones', 'delivery-settings', 'vehicles', 'products', 'operational-alerts']
     }
 ];
 
@@ -474,6 +518,15 @@ export const ProjectSettings: React.FC<{
         branchIds: []
     });
 
+    // Integrated Delivery Zone Profile States
+    const [deliveryProfiles, setDeliveryProfiles] = useState<BranchDeliveryProfile[]>([]);
+    const [editingDeliveryBranch, setEditingDeliveryBranch] = useState<Branch | null>(null);
+    const [deliveryDraft, setDeliveryDraft] = useState<BranchDeliveryProfileInput | null>(null);
+    const [isSavingDeliveryProfile, setIsSavingDeliveryProfile] = useState(false);
+    const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+    const [branchFilterMode, setBranchFilterMode] = useState<'all' | 'delivery-active' | 'missing-origin'>('all');
+    const [branchAreaMap, setBranchAreaMap] = useState<Record<string, string>>(() => controlCenterService.getBranchAreaMapping());
+
     // Permission States
     const [selectedBranchForPerms, setSelectedBranchForPerms] = useState<string | null>(null);
     const [permissions, setPermissions] = useState<FeaturePermission[]>([]);
@@ -498,27 +551,26 @@ export const ProjectSettings: React.FC<{
         setIsLoading(true);
         setMaintenanceSettingsError(null);
         try {
-            const [b, p, c, assignmentResult, branchDefaults] = await Promise.all([
+            const [b, p, c, assignmentResult, branchDefaults, dProfiles] = await Promise.all([
                 supabase.branches.list(),
                 supabase.pharmacists.listAll(),
                 supabase.delivery.classifications.list(),
-                supabase.client.from('pharmacist_branches').select('branch_id, pharmacist_id'),
-                supabase.permissions.listRoleDefaults('branch')
+                supabase.pharmacists.listAllAssignments(),
+                supabase.permissions.listRoleDefaults('branch'),
+                branchDeliveryProfileService.listBranchDeliveryProfiles().catch(() => [] as BranchDeliveryProfile[])
             ]);
             setBranches(b);
             setPharmacists(p);
             setBranchClassifications(c);
             setBranchRoleDefaults(branchDefaults);
-            if (assignmentResult.error) {
-                setPharmacistAssignmentsByBranch({});
-            } else {
-                const assignmentMap = (assignmentResult.data || []).reduce<Record<string, string[]>>((map, assignment) => {
-                    if (!assignment.branch_id || !assignment.pharmacist_id) return map;
-                    map[assignment.branch_id] = [...(map[assignment.branch_id] || []), assignment.pharmacist_id];
-                    return map;
-                }, {});
-                setPharmacistAssignmentsByBranch(assignmentMap);
-            }
+            setDeliveryProfiles(dProfiles);
+            controlCenterService.fetchLiveBranchAreaMapping(b).then(setBranchAreaMap).catch(() => {});
+            const assignmentMap = (assignmentResult || []).reduce<Record<string, string[]>>((map, assignment) => {
+                if (!assignment.branch_id || !assignment.pharmacist_id) return map;
+                map[assignment.branch_id] = [...(map[assignment.branch_id] || []), assignment.pharmacist_id];
+                return map;
+            }, {});
+            setPharmacistAssignmentsByBranch(assignmentMap);
             try {
                 const settings = await supabase.systemSettings.getMaintenanceSettings();
                 setMaintenanceSettings(settings);
@@ -893,9 +945,81 @@ export const ProjectSettings: React.FC<{
         return map;
     }, [branchClassifications]);
 
+    const deliveryProfileByBranchId = useMemo(() => {
+        return new Map(deliveryProfiles.map(p => [p.branchId, p]));
+    }, [deliveryProfiles]);
+
+    const operationalAreas = useMemo(() => controlCenterService.getAreas(), []);
+    const areaSupervisors = useMemo(() => controlCenterService.getSupervisors(), []);
+
+    const handleOpenDeliveryModal = (branch: Branch) => {
+        const profile = deliveryProfileByBranchId.get(branch.id);
+        setEditingDeliveryBranch(branch);
+        setDeliveryDraft({
+            branchId: branch.id,
+            originBlockNumber: profile?.originBlockNumber || '',
+            coreRadiusKm: profile?.coreRadiusKm ?? 3,
+            standardRadiusKm: profile?.standardRadiusKm ?? 5,
+            extendedRadiusKm: profile?.extendedRadiusKm ?? 8,
+            targetDeliveryMinutes: profile?.targetDeliveryMinutes ?? 25,
+            warningDeliveryMinutes: profile?.warningDeliveryMinutes ?? 35,
+            isDeliveryEnabled: profile?.isDeliveryEnabled ?? true,
+            notes: profile?.notes || ''
+        });
+        setIsDeliveryModalOpen(true);
+    };
+
+    const handleSaveDeliveryProfile = async () => {
+        if (!editingDeliveryBranch || !deliveryDraft || isSavingDeliveryProfile) return;
+        const origin = deliveryDraft.originBlockNumber.trim();
+        if (!origin) {
+            Swal.fire('Origin Block Required', 'Please specify the branch origin block number before saving.', 'warning');
+            return;
+        }
+        if (deliveryDraft.coreRadiusKm > deliveryDraft.standardRadiusKm || deliveryDraft.standardRadiusKm > deliveryDraft.extendedRadiusKm) {
+            Swal.fire('Invalid Radius Order', 'Radius bands must follow order: Core <= Standard <= Extended.', 'warning');
+            return;
+        }
+
+        setIsSavingDeliveryProfile(true);
+        try {
+            const saved = await branchDeliveryProfileService.upsertBranchDeliveryProfile({
+                ...deliveryDraft,
+                originBlockNumber: origin
+            });
+            setDeliveryProfiles(prev => {
+                const next = prev.filter(p => p.branchId !== editingDeliveryBranch.id);
+                next.push(saved);
+                return next;
+            });
+            setIsDeliveryModalOpen(false);
+            setEditingDeliveryBranch(null);
+            setDeliveryDraft(null);
+            Swal.fire({
+                icon: 'success',
+                title: 'Delivery Profile Saved',
+                text: `${editingDeliveryBranch.code} delivery parameters have been updated.`,
+                timer: 1600,
+                showConfirmButton: false
+            });
+        } catch (error: any) {
+            Swal.fire('Save Failed', error?.message || 'Could not save delivery profile.', 'error');
+        } finally {
+            setIsSavingDeliveryProfile(false);
+        }
+    };
+
     const filteredBranches = branches.filter(b => {
         const q = searchTerm.toLowerCase();
         const classification = branchClassificationMap.get(b.id);
+        const profile = deliveryProfileByBranchId.get(b.id);
+
+        if (branchFilterMode === 'delivery-active') {
+            if (!profile?.isDeliveryEnabled || !profile?.originBlockNumber) return false;
+        } else if (branchFilterMode === 'missing-origin') {
+            if (profile?.originBlockNumber) return false;
+        }
+
         return (
             b.name.toLowerCase().includes(q) ||
             b.code.toLowerCase().includes(q) ||
@@ -903,7 +1027,8 @@ export const ProjectSettings: React.FC<{
             (classification?.supervisorName || '').toLowerCase().includes(q) ||
             (b.branchManagerName || '').toLowerCase().includes(q) ||
             (b.nhraLicenseNo || '').toLowerCase().includes(q) ||
-            (b.crNumber || '').toLowerCase().includes(q)
+            (b.crNumber || '').toLowerCase().includes(q) ||
+            (profile?.originBlockNumber || '').toLowerCase().includes(q)
         );
     });
 
@@ -1060,16 +1185,17 @@ export const ProjectSettings: React.FC<{
                     </div>
                 </header>
                 <div className="mt-8 space-y-8">
-                    {/* Horizontal Navigation Section */}
-                    <section className="w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all">
+                    {/* Executive Segmented Navigation Section */}
+                    <section className="w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl transition-all">
+                        {/* Top Header */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 bg-slate-50/50 p-4 gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-dark text-white shadow-sm shadow-brand/20">
                                     <Settings2 size={18} />
                                 </div>
                                 <div>
-                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Navigation</p>
-                                    <h2 className="mt-0.5 text-base font-black tracking-tight text-slate-950 whitespace-nowrap">Control Areas</h2>
+                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Executive Control</p>
+                                    <h2 className="mt-0.5 text-base font-black tracking-tight text-slate-950 whitespace-nowrap">Operational Command Pillars</h2>
                                 </div>
                             </div>
                             {maintenanceEnabled && (
@@ -1083,48 +1209,152 @@ export const ProjectSettings: React.FC<{
                             )}
                         </div>
 
-                        <div className="p-5 overflow-x-auto custom-scrollbar bg-slate-50/30">
-                            <div className="flex gap-8 min-w-max">
-                                {PILLARS.map(pillar => {
-                                    const pillarTabs = pillar.tabs.filter(t => visibleSettingsTabs.includes(t));
-                                    if (pillarTabs.length === 0) return null;
-                                    return (
-                                        <div key={pillar.id} className="flex flex-col gap-3 min-w-[220px]">
-                                            <div className="px-1 flex items-center gap-2">
-                                                <div className="h-3 w-1 bg-brand rounded-full"></div>
-                                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{pillar.title}</span>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {pillarTabs.map(tab => {
-                                                    const meta = TAB_META[tab];
-                                                    const Icon = meta.icon;
-                                                    const isActive = activeTab === tab;
+                        {/* Top-Level Pillar Segmented Switcher */}
+                        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 p-3">
+                            {PILLARS.map(pillar => {
+                                const isPillarActive = pillar.tabs.includes(activeTab);
+                                const Icon = PILLAR_META[pillar.id]?.icon || Layers;
+                                const availableCount = pillar.tabs.filter(t => visibleSettingsTabs.includes(t)).length;
+                                if (availableCount === 0) return null;
 
-                                                    return (
-                                                        <button
-                                                            key={tab}
-                                                            type="button"
-                                                            onClick={() => setActiveTab(tab)}
-                                                            aria-current={isActive ? 'page' : undefined}
-                                                            className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left transition-all duration-300 ${
-                                                                isActive
-                                                                    ? 'bg-slate-900 text-white shadow-md ring-1 ring-slate-900/5 scale-[1.02]'
-                                                                    : 'text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200/60 shadow-sm hover:shadow hover:border-slate-300/60'
-                                                            }`}
-                                                        >
-                                                            <Icon size={16} className={`shrink-0 transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-brand'}`} />
-                                                            <span className="min-w-0 flex-1 whitespace-nowrap text-xs font-bold leading-tight">{meta.label}</span>
-                                                            {tab === 'system' && maintenanceEnabled && (
-                                                                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>On</span>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
+                                return (
+                                    <button
+                                        key={pillar.id}
+                                        type="button"
+                                        onClick={() => {
+                                            const firstVisible = pillar.tabs.find(t => visibleSettingsTabs.includes(t));
+                                            if (firstVisible) setActiveTab(firstVisible);
+                                        }}
+                                        className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                                            isPillarActive
+                                                ? 'bg-red-700 text-white shadow-md shadow-red-700/20 scale-[1.02]'
+                                                : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/70'
+                                        }`}
+                                    >
+                                        <Icon size={15} className={isPillarActive ? 'text-white' : 'text-slate-400'} />
+                                        <span>{pillar.title}</span>
+                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                            isPillarActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            {availableCount}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Pillar Content Sub-Navigation */}
+                        <div className="p-5 bg-slate-50/30">
+                            {/* If in Operational Infrastructure Pillar -> Render 2-tier Categorized Command Deck */}
+                            {PILLARS.find(p => p.id === 'infrastructure')?.tabs.includes(activeTab) ? (
+                                <div className="space-y-6">
+                                    {INFRASTRUCTURE_GROUPS.map((group, gIdx) => {
+                                        const groupTabs = group.tabs.filter(t => visibleSettingsTabs.includes(t));
+                                        if (groupTabs.length === 0) return null;
+
+                                        return (
+                                            <div key={gIdx} className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full bg-red-700" />
+                                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                                                            {group.title}
+                                                        </h3>
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                                                            {group.badge}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                                                        {group.subtitle}
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                                    {groupTabs.map(tab => {
+                                                        const meta = TAB_META[tab];
+                                                        const Icon = meta.icon;
+                                                        const isActive = activeTab === tab;
+
+                                                        return (
+                                                            <button
+                                                                key={tab}
+                                                                type="button"
+                                                                onClick={() => setActiveTab(tab)}
+                                                                aria-current={isActive ? 'page' : undefined}
+                                                                className={`group relative flex items-start gap-3 rounded-xl p-3.5 text-left transition-all duration-200 cursor-pointer ${
+                                                                    isActive
+                                                                        ? 'bg-slate-950 text-white shadow-md ring-2 ring-red-700 scale-[1.01]'
+                                                                        : 'bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80 shadow-xs hover:border-slate-300'
+                                                                }`}
+                                                            >
+                                                                <div className={`p-2 rounded-lg shrink-0 transition-colors ${
+                                                                    isActive ? 'bg-red-700 text-white' : 'bg-slate-100 text-slate-500 group-hover:text-red-700 group-hover:bg-red-50'
+                                                                }`}>
+                                                                    <Icon size={16} />
+                                                                </div>
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className={`text-xs font-black leading-tight ${isActive ? 'text-white' : 'text-slate-900'}`}>
+                                                                        {meta.label}
+                                                                    </p>
+                                                                    <p className={`mt-1 text-[10px] line-clamp-2 leading-relaxed font-medium ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                                                                        {meta.description}
+                                                                    </p>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                /* Other Pillars: Identity, Experience, Maintenance */
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                    {(PILLARS.find(p => p.tabs.includes(activeTab))?.tabs || [])
+                                        .filter(t => visibleSettingsTabs.includes(t))
+                                        .map(tab => {
+                                            const meta = TAB_META[tab];
+                                            const Icon = meta.icon;
+                                            const isActive = activeTab === tab;
+
+                                            return (
+                                                <button
+                                                    key={tab}
+                                                    type="button"
+                                                    onClick={() => setActiveTab(tab)}
+                                                    aria-current={isActive ? 'page' : undefined}
+                                                    className={`group relative flex items-start gap-3 rounded-xl p-3.5 text-left transition-all duration-200 cursor-pointer ${
+                                                        isActive
+                                                            ? 'bg-slate-950 text-white shadow-md ring-2 ring-red-700 scale-[1.01]'
+                                                            : 'bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80 shadow-xs hover:border-slate-300'
+                                                    }`}
+                                                >
+                                                    <div className={`p-2 rounded-lg shrink-0 transition-colors ${
+                                                        isActive ? 'bg-red-700 text-white' : 'bg-slate-100 text-slate-500 group-hover:text-red-700 group-hover:bg-red-50'
+                                                    }`}>
+                                                        <Icon size={16} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <p className={`text-xs font-black leading-tight ${isActive ? 'text-white' : 'text-slate-900'}`}>
+                                                                {meta.label}
+                                                            </p>
+                                                            {tab === 'system' && maintenanceEnabled && (
+                                                                <span className="rounded px-1.5 py-0.5 text-[9px] font-black uppercase bg-amber-500 text-white">
+                                                                    Active
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className={`mt-1 text-[10px] line-clamp-2 leading-relaxed font-medium ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                                                            {meta.description}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -1219,129 +1449,320 @@ export const ProjectSettings: React.FC<{
                             )}
 
                             {activeTab === 'branches' && (
-                                filteredBranches.length === 0 ? (
-                                    <EmptyState
-                                        icon={Store}
-                                        title="No branches found"
-                                        description="Try another search term or add a new operational branch."
-                                    />
-                                ) : (
-                                    <div className="space-y-4">
-                                        {filteredBranches.map(branch => {
-                                            const classification = branchClassificationMap.get(branch.id);
-                                            const enabledModules = [
-                                                branch.isItemsEntryEnabled && 'Items',
-                                                branch.isKPIDashboardEnabled && 'KPI',
-                                                branch.isSpinEnabled && 'Spin'
-                                            ].filter(Boolean);
-                                            const moduleStates = [
-                                                { label: 'Items Entry', enabled: Boolean(branch.isItemsEntryEnabled) },
-                                                { label: 'KPI Dashboard', enabled: Boolean(branch.isKPIDashboardEnabled) },
-                                                { label: 'Spin & Win', enabled: Boolean(branch.isSpinEnabled) }
-                                            ];
-                                            const areaName = classification?.area
-                                                ? `${classification.area}${classification.governorate ? ` / ${classification.governorate}` : ''}`
-                                                : undefined;
+                                <div className="space-y-6">
+                                    {/* Branches & Delivery Top Controls */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="p-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200">
+                                                    <Building2 className="w-5 h-5" />
+                                                </span>
+                                                <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                                                    Operational Network Branches & Delivery Zones
+                                                </h2>
+                                            </div>
+                                            <p className="text-xs text-slate-500 font-medium mt-1">
+                                                Unified branch directory: supervisory areas, managers, legal registrations, and integrated delivery parameters
+                                            </p>
+                                        </div>
 
-                                            return (
-                                                <article key={branch.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-brand/30 hover:shadow-md hover:shadow-brand/10">
-                                                    <div className="grid gap-0 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-                                                        <div className="p-5 md:p-6">
-                                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                                                <div className="flex min-w-0 flex-1 items-start gap-4">
-                                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-brand/10 bg-brand/5 text-brand">
-                                                                        <Store size={22} />
-                                                                    </div>
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <div className="flex flex-wrap items-center gap-2">
-                                                                            <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-slate-500">{branch.code || 'No code'}</span>
-                                                                            <span className="rounded-md bg-brand/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand">Operational branch</span>
-                                                                        </div>
-                                                                        <h3 className="mt-2 break-words text-2xl font-black leading-8 tracking-tight text-slate-950">{branch.name}</h3>
-                                                                        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">
-                                                                            {areaName || 'Area not assigned'}{classification?.supervisorName ? ` - ${classification.supervisorName}` : ''}
-                                                                        </p>
-                                                                    </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                                onClick={() => {
+                                                    setBranchForm(newBranchForm);
+                                                    setIsBranchModalOpen(true);
+                                                }}
+                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-700 text-white text-xs font-bold shadow-sm shadow-red-700/20 hover:bg-red-800 transition-all cursor-pointer"
+                                            >
+                                                <Plus size={16} />
+                                                <span>+ Add Operational Branch</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Filter Pills & Stats Ribbon */}
+                                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setBranchFilterMode('all')}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                    branchFilterMode === 'all'
+                                                        ? 'bg-slate-900 text-white shadow-xs'
+                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                }`}
+                                            >
+                                                All Branches ({branches.length})
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBranchFilterMode('delivery-active')}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                    branchFilterMode === 'delivery-active'
+                                                        ? 'bg-emerald-700 text-white shadow-xs'
+                                                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 hover:bg-emerald-100'
+                                                }`}
+                                            >
+                                                <CheckCircle2 size={13} />
+                                                <span>Delivery Active ({deliveryProfiles.filter(p => p.isDeliveryEnabled && p.originBlockNumber).length})</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBranchFilterMode('missing-origin')}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                    branchFilterMode === 'missing-origin'
+                                                        ? 'bg-amber-700 text-white shadow-xs'
+                                                        : 'bg-amber-50 text-amber-700 border border-amber-200/60 hover:bg-amber-100'
+                                                }`}
+                                            >
+                                                <AlertTriangle size={13} />
+                                                <span>Missing Origin ({branches.length - deliveryProfiles.filter(p => p.originBlockNumber).length})</span>
+                                            </button>
+                                        </div>
+
+                                        <p className="text-xs font-semibold text-slate-400">
+                                            Showing {filteredBranches.length} of {branches.length} branches
+                                        </p>
+                                    </div>
+
+                                    {/* Branch Cards Listing */}
+                                    {filteredBranches.length === 0 ? (
+                                        <EmptyState
+                                            icon={Store}
+                                            title="No branches found"
+                                            description="Try another search term or filter to locate operational branches."
+                                        />
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {filteredBranches.map(branch => {
+                                                const classification = branchClassificationMap.get(branch.id);
+                                                const deliveryProfile = deliveryProfileByBranchId.get(branch.id);
+                                                const assignedAreaId = branchAreaMap[branch.id] || operationalAreas[0]?.id;
+                                                const assignedArea = operationalAreas.find(a => a.id === assignedAreaId);
+                                                const assignedSupervisor = areaSupervisors.find(s => s.id === assignedArea?.supervisor_id);
+
+                                                const effectiveAreaName = assignedArea?.name_en || classification?.area || 'Area 1 (Capital & Northern)';
+                                                const effectiveSupervisorName = assignedSupervisor?.name || classification?.supervisorName || 'Dr. Abdelrahman Ahmed';
+
+                                                const autoAssignedCr = getAutoAssignedCrForBranch(branch.id, branch.name, branch.code);
+                                                const displayCrVal = autoAssignedCr
+                                                    ? `${autoAssignedCr.cr_number} (${autoAssignedCr.cr_name})`
+                                                    : (branch.crNumber || 'Not assigned');
+
+                                                const isDeliveryActive = Boolean(deliveryProfile?.isDeliveryEnabled && deliveryProfile?.originBlockNumber);
+                                                const assignedPharmacists = pharmacistAssignmentsByBranch[branch.id] || [];
+
+                                                return (
+                                                    <article
+                                                        key={branch.id}
+                                                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-red-300 hover:shadow-md"
+                                                    >
+                                                        {/* Card Top Header */}
+                                                        <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/40">
+                                                            <div className="flex items-start gap-3.5 min-w-0">
+                                                                <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 border border-red-200/80 flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
+                                                                    {branch.code}
                                                                 </div>
-                                                                <div className="flex shrink-0 gap-2">
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setBranchForm({
-                                                                                ...branch,
-                                                                                dutyRadiusM: branch.dutyRadiusM ?? DEFAULT_BRANCH_DUTY_RADIUS_M
-                                                                            });
-                                                                            setIsBranchModalOpen(true);
-                                                                        }}
-                                                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-brand/30 hover:bg-brand/5 hover:text-brand"
-                                                                        title="Edit branch"
-                                                                        aria-label={`Edit ${branch.name}`}
-                                                                    >
-                                                                        <Edit2 size={17} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDeleteBranch(branch.id)}
-                                                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100"
-                                                                        title="Delete branch"
-                                                                        aria-label={`Delete ${branch.name}`}
-                                                                    >
-                                                                        <Trash2 size={17} />
-                                                                    </button>
+                                                                <div className="min-w-0">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <h3 className="text-base font-black text-slate-950 truncate">
+                                                                            {branch.name}
+                                                                        </h3>
+                                                                        <span className="text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase">
+                                                                            {branch.code}
+                                                                        </span>
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200/60">
+                                                                            Operational Branch
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-500 font-medium">
+                                                                        <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                                                                            <Layers className="w-3.5 h-3.5 text-red-700" />
+                                                                            <span>{effectiveAreaName}</span>
+                                                                        </span>
+                                                                        <span>·</span>
+                                                                        <span className="flex items-center gap-1.5">
+                                                                            <UserCheck className="w-3.5 h-3.5 text-red-700" />
+                                                                            <span>Supervisor: <strong className="text-slate-800 font-bold">{effectiveSupervisorName}</strong></span>
+                                                                        </span>
+                                                                        {isDeliveryActive ? (
+                                                                            <>
+                                                                                <span>·</span>
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                                                                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                                                    <span>Delivery Active · Block {deliveryProfile?.originBlockNumber}</span>
+                                                                                </span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span>·</span>
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold">
+                                                                                    <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                                                                    <span>Delivery Origin Unset</span>
+                                                                                </span>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
-                                                            {(() => {
-                                                                const autoAssignedCr = getAutoAssignedCrForBranch(branch.id, branch.name, branch.code);
-                                                                const displayCrVal = autoAssignedCr
-                                                                    ? `${autoAssignedCr.cr_number} (Auto-Assigned)`
-                                                                    : (branch.crNumber || 'Not assigned');
-                                                                return (
-                                                                    <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                                                                        <BranchInfoItem label="Area" value={areaName} icon={Building2} />
-                                                                        <BranchInfoItem label="Supervisor" value={classification?.supervisorName} icon={UserCheck} />
-                                                                        <BranchInfoItem label="Branch Manager" value={branch.branchManagerName} icon={Users} />
-                                                                        <BranchInfoItem label="CR No." value={displayCrVal} icon={Building2} />
-                                                                        <BranchInfoItem label="NHRA No." value={branch.nhraLicenseNo} icon={FileText} />
-                                                                        <BranchInfoItem label="GPS" value={formatBranchCoordinates(branch)} icon={MapPinned} />
-                                                                        <BranchInfoItem label="Start Radius" value={formatBranchDutyRadius(branch)} icon={RadioTower} />
-                                                                    </div>
-                                                                );
-                                                            })()}
+                                                            {/* Action Buttons */}
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenDeliveryModal(branch)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/80 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                                                                    title="Configure Delivery Zone origin block, service radii, and dispatch SLAs"
+                                                                >
+                                                                    <MapPinned className="w-3.5 h-3.5 text-red-700" />
+                                                                    <span>Delivery Zone</span>
+                                                                </button>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setBranchForm({
+                                                                            ...branch,
+                                                                            dutyRadiusM: branch.dutyRadiusM ?? DEFAULT_BRANCH_DUTY_RADIUS_M
+                                                                        });
+                                                                        setIsBranchModalOpen(true);
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold transition-all cursor-pointer"
+                                                                    title="Edit Branch Configuration"
+                                                                >
+                                                                    <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                                                                    <span>Edit Branch</span>
+                                                                </button>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDeleteBranch(branch.id)}
+                                                                    className="p-2 rounded-xl bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-colors cursor-pointer"
+                                                                    title="Delete Branch"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
 
-                                                        <aside className="border-t border-slate-100 bg-slate-50/70 p-5 md:p-6 xl:border-l xl:border-t-0">
-                                                            <div className="flex items-start justify-between gap-4">
-                                                                <div>
-                                                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Module availability</p>
-                                                                    <p className="mt-1 text-sm font-black text-slate-900">{enabledModules.length}/3 active</p>
+                                                        {/* Card Body: 3-Column Specifications Grid */}
+                                                        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-5 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                                                            {/* Column 1: Identity & Compliance */}
+                                                            <div className="space-y-3 pt-3 md:pt-0">
+                                                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                                    Supervisory & Compliance
+                                                                </p>
+                                                                <div className="space-y-2 text-xs">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-400 font-medium">Branch Manager:</span>
+                                                                        <span className="text-slate-800 font-bold">{branch.branchManagerName || 'Unassigned'}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-400 font-medium">Commercial Reg.:</span>
+                                                                        <span className="text-slate-800 font-bold truncate max-w-[160px]" title={displayCrVal}>{displayCrVal}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-400 font-medium">NHRA License:</span>
+                                                                        <span className="text-slate-800 font-bold">{branch.nhraLicenseNo || 'Pending'}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-400 font-medium">GPS Geofence:</span>
+                                                                        <span className="text-slate-800 font-bold tabular-nums">
+                                                                            {formatBranchCoordinates(branch)} ({branch.dutyRadiusM ?? 50}m)
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                                <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${enabledModules.length > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
-                                                                    {enabledModules.length > 0 ? 'Enabled' : 'Paused'}
-                                                                </span>
                                                             </div>
 
-                                                            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
-                                                                {moduleStates.map(module => {
-                                                                    return (
-                                                                        <div key={module.label} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs font-black ${
-                                                                            module.enabled ? 'border-brand/10 bg-white text-brand' : 'border-slate-200 bg-white/70 text-slate-400'
+                                                            {/* Column 2: MERGED DELIVERY ZONE */}
+                                                            <div className="space-y-3 pt-3 md:pt-0 md:pl-5 bg-red-50/20 rounded-xl p-3">
+                                                                <div className="flex items-center justify-between">
+                                                                    <p className="text-[10px] font-black uppercase tracking-wider text-red-900 flex items-center gap-1.5">
+                                                                        <MapPinned className="w-3 h-3 text-red-700" />
+                                                                        <span>Integrated Delivery Zone</span>
+                                                                    </p>
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                                                        deliveryProfile?.isDeliveryEnabled
+                                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                                            : 'bg-slate-200 text-slate-600'
+                                                                    }`}>
+                                                                        {deliveryProfile?.isDeliveryEnabled ? 'Active' : 'Paused'}
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="space-y-2 text-xs">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-500 font-medium">Origin Block:</span>
+                                                                        <strong className="text-slate-950 font-black">
+                                                                            {deliveryProfile?.originBlockNumber ? `Block ${deliveryProfile.originBlockNumber}` : 'Not configured'}
+                                                                        </strong>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-500 font-medium">Service Radii:</span>
+                                                                        <span className="text-slate-800 font-bold tabular-nums">
+                                                                            Core: {deliveryProfile?.coreRadiusKm ?? 3}km · Std: {deliveryProfile?.standardRadiusKm ?? 5}km · Ext: {deliveryProfile?.extendedRadiusKm ?? 8}km
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-500 font-medium">Delivery SLA:</span>
+                                                                        <span className="text-slate-800 font-bold tabular-nums">
+                                                                            Target: {deliveryProfile?.targetDeliveryMinutes ?? 25}m | Warning: {deliveryProfile?.warningDeliveryMinutes ?? 35}m
+                                                                        </span>
+                                                                    </div>
+                                                                    {deliveryProfile?.notes && (
+                                                                        <p className="text-[11px] text-slate-500 italic truncate" title={deliveryProfile.notes}>
+                                                                            "{deliveryProfile.notes}"
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Column 3: Capabilities & Staffing */}
+                                                            <div className="space-y-3 pt-3 md:pt-0 md:pl-5">
+                                                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                                    Modules & Workforce
+                                                                </p>
+                                                                <div className="space-y-2 text-xs">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-slate-400 font-medium">Assigned Staff:</span>
+                                                                        <span className="text-slate-800 font-bold">
+                                                                            {assignedPharmacists.length} Pharmacist{assignedPharmacists.length === 1 ? '' : 's'} Assigned
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 pt-1">
+                                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                                            branch.isItemsEntryEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'
                                                                         }`}>
-                                                                            <span className="break-words">{module.label}</span>
-                                                                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${module.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                                                                        </div>
-                                                                    );
-                                                                })}
+                                                                            POS Items
+                                                                        </span>
+                                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                                            branch.isKPIDashboardEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'
+                                                                        }`}>
+                                                                            KPI Dashboard
+                                                                        </span>
+                                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                                            branch.isSpinEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'
+                                                                        }`}>
+                                                                            Spin & Win
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
+                                                        </div>
+                                                    </article>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
-                                                            <p className="mt-4 text-xs font-semibold leading-5 text-slate-500">
-                                                                Use edit to update branch identity, licenses, module flags, and branch manager assignment.
-                                                            </p>
-                                                        </aside>
-                                                    </div>
-                                                </article>
-                                            );
-                                        })}
-                                    </div>
-                                )
+                            {activeTab === 'operational-hierarchy' && (
+                                <OperationalAreasZonesSection branches={branches} canEdit={canManageSettings} />
+                            )}
+
+                            {activeTab === 'staff-assignments' && (
+                                <BranchStaffAllocationSection branches={branches} canEdit={canManageSettings} />
                             )}
 
                             {activeTab === 'products' && (
@@ -1449,13 +1870,13 @@ export const ProjectSettings: React.FC<{
                                                             <div className="grid grid-cols-2 gap-2">
                                                                 <button
                                                                     onClick={async () => {
-                                                                        const { data } = await supabase.client.from('pharmacist_branches').select('branch_id').eq('pharmacist_id', phar.id);
+                                                                        const branchIds = await supabase.pharmacists.listBranchIdsForPharmacist(phar.id);
                                                                         setPharForm({
                                                                             id: phar.id,
                                                                             code: phar.code || '',
                                                                             name: phar.name,
                                                                             isActive: phar.isActive,
-                                                                            branchIds: data?.map(d => d.branch_id) || []
+                                                                            branchIds: branchIds || []
                                                                         });
                                                                         setIsPharModalOpen(true);
                                                                     }}
@@ -1996,6 +2417,277 @@ export const ProjectSettings: React.FC<{
                 </div>
             </div>
 
+            {/* Integrated Delivery Zone Configuration Modal */}
+            {isDeliveryModalOpen && editingDeliveryBranch && deliveryDraft && (
+                <div
+                    className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-6"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="delivery-modal-title"
+                    aria-describedby="delivery-modal-description"
+                >
+                    <div className="flex max-h-[calc(100vh-3rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-300">
+                        <span id="delivery-modal-description" className="sr-only">
+                            Configuration form for branch origin block, delivery service radii, and dispatch SLAs.
+                        </span>
+                        
+                        {/* Modal Header */}
+                        <div className="shrink-0 border-b border-slate-200/60 bg-slate-50/70 p-5 sm:p-6">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-3.5">
+                                    <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-700 border border-red-200/80 flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                                        <MapPinned size={22} className="text-red-700" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 id="delivery-modal-title" className="text-xl font-black text-slate-950 uppercase tracking-tight">
+                                                Delivery Zone & Dispatch Profile
+                                            </h3>
+                                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-red-100/70 text-red-800 uppercase tracking-wider">
+                                                {editingDeliveryBranch.code}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs font-semibold text-slate-500 mt-1">
+                                            {editingDeliveryBranch.name} · Bahrain Logistics Origin & Radius Bands
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setIsDeliveryModalOpen(false);
+                                        setEditingDeliveryBranch(null);
+                                        setDeliveryDraft(null);
+                                    }}
+                                    className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-red-300 hover:bg-red-50 active:scale-95"
+                                >
+                                    <X size={20} className="text-slate-500 group-hover:text-red-700" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="custom-scrollbar flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+                            {/* Section 1: Origin Block & Delivery Status */}
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Section 1</p>
+                                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-0.5">
+                                            Branch Origin Block & Delivery Activation
+                                        </h4>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                                        deliveryDraft.isDeliveryEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                    }`}>
+                                        {deliveryDraft.isDeliveryEnabled ? 'Delivery Active' : 'Delivery Paused'}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            Origin Block Number (Bahrain Central Address)
+                                        </label>
+                                        <div className="relative">
+                                            <MapPinned className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                value={deliveryDraft.originBlockNumber}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, originBlockNumber: e.target.value.trim() })}
+                                                placeholder="e.g. 736, 328, 905"
+                                                className="w-full bg-slate-50 border-2 border-slate-200 p-3 pl-10 rounded-xl outline-none text-sm font-black focus:border-red-700 focus:bg-white focus:ring-4 focus:ring-red-700/10 transition-all uppercase"
+                                            />
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 font-medium">
+                                            The official Bahrain block where this pharmacy branch is physically located for dispatch rings.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            Dispatch Operations Switch
+                                        </label>
+                                        <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+                                            <div>
+                                                <p className="text-xs font-black text-slate-900">Active Delivery Orders</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Accept and route orders from this branch</p>
+                                            </div>
+                                            <label className="relative inline-flex cursor-pointer items-center shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={deliveryDraft.isDeliveryEnabled}
+                                                    onChange={e => setDeliveryDraft({ ...deliveryDraft, isDeliveryEnabled: e.target.checked })}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="h-7 w-12 rounded-full bg-slate-200 peer peer-checked:bg-red-700 peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:border after:border-slate-300 after:bg-white after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Section 2: Service Radii Bands */}
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+                                <div className="border-b border-slate-100 pb-3 mb-4">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Section 2</p>
+                                    <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-0.5">
+                                        Centroid Service Distance Rings (Kilometers)
+                                    </h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800">Core Ring</span>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Priority</span>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                min="0.5"
+                                                max="50"
+                                                step="0.5"
+                                                value={deliveryDraft.coreRadiusKm}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, coreRadiusKm: parseFloat(e.target.value) || 0 })}
+                                                className="w-full bg-white border border-emerald-200 p-2.5 pr-10 rounded-lg outline-none text-base font-black text-slate-900 tabular-nums focus:ring-2 focus:ring-emerald-500/20"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">km</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-medium">Immediate hyper-local neighborhood deliveries</p>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/40 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-800">Standard Ring</span>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">Regular</span>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                min="0.5"
+                                                max="50"
+                                                step="0.5"
+                                                value={deliveryDraft.standardRadiusKm}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, standardRadiusKm: parseFloat(e.target.value) || 0 })}
+                                                className="w-full bg-white border border-blue-200 p-2.5 pr-10 rounded-lg outline-none text-base font-black text-slate-900 tabular-nums focus:ring-2 focus:ring-blue-500/20"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">km</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-medium">Standard fleet dispatch operational radius</p>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/40 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-purple-800">Extended Ring</span>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">Outer</span>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                min="0.5"
+                                                max="50"
+                                                step="0.5"
+                                                value={deliveryDraft.extendedRadiusKm}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, extendedRadiusKm: parseFloat(e.target.value) || 0 })}
+                                                className="w-full bg-white border border-purple-200 p-2.5 pr-10 rounded-lg outline-none text-base font-black text-slate-900 tabular-nums focus:ring-2 focus:ring-purple-500/20"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">km</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-medium">Extended coverage border before cutoff</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Section 3: SLA Targets & Warnings */}
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+                                <div className="border-b border-slate-100 pb-3 mb-4">
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Section 3</p>
+                                    <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-0.5">
+                                        Target & Alert SLA Thresholds (Minutes)
+                                    </h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            Target Delivery Time (Commitment)
+                                        </label>
+                                        <div className="relative">
+                                            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
+                                            <input
+                                                type="number"
+                                                min="5"
+                                                max="180"
+                                                value={deliveryDraft.targetDeliveryMinutes}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, targetDeliveryMinutes: parseInt(e.target.value) || 0 })}
+                                                className="w-full bg-slate-50 border-2 border-slate-200 p-3 pl-10 pr-12 rounded-xl outline-none text-sm font-black text-slate-900 tabular-nums focus:border-red-700 focus:bg-white"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">mins</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            Warning Alert Threshold (Overdue SLA)
+                                        </label>
+                                        <div className="relative">
+                                            <AlertTriangle className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                                            <input
+                                                type="number"
+                                                min="5"
+                                                max="240"
+                                                value={deliveryDraft.warningDeliveryMinutes}
+                                                onChange={e => setDeliveryDraft({ ...deliveryDraft, warningDeliveryMinutes: parseInt(e.target.value) || 0 })}
+                                                className="w-full bg-slate-50 border-2 border-slate-200 p-3 pl-10 pr-12 rounded-xl outline-none text-sm font-black text-slate-900 tabular-nums focus:border-red-700 focus:bg-white"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">mins</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Section 4: Operational Notes */}
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-2">
+                                    Operational Dispatch Notes & Restrictions
+                                </label>
+                                <textarea
+                                    rows={2}
+                                    value={deliveryDraft.notes || ''}
+                                    onChange={e => setDeliveryDraft({ ...deliveryDraft, notes: e.target.value })}
+                                    placeholder="Enter branch-specific delivery instructions, road restrictions, or bridge transit notes..."
+                                    className="w-full bg-slate-50 border-2 border-slate-200 p-3.5 rounded-xl outline-none text-xs font-medium focus:border-red-700 focus:bg-white focus:ring-4 focus:ring-red-700/10 transition-all resize-none"
+                                />
+                            </section>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="shrink-0 border-t border-slate-200/60 bg-slate-50/80 p-5 sm:p-6 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsDeliveryModalOpen(false);
+                                    setEditingDeliveryBranch(null);
+                                    setDeliveryDraft(null);
+                                }}
+                                className="px-5 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isSavingDeliveryProfile}
+                                onClick={handleSaveDeliveryProfile}
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-700 text-white font-black text-xs uppercase tracking-wider hover:bg-red-800 transition-all shadow-md shadow-red-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Save size={16} />
+                                <span>{isSavingDeliveryProfile ? 'Saving Profile...' : 'Save Delivery Profile'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Branch Modal */}
             {isBranchModalOpen && (
                 <div
@@ -2105,7 +2797,7 @@ export const ProjectSettings: React.FC<{
                                             return (
                                                 <div className="space-y-2 md:col-span-2">
                                                     <div className="flex items-center justify-between">
-                                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number (رقم السجل التجاري)</label>
+                                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">CR Number (Commercial Registration)</label>
                                                         {autoAssignedCr && (
                                                             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                                                                 <CheckCircle2 size={12} /> Auto Assigned
@@ -2274,78 +2966,119 @@ export const ProjectSettings: React.FC<{
                 </div>
             )}
 
-            {/* Pharmacist Modal */}
+            {/* Pharmacist / Personnel Modal */}
             {isPharModalOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 sm:p-6"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="pharmacist-modal-title"
                     aria-describedby="pharmacist-modal-description"
                 >
-                    <div className="bg-white w-full max-w-xl rounded-lg shadow-xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-300">
+                    <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden animate-in zoom-in-95 duration-300 max-h-[calc(100vh-3rem)] flex flex-col">
                         <span id="pharmacist-modal-description" className="sr-only">Form to manage personnel profiles and specialist credentials.</span>
-                        <div className="p-6 border-b flex items-center justify-between bg-slate-50">
-                            <div>
-                                <h3 id="pharmacist-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Profile</h3>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Manage Specialist Credentials</p>
+                        <div className="p-6 border-b border-slate-200/70 flex items-center justify-between bg-slate-50/70 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center">
+                                    <UserCheck size={20} />
+                                </div>
+                                <div>
+                                    <h3 id="pharmacist-modal-title" className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Profile</h3>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Manage Specialist Credentials & Branch Allocations</p>
+                                </div>
                             </div>
-                            <button onClick={() => setIsPharModalOpen(false)} className="w-9 h-9 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg flex items-center justify-center transition-colors"><X size={18} /></button>
+                            <button onClick={() => setIsPharModalOpen(false)} className="w-9 h-9 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl flex items-center justify-center transition-colors"><X size={18} /></button>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pharmacist Code</label>
-                                <div className="relative">
-                                    <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
+                        <div className="p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pharmacist Code</label>
+                                    <div className="relative">
+                                        <Hash className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
+                                        <input
+                                            type="text"
+                                            maxLength={32}
+                                            value={pharForm.code}
+                                            onChange={e => setPharForm({ ...pharForm, code: e.target.value.trim().toUpperCase() })}
+                                            placeholder="P001"
+                                            className="w-full bg-slate-50 border border-slate-200 p-3 pl-10 rounded-xl outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black uppercase"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Official Full Name</label>
                                     <input
                                         type="text"
-                                        maxLength={32}
-                                        value={pharForm.code}
-                                        onChange={e => setPharForm({ ...pharForm, code: e.target.value.trim().toUpperCase() })}
-                                        placeholder="P001"
-                                        className="w-full bg-slate-50 border border-slate-200 p-3 pl-10 rounded-lg outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black uppercase"
+                                        value={pharForm.name}
+                                        onChange={e => setPharForm({ ...pharForm, name: e.target.value })}
+                                        placeholder="e.g. Dr. Ahmed Elkholy"
+                                        className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black uppercase"
                                     />
                                 </div>
                             </div>
+
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Official Full Name</label>
-                                <input
-                                    type="text"
-                                    value={pharForm.name}
-                                    onChange={e => setPharForm({ ...pharForm, name: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-lg outline-none text-sm focus:border-brand/40 focus:ring-2 focus:ring-brand/10 transition-all font-black uppercase"
-                                />
-                            </div>
-                            <div className="space-y-4">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignments (Multi-Select)</label>
-                                <div className="grid grid-cols-2 gap-2 h-48 overflow-y-auto custom-scrollbar p-2 bg-slate-50 rounded-lg border border-slate-200">
-                                    {branches.filter(b => b.role === 'branch').map(b => (
-                                        <button
-                                            key={b.id}
-                                            onClick={() => {
-                                                const current = pharForm.branchIds || [];
-                                                const next = current.includes(b.id) ? current.filter(id => id !== b.id) : [...current, b.id];
-                                                setPharForm({ ...pharForm, branchIds: next });
-                                            }}
-                                            className={`p-3 rounded-lg text-[9px] font-black uppercase tracking-tight text-left transition-colors border ${pharForm.branchIds?.includes(b.id) ? 'bg-brand text-white border-brand' : 'bg-white text-slate-400 border-slate-200 hover:border-brand/40'}`}
-                                        >
-                                            {b.name}
-                                        </button>
-                                    ))}
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Branch Assignments (Multi-Select)</label>
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                        {pharForm.branchIds?.length || 0} branches selected
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto custom-scrollbar p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                                    {branches.filter(b => b.role === 'branch').map(b => {
+                                        const isSelected = pharForm.branchIds?.includes(b.id);
+                                        return (
+                                            <button
+                                                key={b.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = pharForm.branchIds || [];
+                                                    const next = current.includes(b.id) ? current.filter(id => id !== b.id) : [...current, b.id];
+                                                    setPharForm({ ...pharForm, branchIds: next });
+                                                }}
+                                                className={`p-3 rounded-xl text-left transition-all border flex items-center justify-between gap-2 ${
+                                                    isSelected
+                                                        ? 'bg-red-700 text-white border-red-700 shadow-sm'
+                                                        : 'bg-white text-slate-700 border-slate-200 hover:border-red-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className="min-w-0">
+                                                    <span className={`text-[10px] font-black uppercase tracking-wider block ${isSelected ? 'text-red-200' : 'text-slate-400'}`}>
+                                                        {b.code}
+                                                    </span>
+                                                    <span className="text-xs font-bold truncate block">{b.name}</span>
+                                                </div>
+                                                {isSelected && <CheckCircle2 size={16} className="text-white shrink-0" />}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-wider text-slate-900">Active Duty Status</p>
+                                    <p className="text-[10px] font-semibold text-slate-400">Enable profile for branch scheduling and login permissions</p>
+                                </div>
                                 <input
                                     type="checkbox"
                                     checked={pharForm.isActive}
                                     onChange={e => setPharForm({ ...pharForm, isActive: e.target.checked })}
-                                    className="w-5 h-5 accent-brand rounded"
+                                    className="w-5 h-5 accent-brand rounded cursor-pointer"
                                 />
-                                <span className="text-[10px] font-black uppercase tracking-widest">Active Duty Status</span>
                             </div>
                         </div>
-                        <div className="p-6 bg-slate-50 flex gap-4">
-                            <button onClick={handleSavePharmacist} className="btn-primary flex-1 text-[10px] uppercase tracking-widest"><Save size={18} /> Update specialist credentials</button>
+                        <div className="p-6 bg-slate-50/70 border-t border-slate-200/70 flex gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsPharModalOpen(false)}
+                                className="px-5 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button onClick={handleSavePharmacist} className="btn-primary flex-1 text-xs uppercase tracking-widest py-3">
+                                <Save size={18} /> Update Specialist Credentials
+                            </button>
                         </div>
                     </div>
                 </div>

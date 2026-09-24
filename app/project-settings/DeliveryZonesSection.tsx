@@ -75,7 +75,8 @@ export const DeliveryZonesSection: React.FC<DeliveryZonesSectionProps> = ({ bran
 
     for (const profile of profiles) {
       const block = normalizeBlockKey(profile.originBlockNumber);
-      const code = profile.branchCode || branches.find(branch => branch.id === profile.branchId)?.code || profile.branchId.slice(0, 6);
+      const matchedBranch = branches.find(branch => branch.id === profile.branchId);
+      const code = profile.branchCode || matchedBranch?.code || matchedBranch?.name || 'Branch';
       if (!block) {
         missingOrigin += 1;
         unmapped += 1;

@@ -1,0 +1,234 @@
+// ============================================================================
+// Control Center Module: Enterprise Multi-Branch Pharmacy Management System (Bahrain)
+// Production Prisma Schema Definition
+// ============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------------------------------
+// 1. Enums
+// ----------------------------------------------------------------------------
+
+enum GovernorateCode {
+  CAPITAL
+  MUHARRAQ
+  NORTHERN
+  SOUTHERN
+
+  @@map("governorate_code_enum")
+}
+
+enum BranchStaffRole {
+  Pharmacist
+  Driver
+  Worker
+  Assistant
+  Cashier
+
+  @@map("branch_staff_role_enum")
+}
+
+enum StaffAssignmentType {
+  PrimaryBase          @map("Primary Base")
+  FloatingReliefCover  @map("Floating / Relief Cover")
+
+  @@map("staff_assignment_type_enum")
+}
+
+// ----------------------------------------------------------------------------
+// 2. Models
+// ----------------------------------------------------------------------------
+
+/// Official 4 Governorates of the Kingdom of Bahrain
+model Governorate {
+  id        String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      GovernorateCode @unique
+  nameEn    String          @unique @map("name_en") @db.VarChar(100)
+  nameAr    String          @unique @map("name_ar") @db.VarChar(100)
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  branches  Branch[]
+
+  @@map("governorates")
+}
+
+/// Operational Area grouping (e.g. Area 1, Area 2) with assigned Supervisor
+model OperationalArea {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code         String            @unique @db.VarChar(30)
+  nameEn       String            @map("name_en") @db.VarChar(120)
+  nameAr       String            @map("name_ar") @db.VarChar(120)
+  supervisorId String            @map("supervisor_id") @db.Uuid
+  description  String?           @db.Text
+  isActive     Boolean           @default(true) @map("is_active")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  zones        OperationalZone[]
+  branches     Branch[]
+
+  @@index([supervisorId], map: "idx_operational_areas_supervisor_id")
+  @@map("operational_areas")
+}
+
+/// Operational Dispatch and Workforce Coverage Zones inside an Area
+model OperationalZone {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  areaId                  String          @map("area_id") @db.Uuid
+  code                    String          @unique @db.VarChar(30)
+  nameEn                  String          @map("name_en") @db.VarChar(120)
+  nameAr                  String          @map("name_ar") @db.VarChar(120)
+  defaultShiftScheduleId  String?         @map("default_shift_schedule_id") @db.Uuid
+  coverageParameters      Json            @default("{}") @map("coverage_parameters")
+  shiftRules              Json            @default("[]") @map("shift_rules")
+  isActive                Boolean         @default(true) @map("is_active")
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  area                    OperationalArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  branches                Branch[]
+
+  @@index([areaId], map: "idx_operational_zones_area_id")
+  @@map("operational_zones")
+}
+
+/// Commercial Registration & Legal Identity powering statutory compliance and HR letter generation
+model CommercialRegistration {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  crNumber             String    @unique @map("cr_number") @db.VarChar(50)
+  isMainGroupCr        Boolean   @default(false) @map("is_main_group_cr")
+  legalNameEn          String    @map("legal_name_en") @db.VarChar(255)
+  legalNameAr          String    @map("legal_name_ar") @db.VarChar(255)
+  vatAccountNumber     String    @map("vat_account_number") @db.VarChar(50)
+  crExpiryDate         DateTime  @map("cr_expiry_date") @db.Date
+  nhraCrLicenseNo      String    @map("nhra_cr_license_no") @db.VarChar(50)
+  nhraCrExpiryDate     DateTime  @map("nhra_cr_expiry_date") @db.Date
+  bcciExpiryDate       DateTime  @map("bcci_expiry_date") @db.Date
+  logoUrl              String    @map("logo_url") @db.Text
+  ceoSignatureUrl      String    @map("ceo_signature_url") @db.Text
+  officialSealStampUrl String    @map("official_seal_stamp_url") @db.Text
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  branches             Branch[]
+
+  @@map("commercial_registrations")
+}
+
+/// Pharmacy Branch Store & Dispensary
+model Branch {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchCode             String                 @unique @map("branch_code") @db.VarChar(20)
+  nameEn                 String                 @map("name_en") @db.VarChar(150)
+  nameAr                 String                 @map("name_ar") @db.VarChar(150)
+  operationalName        String                 @map("operational_name") @db.VarChar(150)
+
+  // Foreign Keys
+  crId                   String                 @map("cr_id") @db.Uuid
+  governorateId          String                 @map("governorate_id") @db.Uuid
+  areaId                 String                 @map("area_id") @db.Uuid
+  zoneId                 String                 @map("zone_id") @db.Uuid
+
+  // Address (Bahrain Standards)
+  blockNumber            String                 @map("block_number") @db.VarChar(20)
+  roadNumber             String                 @map("road_number") @db.VarChar(50)
+  buildingNumber         String                 @map("building_number") @db.VarChar(50)
+  shopNumber             String?                @map("shop_number") @db.VarChar(50)
+
+  // Geofence & GPS (Radius strictly between 10m and 1000m)
+  latitude               Decimal?               @map("latitude") @db.Decimal(10, 8)
+  longitude              Decimal?               @map("longitude") @db.Decimal(11, 8)
+  startShiftRadiusMeters Int                    @default(100) @map("start_shift_radius_meters")
+
+  // Leadership & License Holders
+  branchManagerId        String?                @map("branch_manager_id") @db.Uuid
+  inChargePharmacistId   String?                @map("in_charge_pharmacist_id") @db.Uuid
+
+  // Contact Info
+  phoneLandline          String?                @map("phone_landline") @db.VarChar(30)
+  phoneMobile            String?                @map("phone_mobile") @db.VarChar(30)
+  branchEmail            String                 @map("branch_email") @db.VarChar(255)
+
+  // Status
+  is24Hours              Boolean                @default(false) @map("is_24_hours")
+  isActive               Boolean                @default(true) @map("is_active")
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  commercialRegistration CommercialRegistration @relation(fields: [crId], references: [id], onDelete: Restrict)
+  governorate            Governorate            @relation(fields: [governorateId], references: [id], onDelete: Restrict)
+  operationalArea        OperationalArea        @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  operationalZone        OperationalZone        @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  deliveryZone           BranchDeliveryZone?
+  staffAssignments       BranchStaffAssignment[]
+
+  @@index([crId], map: "idx_branches_cr_id")
+  @@index([governorateId], map: "idx_branches_governorate_id")
+  @@index([areaId], map: "idx_branches_area_id")
+  @@index([zoneId], map: "idx_branches_zone_id")
+  @@index([branchCode], map: "idx_branches_branch_code")
+  @@index([isActive], map: "idx_branches_active_status")
+  @@map("branches")
+}
+
+/// Dispatch Rules & SLA Thresholds for Branch Deliveries
+model BranchDeliveryZone {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId    String   @unique @map("branch_id") @db.Uuid
+  originBlock String   @map("origin_block") @db.VarChar(20)
+
+  // Distance Tiers (KM)
+  coreKm      Decimal  @default(3.00) @map("core_km") @db.Decimal(5, 2)
+  standardKm  Decimal  @default(7.00) @map("standard_km") @db.Decimal(5, 2)
+  extendedKm  Decimal  @default(15.00) @map("extended_km") @db.Decimal(5, 2)
+
+  // SLA Timers (Minutes)
+  targetMin   Int      @default(30) @map("target_min")
+  warningMin  Int      @default(45) @map("warning_min")
+
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([originBlock], map: "idx_branch_delivery_zones_origin_block")
+  @@map("branch_delivery_zones")
+}
+
+/// Dynamic Multi-Staff Allocation per Branch
+model BranchStaffAssignment {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId       String              @map("branch_id") @db.Uuid
+  userId         String              @map("user_id") @db.Uuid
+  role           BranchStaffRole
+  assignmentType StaffAssignmentType @default(PrimaryBase) @map("assignment_type")
+  startDate      DateTime            @default(now()) @map("start_date") @db.Date
+  endDate        DateTime?           @map("end_date") @db.Date
+  isActive       Boolean             @default(true) @map("is_active")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  branch         Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId, isActive], map: "idx_staff_assignments_branch_active")
+  @@index([userId, isActive], map: "idx_staff_assignments_user_active")
+  @@index([startDate, endDate], map: "idx_staff_assignments_dates")
+  @@map("branch_staff_assignments")
+}

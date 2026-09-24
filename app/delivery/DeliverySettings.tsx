@@ -351,6 +351,118 @@ export const DeliverySettings: React.FC = () => {
     }
   };
 
+  const exportAreasAndBlocksExcel = async () => {
+    if (areas.length === 0 && blocks.length === 0) {
+      Swal.fire('No data', 'There are no areas or blocks to export.', 'info');
+      return;
+    }
+    try {
+      const ExcelJS = await import('exceljs');
+      const { saveAs } = await import('file-saver');
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Tabarak Hub';
+      workbook.created = new Date();
+
+      // Sheet 1: Blocks Directory
+      const blocksSheet = workbook.addWorksheet('Blocks Directory');
+      blocksSheet.columns = [
+        { header: 'Block Number', key: 'blockNumber', width: 16 },
+        { header: 'Area Name', key: 'areaName', width: 28 },
+        { header: 'Governorate', key: 'governorate', width: 22 },
+        { header: 'Status', key: 'status', width: 14 }
+      ];
+
+      const sortedBlocks = [...blocks].sort((a, b) =>
+        a.blockNumber.localeCompare(b.blockNumber, undefined, { numeric: true })
+      );
+
+      sortedBlocks.forEach(b => {
+        blocksSheet.addRow({
+          blockNumber: b.blockNumber,
+          areaName: b.areaName,
+          governorate: b.governorate,
+          status: b.isActive ? 'Active' : 'Inactive'
+        });
+      });
+
+      blocksSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      blocksSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+      blocksSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+      blocksSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      blocksSheet.autoFilter = 'A1:D1';
+
+      // Sheet 2: Delivery Areas
+      const areasSheet = workbook.addWorksheet('Delivery Areas');
+      areasSheet.columns = [
+        { header: 'Area Name', key: 'name', width: 28 },
+        { header: 'Governorate', key: 'governorate', width: 22 },
+        { header: 'Blocks Count', key: 'blocksCount', width: 16 },
+        { header: 'Status', key: 'status', width: 14 },
+        { header: 'Notes', key: 'notes', width: 36 }
+      ];
+
+      const areaBlockCounts = blocks.reduce<Record<string, number>>((acc, b) => {
+        const key = `${b.governorate}_${b.areaName.toLowerCase()}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      const sortedAreas = [...areas].sort((a, b) =>
+        a.governorate.localeCompare(b.governorate) || a.name.localeCompare(b.name)
+      );
+
+      sortedAreas.forEach(a => {
+        const count = areaBlockCounts[`${a.governorate}_${a.name.toLowerCase()}`] || 0;
+        areasSheet.addRow({
+          name: a.name,
+          governorate: a.governorate,
+          blocksCount: count,
+          status: a.isActive ? 'Active' : 'Inactive',
+          notes: a.notes || ''
+        });
+      });
+
+      areasSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      areasSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+      areasSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+      areasSheet.views = [{ state: 'frozen', ySplit: 1 }];
+      areasSheet.autoFilter = 'A1:E1';
+
+      // Sheet 3: Summary by Governorate
+      const summarySheet = workbook.addWorksheet('Governorate Summary');
+      summarySheet.columns = [
+        { header: 'Governorate', key: 'governorate', width: 22 },
+        { header: 'Total Areas', key: 'totalAreas', width: 16 },
+        { header: 'Total Blocks', key: 'totalBlocks', width: 16 },
+        { header: 'Active Blocks', key: 'activeBlocks', width: 16 }
+      ];
+
+      GOVERNORATES.forEach(gov => {
+        const govAreas = areas.filter(a => a.governorate === gov);
+        const govBlocks = blocks.filter(b => b.governorate === gov);
+        const activeGovBlocks = govBlocks.filter(b => b.isActive);
+        summarySheet.addRow({
+          governorate: gov,
+          totalAreas: govAreas.length,
+          totalBlocks: govBlocks.length,
+          activeBlocks: activeGovBlocks.length
+        });
+      });
+
+      summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      summarySheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB91C1C' } };
+      summarySheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+      summarySheet.views = [{ state: 'frozen', ySplit: 1 }];
+      summarySheet.autoFilter = 'A1:D1';
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      saveAs(new Blob([buffer]), `Delivery_Areas_and_Blocks_${dateStr}.xlsx`);
+    } catch (e: any) {
+      Swal.fire('Export failed', e?.message || 'Could not export areas and blocks.', 'error');
+    }
+  };
+
   const editDriverTarget = async (driver: DeliveryDriver, target?: DeliveryDriverMonthlyTarget) => {
     const { value } = await Swal.fire({
       title: `<span class="text-xl font-black tracking-tight">Monthly target - ${escapeHtml(driver.name)}</span>`,
@@ -961,14 +1073,23 @@ export const DeliverySettings: React.FC = () => {
         </section>
       ) : tab === 'areas' ? (
         <section className="operational-panel p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery areas</h3>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Delivery areas ({areas.length})</h3>
               <p className="mt-1 text-[11px] font-medium text-slate-500">Create areas first, then link blocks and branches to them.</p>
             </div>
-            <button onClick={() => editArea()} className="btn-primary text-[10px] uppercase tracking-widest">
-              <Plus className="h-3.5 w-3.5" /> Add area
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={exportAreasAndBlocksExcel}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand"
+                disabled={areas.length === 0 && blocks.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" /> Download Excel
+              </button>
+              <button onClick={() => editArea()} className="btn-primary text-[10px] uppercase tracking-widest">
+                <Plus className="h-3.5 w-3.5" /> Add area
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {areas.map(area => (
@@ -998,7 +1119,7 @@ export const DeliverySettings: React.FC = () => {
         <section className="operational-panel p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Blocks directory ({blocks.length})</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300" />
                 <input
@@ -1008,6 +1129,13 @@ export const DeliverySettings: React.FC = () => {
                   className="rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs font-bold outline-none focus:border-brand/40"
                 />
               </div>
+              <button
+                onClick={exportAreasAndBlocksExcel}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand"
+                disabled={blocks.length === 0 && areas.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" /> Download Excel
+              </button>
               <button onClick={() => editBlock()} className="btn-primary text-[10px] uppercase tracking-widest">
                 <Plus className="h-3.5 w-3.5" /> Add block
               </button>

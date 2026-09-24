@@ -23,7 +23,7 @@ export const PharmacistActivitySection: React.FC<PharmacistActivityProps> = ({ s
     useEffect(() => {
         const fetchData = async () => {
             // 1. Fetch pharmacists names
-            const { data: phData } = await supabase.client.from('pharmacists').select('id, name');
+            const phData = await supabase.pharmacists.listAll({ includeInactive: true });
             if (phData) {
                 const map: Record<string, string> = {};
                 phData.forEach((p: any) => map[p.id] = p.name);
@@ -31,7 +31,7 @@ export const PharmacistActivitySection: React.FC<PharmacistActivityProps> = ({ s
             }
 
             // 2. Fetch branch assignments to prevent "wrong branch" display
-            const { data: assignData } = await supabase.client.from('pharmacist_branches').select('pharmacist_id, branch_id');
+            const assignData = await supabase.pharmacists.listAllAssignments();
             if (assignData) {
                 const map: Record<string, Set<string>> = {};
                 assignData.forEach((a: any) => {
