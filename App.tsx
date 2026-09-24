@@ -301,6 +301,8 @@ const App: React.FC = () => {
         return isModuleEnabled('delivery') && canUseFeature('delivery', 'read', role, permissionState);
       case 'payroll':
         return role !== 'branch' && isModuleEnabled('hr') && (isManagerRole(role) || canUseFeature('hr_requests', 'read', role, permissionState) || canUseFeature('workforce', 'read', role, permissionState) || canUseFeature('delivery', 'read', role, permissionState));
+      case 'tqph':
+        return role !== 'branch' && (isManagerRole(role) || role === 'owner' || role === 'supervisor');
       default:
         return true;
     }

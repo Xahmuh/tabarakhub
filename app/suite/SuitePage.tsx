@@ -254,7 +254,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'tqph',
-      visible: true,
+      visible: role !== 'branch' && (isManager || isOwner || role === 'admin' || role === 'supervisor'),
       title: 'Tabarak Quality & Performance Hub (TQPH)',
       description: 'National NHRA compliance simulated audits, 20-branch ranking leaderboard, 6-pillar staff appraisals, and 48h CAPA action center.',
       icon: <ShieldCheck className="h-5 w-5 text-emerald-400" />,

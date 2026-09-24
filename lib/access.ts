@@ -64,6 +64,11 @@ export const resolveAccessLevel = (
     return 'none';
   }
 
+  // Hard boundary: Branch role must never access TQPH
+  if (role === 'branch' && (feature === 'tqph' || feature.startsWith('tqph:') || feature.startsWith('tqph_'))) {
+    return 'none';
+  }
+
   // Hard boundary: Branch role access for Operational Cash Expenses
   if (role === 'branch') {
     if (feature === 'operational_expenses' || feature === 'operational-expenses' || feature === 'operationalExpenses') {

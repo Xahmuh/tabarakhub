@@ -290,20 +290,28 @@ export const AppRouter: React.FC<AppRouterProps> = ({
           />
         </div>
       ) : activeTab === 'tqph' ? (
-        <TQPHHubView
-          onBackToModules={() => onTabChange('selector')}
-          currentUser={
-            authState.user
-              ? {
-                  id: authState.user.id,
-                  name: authState.user.name,
-                  cpr: '990101010',
-                  role: isManagerRole(authState.user.role) ? 'admin' : 'branch_manager',
-                  branch_id: authState.user.id,
-                }
-              : undefined
-          }
-        />
+        authState.user?.role === 'branch' ? (
+          <DashboardPage
+            user={authState.user!}
+            permissions={authState.permissions || []}
+            onBack={() => onTabChange('selector')}
+          />
+        ) : (
+          <TQPHHubView
+            onBackToModules={() => onTabChange('selector')}
+            currentUser={
+              authState.user
+                ? {
+                    id: authState.user.id,
+                    name: authState.user.name,
+                    cpr: '990101010',
+                    role: isManagerRole(authState.user.role) ? 'admin' : (authState.user.role === 'supervisor' ? 'supervisor' : 'admin'),
+                    branch_id: authState.user.id,
+                  }
+                : undefined
+            }
+          />
+        )
       ) : (
         <DashboardPage
           user={authState.user!}

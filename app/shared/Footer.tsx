@@ -110,6 +110,10 @@ export const Footer: React.FC<FooterProps> = ({ permissions = [], rolePermission
         enabledModuleCount += 1;
     }
 
+    if (role !== 'branch' && (isManager || isOwner || role === 'admin' || role === 'supervisor')) {
+        enabledModuleCount += 1;
+    }
+
     return (
         <footer className="w-full border-t border-white/10 mt-10 text-white print:hidden" style={{ backgroundColor: clientConfig.accentColor }}>
             <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-4">
