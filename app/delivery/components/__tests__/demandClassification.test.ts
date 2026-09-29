@@ -19,6 +19,7 @@ import {
   computeDemandLegendItems,
   activityTone,
   computeBlockPercentileRank,
+  resolveBlockDisplayMetadata,
   DEMAND_COLORS,
   DemandThresholds
 } from '../BlockCoverageMap';
@@ -49,6 +50,22 @@ function makeMockBlocks(counts: number[]): DeliveryBlockMetric[] {
 }
 
 console.log('\n🧪 RUNNING JENKS NATURAL BREAKS DEMAND CLASSIFICATION TEST SUITE\n');
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 0: Directory metadata wins for zero-order map blocks
+// -----------------------------------------------------------------------------
+console.log('--- TEST 0: Block Directory Metadata Fallback ---');
+{
+  const metadata = resolveBlockDisplayMetadata('618', null, {
+    areaName: 'Madinat Sitra',
+    governorate: 'Capital'
+  });
+  assert(
+    metadata.areaName === 'Madinat Sitra' && metadata.governorate === 'Capital',
+    'Zero-order block 618 resolves its area and governorate from the active block directory',
+    metadata
+  );
+}
 
 // -----------------------------------------------------------------------------
 // TEST SUITE 1: Normal Skewed Distribution & 10 vs 100 Regression Test

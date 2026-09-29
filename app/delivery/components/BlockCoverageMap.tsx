@@ -572,6 +572,21 @@ const zoneLegendItems: LegendItem[] = [
   { label: 'No orders', color: MAP_BASE_COLOR, border: MAP_BOUNDARY_COLOR }
 ];
 
+export const resolveBlockDisplayMetadata = (
+  blockNumber: string,
+  metric?: Pick<DeliveryBlockMetric, 'areaName' | 'governorate'> | null,
+  directoryBlock?: Pick<DeliveryBlock, 'areaName' | 'governorate'> | null
+) => {
+  const cleanBlockNumber = blockNumber.trim();
+  return {
+    areaName: metric?.areaName
+      || directoryBlock?.areaName
+      || (LEGACY_BLOCK_AREA_NAMES as Record<string, string>)[cleanBlockNumber]
+      || null,
+    governorate: metric?.governorate || directoryBlock?.governorate || null
+  };
+};
+
 const INITIAL_VIEWPORT: MapViewport = { x: 0, y: 0, width: VIEW_W, height: VIEW_H };
 const MIN_VIEW_SIZE = 170;
 const MAX_VIEW_SIZE = VIEW_W;
@@ -752,6 +767,11 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
   const blocksByNumber = useMemo(
     () => new Map(blocks.map(block => [block.blockNumber.trim(), block])),
     [blocks]
+  );
+
+  const directoryByBlock = useMemo(
+    () => new Map(directoryBlocks.map(block => [block.blockNumber.trim(), block])),
+    [directoryBlocks]
   );
 
   const bounds = useMemo(() => {
@@ -1170,7 +1190,8 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     const demandTone = activityTone(orderCount, demandThresholds);
     const cleanNum = row.blockNumber.trim();
     const noOrderData = noOrderAnalysis?.get(cleanNum) || noOrderAnalysis?.get(row.blockNumber);
-    const fallbackArea = (LEGACY_BLOCK_AREA_NAMES as Record<string, string>)[cleanNum] || null;
+    const directoryBlock = directoryByBlock.get(cleanNum);
+    const displayMetadata = resolveBlockDisplayMetadata(cleanNum, block, directoryBlock);
 
     let competitorNames: string[] = [];
     if (noOrderData) {
@@ -1188,7 +1209,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
 
     setHovered({
       blockNumber: cleanNum,
-      areaName: block?.areaName || fallbackArea,
+      areaName: displayMetadata.areaName,
       orderCount,
       shareOfTotal: block?.shareOfTotal,
       percentileRank: rankInfo?.rankLabel,
@@ -1445,6 +1466,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
               {paths.map(row => {
                 const block = row.block;
                 const cleanBlockNum = row.blockNumber.trim();
+                const directoryBlock = directoryByBlock.get(cleanBlockNum);
                 const selected = selectedBlock?.blockNumber?.trim() === cleanBlockNum;
                 const hoveredBlock = hovered?.blockNumber?.trim() === cleanBlockNum;
                 const noOrderData = noOrderAnalysis?.get(cleanBlockNum) || noOrderAnalysis?.get(row.blockNumber);
@@ -1514,10 +1536,11 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                         event.stopPropagation();
                         return;
                       }
+                      const displayMetadata = resolveBlockDisplayMetadata(cleanBlockNum, block, directoryBlock);
                       const targetBlock: DeliveryBlockMetric = block || {
                         blockNumber: cleanBlockNum,
-                        areaName: (LEGACY_BLOCK_AREA_NAMES as Record<string, string>)[cleanBlockNum] || null,
-                        governorate: null,
+                        areaName: displayMetadata.areaName,
+                        governorate: displayMetadata.governorate,
                         unresolved: false,
                         orderCount: 0,
                         branchBreakdown: [],
@@ -1529,10 +1552,11 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                     onKeyDown={event => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
+                        const displayMetadata = resolveBlockDisplayMetadata(cleanBlockNum, block, directoryBlock);
                         const targetBlock: DeliveryBlockMetric = block || {
                           blockNumber: cleanBlockNum,
-                          areaName: (LEGACY_BLOCK_AREA_NAMES as Record<string, string>)[cleanBlockNum] || null,
-                          governorate: null,
+                          areaName: displayMetadata.areaName,
+                          governorate: displayMetadata.governorate,
                           unresolved: false,
                           orderCount: 0,
                           branchBreakdown: [],
