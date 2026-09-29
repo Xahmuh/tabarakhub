@@ -48,7 +48,10 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = '';
+
+REVOKE ALL ON FUNCTION public.fn_set_updated_at() FROM PUBLIC, anon, authenticated;
 
 -- 4. Governorates Table
 CREATE TABLE IF NOT EXISTS public.governorates (
@@ -110,10 +113,10 @@ CREATE TABLE IF NOT EXISTS public.operational_zones (
 -- Seed Baseline Operational Zones
 INSERT INTO public.operational_zones (id, area_id, code, name_en, name_ar, shift_rules)
 VALUES
-    ('z1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000001', 'ZONE-1A', 'Zone 1A - Capital Core', 'زون 1أ - العاصمة', '[{"shift_name": "Morning Shift", "start_time": "08:00", "end_time": "16:00", "duration_hours": 8, "coverage_type": "regular"}, {"shift_name": "Evening Shift", "start_time": "16:00", "end_time": "00:00", "duration_hours": 8, "coverage_type": "regular"}]'::jsonb),
-    ('z1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000001', 'ZONE-1B', 'Zone 1B - Northern Coastal', 'زون 1ب - الساحل الشمالي', '[{"shift_name": "Full Coverage Shift", "start_time": "08:00", "end_time": "20:00", "duration_hours": 12, "coverage_type": "regular"}]'::jsonb),
-    ('z2000000-0000-4000-8000-000000000001', 'a2000000-0000-4000-8000-000000000002', 'ZONE-2A', 'Zone 2A - Southern Riffa', 'زون 2أ - الرفاع الجنوبية', '[{"shift_name": "Morning Peak", "start_time": "07:30", "end_time": "15:30", "duration_hours": 8, "coverage_type": "regular"}]'::jsonb),
-    ('z2000000-0000-4000-8000-000000000002', 'a2000000-0000-4000-8000-000000000002', 'ZONE-2B', 'Zone 2B - Muharraq Island', 'زون 2ب - جزيرة المحرق', '[{"shift_name": "24H Continuous On-Call", "start_time": "00:00", "end_time": "23:59", "duration_hours": 24, "coverage_type": "full_day_24h"}]'::jsonb)
+    ('c1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000001', 'ZONE-1A', 'Zone 1A - Capital Core', 'زون 1أ - العاصمة', '[{"shift_name": "Morning Shift", "start_time": "08:00", "end_time": "16:00", "duration_hours": 8, "coverage_type": "regular"}, {"shift_name": "Evening Shift", "start_time": "16:00", "end_time": "00:00", "duration_hours": 8, "coverage_type": "regular"}]'::jsonb),
+    ('c1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000001', 'ZONE-1B', 'Zone 1B - Northern Coastal', 'زون 1ب - الساحل الشمالي', '[{"shift_name": "Full Coverage Shift", "start_time": "08:00", "end_time": "20:00", "duration_hours": 12, "coverage_type": "regular"}]'::jsonb),
+    ('c2000000-0000-4000-8000-000000000001', 'a2000000-0000-4000-8000-000000000002', 'ZONE-2A', 'Zone 2A - Southern Riffa', 'زون 2أ - الرفاع الجنوبية', '[{"shift_name": "Morning Peak", "start_time": "07:30", "end_time": "15:30", "duration_hours": 8, "coverage_type": "regular"}]'::jsonb),
+    ('c2000000-0000-4000-8000-000000000002', 'a2000000-0000-4000-8000-000000000002', 'ZONE-2B', 'Zone 2B - Muharraq Island', 'زون 2ب - جزيرة المحرق', '[{"shift_name": "24H Continuous On-Call", "start_time": "00:00", "end_time": "23:59", "duration_hours": 24, "coverage_type": "full_day_24h"}]'::jsonb)
 ON CONFLICT (code) DO NOTHING;
 
 -- 7. Commercial Registrations Table
@@ -207,13 +210,20 @@ ALTER TABLE public.commercial_registrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branch_delivery_zones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branch_staff_assignments ENABLE ROW LEVEL SECURITY;
 
--- Grants for anon (read-only) and authenticated / service_role (manage)
-GRANT SELECT ON public.governorates TO anon, authenticated;
-GRANT SELECT ON public.operational_areas TO anon, authenticated;
-GRANT SELECT ON public.operational_zones TO anon, authenticated;
-GRANT SELECT ON public.commercial_registrations TO anon, authenticated;
-GRANT SELECT ON public.branch_delivery_zones TO anon, authenticated;
-GRANT SELECT ON public.branch_staff_assignments TO anon, authenticated;
+-- Internal control-center data is never exposed to anonymous callers.
+REVOKE ALL ON public.governorates FROM anon;
+REVOKE ALL ON public.operational_areas FROM anon;
+REVOKE ALL ON public.operational_zones FROM anon;
+REVOKE ALL ON public.commercial_registrations FROM anon;
+REVOKE ALL ON public.branch_delivery_zones FROM anon;
+REVOKE ALL ON public.branch_staff_assignments FROM anon;
+
+GRANT SELECT ON public.governorates TO authenticated;
+GRANT SELECT ON public.operational_areas TO authenticated;
+GRANT SELECT ON public.operational_zones TO authenticated;
+GRANT SELECT ON public.commercial_registrations TO authenticated;
+GRANT SELECT ON public.branch_delivery_zones TO authenticated;
+GRANT SELECT ON public.branch_staff_assignments TO authenticated;
 
 GRANT INSERT, UPDATE, DELETE ON public.operational_areas TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.operational_zones TO authenticated;
@@ -228,40 +238,56 @@ GRANT ALL ON public.commercial_registrations TO service_role;
 GRANT ALL ON public.branch_delivery_zones TO service_role;
 GRANT ALL ON public.branch_staff_assignments TO service_role;
 
--- Open Select Policies
+-- Authenticated select policies
 DROP POLICY IF EXISTS "governorates read all" ON public.governorates;
-CREATE POLICY "governorates read all" ON public.governorates FOR SELECT USING (true);
+CREATE POLICY "governorates read authenticated" ON public.governorates
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "operational_areas read all" ON public.operational_areas;
-CREATE POLICY "operational_areas read all" ON public.operational_areas FOR SELECT USING (true);
+CREATE POLICY "operational_areas read authenticated" ON public.operational_areas
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "operational_zones read all" ON public.operational_zones;
-CREATE POLICY "operational_zones read all" ON public.operational_zones FOR SELECT USING (true);
+CREATE POLICY "operational_zones read authenticated" ON public.operational_zones
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "commercial_registrations read all" ON public.commercial_registrations;
-CREATE POLICY "commercial_registrations read all" ON public.commercial_registrations FOR SELECT USING (true);
+CREATE POLICY "commercial_registrations read authenticated" ON public.commercial_registrations
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "branch_delivery_zones read all" ON public.branch_delivery_zones;
-CREATE POLICY "branch_delivery_zones read all" ON public.branch_delivery_zones FOR SELECT USING (true);
+CREATE POLICY "branch_delivery_zones read authenticated" ON public.branch_delivery_zones
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 DROP POLICY IF EXISTS "branch_staff_assignments read all" ON public.branch_staff_assignments;
-CREATE POLICY "branch_staff_assignments read all" ON public.branch_staff_assignments FOR SELECT USING (true);
+CREATE POLICY "branch_staff_assignments read authenticated" ON public.branch_staff_assignments
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) IS NOT NULL);
 
 -- Manage Policies for Authenticated Operations
 DROP POLICY IF EXISTS "operational_areas manage auth" ON public.operational_areas;
-CREATE POLICY "operational_areas manage auth" ON public.operational_areas FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "operational_areas manage auth" ON public.operational_areas FOR ALL TO authenticated
+USING ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'))
+WITH CHECK ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'));
 
 DROP POLICY IF EXISTS "operational_zones manage auth" ON public.operational_zones;
-CREATE POLICY "operational_zones manage auth" ON public.operational_zones FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "operational_zones manage auth" ON public.operational_zones FOR ALL TO authenticated
+USING ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'))
+WITH CHECK ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'));
 
 DROP POLICY IF EXISTS "commercial_registrations manage auth" ON public.commercial_registrations;
-CREATE POLICY "commercial_registrations manage auth" ON public.commercial_registrations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "commercial_registrations manage auth" ON public.commercial_registrations FOR ALL TO authenticated
+USING ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner'))
+WITH CHECK ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner'));
 
 DROP POLICY IF EXISTS "branch_delivery_zones manage auth" ON public.branch_delivery_zones;
-CREATE POLICY "branch_delivery_zones manage auth" ON public.branch_delivery_zones FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "branch_delivery_zones manage auth" ON public.branch_delivery_zones FOR ALL TO authenticated
+USING ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'))
+WITH CHECK ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'));
 
 DROP POLICY IF EXISTS "branch_staff_assignments manage auth" ON public.branch_staff_assignments;
-CREATE POLICY "branch_staff_assignments manage auth" ON public.branch_staff_assignments FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "branch_staff_assignments manage auth" ON public.branch_staff_assignments FOR ALL TO authenticated
+USING ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'))
+WITH CHECK ((SELECT public.current_app_role()) IN ('admin', 'manager', 'owner', 'supervisor'));
 
 -- Notify PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

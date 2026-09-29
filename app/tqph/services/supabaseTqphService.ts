@@ -288,11 +288,16 @@ class SupabaseTQPHService {
         return null;
       }
 
-      const { data: publicUrlData } = (supabaseClient as any).storage
+      const { data: signedUrlData, error: signedUrlError } = await (supabaseClient as any).storage
         .from('tqph-evidence')
-        .getPublicUrl(data.path);
+        .createSignedUrl(data.path, 60 * 60);
 
-      return publicUrlData.publicUrl;
+      if (signedUrlError) {
+        console.error('Storage signed URL error:', signedUrlError);
+        return null;
+      }
+
+      return signedUrlData.signedUrl;
     } catch (err) {
       console.error('Evidence upload exception:', err);
       return null;

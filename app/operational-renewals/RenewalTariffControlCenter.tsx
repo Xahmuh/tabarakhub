@@ -6,6 +6,7 @@ import {
   Layers, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Calendar
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { escapeHtml } from '../../utils/html';
 import {
   OperationalRenewalType,
   RenewalTariffRule,
@@ -346,7 +347,7 @@ export const RenewalTariffControlCenter: React.FC<RenewalTariffControlCenterProp
   const handleDelete = async (rule: RenewalTariffRule) => {
     const res = await Swal.fire({
       title: 'Delete Tariff Rule?',
-      html: `Are you sure you want to delete <b>"${rule.label}"</b>?<br/><span class="text-xs text-slate-500">Records using this rule will fall back to default category tariffs.</span>`,
+      html: `Are you sure you want to delete <b>"${escapeHtml(rule.label)}"</b>?<br/><span class="text-xs text-slate-500">Records using this rule will fall back to default category tariffs.</span>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',

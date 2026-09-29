@@ -21,14 +21,16 @@ alter table public.spin_settings enable row level security;
 
 drop policy if exists "spin_settings_select_all" on public.spin_settings;
 create policy "spin_settings_select_all" on public.spin_settings
-  for select using (true);
+  for select to authenticated using ((select auth.uid()) is not null);
 
 drop policy if exists "spin_settings_modify_auth" on public.spin_settings;
 create policy "spin_settings_modify_auth" on public.spin_settings
-  for all using (auth.role() = 'authenticated')
-  with check (auth.role() = 'authenticated');
+  for all to authenticated
+  using ((select public.current_app_role()) in ('admin', 'manager', 'owner'))
+  with check ((select public.current_app_role()) in ('admin', 'manager', 'owner'));
 
-grant select on public.spin_settings to anon, authenticated, service_role;
+revoke all on public.spin_settings from anon;
+grant select on public.spin_settings to authenticated, service_role;
 grant all on public.spin_settings to authenticated, service_role;
 
 -- 3. Replace execute_spin_transaction to enforce dynamic daily limit by phone and by device
@@ -55,7 +57,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_session record;
@@ -81,8 +83,25 @@ begin
     raise exception 'TOKEN_REQUIRED';
   end if;
 
-  if length(v_phone) < 6 then
-    raise exception 'CUSTOMER_PHONE_REQUIRED';
+  if length(v_phone) < 6
+    or length(v_phone) > 32
+    or v_phone !~ '^\+?[0-9]+$'
+  then
+    raise exception 'CUSTOMER_PHONE_INVALID';
+  end if;
+
+  if length(coalesce(p_first_name, '')) > 120
+    or length(coalesce(p_last_name, '')) > 120
+    or length(coalesce(p_email, '')) > 320
+    or length(coalesce(p_device_fingerprint, '')) > 256
+  then
+    raise exception 'CUSTOMER_DETAILS_INVALID';
+  end if;
+
+  if nullif(btrim(coalesce(p_email, '')), '') is not null
+    and btrim(p_email) !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+  then
+    raise exception 'CUSTOMER_EMAIL_INVALID';
   end if;
 
   select

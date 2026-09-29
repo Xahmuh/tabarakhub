@@ -1,8 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef, createContext, useContext } from "react";
-import { BackToModulesButton } from '../shared';
-import { branchService } from '../../services/branchService';
-import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
-import { deliveryService } from '../../services/deliveryService';
+import { BackToModulesButton } from '../shared/BackToModulesButton';
+import { supabaseClient } from '../../lib/supabaseClient';
 import { getBlockGovernorate, loadBahrainBlockGeometry } from '../delivery/bahrainBlockGeometry';
 import { LEGACY_BLOCK_AREA_NAMES, LEGACY_BLOCK_PHARMACY_MAP, LEGACY_COVERAGE_DATA } from './legacyCoverageData';
 
@@ -2072,17 +2070,19 @@ export function BlockCoverageAnalyzer({ onBack }) {
     setDbSyncStatus(status => ({ ...status, state: "loading", error: "" }));
 
     Promise.all([
-      branchService.list(),
-      branchDeliveryProfileService.listBranchDeliveryProfiles(),
-      deliveryService.blocks.list(true).catch(() => []),
+      supabaseClient.rpc('get_public_bahrain_block_coverage'),
       loadBahrainBlockGeometry()
     ])
-      .then(([branches, profiles, blocks, geometry]) => {
+      .then(([coverageSnapshotResult, geometry]) => {
         if (cancelled) return;
+        if (coverageSnapshotResult.error) {
+          throw new Error(`Could not load public branch coverage: ${coverageSnapshotResult.error.message}`);
+        }
+        const snapshot = coverageSnapshotResult.data || {};
         const dbData = buildDbCoverageData({
-          branches: (branches || []).filter(branch => branch.role === "branch"),
-          profiles,
-          blocks,
+          branches: Array.isArray(snapshot.branches) ? snapshot.branches : [],
+          profiles: Array.isArray(snapshot.profiles) ? snapshot.profiles : [],
+          blocks: Array.isArray(snapshot.blocks) ? snapshot.blocks : [],
           geometry
         });
 

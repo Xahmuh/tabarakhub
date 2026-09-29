@@ -125,12 +125,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
 
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
+                <label htmlFor="login-identifier" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Email or Login Code</span>
                 </label>
                 <div className={`relative rounded-xl border-2 transition-all duration-300 ${focusedField === 'code' ? 'border-brand shadow-lg shadow-brand/5' : 'border-slate-100 hover:border-slate-200'}`}>
                   <input
+                    id="login-identifier"
+                    name="username"
+                    aria-label="Email or login code"
                     type="text"
                     autoComplete="username"
                     className="w-full px-5 py-4 rounded-xl bg-transparent text-slate-900 font-bold outline-none text-base placeholder:text-slate-300"
@@ -145,12 +148,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, settings, notice 
               </div>
 
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
+                <label htmlFor="login-password" className="text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1 flex items-center space-x-2">
                   <Lock className="w-3.5 h-3.5" />
                   <span>Password</span>
                 </label>
                 <div className={`relative rounded-xl border-2 transition-all duration-300 ${focusedField === 'password' ? 'border-brand shadow-lg shadow-brand/5' : 'border-slate-100 hover:border-slate-200'}`}>
                   <input
+                    id="login-password"
+                    name="password"
+                    aria-label="Password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     className="w-full rounded-xl bg-transparent px-5 py-4 pr-16 text-base font-bold text-slate-900 outline-none placeholder:text-slate-300"

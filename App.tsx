@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useTransition } from 'react';
+import React, { lazy, useCallback, useEffect, useState, useTransition } from 'react';
 
 // --- Core Imports ---
 import {
@@ -20,10 +20,14 @@ import { LoginPage } from './app/login';
 import { BranchLoginApprovalWaitingPage } from './app/login/BranchLoginApprovalWaitingPage';
 import { SelectPharmacistPage } from './app/select-pharmacist';
 import { SuitePage } from './app/suite';
-import { CustomerFlow } from './app/spin-win';
-import { AppHeader, Footer, POSGuidelineModal, ModuleHelpButton } from './app/shared';
-import { BlockCoverageAnalyzer } from './app/block-analyzer';
+import { AppHeader } from './app/shared/AppHeader';
+import { Footer } from './app/shared/Footer';
+import { POSGuidelineModal } from './app/shared/POSGuidelineModal';
+import { ModuleHelpButton } from './app/shared/ModuleHelpButton';
 import { MaintenancePage } from './app/maintenance';
+
+const CustomerFlow = lazy(() => import('./app/spin-win/CustomerFlow').then(module => ({ default: module.CustomerFlow })));
+const BlockCoverageAnalyzer = lazy(() => import('./app/block-analyzer/BlockCoverageAnalyzer').then(module => ({ default: module.BlockCoverageAnalyzer })));
 
 // --- Router & Hooks ---
 import {

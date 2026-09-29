@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,9 +14,17 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   import.meta.env.DEV ? (
     <React.StrictMode>
-      <App />
+      <AppErrorBoundary>
+        <React.Suspense fallback={null}>
+          <App />
+        </React.Suspense>
+      </AppErrorBoundary>
     </React.StrictMode>
   ) : (
-    <App />
+    <AppErrorBoundary>
+      <React.Suspense fallback={null}>
+        <App />
+      </React.Suspense>
+    </AppErrorBoundary>
   )
 );

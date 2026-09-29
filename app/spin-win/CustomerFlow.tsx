@@ -276,7 +276,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
         const fullPhone = `${countryCode}${phone}`;
 
         try {
-            const cust = await spinWinService.customers.upsert(fullPhone, email, firstName, lastName);
+            const cust = await spinWinService.customers.upsert(fullPhone, email, firstName, lastName, token);
             setCustomer(cust);
             saveFlowDraft({ hasClickedRate: false, step: 'info' });
 
@@ -332,7 +332,7 @@ export const CustomerFlow: React.FC<CustomerFlowProps> = ({ token, logoUrl = cli
                 customerId: customer.id,
                 branchId: session.branchId,
                 reviewClicked: true
-            });
+            }, token);
         }
         const reviewUrl = session.branches?.google_maps_link || 'https://search.google.com/local/writereview?placeid=ChIJo_Y029TfPTUREonl7Y1yN5A';
         const opened = window.open(reviewUrl, '_blank', 'noopener,noreferrer');

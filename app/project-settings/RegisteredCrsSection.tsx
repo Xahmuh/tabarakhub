@@ -5,6 +5,7 @@ import {
   X, Clock, CalendarPlus, Zap
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { escapeHtml } from '../../utils/html';
 import { Branch } from '../../types';
 import { crService, INITIAL_21_CRS, LOCAL_STORAGE_CR_KEY, CR_UPDATED_EVENT, RegisteredCr } from '../../services/crService';
 import { RENEWALS_UPDATED_EVENT } from '../../services/operationalRenewalService';
@@ -528,7 +529,7 @@ export const RegisteredCrsSection: React.FC<{ branches: Branch[] }> = ({ branche
     Swal.fire({
       icon: 'success',
       title: 'تم التجديد السريع بنجاح (+1 سنة)!',
-      html: `تم تمديد صلاحية السجل التجاري <strong>${cr.cr_number}</strong><br/><span class="text-xs text-slate-600">${cr.cr_name_ar || cr.cr_name}</span><br/><div class="mt-2 text-sm font-bold text-emerald-600 font-mono bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200">تاريخ الانتهاء الجديد: ${newExpiry}</div>`,
+      html: `تم تمديد صلاحية السجل التجاري <strong>${escapeHtml(cr.cr_number)}</strong><br/><span class="text-xs text-slate-600">${escapeHtml(cr.cr_name_ar || cr.cr_name)}</span><br/><div class="mt-2 text-sm font-bold text-emerald-600 font-mono bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200">تاريخ الانتهاء الجديد: ${escapeHtml(newExpiry)}</div>`,
       timer: 2200,
       showConfirmButton: false
     });
@@ -561,7 +562,7 @@ export const RegisteredCrsSection: React.FC<{ branches: Branch[] }> = ({ branche
     Swal.fire({
       icon: 'success',
       title: 'تم التجديد السريع لترخيص NHRA بنجاح (+3 سنوات)!',
-      html: `تم تمديد صلاحية ترخيص NHRA لفرع/سجل <strong>${cr.cr_number}</strong><br/><span class="text-xs text-slate-600">${cr.cr_name_ar || cr.cr_name}</span><br/><div class="mt-2 text-sm font-bold text-purple-700 font-mono bg-purple-50 py-1.5 px-3 rounded-lg border border-purple-200">تاريخ انتهاء NHRA الجديد: ${newExpiry}</div>`,
+      html: `تم تمديد صلاحية ترخيص NHRA لفرع/سجل <strong>${escapeHtml(cr.cr_number)}</strong><br/><span class="text-xs text-slate-600">${escapeHtml(cr.cr_name_ar || cr.cr_name)}</span><br/><div class="mt-2 text-sm font-bold text-purple-700 font-mono bg-purple-50 py-1.5 px-3 rounded-lg border border-purple-200">تاريخ انتهاء NHRA الجديد: ${escapeHtml(newExpiry)}</div>`,
       timer: 2200,
       showConfirmButton: false
     });

@@ -10,13 +10,14 @@ import {
 } from './types';
 import { isManagerRole } from './lib/access';
 
-// Core immediately-rendered modules
-import { POSPage } from './app/pos';
-import { DashboardPage, HRRequestsSection } from './app/dashboard';
-import { SpinWinHub } from './app/spin-win';
-import { BackToModulesButton } from './app/shared';
+import { BackToModulesButton } from './app/shared/BackToModulesButton';
 
-// Lazy-loaded secondary & heavy modules
+// Route modules are lazy so the login shell does not download ERP modules that
+// the current user may never open.
+const POSPage = lazy(() => import('./app/pos/page').then(m => ({ default: m.POSPage })));
+const DashboardPage = lazy(() => import('./app/dashboard/page').then(m => ({ default: m.DashboardPage })));
+const HRRequestsSection = lazy(() => import('./app/dashboard/HRRequestsSection').then(m => ({ default: m.HRRequestsSection })));
+const SpinWinHub = lazy(() => import('./app/spin-win/SpinWinHub').then(m => ({ default: m.SpinWinHub })));
 const OwnerDashboardPage = lazy(() => import('./app/owner-dashboard').then(m => ({ default: m.OwnerDashboardPage })));
 const HRPortalPage = lazy(() => import('./app/hr').then(m => ({ default: m.HRPortalPage })));
 const WorkforceDirectory = lazy(() => import('./app/hr').then(m => ({ default: m.WorkforceDirectory })));

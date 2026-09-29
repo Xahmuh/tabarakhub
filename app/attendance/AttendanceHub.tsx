@@ -34,6 +34,7 @@ import {
   Trash2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { escapeHtml } from '../../utils/html';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import {
@@ -432,16 +433,16 @@ export const AttendanceHub: React.FC<Props> = ({
       html: `
         <div class="text-left text-xs space-y-3 font-sans text-slate-700 mt-2">
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-            <div class="text-slate-500 text-xs">Staff Member: <b class="text-slate-950 font-black text-sm">${empName}</b></div>
+            <div class="text-slate-500 text-xs">Staff Member: <b class="text-slate-950 font-black text-sm">${escapeHtml(empName)}</b></div>
             <div class="text-slate-500 text-xs">Status: ${
               currentFp
-                ? `<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold">${currentFp}</span>`
+                ? `<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold">${escapeHtml(currentFp)}</span>`
                 : `<span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold">Not Registered</span>`
             }</div>
           </div>
           <div>
             <label class="block text-slate-800 font-bold mb-1 text-xs">Registered Biometric / Device Token:</label>
-            <input id="swal-fp-input" class="w-full bg-white border border-slate-200 text-slate-900 rounded-lg p-2.5 font-mono text-sm uppercase focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600" value="${currentFp || suggestedToken}" placeholder="e.g. FP-9A4B12 or BIO-001" />
+            <input id="swal-fp-input" class="w-full bg-white border border-slate-200 text-slate-900 rounded-lg p-2.5 font-mono text-sm uppercase focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600" value="${escapeHtml(currentFp || suggestedToken)}" placeholder="e.g. FP-9A4B12 or BIO-001" />
           </div>
           <div class="flex gap-2">
             <button type="button" id="swal-fp-gen" class="flex-1 py-2 px-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] text-red-700 rounded-lg font-bold transition flex items-center justify-center gap-1">
@@ -522,10 +523,10 @@ export const AttendanceHub: React.FC<Props> = ({
       title: 'Delete Registered Fingerprint?',
       html: `
         <div class="text-left text-xs space-y-2 text-slate-700">
-          <p class="text-red-700 font-bold text-sm">Are you sure you want to remove the registered biometric device token for ${empName}?</p>
+          <p class="text-red-700 font-bold text-sm">Are you sure you want to remove the registered biometric device token for ${escapeHtml(empName)}?</p>
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 my-2">
-            <div class="text-slate-500">Employee: <b class="text-slate-950 font-black">${empName}</b></div>
-            <div class="text-slate-500">Current Token: <span class="font-mono text-red-700 font-bold">${currentFp}</span></div>
+            <div class="text-slate-500">Employee: <b class="text-slate-950 font-black">${escapeHtml(empName)}</b></div>
+            <div class="text-slate-500">Current Token: <span class="font-mono text-red-700 font-bold">${escapeHtml(currentFp)}</span></div>
           </div>
           <p class="text-slate-500">Once deleted, the employee will no longer have a trusted device/terminal bound to their profile until registered again.</p>
         </div>

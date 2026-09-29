@@ -388,33 +388,42 @@ export const spinWinService = {
                 return customers.find(c => c.phone === phone) || null;
             }
         },
-        upsert: async (phone: string, email?: string, firstName?: string, lastName?: string) => {
+        upsert: async (
+            phone: string,
+            email?: string,
+            firstName?: string,
+            lastName?: string,
+            spinToken?: string
+        ) => {
             try {
-                const payload = {
-                    phone,
-                    email: email || null,
-                    first_name: firstName || null,
-                    last_name: lastName || null
-                };
+                if (!spinToken) {
+                    throw new Error('A valid spin session is required.');
+                }
 
                 const { data, error } = await supabaseClient
-                    .from('customers')
-                    .upsert(payload, { onConflict: 'phone' })
-                    .select()
-                    .single();
+                    .rpc('prepare_spin_customer', {
+                        p_token: spinToken,
+                        p_phone: phone,
+                        p_email: email || null,
+                        p_first_name: firstName || null,
+                        p_last_name: lastName || null
+                    });
 
                 if (error) {
                     console.error('Customer Sync Error:', error.message);
                     throw error;
                 }
 
+                const customer = data?.[0];
+                if (!customer) throw new Error('Customer preparation returned no data.');
+
                 return {
-                    id: data.id,
-                    phone: data.phone,
-                    firstName: data.first_name,
-                    lastName: data.last_name,
-                    email: data.email,
-                    createdAt: data.created_at
+                    id: customer.customer_id,
+                    phone: customer.customer_phone,
+                    firstName: customer.customer_first_name,
+                    lastName: customer.customer_last_name,
+                    email: customer.customer_email,
+                    createdAt: customer.customer_created_at
                 } as Customer;
             } catch (err) {
                 throwUnlessDemoMode(err);
@@ -717,21 +726,21 @@ export const spinWinService = {
     },
 
     reviews: {
-        log: async (review: Omit<BranchReview, 'id' | 'reviewedAt'>) => {
+        log: async (review: Omit<BranchReview, 'id' | 'reviewedAt'>, spinToken: string) => {
             try {
-                // Map to snake_case for DB
-                const dbReview = {
-                    customer_id: review.customerId,
-                    branch_id: review.branchId,
-                    review_clicked: review.reviewClicked
-                };
                 const { data, error } = await supabaseClient
-                    .from('branch_reviews')
-                    .insert([dbReview])
-                    .select()
-                    .single();
+                    .rpc('log_public_branch_review', {
+                        p_token: spinToken,
+                        p_customer_id: review.customerId,
+                        p_branch_id: review.branchId,
+                        p_review_clicked: review.reviewClicked
+                    });
                 if (error) throw error;
-                return data as BranchReview;
+                return {
+                    ...review,
+                    id: data || generateUUID(),
+                    reviewedAt: new Date().toISOString()
+                } as BranchReview;
             } catch (err) {
                 throwUnlessDemoMode(err);
                 console.error('Database review log failed', err);
@@ -759,12 +768,11 @@ export const spinWinService = {
     shares: {
         log: async (share: { voucherCode: string, fromCustomerId: string, branchId: string }) => {
             try {
-                const dbShare = {
-                    voucher_code: share.voucherCode,
-                    from_customer_id: share.fromCustomerId,
-                    branch_id: share.branchId
-                };
-                const { error } = await supabaseClient.from('voucher_shares').insert([dbShare]);
+                const { error } = await supabaseClient.rpc('log_public_voucher_share', {
+                    p_voucher_code: share.voucherCode,
+                    p_customer_id: share.fromCustomerId,
+                    p_branch_id: share.branchId
+                });
                 if (error) throw error;
                 return true;
             } catch (err) {
