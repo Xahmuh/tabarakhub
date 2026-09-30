@@ -101,7 +101,7 @@ export const BranchCashDifferenceTracker: React.FC<BranchCashDifferenceTrackerPr
     const [alertsPage, setAlertsPage] = useState(1); // Pagination for alerts
 
     // --- Date Filter States ---
-    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>(isManagerRole(role) || role === 'owner' || role === 'accounts' ? 'all' : 'today');
+    const [dateType, setDateType] = useState<'all' | 'today' | 'yesterday' | '7d' | 'month' | 'custom'>('today');
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);

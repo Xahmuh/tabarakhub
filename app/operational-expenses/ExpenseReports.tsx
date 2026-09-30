@@ -32,11 +32,13 @@ export const ExpenseReports: React.FC<ExpenseReportsProps> = ({ user, isManager 
   const [pharmacistPage, setPharmacistPage] = useState(1);
 
   const [dateFrom, setDateFrom] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split('T')[0];
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
-  const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = useState<string>(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
 
   // Calculate previous date range for comparison (handles full calendar months or exact calendar day shifts)
   const prevPeriod = useMemo(() => {

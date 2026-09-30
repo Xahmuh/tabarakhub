@@ -132,7 +132,7 @@ interface DeliveryCoverageProps {
 
 export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranchId, canCreateTask = false, branchView = false }) => {
   const advancedEnabled = isModuleEnabled('deliveryCoverageAdvanced');
-  const [preset, setPreset] = useState<CoveragePreset>('30d');
+  const [preset, setPreset] = useState<CoveragePreset>('today');
   const [customFrom, setCustomFrom] = useState(toDateKey(new Date()));
   const [customTo, setCustomTo] = useState(toDateKey(new Date()));
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(lockedBranchId ? [lockedBranchId] : []);

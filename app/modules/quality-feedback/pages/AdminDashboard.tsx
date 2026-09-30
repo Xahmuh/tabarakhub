@@ -42,14 +42,18 @@ interface Props {
 
 type Tab = 'analytics' | 'questions' | 'settings';
 type AnalyticsSection = 'summary' | 'trends' | 'responses';
+const getTodayDateKey = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
 
 export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
   const [activeTab, setActiveTab] = useState<Tab>('analytics');
   const [activeAnalyticsSection, setActiveAnalyticsSection] = useState<AnalyticsSection>('summary');
   const canManageQuestions = isManagerRole(userRole?.toLowerCase());
   const [filters, setFilters] = useState<DashboardFilters>({
-    dateFrom: '',
-    dateTo: '',
+    dateFrom: getTodayDateKey(),
+    dateTo: getTodayDateKey(),
     cluster: 'All',
     role: 'All',
     experience: 'All',
@@ -211,7 +215,7 @@ export const AdminDashboard: React.FC<Props> = ({ userRole, onBack }) => {
                   <option value="Supervisor">Supervisor</option>
                 </select>
               </label>
-              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', cluster: 'All', role: 'All', experience: 'All' })} className="h-10 w-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors flex items-center justify-center" title="Reset Filters">
+              <button onClick={() => setFilters({ dateFrom: getTodayDateKey(), dateTo: getTodayDateKey(), cluster: 'All', role: 'All', experience: 'All' })} className="h-10 w-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors flex items-center justify-center" title="Reset Filters">
                 <RefreshCw className="w-5 h-5" />
               </button>
             </div>

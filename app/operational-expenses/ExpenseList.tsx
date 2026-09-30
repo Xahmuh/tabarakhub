@@ -8,6 +8,10 @@ import { exportExpensesToExcel } from './utils/exportExpenses';
 import { PaginationControls } from '../shared';
 
 const PAGE_SIZE = 50;
+const getTodayDateKey = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
 
 interface ExpenseListProps {
   user: Branch;
@@ -24,8 +28,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({ user, isManager, canEd
   const [loading, setLoading] = useState(true);
   const [selectedBranch, setSelectedBranch] = useState<string>(isManager ? 'all' : user.id);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>(getTodayDateKey);
+  const [dateTo, setDateTo] = useState<string>(getTodayDateKey);
   const [receiptFilter, setReceiptFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -88,8 +92,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({ user, isManager, canEd
   const handleResetFilters = () => {
     if (isManager) setSelectedBranch('all');
     setSelectedCategory('all');
-    setDateFrom('');
-    setDateTo('');
+    setDateFrom(getTodayDateKey());
+    setDateTo(getTodayDateKey());
     setReceiptFilter('all');
     setSearchTerm('');
   };

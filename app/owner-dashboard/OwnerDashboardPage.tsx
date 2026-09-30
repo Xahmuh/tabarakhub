@@ -604,7 +604,7 @@ const AuditTimeline: React.FC<{
 export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, onBack }) => {
   const [language, setLanguage] = useState<OwnerDashboardLanguage>(getSavedOwnerDashboardLanguage);
   const [section, setSection] = useState<OwnerDashboardSection>('overview');
-  const [preset, setPreset] = useState<PeriodPreset>('month');
+  const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
   const [branchFilter, setBranchFilter] = useState<string | null>(null);

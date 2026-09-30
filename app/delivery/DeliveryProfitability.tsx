@@ -103,7 +103,7 @@ const buildRecommendations = (rows: DriverEfficiency[], outsidePct: number): str
 };
 
 export const DeliveryProfitability: React.FC<{ canEdit: boolean }> = ({ canEdit }) => {
-  const [preset, setPreset] = useState<PeriodPreset>('month');
+  const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
 

@@ -11,9 +11,10 @@ interface DriverDutyReportProps {
   selfOnly?: boolean;
 }
 
-type DutyPeriodPreset = 'this-month' | 'last-month' | 'all-time' | 'custom';
+type DutyPeriodPreset = 'today' | 'this-month' | 'last-month' | 'all-time' | 'custom';
 
 const PERIOD_OPTIONS: Array<{ id: DutyPeriodPreset; label: string }> = [
+  { id: 'today', label: 'Today' },
   { id: 'this-month', label: 'This month' },
   { id: 'last-month', label: 'Last month' },
   { id: 'all-time', label: 'All the time' },
@@ -37,6 +38,10 @@ const monthRangeFromKey = (monthKey: string) => {
 
 const getDutyRange = (preset: DutyPeriodPreset, customFrom: string, customTo: string) => {
   const now = new Date();
+  if (preset === 'today') {
+    const today = toDateKey(now);
+    return { from: today, to: today };
+  }
   if (preset === 'this-month') return { ...monthRangeFromKey(monthKeyFromDate(now)), to: toDateKey(now) };
   if (preset === 'last-month') {
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -67,6 +72,7 @@ const formatMonthLabel = (dateKey: string) => {
 };
 
 const dutyPeriodLabel = (preset: DutyPeriodPreset, from: string, to: string) => {
+  if (preset === 'today') return `Today (${from})`;
   if (preset === 'this-month') return `This month (${from} - ${to})`;
   if (preset === 'last-month') return `Last month (${from} - ${to})`;
   if (preset === 'all-time') return `All the time (${from} - ${to})`;
@@ -121,10 +127,10 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string; icon: Reac
 );
 
 export const DriverDutyReport: React.FC<DriverDutyReportProps> = ({ selfOnly = false }) => {
-  const initialMonth = monthRangeFromKey(monthKeyFromDate(new Date()));
-  const [preset, setPreset] = useState<DutyPeriodPreset>('this-month');
-  const [customFrom, setCustomFrom] = useState(initialMonth.from);
-  const [customTo, setCustomTo] = useState(initialMonth.to);
+  const initialToday = toDateKey(new Date());
+  const [preset, setPreset] = useState<DutyPeriodPreset>('today');
+  const [customFrom, setCustomFrom] = useState(initialToday);
+  const [customTo, setCustomTo] = useState(initialToday);
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [rows, setRows] = useState<DeliveryDriverDutyReportRow[]>([]);
