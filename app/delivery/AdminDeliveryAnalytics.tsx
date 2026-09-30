@@ -78,7 +78,7 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string }> = ({ lab
 );
 
 export const AdminDeliveryAnalytics: React.FC = () => {
-  const [preset, setPreset] = useState<PeriodPreset>('month');
+  const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
 
