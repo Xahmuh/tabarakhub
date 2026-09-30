@@ -1,8 +1,5 @@
 import React from 'react';
-import { pdf } from '@react-pdf/renderer';
 import { Branch, CAPA_Task, NHRA_Audit, Pharmacist_Appraisal, User } from '../types';
-import { NHRAReportDocument } from '../components/pdf/NHRAReportDocument';
-import { AppraisalReportDocument } from '../components/pdf/AppraisalReportDocument';
 
 /**
  * PDF Export Service (Section 7.4)
@@ -18,6 +15,10 @@ export async function generateNHRAReportPDF(
   supervisor: User,
   capas: CAPA_Task[] = []
 ): Promise<Blob> {
+  const [{ pdf }, { NHRAReportDocument }] = await Promise.all([
+    import('@react-pdf/renderer'),
+    import('../components/pdf/NHRAReportDocument')
+  ]);
   const doc = React.createElement(NHRAReportDocument, {
     audit,
     branch,
@@ -37,6 +38,10 @@ export async function generateAppraisalPDF(
   branch: Branch,
   supervisor?: User
 ): Promise<Blob> {
+  const [{ pdf }, { AppraisalReportDocument }] = await Promise.all([
+    import('@react-pdf/renderer'),
+    import('../components/pdf/AppraisalReportDocument')
+  ]);
   const doc = React.createElement(AppraisalReportDocument, {
     appraisal,
     pharmacist,

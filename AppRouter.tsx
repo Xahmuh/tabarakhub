@@ -41,7 +41,7 @@ const LeaveManagementHub = lazy(() => import('./app/leave-management/LeaveManage
 const DeliveryNotificationsPage = lazy(() => import('./app/notifications').then(m => ({ default: m.DeliveryNotificationsPage })));
 const PayrollModuleHub = lazy(() => import('./app/payroll').then(m => ({ default: m.PayrollModuleHub })));
 const AttendanceHub = lazy(() => import('./app/attendance/AttendanceHub').then(m => ({ default: m.AttendanceHub })));
-const TQPHHubView = lazy(() => import('./app/tqph').then(m => ({ default: m.TQPHHubView })));
+const TQPHHubView = lazy(() => import('./app/tqph/components/views/TQPHHubView').then(m => ({ default: m.TQPHHubView })));
 
 export type AppTab =
   | 'owner-dashboard'

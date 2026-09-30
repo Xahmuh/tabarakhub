@@ -68,6 +68,8 @@ type BranchScopedListOptions = {
 };
 
 const PAGE_SIZE = 1000;
+const SALES_LIST_COLUMNS = 'id,branch_id,pharmacist_id,pharmacist_name,product_id,product_name,agent_name,category,unit_price,quantity,total_value,lost_date,lost_hour,timestamp,is_manual,price_source,session_id,notes,alternative_given,internal_transfer,internal_code';
+const SHORTAGES_LIST_COLUMNS = 'id,branch_id,pharmacist_id,product_id,product_name,agent_name,status,pharmacist_name,timestamp,notes,internal_code,history';
 
 const normalizeTimestampBound = (value?: Date | string | null) => {
   if (!value) return null;
@@ -273,36 +275,70 @@ const fetchBranchScopedRows = async (
   const queryOptions = shouldSplitScope
     ? { ...options, branchIds: undefined }
     : options;
-  const allRecords: any[] = [];
   const maxRows = getMaxRows(options);
 
-  for (const scopedBranchId of branchIds) {
+  const fetchRowsForBranch = async (scopedBranchId: string | undefined, rowLimit: number) => {
+    const branchRecords: any[] = [];
     let cursor: { timestamp: string; id: string } | null = null;
     let hasMore = true;
-    while (hasMore && allRecords.length < maxRows) {
-      let query = supabaseClient.from(tableName).select('*');
+    while (hasMore && branchRecords.length < rowLimit) {
+      const columns = tableName === 'lost_sales' ? SALES_LIST_COLUMNS : SHORTAGES_LIST_COLUMNS;
+      let query = supabaseClient.from(tableName).select(columns);
       query = applyBranchScope(query, scopedBranchId, role, queryOptions);
       if (!query) break;
       query = applyTimestampBounds(query, queryOptions);
       query = applyKeysetCursor(query, cursor);
-      const currentPageSize = Math.min(PAGE_SIZE, maxRows - allRecords.length);
+      const currentPageSize = Math.min(PAGE_SIZE, rowLimit - branchRecords.length);
       const { data, error } = await query
         .order('timestamp', { ascending: false })
         .order('id', { ascending: false })
         .limit(currentPageSize);
       if (error) throw error;
-      if (!data || data.length === 0) {
+      const pageRows = (data || []) as any[];
+      if (pageRows.length === 0) {
         hasMore = false;
       } else {
-        allRecords.push(...data);
-        const last = data[data.length - 1];
-        if (data.length < currentPageSize || allRecords.length >= maxRows || !last?.timestamp || !last?.id) {
+        branchRecords.push(...pageRows);
+        const last = pageRows[pageRows.length - 1];
+        if (pageRows.length < currentPageSize || branchRecords.length >= rowLimit || !last?.timestamp || !last?.id) {
           hasMore = false;
         } else {
           cursor = { timestamp: last.timestamp, id: last.id };
         }
       }
     }
+
+    return branchRecords;
+  }
+
+  // Supervisor scopes can span many branches. Fetch complete branch scopes with
+  // bounded concurrency instead of paying one network round-trip per branch.
+  // Finite maxRows retains its previous global, branch-order semantics.
+  if (shouldSplitScope && !Number.isFinite(maxRows)) {
+    const branchResults: any[][] = new Array(branchIds.length);
+    let nextBranchIndex = 0;
+    let branchFetchFailed = false;
+    const workerCount = Math.min(4, branchIds.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (!branchFetchFailed) {
+        const branchIndex = nextBranchIndex++;
+        if (branchIndex >= branchIds.length) return;
+        try {
+          branchResults[branchIndex] = await fetchRowsForBranch(branchIds[branchIndex], maxRows);
+        } catch (error) {
+          branchFetchFailed = true;
+          throw error;
+        }
+      }
+    }));
+    return branchResults.flat();
+  }
+
+  const allRecords: any[] = [];
+  for (const scopedBranchId of branchIds) {
+    const remainingRows = maxRows - allRecords.length;
+    if (remainingRows <= 0) break;
+    allRecords.push(...await fetchRowsForBranch(scopedBranchId, remainingRows));
   }
 
   return allRecords;

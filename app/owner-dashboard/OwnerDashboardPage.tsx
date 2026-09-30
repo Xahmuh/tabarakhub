@@ -612,6 +612,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
   const [governorateFilter, setGovernorateFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [bundle, setBundle] = useState<OwnerDashboardBundle | null>(null);
   const [geometry, setGeometry] = useState<BlockGeometryDataset | null>(null);
   const [isGeometryLoading, setIsGeometryLoading] = useState(true);
@@ -627,6 +628,11 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
   const money = (value: number) => formatBhdForLanguage(value, language);
   const startTextClass = isArabic ? 'text-right' : 'text-left';
   const endTextClass = isArabic ? 'text-left' : 'text-right';
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     window.localStorage.setItem(OWNER_DASHBOARD_LANGUAGE_KEY, language);
@@ -656,7 +662,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       paymentType: paymentFilter as DeliveryPaymentType | null,
       driverId: driverFilter,
       governorate: governorateFilter as Governorate | null,
-      search
+      search: debouncedSearch
     })
       .then(data => { if (!cancelled) setBundle(data); })
       .catch(loadError => {
@@ -668,7 +674,7 @@ export const OwnerDashboardPage: React.FC<OwnerDashboardPageProps> = ({ user, on
       .finally(() => { if (!cancelled) setIsLoading(false); });
 
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, governorateFilter, search]);
+  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, governorateFilter, debouncedSearch]);
 
   const branchOptions = useMemo(
     () => (bundle?.branches || []).map(branch => ({ value: branch.id, label: branch.name, hint: branch.code })),

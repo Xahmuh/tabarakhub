@@ -50,7 +50,7 @@ import {
 import { BackToModulesButton, RevenueChart, OperationalTrendChart, ShortageTrendChart, DailyPerformanceCalendar, RangeDatePicker } from '../shared';
 import { PharmacistActivitySection } from './PharmacistActivitySection';
 import { supabase } from '../../lib/supabase';
-import { LostSale, Branch, Product, Shortage } from '../../types';
+import { LostSale, Branch, Shortage } from '../../types';
 import { mapBranchName } from '../../utils/excelUtils';
 import { isModuleEnabled } from '../../config/clientConfig';
 import { isManagerRole } from '../../lib/access';
@@ -218,7 +218,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
 
   const cleanName = (name: string) => name?.toLowerCase().trim().replace(/\s+/g, ' ') || '';
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const branchListRef = useRef<Branch[]>([]);
+  const supervisorBranchIdsRef = useRef<string[] | null>(null);
   const isSupervisorRole = user.role === 'supervisor';
   const supervisorUsesAssignedScope = isSupervisorRole && user.supervisorScopeMode !== 'all_zones';
   const isCanSelectBranch = isManagerRole(user.role) || user.role === 'owner' || user.role === 'warehouse' || isSupervisorRole;
@@ -391,7 +392,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       const activeBranchId = isCanSelectBranch ? selectedBranch : user.id;
       const { start, end } = getDateRange(dateType, startDate, endDate);
       const supervisorBranchIds = supervisorUsesAssignedScope && activeBranchId === 'all'
-        ? await getSupervisorBranchIds()
+        ? (supervisorBranchIdsRef.current ?? await getSupervisorBranchIds())
         : undefined;
 
       if (supervisorUsesAssignedScope && activeBranchId === 'all' && supervisorBranchIds?.length === 0) {
@@ -417,18 +418,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
       };
       let rawData: LostSale[];
       let rawShortages: Shortage[];
-      try {
-        const toDateParam = (value: Date | null, fallback: Date) =>
-          toLocalDateKey(value || fallback);
-        const dateFrom = toDateParam(start, new Date('1900-01-01T00:00:00.000Z'));
-        const dateTo = toDateParam(end, new Date());
-        const kpiBranchIds = activeBranchId === 'all'
-          ? (supervisorBranchIds && supervisorBranchIds.length > 0
-            ? supervisorBranchIds
-            : (await supabase.branches.list()).filter(branch => branch.role === 'branch').map(branch => branch.id))
-          : [activeBranchId];
+      const toDateParam = (value: Date | null, fallback: Date) =>
+        toLocalDateKey(value || fallback);
+      const dateFrom = toDateParam(start, new Date('1900-01-01T00:00:00.000Z'));
+      const dateTo = toDateParam(end, new Date());
+      const kpiBranchIds = activeBranchId === 'all'
+        ? (supervisorBranchIds && supervisorBranchIds.length > 0
+          ? supervisorBranchIds
+          : (branchListRef.current.length > 0
+            ? branchListRef.current.map(branch => branch.id)
+            : (await supabase.branches.list()).filter(branch => branch.role === 'branch').map(branch => branch.id)))
+        : [activeBranchId];
 
-        const kpiResults = await Promise.all(kpiBranchIds.map(async branchId => {
+      const [kpiResults, salesResult, shortagesResult] = await Promise.all([
+        Promise.all(kpiBranchIds.map(async branchId => {
           const { data, error } = await supabase.client.rpc('get_dashboard_kpis', {
             p_branch_id: branchId,
             p_date_from: dateFrom,
@@ -436,41 +439,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
           });
           if (error) throw error;
           return data as DashboardKpiSnapshot;
-        }));
+        })).catch(error => { throw new Error(`Could not load dashboard KPIs: ${getUnknownErrorMessage(error)}`); }),
+        supabase.sales.list(activeBranchId, user.role, listOptions)
+          .catch(error => { throw new Error(`Could not load lost sales: ${getUnknownErrorMessage(error)}`); }),
+        supabase.shortages.list(activeBranchId, user.role, listOptions)
+          .catch(error => { throw new Error(`Could not load shortages: ${getUnknownErrorMessage(error)}`); })
+      ]);
+      rawData = salesResult;
+      rawShortages = shortagesResult;
 
-        const shortageByDay = new Map<string, number>();
-        const mergedKpis = kpiResults.reduce<DashboardKpiSnapshot>((acc, item) => {
-          acc.total_shortages += Number(item.total_shortages) || 0;
-          acc.total_lost_sales += Number(item.total_lost_sales) || 0;
-          acc.total_products += Number(item.total_products) || 0;
-          (item.shortage_by_day || []).forEach(day => {
-            shortageByDay.set(day.date, (shortageByDay.get(day.date) || 0) + (Number(day.count) || 0));
-          });
-          return acc;
-        }, {
-          total_shortages: 0,
-          total_lost_sales: 0,
-          total_products: 0,
-          shortage_by_day: []
+      const shortageByDay = new Map<string, number>();
+      const mergedKpis = kpiResults.reduce<DashboardKpiSnapshot>((acc, item) => {
+        acc.total_shortages += Number(item.total_shortages) || 0;
+        acc.total_lost_sales += Number(item.total_lost_sales) || 0;
+        acc.total_products += Number(item.total_products) || 0;
+        (item.shortage_by_day || []).forEach(day => {
+          shortageByDay.set(day.date, (shortageByDay.get(day.date) || 0) + (Number(day.count) || 0));
         });
-        mergedKpis.shortage_by_day = Array.from(shortageByDay.entries())
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([date, count]) => ({ date, count }));
-        setDashboardKpis(mergedKpis);
-      } catch (error) {
-        throw new Error(`Could not load dashboard KPIs: ${getUnknownErrorMessage(error)}`);
-      }
-      try {
-        rawData = await supabase.sales.list(activeBranchId, user.role, listOptions);
-      } catch (error) {
-        throw new Error(`Could not load lost sales: ${getUnknownErrorMessage(error)}`);
-      }
-      try {
-        rawShortages = await supabase.shortages.list(activeBranchId, user.role, listOptions);
-      } catch (error) {
-        throw new Error(`Could not load shortages: ${getUnknownErrorMessage(error)}`);
-      }
-
+        return acc;
+      }, {
+        total_shortages: 0,
+        total_lost_sales: 0,
+        total_products: 0,
+        shortage_by_day: []
+      });
+      mergedKpis.shortage_by_day = Array.from(shortageByDay.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count }));
+      setDashboardKpis(mergedKpis);
       // Store raw data for calculations within the selected dashboard range.
       setAllSales(rawData);
       setAllShortages(rawShortages);
@@ -500,16 +496,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
   useEffect(() => {
     const initializeSystem = async () => {
       try {
-        const [branchList, productList, zoneList] = await Promise.all([
+        const [branchList, zoneList] = await Promise.all([
           supabase.branches.list(),
-          supabase.products.list(user.id),
           supervisorUsesAssignedScope ? supabase.permissions.listBranchZones() : Promise.resolve([])
         ]);
         const supervisorBranchIds = supervisorUsesAssignedScope
           ? new Set(zoneList.filter(zone => zone.isActive).flatMap(zone => zone.branchIds || []))
           : null;
-        setBranches(branchList.filter(b => b.role === 'branch' && (!supervisorBranchIds || supervisorBranchIds.has(b.id))));
-        setProducts(productList);
+        const visibleBranches = branchList.filter(b => b.role === 'branch' && (!supervisorBranchIds || supervisorBranchIds.has(b.id)));
+        branchListRef.current = visibleBranches;
+        supervisorBranchIdsRef.current = supervisorBranchIds ? Array.from(supervisorBranchIds) : null;
+        setBranches(visibleBranches);
         if (supervisorBranchIds && selectedBranch !== 'all' && !supervisorBranchIds.has(selectedBranch)) {
           setSelectedBranch('all');
         }
@@ -527,19 +524,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     };
     initializeSystem();
 
+    // Batch local and Realtime notifications so one burst causes one full refresh.
+    let realtimeSyncTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleDashboardSync = () => {
+      if (realtimeSyncTimer) clearTimeout(realtimeSyncTimer);
+      realtimeSyncTimer = setTimeout(() => {
+        realtimeSyncTimer = null;
+        void syncDashboardData();
+      }, 300);
+    };
+
     // Real-time Update Listener
     const channel = supabase.client
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lost_sales' }, () => {
-        syncDashboardData();
+        scheduleDashboardSync();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shortages' }, () => {
-        syncDashboardData();
+        scheduleDashboardSync();
       })
       .subscribe();
 
     // Local Event Listener for Instant Feedback
-    const handleLocalUpdate = () => syncDashboardData();
+    const handleLocalUpdate = () => scheduleDashboardSync();
     window.addEventListener('tabarak_sales_updated', handleLocalUpdate);
     window.addEventListener('tabarak_shortages_updated', handleLocalUpdate);
 
@@ -555,6 +562,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, permissions,
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
+      if (realtimeSyncTimer) clearTimeout(realtimeSyncTimer);
       supabase.client.removeChannel(channel);
       window.removeEventListener('tabarak_sales_updated', handleLocalUpdate);
       window.removeEventListener('tabarak_shortages_updated', handleLocalUpdate);
