@@ -128,18 +128,20 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       governorate: governorateFilter || undefined
     }).then(data => {
       if (cancelled) return;
-      const branchNames = new Map(branches.map(branch => [branch.id, branch.name]));
-      setOrders(data.map(order => ({
-        ...order,
-        branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch'
-      })));
+      setOrders(data);
     })
       .catch(e => { console.error('Analytics load failed', e); if (!cancelled) setOrders([]); })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter, branches]);
+  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter]);
 
-  const filteredOrders = orders;
+  const filteredOrders = useMemo(() => {
+    const branchNames = new Map(branches.map(branch => [branch.id, branch.name]));
+    return orders.map(order => ({
+      ...order,
+      branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch'
+    }));
+  }, [orders, branches]);
 
   const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
   const external = useMemo(
