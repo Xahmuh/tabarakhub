@@ -68,7 +68,7 @@ type BranchScopedListOptions = {
 };
 
 const PAGE_SIZE = 1000;
-const SALES_LIST_COLUMNS = 'id,branch_id,pharmacist_id,pharmacist_name,product_id,product_name,agent_name,category,unit_price,quantity,total_value,lost_date,lost_hour,timestamp,is_manual,price_source,session_id,notes,alternative_given,internal_transfer,internal_code';
+const SALES_LIST_COLUMNS = 'id,branch_id,pharmacist_id,pharmacist_name,product_id,product_name,agent_name,category,unit_price,quantity,total_value,lost_date,lost_hour,timestamp,is_manual,price_source,notes,alternative_given,internal_transfer,internal_code';
 const SHORTAGES_LIST_COLUMNS = 'id,branch_id,pharmacist_id,product_id,product_name,agent_name,status,pharmacist_name,timestamp,notes,internal_code,history';
 
 const normalizeTimestampBound = (value?: Date | string | null) => {
