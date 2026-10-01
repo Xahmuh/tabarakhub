@@ -11,7 +11,8 @@
     "test:demand": "npx tsx app/delivery/components/__tests__/demandClassification.test.ts",
     "test:no-orders": "npx tsx app/delivery/components/__tests__/noOrdersClassification.test.ts",
     "test:money": "npx tsx utils/__tests__/money.test.ts",
-    "test": "npm run test:attendance && npm run test:demand && npm run test:no-orders && npm run test:money",
+    "test:access": "npx tsx lib/__tests__/access.test.ts",
+    "test": "npm run test:attendance && npm run test:demand && npm run test:no-orders && npm run test:money && npm run test:access",
     "preview": "vite preview"
   },
   "dependencies": {

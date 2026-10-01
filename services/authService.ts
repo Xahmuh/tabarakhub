@@ -93,7 +93,7 @@ export const authService = {
 
     const profileResult = await supabaseClient
       .from('app_user_profiles')
-      .select(`role, supervisor_scope_mode, branch:branches(${BRANCH_SELECT})`)
+      .select(`role, is_active, supervisor_scope_mode, branch:branches(${BRANCH_SELECT})`)
       .eq('user_id', data.session.user.id)
       .maybeSingle();
     let profile: any = profileResult.data;
@@ -102,14 +102,14 @@ export const authService = {
     if (profileError && /supervisor_scope_mode/i.test(profileError.message || '')) {
       const fallback = await supabaseClient
         .from('app_user_profiles')
-        .select(`role, branch:branches(${BRANCH_SELECT})`)
+        .select(`role, is_active, branch:branches(${BRANCH_SELECT})`)
         .eq('user_id', data.session.user.id)
         .maybeSingle();
       profile = fallback.data;
       profileError = fallback.error;
     }
 
-    if (profileError || !profile) {
+    if (profileError || !profile || !profile.is_active) {
       return { user: null, pharmacist: null, permissions: [] };
     }
 

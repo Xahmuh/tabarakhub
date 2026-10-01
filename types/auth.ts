@@ -4,7 +4,7 @@
 
 import type { Branch, Pharmacist } from './common';
 
-export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver' | 'worker';
+export type Role = 'owner' | 'admin' | 'manager' | 'accounts' | 'supervisor' | 'warehouse' | 'branch' | 'driver' | 'worker' | 'employee';
 
 export type SupervisorScopeMode = 'assigned_zones' | 'all_zones';
 

@@ -7,6 +7,7 @@ export type AdminCreateUserInput = {
   role: Role;
   branchId?: string | null;
   driverId?: string | null;
+  employeeId?: string | null;
   supervisorZoneIds?: string[];
   isActive?: boolean;
 };
@@ -192,6 +193,20 @@ export const permissionService = {
       createdAt: u.created_at
     }));
   },
+  listEmployeeLoginCandidates: async (): Promise<Array<{ id: string; code: string; name: string }>> => {
+    const [{ data: employees, error: employeeError }, { data: links, error: linksError }, { data: pending, error: pendingError }] = await Promise.all([
+      supabaseClient.from('employees').select('id, code, full_name, status').order('code'),
+      supabaseClient.from('app_user_employee_links').select('employee_id'),
+      supabaseClient.from('pending_employee_accounts').select('employee_id').eq('status', 'pending')
+    ]);
+    if (employeeError) throw employeeError;
+    if (linksError) throw linksError;
+    if (pendingError) throw pendingError;
+    const linkedIds = new Set([...(links || []).map(link => link.employee_id), ...(pending || []).map(account => account.employee_id)]);
+    return (employees || [])
+      .filter(employee => employee.status !== 'Inactive' && !linkedIds.has(employee.id))
+      .map(employee => ({ id: employee.id, code: employee.code, name: employee.full_name }));
+  },
   adminSetUserRole: async (userId: string, role: Role, branchId?: string | null, isActive = true) => {
     const { error } = await supabaseClient.rpc('app_admin_set_user_role', {
       target_user_id: userId,
@@ -240,6 +255,27 @@ export const permissionService = {
       await permissionService.setSupervisorZones(user.userId, input.supervisorZoneIds);
     }
     return user as AppUser;
+  },
+  adminStageEmployeeAccount: async (email: string, employeeId: string): Promise<void> => {
+    const { data, error } = await supabaseClient.functions.invoke('admin-create-user', {
+      body: { email, employeeId, role: 'employee' }
+    });
+    if (error) await throwFunctionError(error, 'Could not stage the employee account.');
+    if (data?.error) throw new Error(data.error);
+    if (!data?.pendingEmployeeAccountId) throw new Error('Employee enrollment was not confirmed.');
+  },
+  listPendingEmployeeAccounts: async (): Promise<Array<{ employeeId: string; email: string; stagedAt: string }>> => {
+    const { data, error } = await supabaseClient
+      .from('pending_employee_accounts')
+      .select('employee_id, email, staged_at')
+      .eq('status', 'pending')
+      .order('staged_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(account => ({
+      employeeId: account.employee_id,
+      email: account.email,
+      stagedAt: account.staged_at
+    }));
   },
   adminDeleteUser: async (userId: string): Promise<boolean> => {
     const { data, error } = await supabaseClient.functions.invoke('admin-delete-user', {

@@ -60,6 +60,7 @@ export const AccessControlSection: React.FC<{
     settings?: MaintenanceSettings | null;
 }> = ({ currentUserId, settings }) => {
     const [users, setUsers] = useState<AppUser[]>([]);
+    const [pendingEmployeeAccounts, setPendingEmployeeAccounts] = useState<Array<{ employeeId: string; email: string; stagedAt: string }>>([]);
     const [branches, setBranches] = useState<Branch[]>([]);
     const [zones, setZones] = useState<BranchZone[]>([]);
     const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
@@ -428,6 +429,10 @@ export const AccessControlSection: React.FC<{
                 permissionService.listBranchStaffAssignments()
             ]);
             setUsers(userList);
+            // Optional during schema-first rollout: older projects may not yet
+            // have the staging table. Existing Access Control must still open.
+            const staged = await permissionService.listPendingEmployeeAccounts().catch(() => []);
+            setPendingEmployeeAccounts(staged);
             setBranches(branchList);
             setRoleDefaults(defaults);
             setDrivers(driverList);
@@ -453,11 +458,21 @@ export const AccessControlSection: React.FC<{
     useEffect(() => { load(); }, []);
 
     const handleCreateUser = async () => {
+        let employeeCandidates: Array<{ id: string; code: string; name: string }> = [];
+        try {
+            employeeCandidates = await permissionService.listEmployeeLoginCandidates();
+        } catch (error: any) {
+            // The employee foundation has not yet been migrated in this environment.
+            console.warn('Employee login candidates are unavailable', error);
+        }
         const branchOptionsHtml = branchOptions.map(b =>
             `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`
         ).join('');
         const driverOptionsHtml = driverOptions.map(driver =>
             `<option value="${escapeHtml(driver.id)}">${escapeHtml(driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name)}${driver.authUserId ? ' (linked)' : ''}</option>`
+        ).join('');
+        const employeeOptionsHtml = employeeCandidates.map(employee =>
+            `<option value="${escapeHtml(employee.id)}">${escapeHtml(employee.code)} - ${escapeHtml(employee.name)}</option>`
         ).join('');
         const supervisorOptionsHtml = zoneOptions.map(zone => `
             <label class="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-bold text-slate-700">
@@ -474,7 +489,7 @@ export const AccessControlSection: React.FC<{
                         <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Email</label>
                         <input id="swal-new-email" type="email" placeholder="user@example.com" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
                     </div>
-                    <div>
+                    <div id="swal-new-password-wrap">
                         <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Temporary password</label>
                         <input id="swal-new-password" type="password" placeholder="Minimum 8 characters" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
                         <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">Share this password outside the app, then ask the user to change it.</p>
@@ -482,7 +497,7 @@ export const AccessControlSection: React.FC<{
                     <div>
                         <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Role</label>
                         <select id="swal-new-role" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
-                            ${ASSIGNABLE_ROLES.map(role => `<option value="${role}">${escapeHtml(ROLE_LABELS[role] || role)}</option>`).join('')}
+                            ${Array.from(new Set([...ASSIGNABLE_ROLES, 'employee' as Role])).map(role => `<option value="${role}">${escapeHtml(ROLE_LABELS[role] || role)}</option>`).join('')}
                         </select>
                     </div>
                     <div id="swal-new-branch-wrap" class="hidden">
@@ -500,6 +515,14 @@ export const AccessControlSection: React.FC<{
                         </select>
                         <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">The mobile app uses this link to show the driver's assigned delivery orders.</p>
                     </div>
+                    <div id="swal-new-employee-wrap" class="hidden">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Linked employee record</label>
+                        <select id="swal-new-employee" class="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold outline-none">
+                            <option value="">Select employee...</option>
+                            ${employeeOptionsHtml}
+                        </select>
+                        <p class="mt-1 text-[10px] font-bold leading-relaxed text-slate-400">Enrollment is staged without an Auth login or password. No employee can sign in until the personal portal and legacy data policies are secured.</p>
+                    </div>
                     <div id="swal-new-supervisor-wrap" class="hidden">
                         <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">Supervisor zones</label>
                         <div class="max-h-52 space-y-2 overflow-y-auto rounded-xl bg-slate-50 p-2">
@@ -513,23 +536,28 @@ export const AccessControlSection: React.FC<{
                 </div>
             `,
             showCancelButton: true,
-            confirmButtonText: 'Create user',
+            confirmButtonText: 'Create / stage account',
             confirmButtonColor: '#B91c1c',
             width: 560,
             didOpen: () => {
                 const roleInput = document.getElementById('swal-new-role') as HTMLSelectElement | null;
                 const branchWrap = document.getElementById('swal-new-branch-wrap');
                 const driverWrap = document.getElementById('swal-new-driver-wrap');
+                const employeeWrap = document.getElementById('swal-new-employee-wrap');
+                const passwordWrap = document.getElementById('swal-new-password-wrap');
                 const supervisorWrap = document.getElementById('swal-new-supervisor-wrap');
                 const activeInput = document.getElementById('swal-new-active') as HTMLInputElement | null;
                 const syncRoleFields = () => {
                     const role = roleInput?.value;
                     branchWrap?.classList.toggle('hidden', role !== 'branch');
                     driverWrap?.classList.toggle('hidden', role !== 'driver');
+                    employeeWrap?.classList.toggle('hidden', role !== 'employee');
+                    passwordWrap?.classList.toggle('hidden', role === 'employee');
                     supervisorWrap?.classList.toggle('hidden', role !== 'supervisor');
                     if (activeInput) {
-                        activeInput.checked = role === 'admin' ? true : activeInput.checked;
-                        activeInput.disabled = role === 'admin';
+                        if (role === 'admin') activeInput.checked = true;
+                        if (role === 'employee') activeInput.checked = false;
+                        activeInput.disabled = role === 'admin' || role === 'employee';
                     }
                 };
                 roleInput?.addEventListener('change', syncRoleFields);
@@ -541,14 +569,15 @@ export const AccessControlSection: React.FC<{
                 const role = (document.getElementById('swal-new-role') as HTMLSelectElement).value as Role;
                 const branchId = (document.getElementById('swal-new-branch') as HTMLSelectElement).value || null;
                 const driverId = (document.getElementById('swal-new-driver') as HTMLSelectElement).value || null;
-                const isActive = role === 'admin' ? true : (document.getElementById('swal-new-active') as HTMLInputElement).checked;
+                const employeeId = (document.getElementById('swal-new-employee') as HTMLSelectElement).value || null;
+                const isActive = role === 'admin' ? true : role === 'employee' ? false : (document.getElementById('swal-new-active') as HTMLInputElement).checked;
                 const supervisorZoneIds = Array.from(document.querySelectorAll<HTMLInputElement>('.swal-new-supervisor-zone:checked')).map(i => i.value);
 
                 if (!email || !email.includes('@')) {
                     Swal.showValidationMessage('Enter a valid email.');
                     return false;
                 }
-                if (password.length < 8) {
+                if (role !== 'employee' && password.length < 8) {
                     Swal.showValidationMessage('Temporary password must be at least 8 characters.');
                     return false;
                 }
@@ -560,8 +589,12 @@ export const AccessControlSection: React.FC<{
                     Swal.showValidationMessage('Driver users must be linked to a delivery driver.');
                     return false;
                 }
+                if (role === 'employee' && !employeeId) {
+                    Swal.showValidationMessage('Select an employee record before creating a personal login.');
+                    return false;
+                }
 
-                return { email, password, role, branchId, driverId, supervisorZoneIds, isActive };
+                return { email, password, role, branchId, driverId, employeeId, supervisorZoneIds, isActive };
             }
         });
 
@@ -569,9 +602,15 @@ export const AccessControlSection: React.FC<{
 
         setSavingKey('create-user');
         try {
-            await permissionService.adminCreateUser(value);
+            if (value.role === 'employee' && value.employeeId) {
+                await permissionService.adminStageEmployeeAccount(value.email, value.employeeId);
+            } else {
+                await permissionService.adminCreateUser(value);
+            }
             await load();
-            Swal.fire('User created', 'The login user was created and linked to the selected role.', 'success');
+            Swal.fire(value.role === 'employee' ? 'Enrollment staged' : 'User created', value.role === 'employee'
+                ? 'The employee record and email are staged. No Auth account or login credentials have been created yet.'
+                : 'The login user was created and linked to the selected role.', 'success');
         } catch (e: any) {
             Swal.fire('Create user failed', e?.message || 'Could not create the user.', 'error');
         } finally {
@@ -1522,10 +1561,24 @@ export const AccessControlSection: React.FC<{
                         </div>
                         {disabledUserCount > 0 && (
                             <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-bold leading-5 text-amber-800">
-                                {disabledUserCount} disabled login{disabledUserCount === 1 ? '' : 's'} are currently blocked from accessing the dashboard.
+                                {disabledUserCount} disabled login{disabledUserCount === 1 ? '' : 's'} are blocked by the application sign-in guard. Database access still depends on each table's RLS policy.
                             </div>
                         )}
                     </section>
+
+                    {pendingEmployeeAccounts.length > 0 && (
+                        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                            <h3 className="text-sm font-black text-amber-950">Pending employee enrollments ({pendingEmployeeAccounts.length})</h3>
+                            <p className="mt-1 text-xs font-semibold text-amber-800">Staged only. These employees have no Auth login or password yet.</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {pendingEmployeeAccounts.map(account => (
+                                    <span key={account.employeeId} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-950">
+                                        {account.email}
+                                    </span>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     {/* User Search & Filter Bar */}
                     <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">

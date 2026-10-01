@@ -2,9 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCorsPreflight, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
-type AssignableRole = "admin" | "owner" | "branch" | "supervisor" | "warehouse" | "accounts" | "driver";
+type AssignableRole = "admin" | "owner" | "branch" | "supervisor" | "warehouse" | "accounts" | "driver" | "employee";
 
-const assignableRoles: AssignableRole[] = ["admin", "owner", "branch", "supervisor", "warehouse", "accounts", "driver"];
+const assignableRoles: AssignableRole[] = ["admin", "owner", "branch", "supervisor", "warehouse", "accounts", "driver", "employee"];
 
 const friendlyDatabaseError = (message: string | undefined, role?: string) => {
   const normalized = message || "Database update failed";
@@ -87,6 +87,7 @@ serve(async (req) => {
   const role = String(body.role || "") as AssignableRole;
   const branchId = body.branchId ? String(body.branchId) : null;
   const driverId = body.driverId ? String(body.driverId) : null;
+  const employeeId = body.employeeId ? String(body.employeeId) : null;
   const requestedIsActive = body.isActive !== false;
   const supervisorBranchIds = Array.isArray(body.supervisorBranchIds)
     ? body.supervisorBranchIds.map((id: unknown) => String(id)).filter(Boolean)
@@ -96,15 +97,16 @@ serve(async (req) => {
     return json({ error: "Valid email is required" }, 400);
   }
 
-  if (password.length < 8) {
-    return json({ error: "Temporary password must be at least 8 characters" }, 400);
-  }
-
   if (!assignableRoles.includes(role)) {
     return json({ error: "Invalid role" }, 400);
   }
 
-  const isActive = role === "admin" ? true : requestedIsActive;
+  if (role !== "employee" && password.length < 8) {
+    return json({ error: "Temporary password must be at least 8 characters" }, 400);
+  }
+
+  // Personal portals are enabled only after their row-scoped policies ship.
+  const isActive = role === "admin" ? true : role === "employee" ? false : requestedIsActive;
 
   if (role === "branch" && !branchId) {
     return json({ error: "Branch role requires a linked branch" }, 400);
@@ -112,6 +114,10 @@ serve(async (req) => {
 
   if (role === "driver" && !driverId) {
     return json({ error: "Driver role requires a linked delivery driver" }, 400);
+  }
+
+  if (role === "employee" && !employeeId) {
+    return json({ error: "Employee role requires a linked employee record" }, 400);
   }
 
   const branchIdsToCheck = role === "branch"
@@ -146,6 +152,35 @@ serve(async (req) => {
     if (driverError) return json({ error: driverError.message }, 400);
     if (!driverRow?.is_active) return json({ error: "Selected delivery driver is inactive or unavailable" }, 400);
     if (driverRow.auth_user_id) return json({ error: "Selected delivery driver is already linked to a login user" }, 400);
+  }
+
+  if (role === "employee") {
+    const { data: employeeRow, error: employeeError } = await supabase
+      .from("employees")
+      .select("id, status")
+      .eq("id", employeeId)
+      .maybeSingle();
+    if (employeeError) return json({ error: employeeError.message }, 400);
+    if (!employeeRow || employeeRow.status === "Inactive") {
+      return json({ error: "Selected employee is inactive or unavailable" }, 400);
+    }
+    const { data: existingLink, error: linkLookupError } = await supabase
+      .from("app_user_employee_links")
+      .select("user_id")
+      .eq("employee_id", employeeId)
+      .maybeSingle();
+    if (linkLookupError) return json({ error: linkLookupError.message }, 400);
+    if (existingLink) return json({ error: "Selected employee already has a login" }, 409);
+
+    // A disabled app profile still receives a valid Supabase Auth token and
+    // could reach legacy authenticated-wide policies. Stage identity only.
+    const { data: pending, error: stageError } = await supabase
+      .from("pending_employee_accounts")
+      .insert({ employee_id: employeeId, email, staged_by: requester.id })
+      .select("id")
+      .single();
+    if (stageError) return json({ error: stageError.message }, 409);
+    return json({ pendingEmployeeAccountId: pending.id, employeeId, email, status: "pending" }, 201);
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -210,6 +245,17 @@ serve(async (req) => {
     }
   }
 
+  if (role === "employee" && employeeId) {
+    const { error: employeeLinkError } = await supabase
+      .from("app_user_employee_links")
+      .insert({ user_id: userId, employee_id: employeeId, linked_by: requester.id });
+    if (employeeLinkError) {
+      await supabase.from("app_user_profiles").delete().eq("user_id", userId);
+      await supabase.auth.admin.deleteUser(userId);
+      return json({ error: employeeLinkError.message }, 400);
+    }
+  }
+
   return json({
     user: {
       userId,
@@ -217,6 +263,7 @@ serve(async (req) => {
       role,
       branchId: role === "branch" ? branchId : null,
       driverId: role === "driver" ? driverId : null,
+      employeeId: role === "employee" ? employeeId : null,
       isActive,
       createdAt: created.user.created_at,
     },

@@ -1,6 +1,6 @@
 import { FeaturePermission, Role, RolePermission } from '../types';
 
-export const ALL_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver', 'worker'];
+export const ALL_ROLES: Role[] = ['admin', 'owner', 'branch', 'supervisor', 'warehouse', 'accounts', 'driver', 'worker', 'employee'];
 
 const BASE_ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -10,7 +10,8 @@ const BASE_ROLE_LABELS: Record<string, string> = {
   warehouse: 'Warehouse',
   accounts: 'Accounts',
   driver: 'Driver',
-  worker: 'Worker'
+  worker: 'Worker',
+  employee: 'Employee'
 };
 
 export const ROLE_LABELS: Record<Role, string> = new Proxy(BASE_ROLE_LABELS, {
@@ -55,10 +56,6 @@ export const resolveAccessLevel = (
 ): AccessLevel => {
   if (isAdminRole(role)) return 'edit';
 
-  // 1. Explicit user override for this feature takes highest precedence
-  const override = overrides?.find(p => p.featureName === feature);
-  if (override) return override.accessLevel;
-
   // Hard boundary: Branch role must never access payroll
   if (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll' || feature.startsWith('payroll:'))) {
     return 'none';
@@ -68,6 +65,10 @@ export const resolveAccessLevel = (
   if (role === 'branch' && (feature === 'tqph' || feature.startsWith('tqph:') || feature.startsWith('tqph_'))) {
     return 'none';
   }
+
+  // User overrides may narrow a hard boundary, but must not grant past it.
+  const override = overrides?.find(p => p.featureName === feature);
+  if (override) return override.accessLevel;
 
   // Hard boundary: Branch role access for Operational Cash Expenses
   if (role === 'branch') {
