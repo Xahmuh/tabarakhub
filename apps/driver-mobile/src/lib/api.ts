@@ -289,28 +289,18 @@ const mapMobileAppSettings = (row: any): DriverMobileAppSettings => ({
 
 export const driverApi = {
   signIn: async (identifier: string, password: string) => {
-    const rawIdentifier = identifier.trim();
-    let email = rawIdentifier.toLowerCase();
-
-    if (!rawIdentifier.includes('@')) {
-      const { data, error } = await supabase.rpc('app_driver_resolve_login_identifier', {
-        p_identifier: rawIdentifier
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Could not find this driver code.');
-      }
-
-      email = String(data || '').trim().toLowerCase();
+    const { data, error } = await supabase.functions.invoke('driver-login', {
+      body: { identifier: identifier.trim(), password }
+    });
+    if (error || !data?.access_token || !data?.refresh_token) {
+      throw new Error('Invalid login credentials');
     }
 
-    if (!email) throw new Error('Email ID or driver code is required.');
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token
     });
-    if (error) throw error;
+    if (sessionError) throw sessionError;
   },
 
   signOut: async () => {
