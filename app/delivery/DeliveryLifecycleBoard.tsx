@@ -7,6 +7,7 @@ import {
   PackageCheck,
   RefreshCw,
   Route,
+  Search,
   Truck,
   XCircle
 } from 'lucide-react';
@@ -46,6 +47,7 @@ const STATUS_META: Record<DeliveryLifecycleStatus, { label: string; className: s
 };
 
 const STATUS_ORDER: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
+type DispatchView = 'all' | 'recorded' | 'assigned' | 'picked_up' | 'closed';
 
 const PAYMENT_COLLECTION_META: Record<DeliveryPaymentCollectionStatus, { label: string; className: string }> = {
   paid: { label: 'Paid', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
@@ -228,6 +230,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
   const [eventErrorMessage, setEventErrorMessage] = useState<string | null>(null);
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
+  const [dispatchView, setDispatchView] = useState<DispatchView>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
@@ -291,6 +295,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
   useEffect(() => {
     if (!focusOrderId) return;
     setHighlightedOrderId(focusOrderId);
+    setDispatchView('all');
+    setSearchQuery('');
     if (focusOrderDate) {
       setPreset('custom');
       setCustomFrom(focusOrderDate);
@@ -321,6 +327,26 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     [internalDispatchOrders]
   );
   const externalNoBlockCount = orders.length - internalDispatchOrders.length;
+  const dispatchViews = useMemo(() => [
+    { id: 'all' as const, label: 'All orders', count: internalDispatchOrders.length },
+    { id: 'recorded' as const, label: 'To assign', count: statusCounts.get('recorded') || 0 },
+    { id: 'assigned' as const, label: 'Awaiting pickup', count: statusCounts.get('assigned') || 0 },
+    { id: 'picked_up' as const, label: 'On the road', count: statusCounts.get('picked_up') || 0 },
+    { id: 'closed' as const, label: 'Closed', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) }
+  ], [internalDispatchOrders.length, statusCounts]);
+  const visibleDispatchOrders = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return internalDispatchOrders.filter(order => {
+      const matchesView = dispatchView === 'all'
+        || (dispatchView === 'closed' ? isClosedOrder(order) : order.deliveryStatus === dispatchView);
+      if (!matchesView) return false;
+      if (!query) return true;
+      return [
+        deliveryOrderNumber(order), order.blockNumber, order.driverName, order.branchName,
+        order.transferFromBranchName, order.transferToBranchName, order.paymentType
+      ].some(value => String(value || '').toLocaleLowerCase().includes(query));
+    });
+  }, [dispatchView, internalDispatchOrders, searchQuery]);
 
   const valueInMotion = useMemo(
     () => internalDispatchOrders
@@ -668,12 +694,42 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onChange={handlePeriodChange} />
-        <button onClick={load} className="btn-secondary text-[10px] uppercase tracking-widest" disabled={isLoading}>
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
-      </div>
+      <header className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 text-white shadow-sm print:hidden">
+        <div className="flex flex-wrap items-end justify-between gap-5 p-5 md:p-6">
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-red-300">Delivery operations / Dispatch</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight md:text-3xl">Move orders forward.</h2>
+            <p className="mt-2 text-xs font-medium text-slate-300">
+              {branch ? branch.name : 'All operational branches'} · {label}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-slate-900">
+              <PeriodFilter preset={preset} customFrom={customFrom} customTo={customTo} onChange={handlePeriodChange} />
+            </div>
+            <button type="button" onClick={() => load()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/20 px-3 text-xs font-bold text-white transition hover:bg-white/10 disabled:opacity-50" disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 border-t border-white/10 bg-white/5 sm:grid-cols-3 lg:grid-cols-5" aria-label="Dispatch stages">
+          {dispatchViews.map((view, index) => (
+            <button
+              key={view.id}
+              type="button"
+              onClick={() => setDispatchView(view.id)}
+              aria-pressed={dispatchView === view.id}
+              className={`min-w-0 border-r border-b border-white/10 px-4 py-3 text-left transition last:border-r-0 hover:bg-white/10 focus-visible:outline-white ${dispatchView === view.id ? 'bg-white/15 shadow-[inset_0_3px_0_#ef4444]' : ''}`}
+            >
+              <span className="font-mono text-[10px] text-slate-400">0{index + 1}</span>
+              <span className="mt-1 flex items-end justify-between gap-2">
+                <span className="text-xs font-bold leading-4 text-slate-200">{view.label}</span>
+                <span className="font-mono text-xl font-bold tabular-nums text-white">{view.count}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </header>
 
       {eventErrorMessage && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
@@ -693,27 +749,33 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
-        {dispatchKpis.map(kpi => (
-          <KpiCard
-            key={kpi.label}
-            label={kpi.label}
-            value={kpi.value}
-            sub={kpi.sub}
-            icon={kpi.icon}
-            tone={kpi.tone}
-          />
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-4">
+        {dispatchKpis.slice(0, 4).map((kpi, index) => (
+          <div key={kpi.label} className={`min-w-0 border-b border-r border-slate-100 px-4 py-3 lg:border-b-0 ${index === 0 ? 'bg-brand/5' : ''}`}>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500">{kpi.label}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <span className={`font-mono text-2xl font-bold tabular-nums ${index === 0 ? 'text-brand' : 'text-slate-950'}`}>{kpi.value}</span>
+              <span className="text-slate-400" aria-hidden="true">{kpi.icon}</span>
+            </div>
+            {kpi.sub && <p className="mt-0.5 truncate text-[11px] text-slate-500" title={kpi.sub}>{kpi.sub}</p>}
+          </div>
         ))}
       </div>
+      {dispatchKpis.length > 4 && (
+        <details className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <summary className="cursor-pointer text-xs font-bold text-slate-600 focus-visible:outline-brand">More operating metrics</summary>
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 lg:grid-cols-3">
+            {dispatchKpis.slice(4).map(kpi => <KpiCard key={kpi.label} {...kpi} />)}
+          </div>
+        </details>
+      )}
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="operational-panel p-4 md:p-5">
+      <section className="space-y-4">
+        <div className="operational-panel overflow-hidden p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Dispatch queue</h3>
-              <p className="mt-1 text-xs font-bold text-slate-400">
-                {branch ? branch.name : 'All operational branches'} - {label}
-              </p>
+              <h3 className="text-base font-black text-slate-900">Dispatch queue <span className="font-mono text-sm text-slate-400">/ {visibleDispatchOrders.length}</span></h3>
+              <p className="mt-1 text-xs font-medium text-slate-500">Find an order, then use its next action. Open details only when needed.</p>
               {externalNoBlockCount > 0 && (
                 <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-orange-600">
                   {externalNoBlockCount} external/no-block order{externalNoBlockCount === 1 ? '' : 's'} hidden from dispatch
@@ -727,15 +789,34 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
             )}
           </div>
 
+          <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-slate-100 pb-4">
+            <label className="relative block min-w-[220px] flex-1">
+              <span className="sr-only">Search dispatch orders</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+                placeholder="Search order, driver, block or branch"
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none"
+              />
+            </label>
+            <span className="font-mono text-[11px] text-slate-500" role="status">{visibleDispatchOrders.length} shown / {internalDispatchOrders.length} total</span>
+          </div>
+
           {isLoading ? (
             <div className="flex h-44 items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-slate-100 border-t-brand"></div>
             </div>
-          ) : internalDispatchOrders.length === 0 ? (
-            <p className="py-12 text-center text-xs font-bold text-slate-400">No internal driver dispatch orders in this period.</p>
+          ) : visibleDispatchOrders.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-12 text-center">
+              <p className="text-sm font-bold text-slate-700">No orders match this view.</p>
+              <p className="mt-1 text-xs text-slate-500">Try another stage, search term or date range.</p>
+              <button type="button" onClick={() => { setSearchQuery(''); setDispatchView('all'); }} className="mt-3 text-xs font-bold text-brand hover:underline">Show all orders</button>
+            </div>
           ) : (
-            <div className="space-y-2.5">
-              {internalDispatchOrders.map(order => {
+            <div className="space-y-2">
+              {visibleDispatchOrders.map(order => {
                 const canActOnOrder = canTransition
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
@@ -755,14 +836,14 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                 return (
                   <article
                     key={order.id}
-                    className={`rounded-lg border bg-white p-3 shadow-sm transition hover:border-brand/30 hover:bg-slate-50/40 hover:shadow-md ${
-                      isHighlightedOrder ? 'border-brand/30 ring-2 ring-brand/20' : 'border-slate-200'
+                    className={`overflow-hidden rounded-xl border border-l-4 bg-white shadow-sm transition hover:shadow-md ${
+                      isHighlightedOrder ? 'border-brand ring-2 ring-brand/20' : order.deliveryStatus === 'recorded' ? 'border-slate-200 border-l-brand' : order.deliveryStatus === 'picked_up' ? 'border-slate-200 border-l-amber-500' : order.deliveryStatus === 'assigned' ? 'border-slate-200 border-l-blue-500' : 'border-slate-200 border-l-slate-300'
                     }`}
                   >
-                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex flex-col gap-3 p-3.5 md:flex-row md:items-center md:justify-between md:gap-5 md:p-4">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-brand">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-mono text-xs font-bold text-brand">
                             {deliveryOrderNumber(order)}
                           </p>
                           {isBenefitPayOrder(order) && onOpenBenefitPayTransfer && (
@@ -784,23 +865,31 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                             {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
                           </span>
                           <StatusBadge status={order.deliveryStatus} />
+                          {isPendingCollectionOrder(order) && (
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${collectionValueBadgeClass(order)}`}>
+                              Collect {formatBhd(order.amountToCollectBhd)}
+                            </span>
+                          )}
                         </div>
-                        <p className="mt-1 break-words text-[13px] font-black leading-5 text-slate-950">{routeLabel}</p>
-                        <p className="mt-0.5 text-[11px] font-bold text-slate-500">
-                          {order.orderDate}{!branch ? ` - ${branchLabel}` : ''}
+                        <p className="mt-2 break-words text-sm font-black leading-5 text-slate-950">{routeLabel}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          {order.orderDate}{!branch ? ` · ${branchLabel}` : ''} · <span className={order.driverName ? 'text-slate-700' : 'font-bold text-brand'}>{order.driverName || 'Driver not assigned'}</span>
                         </p>
                       </div>
 
-                      <div className="flex shrink-0 flex-wrap items-center gap-1.5 lg:justify-end">
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left lg:text-right">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Value</p>
-                          <p className="mt-0.5 text-base font-black leading-none text-slate-950 tabular-nums">
-                            {formatBhd(order.valueBhd)}
-                          </p>
-                        </div>
+                      <div className="shrink-0 border-t border-slate-100 pt-2 md:min-w-[112px] md:border-l md:border-t-0 md:pl-4 md:pt-0 md:text-right">
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400">Order value</p>
+                        <p className="mt-1 font-mono text-lg font-bold tabular-nums text-slate-950">{formatBhd(order.valueBhd)}</p>
                       </div>
                     </div>
 
+                    <details className="group/details border-t border-slate-100 bg-slate-50/50">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 focus-visible:outline-brand md:px-4 [&::-webkit-details-marker]:hidden">
+                        <span>Payment, timing &amp; route details</span>
+                        <span className="ml-auto font-mono text-[10px] text-slate-400 group-open/details:hidden">Show +</span>
+                        <span className="ml-auto hidden font-mono text-[10px] text-slate-400 group-open/details:inline">Hide −</span>
+                      </summary>
+                      <div className="border-t border-slate-100 px-3.5 pb-3 pt-2 md:px-4">
                     {order.orderKind !== 'internal_transfer' && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${PAYMENT_COLLECTION_META[order.paymentCollectionStatus].className}`}>
@@ -856,16 +945,18 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                         <span>{lifecycleTimeFor(order) || '-'}</span>
                       </DispatchMetaItem>
                     </div>
+                      </div>
+                    </details>
 
                     {canTransition && (
-                      <div className="mt-2 flex flex-wrap justify-end gap-1.5 border-t border-slate-100 pt-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-3.5 py-2.5 md:px-4">
                         {nextStatuses.length === 0 ? (
                           canReturnOrder ? (
                             <button
                               type="button"
                               disabled={savingOrderId === order.id}
                               onClick={() => handleReturnOrder(order)}
-                              className="rounded-lg border border-brand/20 bg-brand/5 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/40 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="min-h-9 rounded-lg border border-brand/20 bg-brand/5 px-3 text-xs font-bold text-brand transition hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               {savingOrderId === order.id ? 'Saving' : 'Return'}
                             </button>
@@ -879,10 +970,10 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                               type="button"
                               disabled={!canAdvanceOrder || savingOrderId === order.id}
                               onClick={() => handleTransition(order, nextStatus)}
-                              className={`rounded-lg border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                              className={`min-h-9 rounded-lg border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
                                 nextStatus === 'cancelled'
-                                  ? 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100'
-                                  : 'border-slate-200 bg-white text-slate-600 hover:border-brand/30 hover:text-brand'
+                                  ? 'border-red-200 bg-white text-red-700 hover:bg-red-50'
+                                  : 'border-brand bg-brand text-white hover:brightness-110'
                               }`}
                             >
                               {savingOrderId === order.id ? 'Saving' : nextStatus === 'cancelled' ? 'Customer cancel' : STATUS_META[nextStatus].label}
@@ -898,11 +989,12 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
           )}
         </div>
 
-        <aside className="operational-panel p-4 md:p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Lifecycle trace</h3>
-            <p className="mt-1 text-xs font-bold text-slate-400">Append-only events after migration approval.</p>
-          </div>
+        <details className="operational-panel p-4 md:p-5">
+          <summary className="cursor-pointer text-sm font-black text-slate-800 focus-visible:outline-brand">
+            Lifecycle trace <span className="ml-2 font-mono text-xs text-slate-400">{recentEvents.length} recent events</span>
+          </summary>
+          <p className="mt-1 text-xs font-medium text-slate-500">Append-only events after migration approval.</p>
+          <div className="mt-4">
           {eventErrorMessage ? (
             <p className="rounded-lg border border-dashed border-amber-200 bg-amber-50 p-4 text-xs font-bold leading-5 text-amber-800">
               Event trace is pending until the local Phase 1 migration is approved and applied.
@@ -925,7 +1017,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
               ))}
             </div>
           )}
-        </aside>
+          </div>
+        </details>
       </section>
     </div>
   );

@@ -1,0 +1,11 @@
+# Mobile build artifacts and backend sources are not part of the Vite website.
+apps/
+wordpress-plugins/
+supabase/
+.agents/
+.codex/
+bahrain-geojson-main/
+.codex-tmp/
+node_modules/
+dist/
+.git/
