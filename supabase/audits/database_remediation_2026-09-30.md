@@ -46,3 +46,7 @@ The live catalog has nine `SECURITY DEFINER` functions executable by `anon`. Eig
 The ninth function, `app_driver_resolve_login_identifier(text)`, is the known email-disclosure risk and has a prepared post-rollout revoke. Neither `anon` nor `authenticated` can create objects in the `public` schema. All nine functions set a `search_path`; four use `public` and five use an empty path. There is no current evidence that `search_path` permits a caller-controlled object here, but the `public`-path functions merit review when their definitions change.
 
 On 2026-10-18 the advisor warning counts were 9 anonymous and 70 authenticated callable `SECURITY DEFINER` functions, 149 overlapping permissive-policy findings, 10 RLS initplan findings, and leaked-password protection disabled. These are findings to triage individually, not confirmed vulnerabilities or unused objects.
+
+### Legacy `manager` row detail
+
+The row is active, named `manager`, and has role `manager`. Its eight linked expense transactions, dated 2026-08-21 through 2026-09-06, are **all soft-deleted**; they cover Branch Maintenance, Fuel, Other, and Supplies. Four reference-sequence rows remain for dates from 2026-08-21 through 2026-09-16. No `app_user_profiles` row points to it. This narrows its apparent current use, but does not establish that deleting historical finance records and sequences is acceptable. Keep the row and its unvalidated constraint until its ownership and retention requirements are confirmed.
