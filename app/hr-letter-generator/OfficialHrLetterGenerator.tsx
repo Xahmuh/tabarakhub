@@ -1287,54 +1287,54 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   };
 
   return (
-    <div className="min-h-screen bg-[#fafafa] mesh-gradient-bg text-slate-900 flex flex-col font-sans selection:bg-brand/10 direction-ltr">
-      {/* Top Application Bar */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 px-4 lg:px-6 py-3 shrink-0 shadow-xs">
-        <div className="max-w-[1700px] mx-auto flex flex-wrap items-center justify-between gap-3">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-brand/10 direction-ltr">
+      {/* Top Application Header Bar */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 lg:px-8 py-3.5 shrink-0">
+        <div className="max-w-[1640px] mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* Brand & Title */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3.5">
             {onBack && (
               <button
                 onClick={onBack}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 transition-all cursor-pointer active:scale-95"
+                className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200/80 transition-all cursor-pointer active:scale-95"
                 title="Back to Workforce Directory"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-            <div className="w-10 h-10 rounded-2xl bg-brand/10 border border-brand/20 flex items-center justify-center text-brand shadow-2xs">
-              <Award className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+              <Award className="w-5 h-5 text-brand" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
-                  Official HR Letter & Corporate Identity Generator
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                  Official HR Letter &amp; Corporate Identity Generator
                 </h1>
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20">
-                  v2.5 Live
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/80">
+                  Official Suite
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Automated legal letters with NHRA verification, salary breakdown matrix, and corporate CR identity
+              <p className="text-xs text-slate-500 mt-0.5">
+                Standardized legal certificates, NHRA verification &amp; corporate CR letterhead
               </p>
             </div>
           </div>
 
-          {/* Quick Global Controls */}
+          {/* Global Document Settings & Export Actions */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Letter Document Output Language Switcher (Affects generated A4 letter only) */}
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
-                <Languages className="w-3.5 h-3.5 text-brand" />
-                <span>Letter Language:</span>
+            {/* Document Language Segmented Control */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+              <span className="text-[11px] font-semibold text-slate-500 pl-2.5 pr-1.5 flex items-center gap-1">
+                <Languages className="w-3.5 h-3.5 text-slate-400" />
+                <span>Language:</span>
               </span>
               <button
                 type="button"
                 onClick={() => handleLetterLanguageSwitch('en')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   letterLang === 'en'
-                    ? 'bg-brand text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 English
@@ -1342,77 +1342,77 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
               <button
                 type="button"
                 onClick={() => handleLetterLanguageSwitch('ar')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   letterLang === 'ar'
-                    ? 'bg-brand text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                عربي (Arabic)
+                عربي
               </button>
             </div>
 
-            {/* Gender Phrasing Switcher (Male / Female) */}
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-500 pl-2 pr-1 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-brand" />
-                <span>Gender / الجنس:</span>
+            {/* Gender Phrasing Segmented Control */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+              <span className="text-[11px] font-semibold text-slate-500 pl-2.5 pr-1.5 flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>Gender:</span>
               </span>
               <button
                 type="button"
                 onClick={() => handleGenderSwitch('male')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   letterGender === 'male'
-                    ? 'bg-brand text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Male phrasing (مصري / حامل / يعمل / طلبه)"
+                title="Male phrasing (مصري / حامل / يعمل)"
               >
-                Male (ذكر)
+                Male
               </button>
               <button
                 type="button"
                 onClick={() => handleGenderSwitch('female')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   letterGender === 'female'
-                    ? 'bg-brand text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Female phrasing (مصرية / حاملة / تعمل / طلبها)"
+                title="Female phrasing (مصرية / حاملة / تعمل)"
               >
-                Female (أنثى)
+                Female
               </button>
             </div>
 
-            {/* Without Seal & Signature Checkbox */}
+            <div className="h-5 w-px bg-slate-200 hidden sm:block mx-0.5" />
+
+            {/* Without Seal & Signature Toggle */}
             <label
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all border select-none ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all border select-none ${
                 withoutSealAndSignature
-                  ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  ? 'bg-amber-50/90 text-amber-800 border-amber-200'
+                  : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200/80'
               }`}
-              title="Hide digital seal and signature for pre-printed letterhead or physical ink stamping"
+              title="Hide digital seal and signature for physical stamping on pre-printed letterhead"
             >
               <input
                 type="checkbox"
                 checked={withoutSealAndSignature}
                 onChange={(e) => setWithoutSealAndSignature(e.target.checked)}
-                className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 focus:ring-offset-0 bg-white border-slate-300 accent-amber-600 cursor-pointer"
+                className="w-3.5 h-3.5 rounded text-slate-900 focus:ring-0 border-slate-300 accent-slate-900 cursor-pointer"
               />
-              <span className="whitespace-nowrap">
-                Without seal & signature
-              </span>
+              <span>No Digital Stamp</span>
             </label>
 
-            {/* Copy Text Button */}
+            {/* Copy Text */}
             <button
               type="button"
               onClick={handleCopyText}
-              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-              title="Copy letter text to clipboard"
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="Copy plain text to clipboard"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-              <span>{copied ? 'Copied!' : 'Copy Text'}</span>
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
 
             {/* Word Download */}
@@ -1420,1536 +1420,709 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
               type="button"
               onClick={handleDownloadWord}
               disabled={isDownloadingWord}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-brand to-red-700 hover:from-brand-hover hover:to-red-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-brand/20 active:scale-95 disabled:opacity-50"
-              title="Download official Microsoft Word document (.docx)"
+              className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+              title="Download Microsoft Word (.docx)"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>{isDownloadingWord ? 'Generating...' : 'Word (.docx)'}</span>
+              <Download className="w-3.5 h-3.5 text-brand" />
+              <span>{isDownloadingWord ? 'Exporting...' : 'Word (.docx)'}</span>
             </button>
 
-            {/* Print / Save PDF Button */}
+            {/* Print / Save PDF */}
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-800 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
-              title="Print directly or save as official PDF"
+              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              title="Print or save as official PDF"
             >
-              <Printer className="w-4 h-4 text-brand" />
-              <span>Print / Save PDF</span>
+              <Printer className="w-3.5 h-3.5 text-brand" />
+              <span>Print / PDF</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-[1700px] w-full mx-auto p-4 lg:p-6 space-y-6">
-        {/* Top 2-Column Split: Form Inputs (5 cols) & Live A4 Preview (7 cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* ================= LEFT COLUMN: FORM INPUTS & SELECTORS (5 COLS) ================= */}
+      {/* Main Balanced Workspace */}
+      <main className="flex-1 max-w-[1640px] w-full mx-auto px-4 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* ================= LEFT COLUMN: ORGANIZED CONFIGURATION PANEL (5 COLS) ================= */}
           <aside className="lg:col-span-5 space-y-5">
-          {/* Quick Presets Bar: Pharmacist / Others with Searchable Dropdown */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-black text-slate-900 flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-brand" />
-                <span>
-                  Quick Employee Presets: Pharmacists / Other Roles
+            {/* STEP 1: CORPORATE ENTITY & TEMPLATE TYPE */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                    1
+                  </span>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Corporate Identity &amp; Document Type
+                  </h2>
+                </div>
+                <span className="text-[11px] font-mono font-semibold text-slate-500 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200/70">
+                  CR: {selectedCr.cr_number}
                 </span>
-              </span>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                {isLoadingEmployees ? (
-                  <span className="flex items-center gap-1 text-amber-600 font-bold">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    <span>Syncing...</span>
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-mono">
-                    {employeesList.length} in Database
-                  </span>
-                )}
               </div>
-            </div>
 
-            {/* Category Filter Selector Buttons (Pharmacist / Others / All) */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setStaffCategoryFilter('Pharmacist');
-                  setIsEmployeeDropdownOpen(true);
-                }}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                  staffCategoryFilter === 'Pharmacist'
-                    ? 'bg-brand/10 border-brand text-brand shadow-xs shadow-brand/10 ring-1 ring-brand/20'
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <Pill className="w-3.5 h-3.5 text-brand shrink-0" />
-                  <span className="truncate">Pharmacists</span>
+              {/* Emitting Corporate Entity Selector */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Issuing Commercial Registration (CR)
+                  </label>
+                  {selectedCr.is_master && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold border border-amber-200/60">
+                      Master Entity
+                    </span>
+                  )}
                 </div>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
-                  staffCategoryFilter === 'Pharmacist' ? 'bg-brand text-white' : 'bg-slate-200/80 text-slate-700'
-                }`}>
-                  {pharmacistsCount}
-                </span>
-              </button>
+                <select
+                  value={selectedCrId}
+                  onChange={(e) => setSelectedCrId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all cursor-pointer"
+                >
+                  {registeredCrs.map(c => {
+                    const branchLabel = c.linked_branch_name ? ` [${c.linked_branch_name}]` : '';
+                    const arLabel = c.cr_name_ar ? ` — ${c.cr_name_ar}` : '';
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.cr_name} (CR: {c.cr_number}){arLabel}{branchLabel}
+                      </option>
+                    );
+                  })}
+                </select>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setStaffCategoryFilter('Others');
-                  setIsEmployeeDropdownOpen(true);
-                }}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                  staffCategoryFilter === 'Others'
-                    ? 'bg-indigo-50 border-indigo-400 text-indigo-700 shadow-xs shadow-indigo-100 ring-1 ring-indigo-200'
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate">Others</span>
-                </div>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
-                  staffCategoryFilter === 'Others' ? 'bg-indigo-600 text-white' : 'bg-slate-200/80 text-slate-700'
-                }`}>
-                  {othersCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStaffCategoryFilter('All');
-                  setIsEmployeeDropdownOpen(true);
-                }}
-                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                  staffCategoryFilter === 'All'
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <Globe2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span className="truncate">All Staff</span>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-200/80 text-slate-700 font-mono">
-                  {employeesList.length}
-                </span>
-              </button>
-            </div>
-
-            {/* Searchable Dropdown Menu Container */}
-            <div className="relative" ref={employeeDropdownRef}>
-              {/* Dropdown Trigger Box */}
-              <button
-                type="button"
-                onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 hover:border-brand/60 rounded-xl text-left transition-all flex items-center justify-between gap-2 cursor-pointer group shadow-2xs"
-              >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-7 h-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0 text-brand">
-                    <Search className="w-3.5 h-3.5" />
+                {/* Clean Entity Identity Summary Pill */}
+                <div className="px-3.5 py-2.5 bg-slate-50/60 border border-slate-200/60 rounded-xl flex items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 truncate">{selectedCr.cr_name}</p>
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                      {selectedCr.linked_branch_name ? `Branch: ${selectedCr.linked_branch_name} • ` : ''}
+                      Tel: {selectedCr.phone || '+973 33866650'}
+                    </p>
                   </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    {selectedEmployee ? (
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-slate-900 truncate">{selectedEmployee.full_name}</p>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                            {selectedEmployee.code}
+                  <div className="text-right shrink-0 dir-rtl">
+                    <p className="font-bold text-slate-800">{selectedCr.cr_name_ar || '-'}</p>
+                    <p className="text-[10px] font-mono text-slate-500">CR #{selectedCr.cr_number}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6 Official Document Templates Grid */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Select Letter Template
+                  </label>
+                  <span className="text-[11px] text-slate-400">6 Official Templates</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {DOCUMENT_TYPE_OPTIONS.map(doc => {
+                    const isSelected = letterType === doc.id;
+                    const DocIcon = doc.icon;
+                    return (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => setLetterType(doc.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer relative ${
+                          isSelected
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-sm'
+                            : 'bg-slate-50/60 hover:bg-slate-100/70 border-slate-200/80 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                            isSelected ? 'bg-white/15 text-white' : 'bg-white text-slate-600 border border-slate-200/80'
+                          }`}>
+                            <DocIcon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                            isSelected ? 'bg-white/15 text-slate-200' : 'bg-slate-200/70 text-slate-500'
+                          }`}>
+                            {doc.hintEn}
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-500 truncate">
-                          {selectedEmployee.category === 'Pharmacist'
-                            ? `Pharmacist • NHRA: ${selectedEmployee.salary_matrix?.nhraLicenseNo || 'Licensed'}`
-                            : (selectedEmployee.notes || selectedEmployee.category)}
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs font-bold text-slate-700 group-hover:text-slate-900 truncate">
-                          Choose employee from dropdown to autofill...
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {staffCategoryFilter === 'Pharmacist'
-                            ? 'Showing Pharmacists only'
-                            : staffCategoryFilter === 'Others'
-                            ? 'Showing Others only'
-                            : 'Showing All staff'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
-                  isEmployeeDropdownOpen ? 'rotate-180 text-brand' : ''
-                }`} />
-              </button>
 
-              {/* Dropdown Content Menu */}
-              {isEmployeeDropdownOpen && (
-                <div className="absolute top-full mt-2 left-0 right-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 ring-1 ring-black/5">
-                  {/* Search Input Box */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      autoFocus
-                      value={employeeSearchQuery}
-                      onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                      placeholder={
-                        staffCategoryFilter === 'Pharmacist'
-                          ? 'Search pharmacist by name, CPR, license...'
-                          : 'Search by name, CPR, code...'
-                      }
-                      className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 placeholder-slate-400 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand transition-all"
-                    />
-                    {employeeSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setEmployeeSearchQuery('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
+                        <div className="min-w-0 w-full">
+                          <p className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                            {doc.labelEn}
+                          </p>
+                          <p className={`text-[10px] truncate mt-0.5 dir-rtl text-left ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {doc.labelAr}
+                          </p>
+                        </div>
                       </button>
-                    )}
-                  </div>
-
-                  {/* Active Filter Pill indicator */}
-                  <div className="flex items-center justify-between px-1 text-[10px] text-slate-500">
-                    <span className="flex items-center gap-1 font-medium">
-                      <Filter className="w-3 h-3 text-brand" />
-                      <span>
-                        {staffCategoryFilter === 'Pharmacist'
-                          ? 'Pharmacists Only'
-                          : staffCategoryFilter === 'Others'
-                          ? 'Non-Pharmacists Only'
-                          : 'All Staff'}
-                      </span>
-                    </span>
-                    <span className="font-mono">{filteredEmployees.length} results</span>
-                  </div>
-
-                  {/* Employee Items List */}
-                  <div className="max-h-60 overflow-y-auto space-y-1 pr-0.5 custom-scrollbar">
-                    {filteredEmployees.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-400">
-                        No employee matches your search
-                      </div>
-                    ) : (
-                      filteredEmployees.map((emp) => {
-                        const isSelected = emp.id === selectedEmployeeId;
-                        const isPharm = emp.category === 'Pharmacist';
-                        return (
-                          <button
-                            key={emp.id}
-                            type="button"
-                            onClick={() => handleSelectEmployee(emp)}
-                            className={`w-full p-2 rounded-xl text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
-                              isSelected
-                                ? 'bg-brand/10 border border-brand/30 text-slate-900'
-                                : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-transparent'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                                isPharm ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                              }`}>
-                                {isPharm ? <Pill className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-bold text-slate-900 truncate">{emp.full_name}</p>
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                                    {emp.code}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] text-slate-500 truncate">
-                                  <span>CPR: {emp.cpr_number || emp.salary_matrix?.expatCpr || 'N/A'}</span>
-                                  {(emp.nationality || emp.salary_matrix?.nationality) && (
-                                    <span className="text-blue-600 font-medium">
-                                      • {resolveNationality(emp.nationality || emp.salary_matrix?.nationality, lang)}
-                                    </span>
-                                  )}
-                                  {isPharm && emp.salary_matrix?.nhraLicenseNo && (
-                                    <span className="text-brand font-mono">
-                                      NHRA: {emp.salary_matrix.nhraLicenseNo}
-                                    </span>
-                                  )}
-                                  {!isPharm && emp.notes && (
-                                    <span className="text-slate-400 truncate">• {emp.notes}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            {isSelected && (
-                              <CheckCircle2 className="w-4 h-4 text-brand shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Helper Notice / Confirmation */}
-            {selectedEmployee && (
-              <div className="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[10px] text-emerald-800 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>
-                    Data autofilled — all fields below remain 100% editable.
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedEmployeeId(null);
-                    setEmployeeSearchQuery('');
-                    setEmployeeName('');
-                    setCpr('');
-                    setPassport('');
-                    setNationality('');
-                    setJobTitle('');
-                    setNhraLicense('');
-                    setJoinDate('');
-                    setEndDate('');
-                    setBasicSalary(0);
-                    setHousingAllowance(0);
-                    setTransportationAllowance(0);
-                    setIncentiveBonus(0);
-                    setIsManualTotal(false);
-                    setManualTotalSalary(0);
-                  }}
-                  className="text-slate-500 hover:text-slate-800 underline text-[9px] cursor-pointer font-bold"
-                >
-                  Clear Selection
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Section 1: Corporate Entity & Letter Type Selector */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-4">
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-brand flex items-center gap-1.5">
-                <Building2 className="w-4 h-4" />
-                <span>1. Entity CR & Letter Type</span>
-              </h3>
-              <span className="text-[10px] text-slate-600 font-mono bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">CR: {selectedCr.cr_number}</span>
-            </div>
-
-            {/* Corporate Entity Dropdown */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                <span>Emitting Corporate Entity (CR):</span>
-                {selectedCr.is_master && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 font-bold border border-amber-200">
-                    Master Parent CR
-                  </span>
-                )}
-              </label>
-              <select
-                value={selectedCrId}
-                onChange={(e) => setSelectedCrId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand transition-all cursor-pointer shadow-2xs"
-              >
-                {registeredCrs.map(c => {
-                  const branchLabel = c.linked_branch_name ? ` [${c.linked_branch_name}]` : '';
-                  const arLabel = c.cr_name_ar ? ` | ${c.cr_name_ar}` : '';
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.cr_name} — (CR: {c.cr_number}){arLabel}{branchLabel}
-                    </option>
-                  );
-                })}
-              </select>
-              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 font-bold text-slate-800">
-                  <span className="uppercase text-slate-950 font-black text-xs">
-                    {selectedCr.cr_name}
-                  </span>
-                  <span className="text-right dir-rtl font-sans text-brand font-black">
-                    {selectedCr.cr_name_ar || '-'}
-                  </span>
-                </div>
-                {selectedCr.linked_branch_name && (
-                  <div className="text-[10px] text-slate-500">
-                    الفرع  المرتبط: <span className="font-bold text-slate-700">{selectedCr.linked_branch_name}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-[10px] text-slate-600 font-mono pt-1">
-                  <span className="font-bold text-brand bg-brand/10 px-2 py-0.5 rounded border border-brand/20">
-                    CR: {selectedCr.cr_number}
-                  </span>
-                  <span className="text-slate-500">{selectedCr.phone || '+973 33866650'}</span>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
 
-            {/* Document Type Selector: Searchable Dropdown & 6 Presets (History, Active job, Payroll, Approval, Banking, Travel) */}
-            <div className="space-y-2.5 pt-1" ref={docTypeDropdownRef}>
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-brand" />
-                  <span>Official Document Type:</span>
-                </label>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-mono">
-                  6 Official Templates
-                </span>
-              </div>
-
-              {/* Searchable Dropdown Combobox Trigger */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsDocTypeDropdownOpen(!isDocTypeDropdownOpen)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white border border-slate-200 hover:border-brand rounded-xl text-left transition-all flex items-center justify-between gap-2 cursor-pointer group shadow-2xs"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="w-7 h-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0 text-brand">
-                      {selectedDocOption?.icon ? <selectedDocOption.icon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                    </div>
-                    <div className="min-w-0 flex-1 text-left">
-                      <p className="text-xs font-black text-slate-900 truncate">
-                        {selectedDocOption?.labelEn}
-                      </p>
-                      <p className="text-[10px] text-slate-500 truncate">
-                        {selectedDocOption?.subEn}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
-                    isDocTypeDropdownOpen ? 'rotate-180 text-brand' : ''
-                  }`} />
-                </button>
-
-                {/* Searchable Dropdown Panel */}
-                {isDocTypeDropdownOpen && (
-                  <div className="absolute top-full mt-2 left-0 right-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 ring-1 ring-black/5">
-                    {/* Search Input */}
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        autoFocus
-                        value={docTypeSearchQuery}
-                        onChange={(e) => setDocTypeSearchQuery(e.target.value)}
-                        placeholder="Search document type (Travel, Banking, Payroll, etc.)..."
-                        className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 placeholder-slate-400 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand transition-all"
-                      />
-                      {docTypeSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setDocTypeSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Filter Pills */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px]">
-                      {['all', 'History', 'Active job', 'Payroll', 'Approval', 'Banking', 'Travel'].map(hint => (
-                        <button
-                          key={hint}
-                          type="button"
-                          onClick={() => setDocHintFilter(hint)}
-                          className={`px-2 py-0.5 rounded-lg font-bold shrink-0 transition-all cursor-pointer ${
-                            docHintFilter === hint
-                              ? 'bg-brand text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {hint === 'all' ? 'All' : hint}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Document Options List */}
-                    <div className="max-h-56 overflow-y-auto space-y-1 custom-scrollbar pr-0.5">
-                      {filteredDocTypes.length === 0 ? (
-                        <p className="p-3 text-center text-xs text-slate-400">
-                          No document type matches
-                        </p>
-                      ) : (
-                        filteredDocTypes.map(doc => {
-                          const isSelected = letterType === doc.id;
-                          const DocIcon = doc.icon;
-                          return (
-                            <button
-                              key={doc.id}
-                              type="button"
-                              onClick={() => {
-                                setLetterType(doc.id);
-                                setIsDocTypeDropdownOpen(false);
-                              }}
-                              className={`w-full p-2 rounded-xl text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
-                                isSelected
-                                  ? 'bg-brand/10 border border-brand/30 text-slate-900'
-                                  : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-transparent'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-brand">
-                                  <DocIcon className="w-4 h-4" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <span className="font-black text-xs text-slate-900 truncate">
-                                    {doc.labelEn}
-                                  </span>
-                                  <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                                    {doc.subEn}
-                                  </p>
-                                </div>
-                              </div>
-                              {isSelected && <CheckCircle2 className="w-4 h-4 text-brand shrink-0" />}
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Document Presets Grid (The 6 Cards matching HR Self Service) */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-                {DOCUMENT_TYPE_OPTIONS.map(doc => {
-                  const isSelected = letterType === doc.id;
-                  const DocIcon = doc.icon;
-                  return (
+              {/* Document Reference, Date & Addressee */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1 border-t border-slate-100">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">Reference Number</label>
                     <button
-                      key={doc.id}
                       type="button"
-                      onClick={() => setLetterType(doc.id)}
-                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative overflow-hidden ${
-                        isSelected
-                          ? 'bg-brand/[0.04] border-brand ring-2 ring-brand/20 shadow-xs'
-                          : 'bg-slate-50/70 hover:bg-slate-100/80 border-slate-200 text-slate-700'
-                      }`}
+                      onClick={() => setRefNo(generateRefNo())}
+                      className="text-[11px] text-slate-500 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors"
+                      title="Generate new reference number"
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${
-                          isSelected ? 'bg-brand text-white shadow-xs' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          <DocIcon className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-
-                      <div className="min-w-0 w-full">
-                        <p className={`text-xs font-bold truncate ${isSelected ? 'text-brand font-black' : 'text-slate-800'}`}>
-                          {doc.labelEn}
-                        </p>
-                        <p className="text-[9px] text-slate-500 truncate">
-                          {doc.subEn}
-                        </p>
-                      </div>
-
-                      {isSelected && (
-                        <div className="absolute top-1.5 right-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-brand" />
-                        </div>
-                      )}
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Reset</span>
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Ref No & Issue Date */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-slate-700">Ref No:</label>
-                  <button
-                    type="button"
-                    onClick={() => setRefNo(generateRefNo())}
-                    className="text-[10px] text-brand hover:underline cursor-pointer flex items-center gap-0.5"
-                    title="Regenerate Ref No"
-                  >
-                    <RefreshCw className="w-2.5 h-2.5" />
-                    <span>New</span>
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={refNo}
-                  onChange={(e) => setRefNo(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand transition-all shadow-2xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Issue Date:</label>
-                <input
-                  type="date"
-                  value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand transition-all shadow-2xs"
-                />
-              </div>
-            </div>
-
-            {/* Optional Addressee Header Input & Quick Presets */}
-            <div className="space-y-1.5 p-3 bg-slate-50/80 border border-slate-200/90 rounded-xl">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-brand" />
-                  <span>{isAr ? 'جهة الخطاب / الديباجة (افتراضي: إلى من يهمه الأمر):' : 'Addressee Header (Default: To Whom It May Concern):'}</span>
-                </label>
-                <span className="text-[10px] text-slate-500 font-medium">{isAr ? 'اختياري / قابل للتعديل' : 'Optional / Editable'}</span>
-              </div>
-              <input
-                type="text"
-                value={customAddressee}
-                onChange={(e) => setCustomAddressee(e.target.value)}
-                placeholder={defaultAddresseeHeader}
-                className="w-full px-3 py-1.5 bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
-              />
-              <div className="flex flex-wrap items-center gap-1 pt-1">
-                <span className="text-[10px] text-slate-400 font-bold mr-0.5">{isAr ? 'اختصارات:' : 'Presets:'}</span>
-                <button
-                  type="button"
-                  onClick={() => setCustomAddressee(isAr ? 'إلى من يهمه الأمر،' : 'To Whom It May Concern,')}
-                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
-                >
-                  {isAr ? 'إلى من يهمه الأمر،' : 'To Whom It May Concern,'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomAddressee(isAr ? 'إلى: الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA)' : 'To: National Health Regulatory Authority (NHRA)')}
-                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
-                >
-                  {isAr ? 'إلى: الهيئة الوطنية (NHRA)' : 'To: NHRA'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomAddressee(isAr ? 'إلى: وزارة الصحة' : 'To: Ministry of Health')}
-                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
-                >
-                  {isAr ? 'إلى: وزارة الصحة' : 'To: Ministry of Health'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomAddressee(isAr ? 'إلى: بنك البحرين الوطني (NBB)' : 'To: National Bank of Bahrain (NBB)')}
-                  className="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
-                >
-                  {isAr ? 'إلى: بنك البحرين الوطني' : 'To: NBB'}
-                </button>
-                {customAddressee.trim() && (
-                  <button
-                    type="button"
-                    onClick={() => setCustomAddressee('')}
-                    className="px-2 py-0.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-[10px] font-bold text-slate-700 transition-all cursor-pointer ml-auto"
-                  >
-                    {isAr ? 'إعادة للافتراضي' : 'Reset Default'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Employee Identity & NHRA Licensing */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-4">
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-brand flex items-center gap-1.5">
-                <User className="w-4 h-4" />
-                <span>2. Employee Identity & NHRA License</span>
-              </h3>
-              {nhraLicense.trim() && (
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                  NHRA Verified
-                </span>
-              )}
-            </div>
-
-            {/* Employee Full Name with Searchable Dropdown & Direct Database Picker */}
-            <div className="space-y-1.5" ref={section2DropdownRef}>
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-brand" />
-                  <span>Employee Full Name:</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-                    <Check className="w-3 h-3 text-emerald-600" />
-                    <span>Fully editable</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsSection2DropdownOpen(!isSection2DropdownOpen)}
-                    className="text-[10px] px-2 py-0.5 rounded-lg bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Search className="w-3 h-3" />
-                    <span>Employee DB</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isSection2DropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="relative flex items-center">
+                  </div>
                   <input
                     type="text"
-                    value={employeeName}
-                    onChange={(e) => setEmployeeName(e.target.value)}
-                    placeholder="Type employee name or pick from dropdown..."
-                    className="w-full px-3.5 py-2 pr-8 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand transition-all shadow-2xs"
+                    value={refNo}
+                    onChange={(e) => setRefNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 transition-all"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setIsSection2DropdownOpen(!isSection2DropdownOpen)}
-                    className="absolute right-2.5 text-slate-400 hover:text-brand cursor-pointer p-1"
-                    title="Open employee list"
-                  >
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSection2DropdownOpen ? 'rotate-180 text-brand' : ''}`} />
-                  </button>
                 </div>
 
-                {/* Section 2 Searchable Dropdown Menu */}
-                {isSection2DropdownOpen && (
-                  <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 ring-1 ring-black/5">
-                    {/* Category Filter Pills */}
-                    <div className="flex items-center justify-between gap-1 text-xs">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setStaffCategoryFilter('Pharmacist')}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                            staffCategoryFilter === 'Pharmacist'
-                              ? 'bg-brand text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          <Pill className="w-3 h-3 text-white" />
-                          <span>Pharmacists ({pharmacistsCount})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStaffCategoryFilter('Others')}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                            staffCategoryFilter === 'Others'
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          <Users className="w-3 h-3 text-white" />
-                          <span>Others ({othersCount})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStaffCategoryFilter('All')}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                            staffCategoryFilter === 'All'
-                              ? 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          <Globe2 className="w-3 h-3 text-white" />
-                          <span>All Staff</span>
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsSection2DropdownOpen(false)}
-                        className="text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">Issue Date</label>
+                  <input
+                    type="date"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+              </div>
 
-                    {/* Search Field */}
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        autoFocus
-                        value={employeeSearchQuery}
-                        onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                        placeholder={
-                          staffCategoryFilter === 'Pharmacist'
-                            ? 'Filter pharmacists...'
-                            : 'Filter employees...'
-                        }
-                        className="w-full pl-8 pr-7 py-1.5 bg-slate-50 text-slate-900 text-xs placeholder-slate-400 rounded-lg border border-slate-200 outline-none focus:border-brand focus:bg-white"
-                      />
-                      {employeeSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setEmployeeSearchQuery('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+              {/* Addressee Override */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Addressee Header <span className="text-slate-400 font-normal">(Optional override)</span>
+                  </label>
+                  {customAddressee.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomAddressee('')}
+                      className="text-[11px] text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                    >
+                      Use Default
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={customAddressee}
+                  onChange={(e) => setCustomAddressee(e.target.value)}
+                  placeholder={defaultAddresseeHeader}
+                  className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { label: isAr ? 'إلى من يهمه الأمر' : 'To Whom It May Concern', val: isAr ? 'إلى من يهمه الأمر،' : 'To Whom It May Concern,' },
+                    { label: 'NHRA', val: isAr ? 'إلى: الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA)' : 'To: National Health Regulatory Authority (NHRA)' },
+                    { label: isAr ? 'وزارة الصحة' : 'Ministry of Health', val: isAr ? 'إلى: وزارة الصحة' : 'To: Ministry of Health' },
+                    { label: 'NBB Bank', val: isAr ? 'إلى: بنك البحرين الوطني (NBB)' : 'To: National Bank of Bahrain (NBB)' }
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => setCustomAddressee(item.val)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100/80 hover:bg-slate-200/70 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-                    {/* Employee List */}
-                    <div className="max-h-48 overflow-y-auto space-y-1 custom-scrollbar pr-0.5">
-                      {filteredEmployees.length === 0 ? (
-                        <p className="p-3 text-center text-xs text-slate-400">
-                          No matches found
-                        </p>
+            {/* STEP 2: EMPLOYEE DIRECTORY & IDENTITY DETAILS */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                    2
+                  </span>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Employee Identity &amp; Service Record
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {nhraLicense.trim() && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200/70">
+                      NHRA Licensed
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {isLoadingEmployees ? 'Syncing...' : `${employeesList.length} Staff`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Unified Quick Employee Directory Lookup */}
+              <div className="space-y-2.5 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70" ref={employeeDropdownRef}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Autofill from Workforce Directory</span>
+                  </span>
+
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-200/80 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffCategoryFilter('Pharmacist');
+                        setIsEmployeeDropdownOpen(true);
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+                        staffCategoryFilter === 'Pharmacist'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Pharmacists ({pharmacistsCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffCategoryFilter('Others');
+                        setIsEmployeeDropdownOpen(true);
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+                        staffCategoryFilter === 'Others'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Others ({othersCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffCategoryFilter('All');
+                        setIsEmployeeDropdownOpen(true);
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
+                        staffCategoryFilter === 'All'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Dropdown Selector Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
+                    className="w-full px-3.5 py-2.5 bg-white hover:bg-slate-50/50 border border-slate-200/90 rounded-xl text-left transition-all flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      {selectedEmployee ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-slate-900 truncate">
+                              {selectedEmployee.full_name}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200/80">
+                              {selectedEmployee.code}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 truncate shrink-0">
+                            CPR: {selectedEmployee.cpr_number || selectedEmployee.salary_matrix?.expatCpr || 'N/A'}
+                          </span>
+                        </div>
                       ) : (
-                        filteredEmployees.map((emp) => {
-                          const isSelected = emp.id === selectedEmployeeId || employeeName === emp.full_name;
-                          const isPharm = emp.category === 'Pharmacist';
-                          return (
-                            <button
-                              key={emp.id}
-                              type="button"
-                              onClick={() => handleSelectEmployee(emp)}
-                              className={`w-full p-2 rounded-xl text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                                isSelected
-                                  ? 'bg-brand/10 border border-brand/30 text-slate-900'
-                                  : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-transparent'
-                              }`}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="shrink-0">{isPharm ? <Pill className="w-3.5 h-3.5 text-brand" /> : <User className="w-3.5 h-3.5 text-slate-400" />}</span>
-                                  <span className="font-bold text-xs text-slate-900 truncate">{emp.full_name}</span>
-                                  <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                                    {emp.code}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
-                                  <span>CPR: {emp.cpr_number || emp.salary_matrix?.expatCpr || '-'}</span>
-                                  {(emp.nationality || emp.salary_matrix?.nationality) && (
-                                    <span className="text-blue-600 font-medium">
-                                      • {resolveNationality(emp.nationality || emp.salary_matrix?.nationality, lang)}
-                                    </span>
-                                  )}
-                                  {isPharm && emp.salary_matrix?.nhraLicenseNo && (
-                                    <span className="text-brand font-mono">NHRA: {emp.salary_matrix.nhraLicenseNo}</span>
-                                  )}
-                                  {!isPharm && emp.notes && (
-                                    <span className="text-slate-400 truncate">• {emp.notes}</span>
-                                  )}
-                                </div>
-                              </div>
-                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-brand shrink-0" />}
-                            </button>
-                          );
-                        })
+                        <span className="text-xs text-slate-500">
+                          Select an employee to populate fields automatically...
+                        </span>
                       )}
                     </div>
+                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
+                      isEmployeeDropdownOpen ? 'rotate-180 text-slate-900' : ''
+                    }`} />
+                  </button>
+
+                  {isEmployeeDropdownOpen && (
+                    <div className="absolute top-full mt-2 left-0 right-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={employeeSearchQuery}
+                          onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                          placeholder="Search by name, CPR, passport, or code..."
+                          className="w-full pl-9 pr-8 py-2 bg-slate-50 focus:bg-white text-slate-900 placeholder-slate-400 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                        />
+                        {employeeSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setEmployeeSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-60 overflow-y-auto space-y-1 pr-0.5 custom-scrollbar">
+                        {filteredEmployees.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-400">
+                            No matching employee found
+                          </div>
+                        ) : (
+                          filteredEmployees.map((emp) => {
+                            const isSelected = emp.id === selectedEmployeeId;
+                            const isPharm = emp.category === 'Pharmacist';
+                            return (
+                              <button
+                                key={emp.id}
+                                type="button"
+                                onClick={() => handleSelectEmployee(emp)}
+                                className={`w-full p-2.5 rounded-xl text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-slate-900 text-white'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                                      {emp.full_name}
+                                    </p>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                      isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {emp.code}
+                                    </span>
+                                  </div>
+                                  <div className={`flex items-center gap-2 text-[10px] truncate mt-0.5 ${
+                                    isSelected ? 'text-slate-300' : 'text-slate-500'
+                                  }`}>
+                                    <span>CPR: {emp.cpr_number || emp.salary_matrix?.expatCpr || 'N/A'}</span>
+                                    {(emp.nationality || emp.salary_matrix?.nationality) && (
+                                      <span>• {resolveNationality(emp.nationality || emp.salary_matrix?.nationality, lang)}</span>
+                                    )}
+                                    {isPharm && emp.salary_matrix?.nhraLicenseNo && (
+                                      <span className="font-mono">• NHRA: {emp.salary_matrix.nhraLicenseNo}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-white shrink-0" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedEmployee && (
+                  <div className="flex items-center justify-between px-1 pt-0.5 text-[11px] text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Fields autofilled — you can edit any detail below</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedEmployeeId(null);
+                        setEmployeeSearchQuery('');
+                        setEmployeeName('');
+                        setCpr('');
+                        setPassport('');
+                        setNationality('');
+                        setJobTitle('');
+                        setNhraLicense('');
+                        setJoinDate('');
+                        setEndDate('');
+                        setBasicSalary(0);
+                        setHousingAllowance(0);
+                        setTransportationAllowance(0);
+                        setIncentiveBonus(0);
+                        setIsManualTotal(false);
+                        setManualTotalSalary(0);
+                      }}
+                      className="text-slate-500 hover:text-slate-900 underline cursor-pointer font-medium"
+                    >
+                      Clear
+                    </button>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* CPR & Passport Numbers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">CPR / National ID:</label>
-                <input
-                  type="text"
-                  value={cpr}
-                  onChange={(e) => setCpr(e.target.value)}
-                  placeholder="e.g. 910542318"
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand shadow-2xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Passport Number:</label>
-                <input
-                  type="text"
-                  value={passport}
-                  onChange={(e) => setPassport(e.target.value)}
-                  placeholder="e.g. A28491823"
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand shadow-2xs"
-                />
-              </div>
-            </div>
-
-            {/* Nationality & Job Title */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Nationality:</label>
-                <input
-                  type="text"
-                  value={nationality}
-                  onChange={(e) => setNationality(e.target.value)}
-                  placeholder="e.g. Bahraini / بحريني"
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Job Title / Role:</label>
-                <input
-                  type="text"
-                  value={jobTitle}
-                  onChange={(e) => setJobTitle(e.target.value)}
-                  placeholder="e.g. Licensed Pharmacist"
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
-                />
-              </div>
-            </div>
-
-            {/* NHRA Professional License (Conditional / Dynamic) */}
-            <div className="space-y-1.5 p-3.5 bg-purple-50/60 rounded-xl border border-purple-200/80">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-                  <span>NHRA Professional License No:</span>
-                </label>
-                <span className="text-[10px] text-purple-600 font-medium">Optional for Medical Staff</span>
-              </div>
-              <input
-                type="text"
-                value={nhraLicense}
-                onChange={(e) => setNhraLicense(e.target.value)}
-                placeholder="e.g. NHRA/PH/2022/4912 or leave blank if non-medical"
-                className="w-full px-3 py-1.5 bg-white text-purple-950 border border-purple-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500 shadow-2xs"
-              />
-              <p className="text-[10px] text-purple-700/80">
-                If filled, it automatically appends to the standardized legal preamble.
-              </p>
-            </div>
-
-            {/* Joining Date & End Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-brand" />
-                  <span>Date of Joining:</span>
+              {/* Employee Full Name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Employee Full Name (As in Passport / CPR)
                 </label>
                 <input
-                  type="date"
-                  value={joinDate}
-                  onChange={(e) => setJoinDate(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
+                  type="text"
+                  value={employeeName}
+                  onChange={(e) => setEmployeeName(e.target.value)}
+                  placeholder="e.g. Dr. Ali Hassan Mohamed"
+                  className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                 />
               </div>
 
-              {letterType === 'experience_certificate' ? (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-amber-800 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Service End Date: *</span>
+              {/* CPR & Passport */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">CPR / Identity Number</label>
+                  <input
+                    type="text"
+                    value={cpr}
+                    onChange={(e) => setCpr(e.target.value)}
+                    placeholder="e.g. 910542318"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">Passport Number</label>
+                  <input
+                    type="text"
+                    value={passport}
+                    onChange={(e) => setPassport(e.target.value)}
+                    placeholder="e.g. A28491823"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Nationality & Job Title */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">Nationality</label>
+                  <input
+                    type="text"
+                    value={nationality}
+                    onChange={(e) => setNationality(e.target.value)}
+                    placeholder="e.g. Egyptian / Bahraini"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">Job Title / Designation</label>
+                  <input
+                    type="text"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="e.g. Licensed Pharmacist"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* NHRA License & Dates */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1 border-t border-slate-100">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                    <span>NHRA License No.</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={nhraLicense}
+                    onChange={(e) => setNhraLicense(e.target.value)}
+                    placeholder="Leave blank if non-medical"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 block">Date of Joining</label>
+                  <input
+                    type="date"
+                    value={joinDate}
+                    onChange={(e) => setJoinDate(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {letterType === 'experience_certificate' && (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-semibold text-amber-800 block">
+                    Service End Date (For Experience Certificate)
                   </label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-amber-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500 shadow-2xs"
+                    className="w-full px-3.5 py-2 bg-amber-50/40 hover:bg-amber-50/70 focus:bg-white text-slate-900 border border-amber-300/80 rounded-xl text-xs font-semibold outline-none focus:border-amber-500 transition-all"
                   />
-                </div>
-              ) : (
-                <div className="flex items-center text-[11px] text-slate-500 pt-5 font-medium">
-                  <span>Active service to present date</span>
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Contextual Fields: NOC Company, Embassy, Bank & IBAN */}
-          {(letterType === 'noc_transfer' || letterType === 'embassy_salary' || letterType === 'bank_salary_iban' || letterType === 'bank_salary_undertaking') && (
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-4">
-              <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase tracking-wider text-brand flex items-center gap-1.5">
-                  <Landmark className="w-4 h-4" />
-                  <span>Destination & Banking Details</span>
-                </h3>
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-brand/10 text-brand font-bold border border-brand/20">
-                  For Selected Letter
-                </span>
-              </div>
-
-              {/* NOC Transfer: New Company Name */}
-              {letterType === 'noc_transfer' && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    New Company Name (For Sponsorship Transfer): *
-                  </label>
-                  <input
-                    type="text"
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    placeholder="e.g. Gulf Health Solutions W.L.L / شركة حلول الخليج الصحية"
-                    className="w-full px-3.5 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
-                  />
+            {/* CONTEXTUAL DESTINATION / BANKING DETAILS (IF APPLICABLE) */}
+            {(letterType === 'noc_transfer' || letterType === 'embassy_salary' || letterType === 'bank_salary_iban' || letterType === 'bank_salary_undertaking') && (
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-slate-700" />
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                      Destination &amp; Banking Details
+                    </h2>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold">
+                    Contextual Fields
+                  </span>
                 </div>
-              )}
 
-              {/* Embassy Destination */}
-              {letterType === 'embassy_salary' && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">
-                    Addressee / Embassy Name: *
-                  </label>
-                  <input
-                    type="text"
-                    value={destinationName}
-                    onChange={(e) => setDestinationName(e.target.value)}
-                    placeholder="e.g. Embassy of France / سفارة الجمهورية الفرنسية"
-                    className="w-full px-3.5 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
-                  />
-                </div>
-              )}
-
-              {/* Bank Name & IBAN */}
-              {(letterType === 'bank_salary_iban' || letterType === 'bank_salary_undertaking') && (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">
-                      Bank Name: *
+                {letterType === 'noc_transfer' && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 block">
+                      New Employer / Company Name (For Transfer)
                     </label>
                     <input
                       type="text"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      placeholder="e.g. National Bank of Bahrain (NBB) / بنك البحرين الوطني"
-                      className="w-full px-3.5 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="e.g. Gulf Health Solutions W.L.L / شركة حلول الخليج الصحية"
+                      className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                     />
                   </div>
+                )}
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                      <span>IBAN Number: *</span>
-                      <span className="text-[10px] text-slate-500 font-mono">Bahrain IBAN format</span>
+                {letterType === 'embassy_salary' && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 block">
+                      Destination Embassy / Consulate Name
                     </label>
                     <input
                       type="text"
-                      value={iban}
-                      onChange={(e) => setIban(e.target.value.toUpperCase())}
-                      placeholder="BH29NBOB00000012345678"
-                      className="w-full px-3.5 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand tracking-wider shadow-2xs"
+                      value={destinationName}
+                      onChange={(e) => setDestinationName(e.target.value)}
+                      placeholder="e.g. Embassy of France in Bahrain / سفارة فرنسا"
+                      className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                     />
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </aside>
+                )}
 
-        {/* ================= RIGHT COLUMN: LIVE A4 PREVIEW SHEET (7 COLS) ================= */}
-        <section className="lg:col-span-7 flex flex-col items-center space-y-4">
-          {/* Zoom & View Controls Bar */}
-          <div className="w-full flex items-center justify-between px-4 py-2.5 bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl text-xs text-slate-600 shadow-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-brand/10 flex items-center justify-center">
-                <Eye className="w-3.5 h-3.5 text-brand" />
-              </div>
-              <span className="font-bold text-slate-900">
-                Live Official A4 Document Preview:
-              </span>
-              <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 font-mono font-medium border border-slate-200">
-                210mm &times; 297mm (A4 Portrait)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setZoomLevel(prev => Math.max(70, prev - 10))}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
-              </button>
-              <span className="font-mono text-[11px] text-slate-900 min-w-[42px] text-center font-bold px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200">
-                {zoomLevel}%
-              </span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel(prev => Math.min(130, prev + 10))}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setZoomLevel(100)}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-700 font-bold transition-all cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-
-          {/* A4 Sheet Viewport Container */}
-          <div className="w-full flex justify-center overflow-x-auto p-4 sm:p-8 bg-slate-100/90 rounded-3xl border border-slate-200/80 shadow-inner tech-grid min-h-[1180px]">
-            <div
-              style={{
-                transform: `scale(${zoomLevel / 100})`,
-                transformOrigin: 'top center',
-                transition: 'transform 0.15s ease-out'
-              }}
-              className="transition-all"
-            >
-              {/* THE OFFICIAL PRINTABLE A4 DOCUMENT */}
-              <div
-                id="printable-official-hr-sheet"
-                dir={isAr ? 'rtl' : 'ltr'}
-                className={`w-[780px] min-h-[1100px] bg-white text-slate-900 rounded-xs shadow-2xl ring-1 ring-slate-900/10 p-10 sm:p-12 border border-slate-200 relative select-text flex flex-col justify-between ${
-                  isAr ? 'font-sans' : 'font-sans'
-                }`}
-                style={{
-                  fontFamily: isAr ? "'Cairo', 'Segoe UI', Tahoma, sans-serif" : "'Inter', Arial, sans-serif"
-                }}
-              >
-                {/* 1. OFFICIAL CR BRAND LETTERHEAD (CLOSE PROXIMITY TO LOGO: LEFT IN EN, RIGHT IN AR) */}
-                <div className="space-y-4">
-                  <div
-                    className="header-table"
-                    dir={isAr ? 'rtl' : 'ltr'}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      borderBottom: '3px solid #0f172a',
-                      paddingBottom: '14px',
-                      marginBottom: '20px',
-                      direction: isAr ? 'rtl' : 'ltr'
-                    }}
-                  >
-                    {/* CR Logo */}
-                    <div
-                      className="cr-logo-wrap"
-                      style={{
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <img
-                        src={selectedCr.logo_url || DEFAULT_GROUP_LOGO}
-                        className="cr-logo"
-                        alt="Corporate CR Logo"
-                        style={{
-                          maxHeight: '75px',
-                          maxWidth: '120px',
-                          objectFit: 'contain',
-                          display: 'block'
-                        }}
+                {(letterType === 'bank_salary_iban' || letterType === 'bank_salary_undertaking') && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700 block">Bank Name</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g. National Bank of Bahrain (NBB)"
+                        className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                       />
                     </div>
 
-                    {/* CR Entity Identity & Contact Meta (Close to Logo, Right in AR, Left in EN) */}
-                    <div
-                      className="cr-text-block"
-                      style={{
-                        flex: 1,
-                        textAlign: isAr ? 'right' : 'left',
-                        marginRight: isAr ? '12px' : '0px',
-                        marginLeft: isAr ? '0px' : '12px'
-                      }}
-                    >
-                      <div
-                        className="cr-title-en"
-                        style={{
-                          fontSize: '17.5px',
-                          fontWeight: 900,
-                          color: '#0f172a',
-                          textTransform: 'uppercase',
-                          letterSpacing: '-0.2px',
-                          fontFamily: 'Arial, sans-serif',
-                          textAlign: isAr ? 'right' : 'left'
-                        }}
-                      >
-                        {selectedCr.cr_name || 'Tabarak Pharmacy CO W.L.L'}
-                      </div>
-                      <div
-                        className="cr-title-ar"
-                        style={{
-                          fontSize: '15.5px',
-                          fontWeight: 800,
-                          color: '#1e293b',
-                          marginTop: '3px',
-                          direction: 'rtl',
-                          textAlign: isAr ? 'right' : 'left'
-                        }}
-                      >
-                        {selectedCr.cr_name_ar || 'شركة صيدلية تبارك ذ.م.م'}
-                      </div>
-                      <div
-                        className="cr-meta"
-                        style={{
-                          fontSize: '10.5px',
-                          fontFamily: 'monospace',
-                          fontWeight: 600,
-                          color: '#475569',
-                          marginTop: '5px',
-                          lineHeight: '1.45',
-                          textAlign: isAr ? 'right' : 'left'
-                        }}
-                      >
-                        <div>
-                          <strong>CR NO:</strong> {selectedCr.cr_number || '127506-01'} &nbsp;&bull;&nbsp;{' '}
-                          <strong>Contact No:</strong> {selectedCr.phone || '+973 33866650'}
-                        </div>
-                        <div>
-                          <strong>{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</strong> tabarakph.info@gmail.com{' '}
-                          &nbsp;&bull;&nbsp; {isAr ? 'مملكة البحرين' : 'Kingdom of Bahrain'}
-                        </div>
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700 block">Employee IBAN Number</label>
+                      <input
+                        type="text"
+                        value={iban}
+                        onChange={(e) => setIban(e.target.value.toUpperCase())}
+                        placeholder="BH29NBOB00000012345678"
+                        className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 tracking-wide transition-all"
+                      />
                     </div>
                   </div>
+                )}
+              </div>
+            )}
 
-                  {/* Date & Ref Document Sub-Header Bar */}
-                  <div
-                    className="doc-header flex justify-between items-center border-b border-slate-200 pb-2.5 mb-5"
-                    dir={isAr ? 'rtl' : 'ltr'}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      borderBottom: '1px solid #e2e8f0',
-                      paddingBottom: '10px',
-                      marginBottom: '20px',
-                      fontSize: '12.5px',
-                      direction: isAr ? 'rtl' : 'ltr'
-                    }}
-                  >
-                    <div style={{ fontSize: '12.5px', color: '#334155' }}>
-                      {isAr ? 'التاريخ:' : 'Date:'}{' '}
-                      <strong style={{ color: '#0f172a' }}>{issueDate}</strong>
-                    </div>
-                    <div style={{ fontSize: '12.5px', color: '#334155' }}>
-                      {isAr ? 'المرجع:' : 'Ref:'}{' '}
-                      <span
-                        className="doc-ref font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded border border-sky-200"
-                        style={{
-                          fontFamily: 'monospace',
-                          fontWeight: 'bold',
-                          color: '#0284c7',
-                          background: '#f0f9ff',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          border: '1px solid #bae6fd'
-                        }}
-                      >
-                        {refNo}
-                      </span>
-                    </div>
-                  </div>
+            {/* STEP 3: MONTHLY SALARY MATRIX BREAKDOWN (BHD) */}
+            <div className={`bg-white border rounded-2xl p-5 shadow-2xs space-y-4 transition-all ${
+              isSalaryRequired ? 'border-slate-300' : 'border-slate-200/80'
+            }`}>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                    3
+                  </span>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Monthly Salary Matrix (BHD)
+                  </h2>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${
+                  isSalaryRequired
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
+                    : 'bg-slate-50 text-slate-500 border-slate-200/70'
+                }`}>
+                  {isSalaryRequired ? 'Included in Document' : 'Not Shown on Current Template'}
+                </span>
+              </div>
 
-                  {/* 2. DOCUMENT TITLE & SUBJECT BADGE */}
-                  <div className="text-center py-3 border-b border-slate-100 space-y-1">
-                    <h1 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-wider">
-                      {letterTitles[letterType][lang]}
-                    </h1>
-                    <p className="text-xs font-bold text-brand">
-                      {isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn}
-                    </p>
-                  </div>
-
-                  {/* 3. ADDRESSEE / DESTINATION */}
-                  <div className="pt-2 text-xs font-bold text-slate-900">
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-black text-slate-950">
-                        {effectiveAddresseeHeader}
-                      </p>
-                      {!customAddressee.trim() && letterType === 'embassy_salary' && (
-                        <p className="text-[11px] text-slate-600">
-                          {isAr ? 'الموضوع: شهادة عمل وتعريف راتب' : 'Subject: Employment & Salary Verification Letter'}
-                        </p>
-                      )}
-                      {!customAddressee.trim() && letterType === 'bank_salary_iban' && (
-                        <p className="text-[11px] text-slate-600">
-                          {isAr ? 'الموضوع: شهادة تفاصيل الراتب واعتماد الحساب البنكي' : 'Subject: Salary Certificate & IBAN Confirmation'}
-                        </p>
-                      )}
-                      {!customAddressee.trim() && letterType === 'bank_salary_undertaking' && (
-                        <p className="text-[11px] text-slate-600">
-                          {isAr ? 'الموضوع: تعهد تحويل راتب غير قابل للإلغاء' : 'Subject: Irrevocable Salary Transfer Undertaking'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 4. STANDARDIZED PREAMBLE & CORE LETTER BODY */}
-                  <div className="space-y-4 text-xs sm:text-[13px] leading-relaxed text-slate-800 text-justify pt-1">
-                    <p className="leading-loose">
-                      {letterBodyContent}
-                    </p>
-
-                    {/* 5. SALARY MATRIX TABLE (MANDATORY FOR EMBASSY, BANK, LOAN LETTERS) */}
-                    {isSalaryRequired && (
-                      <div className="my-5 p-1 bg-slate-50 border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
-                        <div className="bg-slate-200/80 px-3 py-1.5 border-b border-slate-300 flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-700">
-                          <span>{isAr ? 'جدول مفردات الراتب الشهري المعتمد:' : 'Monthly Salary Matrix Breakdown:'}</span>
-                          <span>Bahraini Dinars (BHD)</span>
-                        </div>
-
-                        <table className="w-full text-xs text-slate-900 border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-300 bg-white">
-                              <th className={`py-2 px-3 font-black ${isAr ? 'text-right' : 'text-left'}`}>
-                                {isAr ? 'البيان / تفاصيل المخصص' : 'Description / Component'}
-                              </th>
-                              <th className={`py-2 px-3 font-black ${isAr ? 'text-left' : 'text-right'}`}>
-                                {isAr ? 'المبلغ الشهري (د.ب)' : 'Monthly Amount (BHD)'}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200">
-                            <tr>
-                              <td className="py-1.5 px-3 text-slate-700">
-                                {isAr ? 'الراتب الأساسي' : 'Basic Salary'}
-                              </td>
-                              <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
-                                {basicSalary.toFixed(3)} BHD
-                              </td>
-                            </tr>
-                            <tr className="bg-slate-50/60">
-                              <td className="py-1.5 px-3 text-slate-700">
-                                {isAr ? 'بدل السكن' : 'Housing Allowance'}
-                              </td>
-                              <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
-                                {housingAllowance.toFixed(3)} BHD
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="py-1.5 px-3 text-slate-700">
-                                {isAr ? 'بدل المواصلات' : 'Transportation Allowance'}
-                              </td>
-                              <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
-                                {transportationAllowance.toFixed(3)} BHD
-                              </td>
-                            </tr>
-                            <tr className="bg-slate-50/60">
-                              <td className="py-1.5 px-3 text-slate-700">
-                                {isAr ? 'علاوة الحوافز والمسؤولية المهنية' : 'Incentive / Responsibility Bonus'}
-                              </td>
-                              <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
-                                {incentiveBonus.toFixed(3)} BHD
-                              </td>
-                            </tr>
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t-2 border-slate-900 bg-emerald-50/70 font-black text-emerald-900 text-[13px]">
-                              <td className="py-2.5 px-3">
-                                {isAr ? 'إجمالي صافي الراتب الشهري:' : 'TOTAL MONTHLY SALARY:'}
-                              </td>
-                              <td className={`py-2.5 px-3 font-mono text-sm ${isAr ? 'text-left' : 'text-right'}`}>
-                                {effectiveTotalSalary.toFixed(3)} BHD
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    )}
-
-                    {/* Post Table Clause */}
-                    {postTableClause && (
-                      <p className="leading-loose font-medium">
-                        {postTableClause}
-                      </p>
-                    )}
-
-                    {/* Custom Notes if provided */}
-                    {customNotes.trim() && (
-                      <p className="p-2.5 bg-slate-50 border-l-4 border-slate-400 rounded text-xs text-slate-700 italic">
-                        {customNotes.trim()}
-                      </p>
-                    )}
-
-                    {/* General Disclaimer */}
-                    <p className="text-[11px] text-slate-500 pt-2">
-                      {isAr
-                        ? 'تم إصدار هذه الشهادة بناءً على طلب الموظف لاستخدامها في الأغراض الرسمية، دون أدنى مسؤولية أو التزام مالي يترتب على الشركة تجاه الغير.'
-                        : "This certificate is issued upon the employee's request for official purposes without any financial liability or commitment on the company's part."}
-                    </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-600 block">Basic Salary</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={basicSalary}
+                      onChange={(e) => setBasicSalary(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-9 pr-2.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 text-right transition-all"
+                    />
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-mono">BHD</span>
                   </div>
                 </div>
 
-                {/* 6. OFFICIAL FOOTER: AUTHORIZED SIGNATORY & COMPANY SEAL (MATCHING REGISTERED CRS) */}
-                <div
-                  className="footer-section pt-8 border-t border-slate-200 flex items-end justify-between mt-10"
-                  dir="ltr"
-                  style={{
-                    marginTop: '40px',
-                    paddingTop: '20px',
-                    borderTop: '1px solid #e2e8f0',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-end',
-                    direction: 'ltr'
-                  }}
-                >
-                  {/* Authorized Signatory Block */}
-                  <div className="sig-box text-center" style={{ textAlign: 'center', width: '220px' }}>
-                    <div style={{ height: '75px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {!withoutSealAndSignature ? (
-                        <img
-                          src={selectedCr.signature_url || DEFAULT_SIGNATURE}
-                          alt="CEO Signature"
-                          className="sig-img"
-                          style={{
-                            maxHeight: '80px',
-                            maxWidth: '200px',
-                            objectFit: 'contain',
-                            filter: 'contrast(1.2)'
-                          }}
-                        />
-                      ) : (
-                        <div style={{ height: '75px' }} />
-                      )}
-                    </div>
-                    <div className="sig-name" style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a', marginTop: '5px' }}>
-                      {signatoryName || 'Authorized Signatory'}
-                    </div>
-                    <div className="sig-title" style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase' }}>
-                      {isAr ? (signatoryRoleAr || signatoryRoleEn) : (signatoryRoleEn || signatoryRoleAr)}
-                    </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-600 block">Housing</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={housingAllowance}
+                      onChange={(e) => setHousingAllowance(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-9 pr-2.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 text-right transition-all"
+                    />
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-mono">BHD</span>
                   </div>
+                </div>
 
-                  {/* Official Company Seal Block */}
-                  <div
-                    className="seal-box"
-                    style={{
-                      width: '220px',
-                      border: withoutSealAndSignature ? '1.5px dashed #cbd5e1' : '1.5px solid #94a3b8',
-                      borderRadius: '10px',
-                      padding: '10px',
-                      textAlign: 'center',
-                      background: withoutSealAndSignature ? '#ffffff' : '#f8fafc'
-                    }}
-                  >
-                    <span
-                      className="seal-label"
-                      style={{
-                        fontSize: '9px',
-                        fontWeight: 900,
-                        textTransform: 'uppercase',
-                        color: '#475569',
-                        borderBottom: '1px solid #cbd5e1',
-                        paddingBottom: '4px',
-                        marginBottom: '8px',
-                        display: 'block',
-                        letterSpacing: '0.5px'
-                      }}
-                    >
-                      {isAr ? "ختم المنشأة الرسمي • Company's Seal" : "Company's Seal"}
-                    </span>
-                    <div style={{ height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {!withoutSealAndSignature ? (
-                        <img
-                          src={selectedCr.stamp_url || generateCrStampSvg(selectedCr.cr_name_ar, selectedCr.cr_name, selectedCr.cr_number)}
-                          alt="Official Corporate Seal"
-                          className="seal-img"
-                          style={{ maxHeight: '90px', width: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }}
-                        />
-                      ) : (
-                        <div style={{ height: '90px' }} />
-                      )}
-                    </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-600 block">Transport</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={transportationAllowance}
+                      onChange={(e) => setTransportationAllowance(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-9 pr-2.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 text-right transition-all"
+                    />
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-mono">BHD</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-600 block">Incentives</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={incentiveBonus}
+                      onChange={(e) => setIncentiveBonus(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-9 pr-2.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 text-right transition-all"
+                    />
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-mono">BHD</span>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-        </div>
 
-        {/* ================= BOTTOM 2-COLUMN SECTION: SALARY MATRIX & SIGNATORY DETAILS ================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {/* Section 3: Monthly Salary Matrix Breakdown (BHD) */}
-          <div className={`bg-white border rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-4 ${
-            isSalaryRequired ? 'border-brand/40 ring-1 ring-brand/20' : 'border-slate-200/90'
-          }`}>
-            <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Banknote className="w-4 h-4 text-emerald-600" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-700">
-                  3. Monthly Salary Matrix Breakdown (BHD)
-                </h3>
-              </div>
-              <span className={`text-[9px] px-2 py-0.5 rounded font-bold border ${
-                isSalaryRequired ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}>
-                {isSalaryRequired ? 'Required for Letter' : 'Optional'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* Basic Salary */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Basic:</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={basicSalary}
-                    onChange={(e) => setBasicSalary(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand text-right shadow-2xs"
-                  />
-                  <span className="absolute left-2 top-2 text-[9px] text-slate-400 font-mono">BHD</span>
-                </div>
-              </div>
-
-              {/* Housing Allowance */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Housing:</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={housingAllowance}
-                    onChange={(e) => setHousingAllowance(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand text-right shadow-2xs"
-                  />
-                  <span className="absolute left-2 top-2 text-[9px] text-slate-400 font-mono">BHD</span>
-                </div>
-              </div>
-
-              {/* Transportation Allowance */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Transport:</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={transportationAllowance}
-                    onChange={(e) => setTransportationAllowance(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand text-right shadow-2xs"
-                  />
-                  <span className="absolute left-2 top-2 text-[9px] text-slate-400 font-mono">BHD</span>
-                </div>
-              </div>
-
-              {/* Incentive / Bonus */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Incentive:</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    value={incentiveBonus}
-                    onChange={(e) => setIncentiveBonus(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-brand text-right shadow-2xs"
-                  />
-                  <span className="absolute left-2 top-2 text-[9px] text-slate-400 font-mono">BHD</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Total Monthly Salary Display & Custom Override */}
-            <div className="p-3.5 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white rounded-2xl border border-emerald-200/80 shadow-2xs flex items-center justify-between">
-              <div>
-                <p className="text-xs font-black text-emerald-950">
-                  Total Monthly Net Salary:
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <label className="text-[10px] text-slate-600 flex items-center gap-1 cursor-pointer font-medium">
+              {/* Net Monthly Total Bar */}
+              <div className="px-4 py-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-slate-900">Total Monthly Net Salary</p>
+                  <label className="text-[11px] text-slate-500 flex items-center gap-1.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={isManualTotal}
@@ -2957,117 +2130,96 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                         setIsManualTotal(e.target.checked);
                         if (!e.target.checked) setManualTotalSalary(calculatedTotalSalary);
                       }}
-                      className="rounded text-brand accent-brand"
+                      className="rounded text-slate-900 accent-slate-900 w-3.5 h-3.5"
                     />
-                    <span>Manual Override Total</span>
+                    <span>Manual total override</span>
                   </label>
+                </div>
+
+                <div className="text-right">
+                  {isManualTotal ? (
+                    <div className="relative w-32">
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={manualTotalSalary}
+                        onChange={(e) => setManualTotalSalary(parseFloat(e.target.value) || 0)}
+                        className="w-full pl-9 pr-2.5 py-1.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-mono font-bold text-right outline-none focus:border-slate-500"
+                      />
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-mono">BHD</span>
+                    </div>
+                  ) : (
+                    <div className="text-base font-bold font-mono text-slate-900">
+                      {effectiveTotalSalary.toFixed(3)} <span className="text-xs text-slate-500 font-normal">BHD</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* STEP 4: SIGNATORY & ADDITIONAL REMARKS */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                    4
+                  </span>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Signatory &amp; Custom Remarks
+                  </h2>
                 </div>
               </div>
 
-              <div className="text-right">
-                {isManualTotal ? (
-                  <div className="relative w-32">
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={manualTotalSalary}
-                      onChange={(e) => setManualTotalSalary(parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1 bg-white text-emerald-800 border border-emerald-400 rounded-lg text-sm font-mono font-black text-right shadow-inner"
-                    />
-                    <span className="absolute left-2 top-1.5 text-[10px] text-emerald-600 font-mono font-bold">BHD</span>
-                  </div>
-                ) : (
-                  <div className="text-base sm:text-lg font-black font-mono text-emerald-800">
-                    {effectiveTotalSalary.toFixed(3)} <span className="text-xs text-emerald-600 font-normal">BHD</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Custom Letter Notes & Signatory Control */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 hover:shadow-md transition-all space-y-3">
-            <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-brand" />
-                <span>4. Additional Notes & Signatory Details</span>
-              </h3>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-700">
-                Custom Clause / Specific Notes to append:
-              </label>
-              <textarea
-                rows={2}
-                value={customNotes}
-                onChange={(e) => setCustomNotes(e.target.value)}
-                placeholder="Optional custom paragraph or remark..."
-                className="w-full px-3 py-2 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand shadow-2xs transition-all"
-              />
-            </div>
-
-            <div className="space-y-3 pt-1 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1. Authorized Signatory Name */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-700 block">
-                    Authorized Signatory (المفوض بالتوقيع):
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-700 block">
+                    Authorized Signatory
                   </label>
                   <input
                     type="text"
                     value={signatoryName}
                     onChange={(e) => handleUpdateSignatoryName(e.target.value)}
-                    placeholder="e.g. Dr. Fathy Saad Amin"
-                    className="w-full px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs transition-all"
+                    placeholder="Dr. Fathy Saad Amin"
+                    className="w-full px-3 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                   />
                 </div>
 
-                {/* 2. Signatory Title (Arabic for Letter) */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                    <span>Signatory Title (Arabic for Letter):</span>
-                    {isLetterAr && <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-black border border-emerald-200">Active on Letter</span>}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                    <span>Title (Arabic)</span>
+                    {isLetterAr && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Active on Letter" />}
                   </label>
                   <input
                     type="text"
                     value={signatoryRoleAr}
                     onChange={(e) => handleUpdateSignatoryRoleAr(e.target.value)}
-                    placeholder="مثال: المدير العام / المدير التنفيذي"
-                    className={`w-full px-3 py-1.5 text-slate-900 border rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs transition-all ${
-                      isLetterAr ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-400/30' : 'bg-slate-50 hover:bg-white focus:bg-white border-slate-200'
-                    }`}
+                    placeholder="المدير العام"
+                    className="w-full px-3 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all dir-rtl"
                   />
                 </div>
 
-                {/* 3. Signatory Title (English for Letter) */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                    <span>Signatory Title (English for Letter):</span>
-                    {!isLetterAr && <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-black border border-emerald-200">Active on Letter</span>}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                    <span>Title (English)</span>
+                    {!isLetterAr && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Active on Letter" />}
                   </label>
                   <input
                     type="text"
                     value={signatoryRoleEn}
                     onChange={(e) => handleUpdateSignatoryRoleEn(e.target.value)}
-                    placeholder="e.g. General Manager / CEO"
-                    className={`w-full px-3 py-1.5 text-slate-900 border rounded-xl text-xs font-bold outline-none focus:border-brand shadow-2xs transition-all ${
-                      !isLetterAr ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-400/30' : 'bg-slate-50 hover:bg-white focus:bg-white border-slate-200'
-                    }`}
+                    placeholder="General Manager"
+                    className="w-full px-3 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                   />
                 </div>
               </div>
 
-              {/* Quick Title Presets */}
-              <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Title Presets:</span>
+              {/* Role Presets */}
+              <div className="flex flex-wrap items-center gap-1.5">
                 {[
                   { ar: 'المدير العام', en: 'General Manager' },
                   { ar: 'المدير التنفيذي', en: 'CEO' },
                   { ar: 'مدير الموارد البشرية', en: 'HR Manager' },
-                  { ar: 'المفوض بالتوقيع', en: 'Authorized Signatory' },
-                  { ar: 'مدير العمليات', en: 'Operations Manager' },
-                  { ar: 'مدير الصيدلية', en: 'Pharmacy Manager' }
+                  { ar: 'المفوض بالتوقيع', en: 'Authorized Signatory' }
                 ].map((preset) => {
                   const isSelected = signatoryRoleAr === preset.ar && signatoryRoleEn === preset.en;
                   return (
@@ -3075,20 +2227,454 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                       key={preset.en}
                       type="button"
                       onClick={() => handleApplyPresetRole(preset.ar, preset.en)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-brand text-white shadow-xs ring-1 ring-brand'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100/80 hover:bg-slate-200/70 text-slate-600'
                       }`}
-                      title={`Set title to ${preset.ar} / ${preset.en}`}
                     >
-                      {preset.ar} ({preset.en})
+                      {preset.en} • {preset.ar}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Additional Custom Notes */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Additional Remarks / Custom Clause <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={customNotes}
+                  onChange={(e) => setCustomNotes(e.target.value)}
+                  placeholder="Optional custom note to append to the letter body..."
+                  className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs outline-none focus:border-slate-400 transition-all"
+                />
+              </div>
             </div>
-          </div>
+          </aside>
+
+          {/* ================= RIGHT COLUMN: STICKY LIVE A4 DOCUMENT PREVIEW (7 COLS) ================= */}
+          <section className="lg:col-span-7 lg:sticky lg:top-20 flex flex-col items-center space-y-3">
+            {/* Clean Preview Toolbar */}
+            <div className="w-full flex items-center justify-between px-4 py-2.5 bg-white border border-slate-200/80 rounded-2xl text-xs text-slate-600 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="font-bold text-slate-800">
+                  Live A4 Document Preview
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+                  210mm &times; 297mm
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(prev => Math.max(70, prev - 10))}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="font-mono text-[11px] text-slate-700 min-w-[44px] text-center font-semibold">
+                  {zoomLevel}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(prev => Math.min(120, prev + 10))}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-all cursor-pointer"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                {zoomLevel !== 100 && (
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(100)}
+                    className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-700 font-semibold transition-all cursor-pointer ml-1"
+                  >
+                    100%
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Calm & Balanced A4 Canvas Viewport */}
+            <div className="w-full flex justify-center overflow-x-auto py-6 px-4 sm:px-8 bg-slate-200/50 rounded-3xl border border-slate-200/80 min-h-[1140px]">
+              <div
+                style={{
+                  transform: `scale(${zoomLevel / 100})`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease-out'
+                }}
+                className="transition-all"
+              >
+                {/* THE OFFICIAL PRINTABLE A4 DOCUMENT */}
+                <div
+                  id="printable-official-hr-sheet"
+                  dir={isAr ? 'rtl' : 'ltr'}
+                  className="w-[780px] min-h-[1080px] bg-white text-slate-900 rounded-sm shadow-xl ring-1 ring-slate-900/5 p-10 sm:p-12 relative select-text flex flex-col justify-between font-sans"
+                  style={{
+                    fontFamily: isAr ? "'Cairo', 'Segoe UI', Tahoma, sans-serif" : "'Inter', Arial, sans-serif"
+                  }}
+                >
+                  {/* 1. OFFICIAL CR BRAND LETTERHEAD */}
+                  <div className="space-y-4">
+                    <div
+                      className="header-table"
+                      dir={isAr ? 'rtl' : 'ltr'}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        borderBottom: '3px solid #0f172a',
+                        paddingBottom: '14px',
+                        marginBottom: '20px',
+                        direction: isAr ? 'rtl' : 'ltr'
+                      }}
+                    >
+                      {/* CR Logo */}
+                      <div
+                        className="cr-logo-wrap"
+                        style={{
+                          flexShrink: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <img
+                          src={selectedCr.logo_url || DEFAULT_GROUP_LOGO}
+                          className="cr-logo"
+                          alt="Corporate CR Logo"
+                          style={{
+                            maxHeight: '75px',
+                            maxWidth: '120px',
+                            objectFit: 'contain',
+                            display: 'block'
+                          }}
+                        />
+                      </div>
+
+                      {/* CR Entity Identity & Contact Meta */}
+                      <div
+                        className="cr-text-block"
+                        style={{
+                          flex: 1,
+                          textAlign: isAr ? 'right' : 'left',
+                          marginRight: isAr ? '12px' : '0px',
+                          marginLeft: isAr ? '0px' : '12px'
+                        }}
+                      >
+                        <div
+                          className="cr-title-en"
+                          style={{
+                            fontSize: '17.5px',
+                            fontWeight: 900,
+                            color: '#0f172a',
+                            textTransform: 'uppercase',
+                            letterSpacing: '-0.2px',
+                            fontFamily: 'Arial, sans-serif',
+                            textAlign: isAr ? 'right' : 'left'
+                          }}
+                        >
+                          {selectedCr.cr_name || 'Tabarak Pharmacy CO W.L.L'}
+                        </div>
+                        <div
+                          className="cr-title-ar"
+                          style={{
+                            fontSize: '15.5px',
+                            fontWeight: 800,
+                            color: '#1e293b',
+                            marginTop: '3px',
+                            direction: 'rtl',
+                            textAlign: isAr ? 'right' : 'left'
+                          }}
+                        >
+                          {selectedCr.cr_name_ar || 'شركة صيدلية تبارك ذ.م.م'}
+                        </div>
+                        <div
+                          className="cr-meta"
+                          style={{
+                            fontSize: '10.5px',
+                            fontFamily: 'monospace',
+                            fontWeight: 600,
+                            color: '#475569',
+                            marginTop: '5px',
+                            lineHeight: '1.45',
+                            textAlign: isAr ? 'right' : 'left'
+                          }}
+                        >
+                          <div>
+                            <strong>CR NO:</strong> {selectedCr.cr_number || '127506-01'} &nbsp;&bull;&nbsp;{' '}
+                            <strong>Contact No:</strong> {selectedCr.phone || '+973 33866650'}
+                          </div>
+                          <div>
+                            <strong>{isAr ? 'البريد الإلكتروني:' : 'Email Address:'}</strong> tabarakph.info@gmail.com{' '}
+                            &nbsp;&bull;&nbsp; {isAr ? 'مملكة البحرين' : 'Kingdom of Bahrain'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Date & Ref Document Sub-Header Bar */}
+                    <div
+                      className="doc-header flex justify-between items-center border-b border-slate-200 pb-2.5 mb-5"
+                      dir={isAr ? 'rtl' : 'ltr'}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        borderBottom: '1px solid #e2e8f0',
+                        paddingBottom: '10px',
+                        marginBottom: '20px',
+                        fontSize: '12.5px',
+                        direction: isAr ? 'rtl' : 'ltr'
+                      }}
+                    >
+                      <div style={{ fontSize: '12.5px', color: '#334155' }}>
+                        {isAr ? 'التاريخ:' : 'Date:'}{' '}
+                        <strong style={{ color: '#0f172a' }}>{issueDate}</strong>
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#334155' }}>
+                        {isAr ? 'المرجع:' : 'Ref:'}{' '}
+                        <span
+                          className="doc-ref font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded border border-sky-200"
+                          style={{
+                            fontFamily: 'monospace',
+                            fontWeight: 'bold',
+                            color: '#0284c7',
+                            background: '#f0f9ff',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid #bae6fd'
+                          }}
+                        >
+                          {refNo}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 2. DOCUMENT TITLE & SUBJECT BADGE */}
+                    <div className="text-center py-3 border-b border-slate-100 space-y-1">
+                      <h1 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-wider">
+                        {letterTitles[letterType][lang]}
+                      </h1>
+                      <p className="text-xs font-bold text-brand">
+                        {isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn}
+                      </p>
+                    </div>
+
+                    {/* 3. ADDRESSEE / DESTINATION */}
+                    <div className="pt-2 text-xs font-bold text-slate-900">
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-black text-slate-950">
+                          {effectiveAddresseeHeader}
+                        </p>
+                        {!customAddressee.trim() && letterType === 'embassy_salary' && (
+                          <p className="text-[11px] text-slate-600">
+                            {isAr ? 'الموضوع: شهادة عمل وتعريف راتب' : 'Subject: Employment & Salary Verification Letter'}
+                          </p>
+                        )}
+                        {!customAddressee.trim() && letterType === 'bank_salary_iban' && (
+                          <p className="text-[11px] text-slate-600">
+                            {isAr ? 'الموضوع: شهادة تفاصيل الراتب واعتماد الحساب البنكي' : 'Subject: Salary Certificate & IBAN Confirmation'}
+                          </p>
+                        )}
+                        {!customAddressee.trim() && letterType === 'bank_salary_undertaking' && (
+                          <p className="text-[11px] text-slate-600">
+                            {isAr ? 'الموضوع: تعهد تحويل راتب غير قابل للإلغاء' : 'Subject: Irrevocable Salary Transfer Undertaking'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4. STANDARDIZED PREAMBLE & CORE LETTER BODY */}
+                    <div className="space-y-4 text-xs sm:text-[13px] leading-relaxed text-slate-800 text-justify pt-1">
+                      <p className="leading-loose">
+                        {letterBodyContent}
+                      </p>
+
+                      {/* 5. SALARY MATRIX TABLE (MANDATORY FOR EMBASSY, BANK, LOAN LETTERS) */}
+                      {isSalaryRequired && (
+                        <div className="my-5 p-1 bg-slate-50 border border-slate-300 rounded-xl overflow-hidden shadow-2xs">
+                          <div className="bg-slate-200/80 px-3 py-1.5 border-b border-slate-300 flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-700">
+                            <span>{isAr ? 'جدول مفردات الراتب الشهري المعتمد:' : 'Monthly Salary Matrix Breakdown:'}</span>
+                            <span>Bahraini Dinars (BHD)</span>
+                          </div>
+
+                          <table className="w-full text-xs text-slate-900 border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-300 bg-white">
+                                <th className={`py-2 px-3 font-black ${isAr ? 'text-right' : 'text-left'}`}>
+                                  {isAr ? 'البيان / تفاصيل المخصص' : 'Description / Component'}
+                                </th>
+                                <th className={`py-2 px-3 font-black ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {isAr ? 'المبلغ الشهري (د.ب)' : 'Monthly Amount (BHD)'}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              <tr>
+                                <td className="py-1.5 px-3 text-slate-700">
+                                  {isAr ? 'الراتب الأساسي' : 'Basic Salary'}
+                                </td>
+                                <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {basicSalary.toFixed(3)} BHD
+                                </td>
+                              </tr>
+                              <tr className="bg-slate-50/60">
+                                <td className="py-1.5 px-3 text-slate-700">
+                                  {isAr ? 'بدل السكن' : 'Housing Allowance'}
+                                </td>
+                                <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {housingAllowance.toFixed(3)} BHD
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className="py-1.5 px-3 text-slate-700">
+                                  {isAr ? 'بدل المواصلات' : 'Transportation Allowance'}
+                                </td>
+                                <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {transportationAllowance.toFixed(3)} BHD
+                                </td>
+                              </tr>
+                              <tr className="bg-slate-50/60">
+                                <td className="py-1.5 px-3 text-slate-700">
+                                  {isAr ? 'علاوة الحوافز والمسؤولية المهنية' : 'Incentive / Responsibility Bonus'}
+                                </td>
+                                <td className={`py-1.5 px-3 font-mono font-bold ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {incentiveBonus.toFixed(3)} BHD
+                                </td>
+                              </tr>
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t-2 border-slate-900 bg-emerald-50/70 font-black text-emerald-900 text-[13px]">
+                                <td className="py-2.5 px-3">
+                                  {isAr ? 'إجمالي صافي الراتب الشهري:' : 'TOTAL MONTHLY SALARY:'}
+                                </td>
+                                <td className={`py-2.5 px-3 font-mono text-sm ${isAr ? 'text-left' : 'text-right'}`}>
+                                  {effectiveTotalSalary.toFixed(3)} BHD
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Post Table Clause */}
+                      {postTableClause && (
+                        <p className="leading-loose font-medium">
+                          {postTableClause}
+                        </p>
+                      )}
+
+                      {/* Custom Notes if provided */}
+                      {customNotes.trim() && (
+                        <p className="p-2.5 bg-slate-50 border-l-4 border-slate-400 rounded text-xs text-slate-700 italic">
+                          {customNotes.trim()}
+                        </p>
+                      )}
+
+                      {/* General Disclaimer */}
+                      <p className="text-[11px] text-slate-500 pt-2">
+                        {isAr
+                          ? 'تم إصدار هذه الشهادة بناءً على طلب الموظف لاستخدامها في الأغراض الرسمية، دون أدنى مسؤولية أو التزام مالي يترتب على الشركة تجاه الغير.'
+                          : "This certificate is issued upon the employee's request for official purposes without any financial liability or commitment on the company's part."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 6. OFFICIAL FOOTER: AUTHORIZED SIGNATORY & COMPANY SEAL */}
+                  <div
+                    className="footer-section pt-8 border-t border-slate-200 flex items-end justify-between mt-10"
+                    dir="ltr"
+                    style={{
+                      marginTop: '40px',
+                      paddingTop: '20px',
+                      borderTop: '1px solid #e2e8f0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-end',
+                      direction: 'ltr'
+                    }}
+                  >
+                    {/* Authorized Signatory Block */}
+                    <div className="sig-box text-center" style={{ textAlign: 'center', width: '220px' }}>
+                      <div style={{ height: '75px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {!withoutSealAndSignature ? (
+                          <img
+                            src={selectedCr.signature_url || DEFAULT_SIGNATURE}
+                            alt="CEO Signature"
+                            className="sig-img"
+                            style={{
+                              maxHeight: '80px',
+                              maxWidth: '200px',
+                              objectFit: 'contain',
+                              filter: 'contrast(1.2)'
+                            }}
+                          />
+                        ) : (
+                          <div style={{ height: '75px' }} />
+                        )}
+                      </div>
+                      <div className="sig-name" style={{ fontSize: '13px', fontWeight: 900, color: '#0f172a', marginTop: '5px' }}>
+                        {signatoryName || 'Authorized Signatory'}
+                      </div>
+                      <div className="sig-title" style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase' }}>
+                        {isAr ? (signatoryRoleAr || signatoryRoleEn) : (signatoryRoleEn || signatoryRoleAr)}
+                      </div>
+                    </div>
+
+                    {/* Official Company Seal Block */}
+                    <div
+                      className="seal-box"
+                      style={{
+                        width: '220px',
+                        border: withoutSealAndSignature ? '1.5px dashed #cbd5e1' : '1.5px solid #94a3b8',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        background: withoutSealAndSignature ? '#ffffff' : '#f8fafc'
+                      }}
+                    >
+                      <span
+                        className="seal-label"
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 900,
+                          textTransform: 'uppercase',
+                          color: '#475569',
+                          borderBottom: '1px solid #cbd5e1',
+                          paddingBottom: '4px',
+                          marginBottom: '8px',
+                          display: 'block',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        {isAr ? "ختم المنشأة الرسمي • Company's Seal" : "Company's Seal"}
+                      </span>
+                      <div style={{ height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {!withoutSealAndSignature ? (
+                          <img
+                            src={selectedCr.stamp_url || generateCrStampSvg(selectedCr.cr_name_ar, selectedCr.cr_name, selectedCr.cr_number)}
+                            alt="Official Corporate Seal"
+                            className="seal-img"
+                            style={{ maxHeight: '90px', width: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+                          />
+                        ) : (
+                          <div style={{ height: '90px' }} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
     </div>
