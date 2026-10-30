@@ -378,7 +378,7 @@ const PaymentSummary: React.FC<{
           BP Due <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.amountToCollectBhd)}</span>
           {isBenefitPayPending(order) && (
             <span aria-label="Pending Benefit Pay" role="img" className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#f6b000] align-middle">
-              <Hourglass aria-hidden="true" className="h-3 w-3 animate-spin text-white" />
+              <Hourglass aria-hidden="true" className="h-3 w-3 animate-[spin_2s_linear_infinite] text-black" />
             </span>
           )}
         </p>
