@@ -363,8 +363,6 @@ const PaymentSummary: React.FC<{
 
   return (
     <div className="max-w-full">
-      {order.customerAddress && <p className="text-xs">{order.customerAddress}</p>}
-      {order.locationUrl && <p className="break-all text-xs">{order.locationUrl}</p>}
       <div className="flex min-w-0 items-center gap-1">
         <span
           className={

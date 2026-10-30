@@ -202,8 +202,6 @@ const deliveryOrderExportColumns: DeliveryOrderExportColumn[] = [
   { header: 'Order source', keepWhenEmpty: true, value: order => deliverySourceLabel(order.externalSource) },
   { header: 'External order ID', value: order => order.externalOrderId || '' },
   { header: 'Dispatch mode', keepWhenEmpty: true, value: order => order.dispatchMode === 'log_only' ? 'Log Only' : 'System' },
-  { header: 'Detailed address', value: order => order.customerAddress || '' },
-  { header: 'Location URL', value: order => order.locationUrl || '' },
   { header: 'BP received time', width: 18, value: order => formatTimeValue(order.benefitPayReceivedTime) },
   { header: 'Pharmacist', value: order => order.pharmacistName || '' },
   { header: 'Driver ID', value: order => order.driverCode || '' },

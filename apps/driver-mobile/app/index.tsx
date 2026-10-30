@@ -2019,6 +2019,29 @@ const OrderCard = ({
         </View>
       </View>
 
+      {!isTransfer && (order.customerAddress || order.locationUrl) ? (
+        <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12, gap: 8 }}>
+          {order.customerAddress ? (
+            <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>
+              {(language === 'ar' ? 'العنوان التفصيلي' : language === 'ur' ? 'مکمل پتہ' : language === 'bn' ? 'বিস্তারিত ঠিকানা' : 'Detailed address')}: {order.customerAddress}
+            </Text>
+          ) : null}
+          {order.locationUrl ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => Linking.openURL(order.locationUrl!).catch(() => Alert.alert(
+                language === 'ar' ? 'تعذر فتح الموقع' : language === 'ur' ? 'مقام نہیں کھل سکا' : language === 'bn' ? 'অবস্থান খোলা যায়নি' : 'Could not open map'
+              ))}
+              style={{ alignSelf: isRtl ? 'flex-end' : 'flex-start', borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 12, paddingVertical: 9 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800' }}>
+                {language === 'ar' ? 'افتح موقع التوصيل' : language === 'ur' ? 'ڈیلیوری کا مقام کھولیں' : language === 'bn' ? 'ডেলিভারির অবস্থান খুলুন' : 'Open delivery location'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       <PaymentCollectionPanel
         order={order}
         language={language}

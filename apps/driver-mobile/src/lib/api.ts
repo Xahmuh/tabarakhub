@@ -166,6 +166,8 @@ export type DriverOrder = {
   blockNumber?: string | null;
   areaName?: string | null;
   governorate?: string | null;
+  locationUrl?: string | null;
+  customerAddress?: string | null;
   deliveryStatus: DriverOrderStatus;
   assignedAt?: string | null;
   pickedUpAt?: string | null;
@@ -225,6 +227,8 @@ const mapOrder = (row: any): DriverOrder => ({
   blockNumber: row.block_number,
   areaName: row.area_name,
   governorate: row.governorate,
+  locationUrl: row.location_url || null,
+  customerAddress: row.customer_address || null,
   deliveryStatus: row.delivery_status,
   assignedAt: row.assigned_at,
   pickedUpAt: row.picked_up_at,
