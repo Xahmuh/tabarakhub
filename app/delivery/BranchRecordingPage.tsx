@@ -240,6 +240,7 @@ const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded
 const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
 const reconcileActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2.5 text-[9px] font-black uppercase tracking-widest text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50';
 const confirmBpActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2.5 text-[9px] font-black uppercase tracking-widest text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50';
+const reconciliationStatusClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border px-2.5 text-[9px] font-black uppercase tracking-widest shadow-sm';
 const benefitPayTraceIconClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const collectionPanelBaseClass = 'rounded-lg border p-2';
 const collectionPanelCompactClass = `${collectionPanelBaseClass} min-h-[58px]`;
@@ -1298,12 +1299,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const handleOpenDestinationDetails = async (order: DeliveryOrder, event: React.MouseEvent<HTMLButtonElement>) => {
     const iconRect = event.currentTarget.getBoundingClientRect();
     const popupWidth = Math.min(352, window.innerWidth - 24);
-    const popupMaxHeight = Math.min(544, window.innerHeight - 24);
-    const left = Math.max(12, Math.min(iconRect.right - popupWidth, window.innerWidth - popupWidth - 12));
-    let top = iconRect.bottom + 8;
-    if (top + popupMaxHeight > window.innerHeight - 12) {
-      top = Math.max(12, iconRect.top - popupMaxHeight - 8);
-    }
+    const top = Math.min(iconRect.bottom + 4, window.innerHeight - 100);
+    const left = Math.max(12, Math.min(iconRect.left + iconRect.width / 2 - popupWidth / 2, window.innerWidth - popupWidth - 12));
+    const popupMaxHeight = Math.max(88, Math.min(544, window.innerHeight - top - 12));
     const position = { top, left, width: popupWidth, maxHeight: popupMaxHeight };
     setDestinationDetailsLoadingId(order.id);
     try {
@@ -2448,14 +2446,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </div>
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-3 pr-4 text-right align-top">
-                        <div className="flex min-w-0 items-center gap-1">
-                          {reconciliationBadge && (
-                            <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[9px] font-extrabold leading-4 ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
-                              {reconciliationBadge.label}
-                            </span>
-                          )}
+                        <div className="flex min-w-0 items-center justify-end gap-1">
                         {canEdit && (
-                          <div className="ml-auto flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+                          <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
                             {isBenefitPayPending(order) && (
                               <button
                                 onClick={() => handleConfirmBenefitPayReceived(order)}
@@ -2490,6 +2483,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                                 <UserPlus className="h-3.5 w-3.5" />
                                 Reassign
                               </button>
+                            )}
+                            {reconciliationBadge && (
+                              <span className={`${reconciliationStatusClass} ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
+                                {order.driverReconciledAt && <CheckCircle2 className="h-4 w-4" />}
+                                {reconciliationBadge.label}
+                              </span>
                             )}
                             {(
                               <>
@@ -2593,14 +2592,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
                   </div>
-                  {(reconciliationBadge || canEdit) && (
-                    <div className="mt-3 flex items-center gap-1">
-                      {reconciliationBadge && (
-                        <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[9px] font-extrabold leading-4 ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
-                          {reconciliationBadge.label}
-                        </span>
-                      )}
-                      {canEdit && <div className="ml-auto flex flex-nowrap items-center justify-end gap-2">
+                  {canEdit && (
+                    <div className="mt-3 flex flex-nowrap items-center justify-end gap-2">
                       {isBenefitPayPending(order) && (
                         <button
                           onClick={() => handleConfirmBenefitPayReceived(order)}
@@ -2636,6 +2629,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           Reassign
                         </button>
                       )}
+                      {reconciliationBadge && (
+                        <span className={`${reconciliationStatusClass} ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
+                          {order.driverReconciledAt && <CheckCircle2 className="h-4 w-4" />}
+                          {reconciliationBadge.label}
+                        </span>
+                      )}
                     {(
                       <>
                       <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
@@ -2646,7 +2645,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </button>
                       </>
                       )}
-                      </div>}
                     </div>
                   )}
                 </div>
