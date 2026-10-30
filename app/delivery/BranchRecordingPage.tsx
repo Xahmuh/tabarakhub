@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
-import { deliveryService } from '../../services/deliveryService';
+import { deliveryService, DeliveryDriverDutyStatus } from '../../services/deliveryService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
   Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentCollectionStatus, DeliveryPaymentType, DeliveryPaymentTypeConfig, Pharmacist
 } from '../../types';
-import { SearchableSelect } from './components/SearchableSelect';
+import { SearchableSelect, SelectOption } from './components/SearchableSelect';
 import { formatBhd, todayKey, yesterdayKey } from './utils';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
@@ -26,6 +26,9 @@ import {
 } from '../../utils/deliveryImportUtils';
 import { formatBhdAmount, truncateBhd } from '../../utils/money';
 import { formatTimeInput24, PaginationControls, TIME_24H_PATTERN, TimeInput24 } from '../shared';
+import { supabaseClient } from '../../lib/supabaseClient';
+import { deliveryLockKey, deliveryPaymentOrderLabel, deliverySourceLabel } from '../../lib/deliveryRecording';
+import { generateUUID } from '../../utils/uuid';
 
 const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
   isTalabatDeliveryPayment(type)
@@ -33,6 +36,10 @@ const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) 
     : isDeliveryPaymentBlockExempt(type, paymentTypes)
       ? 'border-slate-200 bg-slate-50 text-slate-600'
     : 'border-brand/10 bg-brand/5 text-brand';
+
+const isTWalletPaymentType = (type: DeliveryPaymentTypeConfig) =>
+  normalizeDeliveryPaymentCode(type.code) === 'WALLET'
+  || normalizeDeliveryPaymentCode(type.label) === 'T_WALLET';
 
 const paymentCollectionMeta: Record<DeliveryPaymentCollectionStatus, { label: string; shortLabel: string; className: string }> = {
   paid: {
@@ -57,7 +64,27 @@ const paymentCollectionOptions: Array<{ value: DeliveryPaymentCollectionStatus; 
   { value: 'collect_on_delivery', label: 'On delivery', hint: 'Driver collects full amount' },
   { value: 'partial', label: 'Partial', hint: 'Driver collects remaining amount' }
 ];
+const cashFirstPaymentTypes = (types: DeliveryPaymentTypeConfig[]) => {
+  const sorted = sortDeliveryPaymentTypes(types);
+  return [
+    ...sorted.filter(type => normalizeDeliveryPaymentCode(type.code) === 'CASH'),
+    ...sorted.filter(type => normalizeDeliveryPaymentCode(type.code) !== 'CASH')
+  ];
+};
 const DELIVERY_HISTORY_PAGE_SIZE = 20;
+
+const DriverDutyIndicator: React.FC<{ isIn: boolean | null; branchCode: string | null }> = ({ isIn, branchCode }) => (
+  <span
+    className="inline-flex shrink-0 items-center gap-1 font-black text-slate-500"
+    aria-label={isIn === null ? 'Duty status unavailable' : isIn ? `In${branchCode ? ` at branch ${branchCode}` : ''}` : 'Out'}
+    title={isIn === null ? 'Duty status unavailable' : isIn ? `In${branchCode ? ` at branch ${branchCode}` : ''}` : 'Out'}
+  >
+    <span aria-hidden="true">(</span>
+    <span aria-hidden="true" className={`inline-block h-3 w-3 rounded-full border ${isIn === null ? 'border-slate-400 bg-slate-300' : isIn ? 'border-emerald-700 bg-emerald-500' : 'border-red-700 bg-red-500'}`} />
+    {isIn && branchCode && <span className="text-[11px] text-slate-600">{branchCode}</span>}
+    <span aria-hidden="true">)</span>
+  </span>
+);
 
 const isPaymentCollectionPending = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
@@ -127,7 +154,9 @@ const talabatChannelBadgeClass = 'inline-flex min-h-[22px] items-center justify-
 const firstDriverName = (name?: string | null) => name?.trim().split(/\s+/)[0] || '-';
 
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
-  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? talabatChannelLabel : firstDriverName(order.driverName);
+  isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
+    ? talabatChannelLabel
+    : firstDriverName(order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName : order.driverName);
 
 const TalabatChannelBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
   <span className={`${talabatChannelBadgeClass} ${className}`.trim()} title={talabatChannelLabel}>
@@ -149,7 +178,7 @@ const benefitPayTimeLabel = (order: DeliveryOrder) =>
 const isBenefitPayPending = (order: DeliveryOrder) =>
   isBenefitPayOrder(order) && !benefitPayTimeLabel(order) && order.paymentCollectionStatus !== 'paid';
 const collectionDueLabel = (order: DeliveryOrder) =>
-  `${isBenefitPayOrder(order) ? 'BP Due' : 'COD'} ${formatBhd(order.amountToCollectBhd)}`;
+  `${isBenefitPayOrder(order) ? 'BP Due' : 'Cash due'} ${formatBhd(order.amountToCollectBhd)}`;
 const showBenefitPayRecordedPopup = (order: DeliveryOrder) => Swal.fire({
   title: 'Benefit Pay Recorded',
   html: `
@@ -178,17 +207,21 @@ const showBenefitPayRecordedPopup = (order: DeliveryOrder) => Swal.fire({
     confirmButton: 'inline-flex h-10 items-center justify-center rounded-lg bg-brand px-4 text-[11px] font-black uppercase tracking-widest text-white shadow-sm transition hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand/20'
   }
 });
-type HistoryViewMode = 'all' | 'normal' | 'talabat';
+type HistoryViewMode = 'all' | 'whatsapp' | 'talabat' | 'online';
 const historyViewOptions: Array<{ id: HistoryViewMode; label: string }> = [
   { id: 'all', label: 'All' },
-  { id: 'normal', label: 'Normal' },
-  { id: 'talabat', label: 'Talabat' }
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'talabat', label: 'Talabat' },
+  { id: 'online', label: 'Online' }
 ];
 const isTalabatOrder = (order: DeliveryOrder) => isTalabatDeliveryPayment(order.paymentType);
 const usesFittedCollectionPanel = (paymentCode: string) =>
-  ['CARD', 'BP', 'INSURANCE', 'TALABAT'].includes(paymentCode);
+  ['CASH', 'CARD', 'BP', 'INSURANCE', 'TALABAT'].includes(paymentCode);
 const bahrainTodayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bahrain' });
 const canDeleteRecordedOrder = (order: DeliveryOrder) => {
+  if (isTalabatOrder(order) || order.externalSource === 'talabat') return true;
+  if (order.externalSource === 'woocommerce') return false;
+  if (order.dispatchMode === 'log_only' && order.deliveryStatus !== 'recorded') return false;
   const status = order.deliveryStatus || 'recorded';
   const isRecordingDelete =
     ['recorded', 'assigned'].includes(status)
@@ -305,13 +338,6 @@ const PaymentSummary: React.FC<{
     });
   }
 
-  if (benefitPayTime) {
-    detailItems.push({
-      label: `Received ${benefitPayTime}`,
-      className: 'border-blue-200 bg-blue-50 text-blue-700'
-    });
-  }
-
   if (isBenefitPayPending(order)) {
     detailItems.push({
       label: 'Pending',
@@ -340,6 +366,8 @@ const PaymentSummary: React.FC<{
 
   return (
     <div className="max-w-full">
+      {order.customerAddress && <p className="text-xs">{order.customerAddress}</p>}
+      {order.locationUrl && <p className="break-all text-xs">{order.locationUrl}</p>}
       <div className="flex min-w-0 items-center gap-1">
         <span
           className={
@@ -347,9 +375,9 @@ const PaymentSummary: React.FC<{
               ? 'mr-1 inline-flex min-h-[22px] max-w-full items-center truncate rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700'
               : 'mr-1 min-w-0 truncate text-[11px] font-black leading-5 text-slate-900'
           }
-          title={paymentLabel}
+          title={deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         >
-          {paymentLabel}
+          {deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         </span>
         {primaryDetailItem && (
           <span
@@ -360,6 +388,9 @@ const PaymentSummary: React.FC<{
           </span>
         )}
       </div>
+      {benefitPayTime && (
+        <p className="mt-0.5 text-[9px] font-bold leading-3 text-blue-700">Received {benefitPayTime}</p>
+      )}
       {secondaryDetailItems.length > 0 && (
         <div className="mt-1 space-y-1">
           {secondaryDetailItems.map((item, index) => (
@@ -392,7 +423,7 @@ const OrderDateTimeMeta: React.FC<{ order: DeliveryOrder }> = ({ order }) => {
 
   return (
     <div className="mt-1 flex flex-wrap items-center justify-start gap-1.5 text-[11px] font-bold text-slate-400">
-      <span className="whitespace-nowrap text-slate-600">{order.orderDate}</span>
+      <span className="whitespace-nowrap text-slate-600">{order.orderDate}{order.orderTime ? ` ${order.orderTime.slice(0, 5)}` : ''}</span>
       <span className="whitespace-nowrap">{createdTime}</span>
     </div>
   );
@@ -427,8 +458,23 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   onOpenBenefitPayTransfer
 }) => {
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
+  const recordingV1 = (import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1';
+  const [operatorId, setOperatorId] = useState('');
+  const [hydratedLockKey, setHydratedLockKey] = useState('');
+  const [dispatchMode, setDispatchMode] = useState<'system' | 'log_only'>('system');
+  const [locationUrl, setLocationUrl] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [pendingRecording, setPendingRecording] = useState<DeliveryOrderInput | null>(null);
+  useEffect(() => {
+    const { data } = supabaseClient.auth.onAuthStateChange((_event, session) => setOperatorId(session?.user?.id || ''));
+    void supabaseClient.auth.getSession().then(({ data: auth }) => setOperatorId(auth.session?.user?.id || ''));
+    return () => data.subscription.unsubscribe();
+  }, []);
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
+  const [driverDutyStatusById, setDriverDutyStatusById] = useState<Record<string, DeliveryDriverDutyStatus>>({});
+  const driverDutyStatusRequest = useRef(0);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
+  const [referenceDataLoaded, setReferenceDataLoaded] = useState(false);
   const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>(DEFAULT_DELIVERY_PAYMENT_TYPES);
   const [historyOrders, setHistoryOrders] = useState<DeliveryOrder[]>([]);
@@ -436,6 +482,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [historyTo, setHistoryTo] = useState(todayKey());
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const [isTemplateDownloading, setIsTemplateDownloading] = useState(false);
   const [isHistoryBulkCancelling, setIsHistoryBulkCancelling] = useState(false);
@@ -448,6 +495,45 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [isReassigning, setIsReassigning] = useState(false);
   const [historyView, setHistoryView] = useState<HistoryViewMode>('all');
   const [historyPage, setHistoryPage] = useState(1);
+
+  const refreshDriverDutyStatus = useCallback(async () => {
+    const requestId = ++driverDutyStatusRequest.current;
+    try {
+      const statuses = await deliveryService.drivers.listDropdownDutyStatus(branch.id);
+      if (requestId === driverDutyStatusRequest.current) {
+        setDriverDutyStatusById(Object.fromEntries(statuses.map(status => [status.driverId, status])));
+      }
+    } catch (error) {
+      // The driver list and order assignment remain usable if status is unavailable.
+      console.warn('Driver duty status unavailable', error);
+    }
+  }, [branch.id]);
+
+  useEffect(() => {
+    driverDutyStatusRequest.current += 1;
+    setDriverDutyStatusById({});
+    void refreshDriverDutyStatus();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshDriverDutyStatus();
+    }, 30_000);
+    const onFocus = () => { void refreshDriverDutyStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      driverDutyStatusRequest.current += 1;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshDriverDutyStatus]);
+
+  const renderDriverOption = (option: SelectOption) => {
+    const status = driverDutyStatusById[option.value];
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="truncate">{option.label}</span>
+        <DriverDutyIndicator isIn={status?.isIn ?? null} branchCode={status?.inBranchCode ?? null} />
+      </span>
+    );
+  };
 
   // Form state
   const [orderDate, setOrderDate] = useState(todayKey());
@@ -473,7 +559,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [branchOriginBlockNumber, setBranchOriginBlockNumber] = useState<string | null>(null);
 
   const selectedBlock = useMemo(
-    () => blocks.find(block => block.blockNumber === blockInput) || resolvedBlock,
+    () => blocks.find(block => block.blockNumber === blockInput.trim()) || (resolvedBlock?.blockNumber === blockInput.trim() ? resolvedBlock : null),
     [blocks, blockInput, resolvedBlock]
   );
   const blockOptions = useMemo(() => blocks.map(block => ({
@@ -483,18 +569,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   })), [blocks]);
 
   const activePaymentTypes = useMemo(
-    () => sortDeliveryPaymentTypes(paymentTypes).filter(type => type.isActive),
+    () => cashFirstPaymentTypes(paymentTypes).filter(type => type.isActive && !isTWalletPaymentType(type)),
     [paymentTypes]
   );
   const paymentOptions = useMemo(() => {
-    const sorted = sortDeliveryPaymentTypes(paymentTypes);
-    const active = sorted.filter(type => type.isActive);
+    const sorted = cashFirstPaymentTypes(paymentTypes);
+    const active = sorted.filter(type => type.isActive && (!isTWalletPaymentType(type) || (!!editingOrder && type.code === paymentType)));
     if (paymentType && !active.some(type => type.code === paymentType)) {
       const current = sorted.find(type => type.code === paymentType);
-      if (current) return [...active, current];
+      if (current && (!isTWalletPaymentType(current) || !!editingOrder)) return [...active, current];
     }
     return active;
-  }, [paymentTypes, paymentType]);
+  }, [editingOrder, paymentTypes, paymentType]);
   const defaultPaymentType = activePaymentTypes.find(type => type.code === 'CASH')?.code || activePaymentTypes[0]?.code || 'CASH';
   const selectedPaymentType = paymentOptions.find(type => type.code === paymentType);
   const normalizedPaymentType = normalizeDeliveryPaymentCode(paymentType);
@@ -523,7 +609,36 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager || editingOrder ? undefined : yesterdayKey();
   const maxDate = isManager || editingOrder ? undefined : todayKey();
-  const lockStorageKey = `delivery-entry-locks:${branch.id}`;
+  const hasValidRecordingDate = Boolean(orderDate)
+    && !Number.isNaN(new Date(`${orderDate}T00:00:00`).getTime())
+    && (!minDate || orderDate >= minDate)
+    && (!maxDate || orderDate <= maxDate);
+  const hasValidRecordingValue = Number.isFinite(orderValueNumber) && orderValueNumber > 0;
+  const hasValidPharmacist = Boolean(pharmacistId && pharmacists.some(pharmacist => pharmacist.id === pharmacistId));
+  const hasRequiredDriver = isBlockExemptPayment
+    || Boolean(driverId && drivers.some(driver => driver.id === driverId && driver.isActive));
+  const hasRequiredBlock = !requiresBlock
+    || Boolean(selectedBlock && selectedBlock.blockNumber === blockInput.trim());
+  const hasRequiredBenefitPayTime = !shouldCaptureBenefitPayTime || TIME_24H_PATTERN.test(benefitPayReceivedTime);
+  const hasValidPartialCollection = paymentCollectionStatus !== 'partial'
+    || (Number.isFinite(amountReceivedNumber) && amountReceivedNumber > 0 && amountReceivedNumber < orderValueNumber);
+  const hasValidDriverChange = paymentCollectionStatus !== 'collect_on_delivery'
+    || !cashHandedToDriver.trim()
+    || (Number.isFinite(Number(cashHandedToDriver)) && Number(cashHandedToDriver) >= 0);
+  const hasValidLocationUrl = !recordingV1
+    || !locationUrl.trim()
+    || /^https:\/\/[^\s]+$/i.test(locationUrl.trim());
+  const isRecordingFormComplete = Boolean(selectedPaymentType)
+    && hasValidRecordingDate
+    && hasValidRecordingValue
+    && hasValidPharmacist
+    && hasRequiredDriver
+    && hasRequiredBlock
+    && hasRequiredBenefitPayTime
+    && hasValidPartialCollection
+    && hasValidDriverChange
+    && hasValidLocationUrl;
+  const lockStorageKey = deliveryLockKey(`${window.location.origin}|${(import.meta as any).env?.VITE_SUPABASE_URL || ''}`, operatorId, branch.id);
   const historyRange = useMemo(() => (
     historyFrom <= historyTo
       ? { from: historyFrom, to: historyTo }
@@ -531,9 +646,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   ), [historyFrom, historyTo]);
   const isOrderInsideHistoryRange = (order: DeliveryOrder) => order.orderDate >= historyRange.from && order.orderDate <= historyRange.to;
   const visibleHistoryOrders = useMemo(
-    () => historyView === 'all'
+    () => (historyView === 'all'
       ? historyOrders
-      : historyOrders.filter(order => historyView === 'talabat' ? isTalabatOrder(order) : !isTalabatOrder(order)),
+      : historyOrders.filter(order => deliverySourceLabel(order.externalSource, order.paymentType).toLowerCase() === historyView)),
     [historyOrders, historyView]
   );
   const totalHistoryPages = Math.max(1, Math.ceil(visibleHistoryOrders.length / DELIVERY_HISTORY_PAGE_SIZE));
@@ -550,9 +665,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const canUseHistorySelection = canEdit && visibleHistoryOrders.length > 0;
 
   const loadReference = async () => {
+    setReferenceDataLoaded(false);
     try {
       const [driverList, pharmacistList, blockList, branchProfile] = await Promise.all([
-        deliveryService.drivers.listByBranch(branch.id),
+        recordingV1 ? deliveryService.drivers.list() : deliveryService.drivers.listByBranch(branch.id),
         pharmacistService.listByBranch(branch.id),
         deliveryService.blocks.list(),
         branchDeliveryProfileService.getBranchDeliveryProfile(branch.id).catch(error => {
@@ -564,6 +680,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       setPharmacists(pharmacistList);
       setBlocks(blockList);
       setBranchOriginBlockNumber(branchProfile?.originBlockNumber || null);
+      setReferenceDataLoaded(true);
       deliveryService.paymentTypes.list()
         .then(types => setPaymentTypes(sortDeliveryPaymentTypes(types)))
         .catch(error => console.warn('Delivery payment types load failed', error));
@@ -633,12 +750,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
   useEffect(() => {
     setLocksHydrated(false);
+    if (!operatorId) { setPharmacistId(null); setDriverId(null); setPendingRecording(null); return; }
     let nextPharmacistId: string | null = null;
     let nextDriverId: string | null = null;
     let nextPharmacistLocked = false;
     let nextDriverLocked = false;
     try {
       const saved = localStorage.getItem(lockStorageKey);
+      const pending = localStorage.getItem(lockStorageKey + ':pending');
+      setPendingRecording(pending ? JSON.parse(pending) : null);
       if (saved) {
         const parsed = JSON.parse(saved) as {
           pharmacistId?: string | null;
@@ -663,11 +783,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       setIsPharmacistLocked(nextPharmacistLocked);
       setIsDriverLocked(nextDriverLocked);
       setLocksHydrated(true);
+      setHydratedLockKey(lockStorageKey);
     }
-  }, [lockStorageKey]);
+  }, [lockStorageKey, operatorId]);
 
   useEffect(() => {
-    if (!locksHydrated) return;
+    if (!locksHydrated || !operatorId || hydratedLockKey !== lockStorageKey) return;
     const hasLockedValue = (isPharmacistLocked && pharmacistId) || (isDriverLocked && driverId);
     if (!hasLockedValue) {
       localStorage.removeItem(lockStorageKey);
@@ -679,18 +800,17 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       isDriverLocked,
       driverId: isDriverLocked ? driverId : null
     }));
-  }, [lockStorageKey, locksHydrated, isPharmacistLocked, pharmacistId, isDriverLocked, driverId]);
+  }, [lockStorageKey, locksHydrated, hydratedLockKey, operatorId, isPharmacistLocked, pharmacistId, isDriverLocked, driverId]);
 
   useEffect(() => {
     if (!isBlockExemptPayment) return;
-    setDriverId(null);
-    setIsDriverLocked(false);
+    if (!recordingV1) { setDriverId(null); setIsDriverLocked(false); }
     setPaymentCollectionStatus('paid');
     setAmountReceived('');
     setCashHandedToDriver('');
     setBenefitPayReceivedTime('');
     setDriverPaymentNote('');
-  }, [isBlockExemptPayment]);
+  }, [isBlockExemptPayment, recordingV1]);
 
   // Resolve block -> area as the user types.
   useEffect(() => {
@@ -714,7 +834,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       resolvedBlock
       && (
         resolvedBlock.blockNumber.toLowerCase() === trimmed.toLowerCase()
-        || blockMatches.some(block => block.blockNumber === resolvedBlock.blockNumber)
       )
     ) {
       setBlockMatches([resolvedBlock]);
@@ -730,7 +849,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       if (cancelled) return;
       const normalized = trimmed.toLowerCase();
       const exact = matches.find(block => block.blockNumber.toLowerCase() === normalized);
-      const selected = exact || (matches.length === 1 ? matches[0] : null);
+      const selected = exact || null;
       setBlockMatches(matches);
       setResolvedBlock(selected);
       setBlockNotFound(matches.length === 0);
@@ -759,6 +878,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   };
 
   const resetForm = (preserveBatchContext = true) => {
+    setLocationUrl(''); setCustomerAddress('');
     // Keep locked people only; unlocked selectors reset after each order.
     setValue('');
     setBlockInput('');
@@ -812,18 +932,21 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       ? 'paid'
       : order.paymentCollectionStatus || 'paid';
     setEditingOrder(order);
+    setDispatchMode(order.dispatchMode || 'system');
     setOrderDate(order.orderDate);
     setHistoryFrom(order.orderDate);
     setHistoryTo(order.orderDate);
     setValue(formatBhdAmount(order.valueBhd));
     setPaymentType(order.paymentType);
+    setLocationUrl(order.locationUrl || '');
+    setCustomerAddress(order.customerAddress || '');
     setPaymentCollectionStatus(nextPaymentCollectionStatus);
     setAmountReceived(nextPaymentCollectionStatus === 'partial' ? formatBhdAmount(order.amountReceivedBhd) : '');
     setCashHandedToDriver(order.cashHandedToDriverBhd > 0 ? formatBhdAmount(order.cashHandedToDriverBhd) : '');
     setBenefitPayReceivedTime(normalizeDeliveryPaymentCode(order.paymentType) === 'BP' ? (order.benefitPayReceivedTime || '').slice(0, 5) : '');
     setDriverPaymentNote(order.driverPaymentNote || '');
     setPharmacistId(order.pharmacistId || null);
-    setDriverId(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? null : order.driverId || null);
+    setDriverId(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? null : order.dispatchMode === 'log_only' ? order.recordedDriverId || null : order.driverId || null);
     setBlockInput(isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? '' : order.blockNumber || '');
     setResolvedBlock(null);
     setBlockMatches([]);
@@ -878,7 +1001,67 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      if (recordingV1 && !editingOrder && !isTalabatDeliveryPayment(paymentType)) {
+        let selectedMode: 'system' | 'log_only' | null = null;
+        await Swal.fire({
+          title: 'Record delivery order',
+          html: `
+            <p class="mb-4 text-left text-xs font-bold text-slate-500">Choose what should happen after this order is recorded.</p>
+            <div style="display:grid;gap:10px;text-align:left">
+              <button type="button" data-dispatch-mode="log_only" aria-describedby="recorded-only-description" style="display:block;width:100%;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:14px 16px;text-align:left;cursor:pointer">
+                <span style="display:block;color:#0f172a;font-size:14px;font-weight:800">Recorded only</span>
+                <span id="recorded-only-description" style="display:block;margin-top:4px;color:#64748b;font-size:11px;font-weight:600;line-height:1.45">Save this order with the selected driver recorded, without creating a Driver App task.</span>
+              </button>
+              <button type="button" data-dispatch-mode="system" aria-describedby="send-to-driver-description" style="display:block;width:100%;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;padding:14px 16px;text-align:left;cursor:pointer">
+                <span style="display:block;color:#b91c1c;font-size:14px;font-weight:800">Send to Driver App</span>
+                <span id="send-to-driver-description" style="display:block;margin-top:4px;color:#64748b;font-size:11px;font-weight:600;line-height:1.45">Record this order and send it to the selected driver through the delivery system.</span>
+              </button>
+            </div>
+          `,
+          showConfirmButton: false,
+          showCancelButton: true,
+          cancelButtonText: 'Cancel',
+          buttonsStyling: false,
+          customClass: {
+            popup: 'rounded-xl border border-slate-200 p-0 shadow-2xl',
+            title: 'px-6 pt-6 text-left text-xl font-black text-slate-900',
+            htmlContainer: 'px-6 pb-2 pt-1',
+            actions: 'mb-5 mt-3 flex w-full justify-end px-6',
+            cancelButton: 'inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-[11px] font-black uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50'
+          },
+          didOpen: () => {
+            const popup = Swal.getPopup();
+            popup?.querySelector<HTMLButtonElement>('[data-dispatch-mode="log_only"]')?.addEventListener('click', () => {
+              selectedMode = 'log_only';
+              Swal.close();
+            });
+            popup?.querySelector<HTMLButtonElement>('[data-dispatch-mode="system"]')?.addEventListener('click', () => {
+              selectedMode = 'system';
+              Swal.close();
+            });
+          }
+        });
+        if (!selectedMode) return;
+        await submitRecording(selectedMode);
+        return;
+      }
+
+      await submitRecording(recordingV1 && !editingOrder && isTalabatDeliveryPayment(paymentType) ? 'log_only' : undefined);
+    } finally {
+      submittingRef.current = false;
+    }
+  };
+  const submitRecording = async (dispatchModeOverride?: 'system' | 'log_only') => {
+    const selectedDispatchMode = recordingV1
+      ? isTalabatDeliveryPayment(paymentType) ? 'log_only' : dispatchModeOverride || dispatchMode
+      : dispatchMode;
+    if (!operatorId || !locksHydrated || hydratedLockKey !== lockStorageKey) {
+      void Swal.fire('Please wait', 'Confirming your recording identity and saved selections.', 'info');
+      return;
+    }
     if (!orderDate || Number.isNaN(new Date(`${orderDate}T00:00:00`).getTime())) {
       Swal.fire('Missing date', 'Select a valid order date.', 'warning');
       return;
@@ -917,7 +1100,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       Swal.fire('Pharmacist required', 'Select the pharmacist before saving this delivery order.', 'warning');
       return;
     }
-    if (!isBlockExemptPayment && !driverId) {
+  if (!isBlockExemptPayment && (!driverId || (recordingV1 && selectedDispatchMode === 'system' && !drivers.some(driver => driver.id === driverId && driver.authUserId)))) {
       Swal.fire('Driver required', 'Select the driver before saving this delivery order.', 'warning');
       return;
     }
@@ -958,6 +1141,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     }
 
     const input: DeliveryOrderInput = {
+      ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, idempotencyKey: generateUUID() } : {}),
       branchId: branch.id,
       orderDate,
       valueBhd: value,
@@ -969,7 +1153,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       driverPaymentNote: isBlockExemptPayment ? null : driverPaymentNote.trim() || null,
       pharmacistId,
       pharmacistName: pharmacists.find(p => p.id === pharmacistId)?.name || null,
-      driverId: isBlockExemptPayment ? null : driverId,
+      driverId: isBlockExemptPayment || selectedDispatchMode === 'log_only' ? null : driverId,
+      recordedDriverId: !isBlockExemptPayment && selectedDispatchMode === 'log_only' ? driverId : null,
       blockNumber: requiresBlock ? selectedBlock?.blockNumber || null : null
     };
 
@@ -1000,7 +1185,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         if (!proceed.isConfirmed) { setIsSubmitting(false); return; }
       }
 
+      if (recordingV1) {
+        if (!operatorId) throw new Error('Sign in before recording.');
+        if (pendingRecording || localStorage.getItem(lockStorageKey + ':pending')) throw new Error('Confirm the pending recording using Retry before starting another.');
+        localStorage.setItem(lockStorageKey + ':pending', JSON.stringify(input)); setPendingRecording(input);
+      }
       const created = await deliveryService.orders.insert(input);
+      localStorage.removeItem(lockStorageKey + ':pending'); setPendingRecording(null);
       if (isOrderInsideHistoryRange(created)) {
         setHistoryOrders(prev => sortOrdersNewestFirst([created, ...prev]));
       }
@@ -1009,6 +1200,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         await showBenefitPayRecordedPopup(created);
       }
     } catch (e: any) {
+      if (e?.code === '22023' || e?.code === '22P02' || e?.code === '22007' || e?.code === '22008') {
+        localStorage.removeItem(lockStorageKey + ':pending'); setPendingRecording(null);
+      }
       Swal.fire(editingOrder ? 'Update failed' : 'Save failed', e?.message || 'Could not save the delivery order.', 'error');
     } finally {
       setIsSubmitting(false);
@@ -1016,6 +1210,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   };
 
   const handleDelete = async (order: DeliveryOrder) => {
+    const isTalabat = isTalabatOrder(order) || order.externalSource === 'talabat';
+    const isRecordedOnly = order.dispatchMode === 'log_only' && !isTalabat;
+    const isAuditedVoid = isTalabat || isRecordedOnly;
     if (!canDeleteRecordedOrder(order)) {
       Swal.fire(
         'Delete unavailable',
@@ -1026,16 +1223,30 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     }
 
     const confirm = await Swal.fire({
-      title: 'Delete recorded invoice?',
-      text: `${deliveryOrderNumber(order)} · ${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
+      title: isTalabat ? 'Void Talabat order?' : isRecordedOnly ? 'Void Recorded only order?' : 'Delete recorded invoice?',
+      text: isRecordedOnly
+        ? `${deliveryOrderNumber(order)} · ${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}. This removes it from active views and preserves an audit record.`
+        : isTalabat
+          ? `${deliveryOrderNumber(order)} · ${formatBhd(order.valueBhd)} · Talabat · ${order.orderDate}. The audited financial record is retained and hidden from active lists.`
+        : `${deliveryOrderNumber(order)} · ${formatBhd(order.valueBhd)} · ${order.paymentType} · ${order.orderDate}`,
+      ...(isAuditedVoid ? {
+        input: 'textarea' as const,
+        inputPlaceholder: 'Reason for voiding this order',
+        inputAttributes: { 'aria-label': 'Reason for voiding this order' },
+        inputValidator: (value: string) => !value.trim() || value.trim().length < 3
+          ? 'Enter a reason with at least 3 characters.'
+          : undefined
+      } : {}),
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Delete recording',
+      confirmButtonText: isAuditedVoid ? 'Void order' : 'Delete order',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
     try {
-      await deliveryService.orders.delete(order.id);
+      if (isTalabat) await deliveryService.orders.voidTalabat(order.id, String(confirm.value || '').trim());
+      else if (isRecordedOnly) await deliveryService.orders.voidRecordedOnly(order.id, String(confirm.value || '').trim());
+      else await deliveryService.orders.delete(order.id);
       setHistoryOrders(prev => prev.filter(o => o.id !== order.id));
       setSelectedHistoryIds(prev => {
         const next = new Set(prev);
@@ -1043,7 +1254,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         return next;
       });
     } catch (e: any) {
-      Swal.fire('Delete failed', e?.message || 'Could not delete this recorded delivery invoice.', 'error');
+      Swal.fire(isAuditedVoid ? 'Void failed' : 'Delete failed', e?.message || 'Could not update this recorded delivery invoice.', 'error');
     }
   };
 
@@ -1457,11 +1668,27 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
   return (
     <div className="space-y-5">
+      {recordingV1 && operatorId && hydratedLockKey === lockStorageKey && pendingRecording && <div className="rounded-lg border border-amber-300 p-3 text-sm">A recording is awaiting confirmation. Retry sends the original saved entry.
+        <button disabled={isSubmitting} className="btn-secondary ml-2" onClick={async () => {
+          if (submittingRef.current) return;
+          submittingRef.current = true;
+          setIsSubmitting(true);
+          try {
+            const saved = await deliveryService.orders.insert(pendingRecording);
+            localStorage.removeItem(lockStorageKey + ':pending'); setPendingRecording(null);
+            setHistoryOrders(previous => sortOrdersNewestFirst([saved, ...previous.filter(o => o.id !== saved.id)])); resetForm();
+          } catch (error: any) {
+            if (['22023','22P02','22007','22008'].includes(error?.code)) { localStorage.removeItem(lockStorageKey + ':pending'); setPendingRecording(null); }
+            void Swal.fire('Retry failed', error?.message || 'Keep this request and retry later.', 'error');
+          } finally { submittingRef.current = false; setIsSubmitting(false); }
+        }}>Retry pending entry</button>
+      </div>}
       {canEdit && (
         <section id="delivery-order-form" className="operational-panel p-4 md:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-700">
+                {!editingOrder && <img src="/assets/delivery-package.png" alt="" aria-hidden="true" className="h-10 w-10 shrink-0 object-contain" />}
                 {editingOrder ? 'Edit delivery order' : 'New delivery order'}
               </h3>
               {editingOrder && (
@@ -1491,9 +1718,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               <button
                 type="button"
                 onClick={() => bulkFileInputRef.current?.click()}
-                disabled={isBulkUploading || isSubmitting}
+                disabled={recordingV1 || isBulkUploading || isSubmitting}
                 className="inline-flex h-9 items-center gap-2 rounded-xl border border-brand/15 bg-brand/5 px-3 text-[10px] font-black uppercase tracking-widest text-brand shadow-sm transition hover:border-brand/30 hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Bulk upload delivery orders"
+                title={recordingV1 ? 'Bulk upload awaits a reviewed per-row retry workflow. Record individually.' : 'Bulk upload delivery orders'}
               >
                 <Upload className="h-4 w-4" />
                 {isBulkUploading ? 'Uploading...' : 'Bulk upload'}
@@ -1564,7 +1791,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       paymentType === type.code ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    {type.label}
+                    {type.code === 'CASH' ? 'Cash' : type.label}
                   </button>
                 ))}
               </div>
@@ -1580,42 +1807,39 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               )}
             </div>
 
-            <div className="order-6 space-y-2 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6">
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <div className={recordingV1 && !editingOrder && isTalabatDeliveryPayment(paymentType) ? 'hidden' : 'order-6 flex flex-col items-start gap-2 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6'}>
+              <label className="block w-full text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Payment collection
               </label>
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#0f172a]/20 bg-[#0f172a]/10 p-1">
-                {paymentCollectionOptions.map(option => {
+              <div className={`grid w-full ${recordingV1 ? 'grid-cols-2' : 'grid-cols-3'} justify-center gap-1`}>
+                {paymentCollectionOptions.filter(option => !recordingV1 || option.value !== 'partial').map(option => {
                   const isActive = paymentCollectionStatus === option.value || (isBlockExemptPayment && option.value === 'paid');
                   return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      disabled={isBlockExemptPayment}
-                      onClick={() => setPaymentCollectionStatus(option.value)}
-                      className={`rounded-md px-2 py-2 text-center transition-all disabled:cursor-not-allowed ${
-                        isActive
-                          ? 'bg-[#0f172a] text-white shadow-sm'
-                          : 'bg-[#0f172a]/80 text-white/75 hover:bg-[#0f172a] hover:text-white disabled:bg-slate-200 disabled:text-slate-400'
-                      }`}
-                    >
-                      <span className="block text-[10px] font-black uppercase tracking-widest">{option.label}</span>
-                      <span className="mt-0.5 block text-[9px] font-bold normal-case tracking-normal opacity-70">{option.hint}</span>
-                    </button>
+                    <div key={option.value} className="flex min-w-0 flex-col items-stretch">
+                      <button
+                        type="button"
+                        disabled={isBlockExemptPayment}
+                        onClick={() => setPaymentCollectionStatus(option.value)}
+                        className={`rounded-md px-2 py-2 text-center transition-all disabled:cursor-not-allowed ${
+                          isActive
+                            ? 'bg-[#0f172a] text-white shadow-sm'
+                            : 'bg-[#0f172a]/80 text-white/75 hover:bg-[#0f172a] hover:text-white disabled:bg-slate-200 disabled:text-slate-400'
+                        }`}
+                      >
+                        <span className="block text-[10px] font-black uppercase tracking-widest">{option.label}</span>
+                        <span className="mt-0.5 block text-[9px] font-bold normal-case tracking-normal opacity-70">{option.hint}</span>
+                      </button>
+                      {isActive && option.value === 'paid' && isBlockExemptPayment && (
+                        <span className="mt-1 px-1 text-center text-[9px] font-bold leading-4 text-emerald-700">
+                          By Talabat - handled outside internal driver collection.
+                        </span>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-              {isBlockExemptPayment ? (
-                <div className={`${collectionPanelCompactClass} border-orange-100 bg-orange-50/60`}>
-                  <p className={`${collectionMessageBaseClass} border-orange-100 text-orange-700`}>
-                    By Talabat - handled outside internal driver collection.
-                  </p>
-                </div>
-              ) : paymentCollectionStatus === 'paid' ? (
-                <div className={`${shouldCaptureBenefitPayTime ? collectionPanelExpandedClass : collectionPanelCompactClass} border-emerald-100 bg-emerald-50/60`}>
-                  <p className={`${collectionMessageBaseClass} border-emerald-100 text-emerald-700`}>
-                    Payment received before dispatch
-                  </p>
+              {isBlockExemptPayment ? null : paymentCollectionStatus === 'paid' ? (
+                shouldCaptureBenefitPayTime ? <div className={`${collectionPanelBaseClass} border-emerald-100 bg-emerald-50/60`}>
                   {shouldCaptureBenefitPayTime && (
                     <div className="mt-2 space-y-1">
                       <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
@@ -1639,7 +1863,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       </div>
                     </div>
                   )}
-                </div>
+                </div> : null
               ) : (
                 <div className={`grid ${collectionPanelHeightClass} gap-2 border-red-100 bg-red-50/60 ${
                   paymentCollectionStatus === 'partial' ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'
@@ -1667,11 +1891,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       </div>
                     </div>
                   )}
-                  {isBenefitPaySelected && paymentCollectionStatus === 'collect_on_delivery' && (
-                    <p className={`${collectionMessageBaseClass} border-amber-200 bg-amber-50 text-amber-700 sm:col-span-3`}>
-                      BP pending - confirm received time after customer transfer.
-                    </p>
-                  )}
                   {paymentCollectionStatus === 'partial' && (
                     <div className="space-y-1">
                       <label className={collectionFieldLabelClass}>
@@ -1693,25 +1912,27 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     <label className={collectionFieldLabelClass}>
                       Driver should collect
                     </label>
-                    <div className="flex h-11 items-center rounded-lg border border-red-100 bg-white px-3 text-sm font-black text-red-800 tabular-nums">
+                    <div className="flex h-8 items-center rounded-lg border border-red-100 bg-white px-2 text-sm font-black text-red-800 tabular-nums">
                       {Number.isFinite(amountToCollectPreview) ? formatBhd(amountToCollectPreview) : formatBhd(0)}
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className={collectionFieldLabelClass}>
-                      Driver change
-                    </label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.001"
-                      min="0"
-                      placeholder="0.000"
-                      value={cashHandedToDriver}
-                      onChange={e => setCashHandedToDriver(e.target.value)}
-                      className={`${collectionInputBaseClass} border-red-100 text-red-900 focus:border-red-300`}
-                    />
-                  </div>
+                  {paymentCollectionStatus === 'collect_on_delivery' && (
+                    <div className="space-y-1">
+                      <label className={collectionFieldLabelClass}>
+                        Driver change
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.001"
+                        min="0"
+                        placeholder="0.000"
+                        value={cashHandedToDriver}
+                        onChange={e => setCashHandedToDriver(e.target.value)}
+                        className="h-8 w-full rounded-lg border border-red-100 bg-white px-2 text-sm font-black text-red-900 outline-none focus:border-red-300"
+                      />
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <label className={collectionFieldLabelClass}>
                       Driver note
@@ -1721,7 +1942,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       value={driverPaymentNote}
                       onChange={e => setDriverPaymentNote(e.target.value)}
                       placeholder="Optional note"
-                      className={`${collectionInputBaseClass} border-red-100 font-bold text-red-900 placeholder:text-red-300 focus:border-red-300`}
+                      className="h-8 w-full rounded-lg border border-red-100 bg-white px-2 text-sm font-bold text-red-900 outline-none placeholder:text-red-300 focus:border-red-300"
                     />
                   </div>
                 </div>
@@ -1752,16 +1973,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 {isPharmacistLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                 {isPharmacistLocked ? 'Unlock pharmacist' : 'Lock pharmacist'}
               </button>
-              {pharmacists.length === 0 && (
+              {referenceDataLoaded && pharmacists.length === 0 && (
                 <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
                   No pharmacists are assigned to this branch yet. Please ask a manager to update pharmacist assignments.
                 </p>
               )}
             </div>
 
-            <div className="order-3 space-y-1 lg:col-start-1 lg:row-start-3">
+            <div className={recordingV1 && !editingOrder && isTalabatDeliveryPayment(paymentType) ? 'hidden' : 'order-3 space-y-1 lg:col-start-1 lg:row-start-3'}>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Driver {!isBlockExemptPayment && <RequiredMark />} {isBlockExemptPayment ? '(disabled for this payment)' : ''}
+                Assigned driver {!isBlockExemptPayment && <RequiredMark />} {isBlockExemptPayment ? '(disabled for this payment)' : ''}
               </label>
               <SearchableSelect
                 options={drivers.map(d => ({
@@ -1771,6 +1992,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 }))}
                 value={isBlockExemptPayment ? null : driverId}
                 onChange={setDriverId}
+                onOpen={refreshDriverDutyStatus}
+                renderOption={renderDriverOption}
+                renderSelected={renderDriverOption}
                 disabled={isBlockExemptPayment || isDriverLocked}
                 allowClear={!isBlockExemptPayment && !isDriverLocked}
                 placeholder={isBlockExemptPayment ? 'by Talabat' : 'Select driver'}
@@ -1779,9 +2003,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 <p className="mt-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-700">
                   Internal driver off
                 </p>
-              ) : drivers.length === 0 ? (
+              ) : !referenceDataLoaded ? null : drivers.length === 0 ? (
                 <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-700">
-                  No drivers are assigned to this branch yet. Please ask a manager to update driver assignments.
+                  No drivers are assigned to this branch yet. Ask a manager to assign a driver before recording an order.
                 </p>
               ) : (
                 <button
@@ -1795,7 +2019,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               )}
             </div>
 
-            <div className="order-7 space-y-1 lg:col-start-2 lg:row-start-4 lg:border-l lg:border-slate-100 lg:pl-6">
+            <div className="hidden">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Block / Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}
               </label>
@@ -1810,7 +2034,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               {requiresBlock && isBlockSearching && (
                 <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>
               )}
-              {requiresBlock && blockMatches.length > 1 && !resolvedBlock && (
+              {requiresBlock && blockMatches.length > 0 && !resolvedBlock && (
                 <div className="custom-scrollbar mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
                   {blockMatches.map(block => (
                     <button
@@ -1847,7 +2071,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               )}
             </div>
 
-            <div className="order-8 space-y-1 lg:col-start-2 lg:row-start-5 lg:border-l lg:border-slate-100 lg:pl-6">
+            <div className="hidden">
               <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Area {requiresBlock && <RequiredMark />}
               </label>
@@ -1871,10 +2095,47 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
             </div>
           </div>
 
+          {recordingV1 && !isTalabatDeliveryPayment(paymentType) && (
+            <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+              <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
+                <img src="/assets/customer-location-route.png" alt="" className="h-12 w-12 object-contain" />
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer Location</h4>
+              </div>
+              <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
+                <div className="grid gap-4">
+                  <label className="block space-y-1">
+                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                    <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                    <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </label>
+                </div>
+                <div className="grid gap-4">
+                  <div className="space-y-1">
+                    <label className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Block / Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}</label>
+                    <SearchableSelect options={blockOptions} value={!requiresBlock ? null : blockInput || null} onChange={handleBlockChange} placeholder={!requiresBlock ? `Disabled for ${selectedPaymentType?.label || paymentType}` : 'Search customer area or block...'} disabled={!requiresBlock || blocks.length === 0} allowClear />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Area {requiresBlock && <RequiredMark />}</label>
+                    <div className={`flex min-h-[48px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${resolvedBlock ? 'border-emerald-200 bg-emerald-50 text-slate-950' : blockMatches.length > 0 && blockInput.trim() ? 'border-blue-100 bg-blue-50 text-blue-700' : blockNotFound && blockInput.trim() ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                      {requiresBlock && selectedBlock ? <span className="min-w-0 truncate"><span className="font-black text-slate-950">{selectedBlock.areaName}</span><span className="font-extrabold text-emerald-700"> · {selectedBlock.governorate}</span></span> : areaPreview}
+                    </div>
+                    {requiresBlock && isBlockSearching && <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>}
+                    {selectedBlockIsBranchOrigin && <p className="mt-1 flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-bold text-amber-700"><AlertTriangle className="h-3 w-3" /> This is the branch origin block. Confirm the customer delivery address is in the same block.</p>}
+                    {requiresBlock && blockNotFound && blockInput.trim() && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-600"><AlertTriangle className="h-3 w-3" /> Block not found in directory</p>}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <div className="mt-4 flex justify-end">
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isRecordingFormComplete}
+              title={!isRecordingFormComplete ? 'Complete all required fields to record this order.' : undefined}
               className="btn-primary text-[11px] uppercase tracking-widest disabled:opacity-50"
             >
               {editingOrder ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -1883,6 +2144,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 : editingOrder ? 'Update order' : 'Record order'}
             </button>
           </div>
+          {!isRecordingFormComplete && (
+            <p className="mt-2 text-right text-[10px] font-bold text-slate-400">Complete all required fields to enable Record order.</p>
+          )}
         </section>
       )}
 
@@ -1954,7 +2218,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 <>
                   <span className="text-slate-300">|</span>
                   <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${collectionSummaryBadgeClass}`}>
-                    COD {formatBhd(totals.pendingCollection)}
+                    Cash {formatBhd(totals.pendingCollection)}
                   </span>
                 </>
               )}
@@ -2036,7 +2300,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     <th className="border-l border-slate-100 px-4 py-3 text-center">Driver</th>
                     <th className="border-l border-slate-100 px-4 py-3 text-center">Block / Area</th>
                     <th className="border-l border-slate-100 py-3 pl-2 pr-3 text-center">Value</th>
-                    <th className="border-l border-slate-100 py-3 pl-3 pr-2 text-center">Payment</th>
+                    <th className="border-l border-slate-100 py-3 pl-3 pr-2 text-center">Payment / order type</th>
                     <th className="border-l border-slate-100 py-3 pl-3 pr-4 text-center">Actions</th>
                   </tr>
                 </thead>
@@ -2146,7 +2410,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                                 {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Settle Cash'}
                               </button>
                             )}
-                            {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
+                            {order.deliveryStatus === 'cancelled' && !order.cancelledReason?.startsWith('Recorded only void:') && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
                               <button
                                 onClick={() => handleReassignClick(order)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
@@ -2157,13 +2421,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                                 Reassign
                               </button>
                             )}
-                            <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            {canDeleteRecordedOrder(order) && (
-                              <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete recording" aria-label="Delete recording">
+                            {(
+                              <>
+                                <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              <button onClick={() => handleDelete(order)} className={dangerActionClass} title={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'} aria-label={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'}>
                                 <Trash2 className="h-4 w-4" />
                               </button>
+                              </>
                             )}
                           </div>
                         )}
@@ -2236,8 +2502,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
-                    {order.driverName && <span title={order.driverName}>🛵 {firstDriverName(order.driverName)}</span>}
-                    {!order.driverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
+                    {(order.driverName || order.recordedDriverName) && <span title={order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName || '' : order.driverName || ''}>🛵 {driverDisplayName(order, paymentTypes)}</span>}
+                    {!order.driverName && !order.recordedDriverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
                     )}
@@ -2269,7 +2535,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           {reconcilingOrderIds.has(order.id) ? 'Saving' : 'Settle Cash'}
                         </button>
                       )}
-                      {order.deliveryStatus === 'cancelled' && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
+                      {order.deliveryStatus === 'cancelled' && !order.cancelledReason?.startsWith('Recorded only void:') && !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && (
                         <button
                           onClick={() => handleReassignClick(order)}
                           className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-black uppercase tracking-widest text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
@@ -2280,13 +2546,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           Reassign
                         </button>
                       )}
+                    {(
+                      <>
                       <button onClick={() => handleEdit(order)} className={editActionClass} title="Edit" aria-label="Edit order">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      {canDeleteRecordedOrder(order) && (
-                        <button onClick={() => handleDelete(order)} className={dangerActionClass} title="Delete recording" aria-label="Delete recording">
+                        <button onClick={() => handleDelete(order)} className={dangerActionClass} title={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'} aria-label={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'}>
                           <Trash2 className="h-4 w-4" />
                         </button>
+                      </>
                       )}
                     </div>
                   )}
@@ -2355,6 +2623,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   }))}
                   value={reassignDriverId}
                   onChange={setReassignDriverId}
+                  onOpen={refreshDriverDutyStatus}
+                  renderOption={renderDriverOption}
+                  renderSelected={renderDriverOption}
                   placeholder="Search and select driver..."
                   allowClear={false}
                 />

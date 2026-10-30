@@ -28,12 +28,6 @@ import {
   Pharmacist_Appraisal,
   User
 } from '../../types';
-import {
-  MOCK_AREAS,
-  MOCK_BRANCHES,
-  MOCK_USERS
-} from '../../data';
-import { mockAuditStore } from '../../services/mockAuditStore';
 import { supabaseTqphService } from '../../services/supabaseTqphService';
 import { SUPERVISOR_MONTHLY_VISIT_TARGET } from '../../config/tqphConfig';
 import { getComplianceColorBand } from '../../services/scoringService';
@@ -48,22 +42,10 @@ interface PeriodOption {
   month?: number;
 }
 
-const PERIOD_OPTIONS: PeriodOption[] = [
-  { value: '2026-09', label: 'September 2026 (Active Cycle)', year: 2026, month: 9 },
-  { value: '2026-08', label: 'August 2026 (Historical)', year: 2026, month: 8 },
-  { value: 'all', label: 'All Recorded Cycles' }
-];
-
 interface AreaOption {
   value: string;
   label: string;
 }
-
-const AREA_OPTIONS: AreaOption[] = [
-  { value: 'all', label: 'All Areas (National Network)' },
-  { value: 'area-1', label: 'Area 1 (Capital & Northern)' },
-  { value: 'area-2', label: 'Area 2 (Muharraq & Southern)' }
-];
 
 interface AdminTQPHDashboardViewProps {
   onNavigateToBranch?: (branchId: string) => void;
@@ -86,18 +68,19 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
   onNavigateToPharmacist
 }) => {
   // State for DropdownSearch selections (no native <select>)
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('2026-09');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
   const [selectedArea, setSelectedArea] = useState<string>('all');
   const [branchSearchTerm, setBranchSearchTerm] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'all' | 'branches' | 'pharmacists' | 'supervisors'>('all');
 
-  // Load live data from Supabase with instant store fallback
-  const [audits, setAudits] = useState<NHRA_Audit[]>(() => mockAuditStore.getAudits());
-  const [appraisals, setAppraisals] = useState<Pharmacist_Appraisal[]>(() => mockAuditStore.getAppraisals());
-  const [capas, setCapas] = useState<CAPA_Task[]>(() => mockAuditStore.getCapaTasks());
-  const [branches, setBranches] = useState<Branch[]>(() => MOCK_BRANCHES);
-  const [areas, setAreas] = useState<Area[]>(() => MOCK_AREAS);
-  const [users, setUsers] = useState<User[]>(() => MOCK_USERS);
+  const [audits, setAudits] = useState<NHRA_Audit[]>([]);
+  const [appraisals, setAppraisals] = useState<Pharmacist_Appraisal[]>([]);
+  const [capas, setCapas] = useState<CAPA_Task[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -110,25 +93,33 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
       supabaseTqphService.getPharmacists()
     ]).then(([liveAudits, liveAppraisals, liveCapas, liveBranches, liveAreas, livePharmacists]) => {
       if (!isMounted) return;
-      if (liveAudits && liveAudits.length > 0) setAudits(liveAudits);
-      if (liveAppraisals && liveAppraisals.length > 0) setAppraisals(liveAppraisals);
-      if (liveCapas && liveCapas.length > 0) setCapas(liveCapas);
-      if (liveBranches && liveBranches.length > 0) setBranches(liveBranches);
-      if (liveAreas && liveAreas.length > 0) setAreas(liveAreas);
-      if (livePharmacists && livePharmacists.length > 0) {
-        setUsers(prev => [
-          ...prev.filter(u => u.role !== 'pharmacist'),
-          ...livePharmacists
-        ]);
-      }
+      setAudits(liveAudits);
+      setAppraisals(liveAppraisals);
+      setCapas(liveCapas);
+      setBranches(liveBranches);
+      setAreas(liveAreas);
+      setUsers(livePharmacists);
+      setIsLoading(false);
     }).catch(err => {
-      console.warn('TQPH live fetch fallback:', err);
+      if (!isMounted) return;
+      setLoadError(err instanceof Error ? err.message : 'Failed to load TQPH data');
+      setIsLoading(false);
     });
     return () => { isMounted = false; };
   }, []);
 
   // ── 1. Period & Area Filtering ─────────────────────────────
-  const currentPeriod = PERIOD_OPTIONS.find(p => p.value === selectedPeriod) || PERIOD_OPTIONS[0];
+  const periodOptions = useMemo<PeriodOption[]>(() => [
+    { value: 'all', label: 'All Recorded Cycles' },
+    ...Array.from(new Set<string>(audits.map(a => String(a.date || '').slice(0, 7)).filter(Boolean)))
+      .sort((a, b) => b.localeCompare(a))
+      .map(value => ({ value, label: value, year: Number(value.slice(0, 4)), month: Number(value.slice(5, 7)) }))
+  ], [audits]);
+  const areaOptions = useMemo<AreaOption[]>(() => [
+    { value: 'all', label: 'All Areas' },
+    ...areas.map(area => ({ value: area.id, label: area.name }))
+  ], [areas]);
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod) || periodOptions[0];
 
   const filteredAudits = useMemo(() => {
     return audits.filter(audit => {
@@ -357,6 +348,8 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
 
   return (
     <div className="space-y-8 animate-fadeIn pb-12">
+      {isLoading && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm">Loading TQPH records…</p>}
+      {loadError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">TQPH data could not be loaded: {loadError}</p>}
       {/* ── Dashboard Header ───────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
         <div>
@@ -374,7 +367,7 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
             </div>
           </div>
           <p className="text-xs text-slate-500 max-w-2xl font-medium">
-            National quality audit rankings, pharmacist appraisal indices, and supervisor SLA tracking across all 20 branches.
+            Quality audit rankings, pharmacist appraisals and supervisor activity across {branches.length} branches.
           </p>
         </div>
 
@@ -387,11 +380,11 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
               Evaluation Cycle:
             </label>
             <DropdownSearch<PeriodOption>
-              items={PERIOD_OPTIONS}
+              items={periodOptions}
               getLabel={p => p.label}
               getValue={p => p.value}
               value={selectedPeriod}
-              onChange={val => setSelectedPeriod(val || '2026-09')}
+              onChange={val => setSelectedPeriod(val || 'all')}
               placeholder="Select cycle..."
             />
           </div>
@@ -403,7 +396,7 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
               Geographic Scope:
             </label>
             <DropdownSearch<AreaOption>
-              items={AREA_OPTIONS}
+              items={areaOptions}
               getLabel={a => a.label}
               getValue={a => a.value}
               value={selectedArea}
@@ -975,7 +968,7 @@ export const AdminTQPHDashboardView: React.FC<AdminTQPHDashboardViewProps> = ({
                         </div>
                         <div className="space-y-1">
                           {tracker.recentAudits.map(aud => {
-                            const br = MOCK_BRANCHES.find(b => b.id === aud.branch_id);
+                            const br = branches.find(b => b.id === aud.branch_id);
                             return (
                               <div
                                 key={aud.id}

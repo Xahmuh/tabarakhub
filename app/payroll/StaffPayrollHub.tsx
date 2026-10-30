@@ -1,9 +1,7 @@
-import { workforceService, Employee } from '../../services/workforceService';
+import { Employee } from '../../services/workforceService';
 import { branchService } from '../../services/branchService';
-import { dutySchedulerService } from '../../services/dutySchedulerService';
-import { leaveManagementService } from '../../services/leaveManagementService';
-import { attendancePenaltyEngine } from '../../services/attendancePenaltyEngine';
-import { attendanceService } from '../../services/attendanceService';
+import { payrollDataService } from '../../services/payrollDataService';
+import { getLeaveDaysInMonth, getPayrollMonthBounds, isValidBahrainIban } from '../../lib/payrollSafety';
 import { SearchableSelect } from '../delivery/components/SearchableSelect';
 import {
   Banknote,
@@ -75,21 +73,21 @@ export interface StaffPayrollRow {
 }
 
 export interface StaffPayrollSettings {
-  nightShiftBonusRate: number; // e.g. 5.000 BHD per night shift
-  reliefShiftBonusRate: number; // e.g. 10.000 BHD per relief coverage shift
-  defaultNhraAllowance: number; // e.g. 50.000 BHD
-  gosiPercentage: number; // e.g. 1%
+  nightShiftBonusRate: number;
+  reliefShiftBonusRate: number;
+  defaultNhraAllowance: number;
+  gosiPercentage: number;
 }
 
 const DEFAULT_SETTINGS: StaffPayrollSettings = {
-  nightShiftBonusRate: 5.0,
-  reliefShiftBonusRate: 10.0,
-  defaultNhraAllowance: 50.0,
-  gosiPercentage: 1.0
+  nightShiftBonusRate: 0,
+  reliefShiftBonusRate: 0,
+  defaultNhraAllowance: 0,
+  gosiPercentage: 0
 };
 
 
-export const StaffPayrollHub: React.FC = () => {
+export const StaffPayrollHub: React.FC<{ canEditRules: boolean }> = ({ canEditRules }) => {
   const now = new Date();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -98,6 +96,8 @@ export const StaffPayrollHub: React.FC = () => {
   const [branches, setBranches] = useState<any[]>([]);
   const [payrollRows, setPayrollRows] = useState<StaffPayrollRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [paymentIssues, setPaymentIssues] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
@@ -127,33 +127,40 @@ export const StaffPayrollHub: React.FC = () => {
 
   const loadPayrollData = async () => {
     setIsLoading(true);
+    setLoadError(null);
+    setPayrollRows([]);
+    setPaymentIssues([]);
     try {
-      const [fetchedEmployees, fetchedBranches] = await Promise.all([
-        workforceService.getAllEmployees(),
+      const [sources, fetchedBranches] = await Promise.all([
+        payrollDataService.getSources(selectedMonth),
         branchService.getBranches()
       ]);
+
+      const { employees: fetchedEmployees, assignments, annualLeaves, interimLeaves, authorizedDeductions, authorizedEarnings } = sources;
 
       setEmployees(fetchedEmployees);
       setBranches(fetchedBranches);
 
-      const [yearStr, monthStr] = selectedMonth.split('-');
-      const year = parseInt(yearStr, 10);
-      const month = parseInt(monthStr, 10);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const monthStart = `${selectedMonth}-01`;
-      const monthEnd = `${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`;
-
-      // 1. Fetch duty schedule assignments for this month
-      const assignments = await dutySchedulerService.getAssignmentsForPeriod(monthStart, monthEnd);
-
-      // 2. Fetch approved annual leaves and interim leaves
-      const { annualLeaves, interimLeaves } = await dutySchedulerService.getApprovedLeaveRecordsForPeriod(monthStart, monthEnd);
+      getPayrollMonthBounds(selectedMonth);
+      const issues: string[] = [
+        'No published company payroll policy or dual-approved payroll run exists. Every amount below is an estimate only.'
+      ];
+      if (fetchedEmployees.length === 0) issues.push('No employees were returned from the database.');
 
       // Build rows for non-drivers (drivers have DriverPayrollHub)
       const rows: StaffPayrollRow[] = fetchedEmployees
         .filter(emp => emp.category !== 'Driver' && emp.status !== 'Inactive')
         .map(emp => {
           const matrix = emp.salary_matrix || {};
+          const amount = (label: string, value: unknown): number => {
+            if (value == null || value === '') return 0;
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              issues.push(`${emp.code}: ${label} is invalid.`);
+              return 0;
+            }
+            return parsed;
+          };
           const primaryAssignment = emp.assignments?.find(a => a.is_primary) || emp.assignments?.[0];
           const branchName = primaryAssignment?.branch_name ||
             fetchedBranches.find(b => b.id === primaryAssignment?.branch_id)?.name || 'General Operations';
@@ -168,52 +175,70 @@ export const StaffPayrollHub: React.FC = () => {
           const empAnnual = (annualLeaves || []).filter((l: any) => l.employee_id === emp.id);
           const empInterim = (interimLeaves || []).filter((l: any) => l.employee_id === emp.id);
 
-          const annualLeaveDays = empAnnual.reduce((acc: number, l: any) => acc + (l.requested_days || 0), 0);
+          const annualLeaveDays = empAnnual.reduce((acc: number, l: any) =>
+            acc + getLeaveDaysInMonth(l.start_date, l.end_date, selectedMonth), 0);
           const unpaidLeaveDays = empInterim
             .filter((l: any) => l.leave_type === 'UNPAID')
-            .reduce((acc: number, l: any) => {
-              const s = new Date(l.start_date).getTime();
-              const e = new Date(l.end_date).getTime();
-              const d = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
-              return acc + (d > 0 ? d : 0);
-            }, 0);
+            .reduce((acc: number, l: any) => acc + getLeaveDaysInMonth(l.start_date, l.end_date, selectedMonth), 0);
 
           // Fixed components
-          const basicSalary = matrix.basicSalary || (emp.category === 'Pharmacist' ? 350 : 200);
-          const housingAllowance = matrix.housing || 0;
-          const transportAllowance = matrix.transportation || 0;
-          const totalFixed = basicSalary + housingAllowance + transportAllowance;
+          const basicSalary = Number(matrix.basicSalary);
+          if (!Number.isFinite(basicSalary) || basicSalary <= 0) {
+            issues.push(`${emp.code}: basic salary is missing or invalid.`);
+          }
+          const safeBasicSalary = Number.isFinite(basicSalary) && basicSalary > 0 ? basicSalary : 0;
+          const iban = (matrix.iban || '').replace(/\s+/g, '').toUpperCase();
+          if (!isValidBahrainIban(iban)) issues.push(`${emp.code}: a valid Bahrain IBAN is required.`);
+          const housingAllowance = amount('housing allowance', matrix.housing);
+          const transportAllowance = amount('transport allowance', matrix.transportation);
+          const totalFixed = safeBasicSalary + housingAllowance + transportAllowance;
 
           // NHRA License Allowance
           const hasNhraLicense = Boolean(matrix.nhraLicenseNo || (emp as any).nhra_license_no);
-          const nhraAllowance = hasNhraLicense ? settings.defaultNhraAllowance : 0;
+          const employeeEarnings = authorizedEarnings.filter(e => e.employee_id === emp.id);
+          const approvedAmount = (sourceType: string) => employeeEarnings
+            .filter(e => e.source_type === sourceType)
+            .reduce((sum, e) => sum + amount(`approved ${sourceType}`, e.amount_bhd), 0);
+          const nhraAllowance = approvedAmount('license');
 
           // Variable bonuses
-          const responsibilityBonus = matrix.jobResponsibilityBonus || 0;
-          const nightShiftPay = nightShiftsCount * settings.nightShiftBonusRate;
-          const reliefShiftsPay = reliefShiftsCount * settings.reliefShiftBonusRate;
+          const responsibilityBonus = approvedAmount('bonus') + approvedAmount('other');
+          const nightShiftPay = approvedAmount('night_shift');
+          const reliefShiftsPay = approvedAmount('relief_shift');
 
-          // Attendance Penalties & Overtime (§2.2, §5)
-          const attendancePenalty = attendancePenaltyEngine.getEmployeeMonthlyDeductionBhd(emp.id, selectedMonth);
-          const monthlyReport = attendanceService.getMonthlyReport(emp.id, selectedMonth);
-          const overtimeMinutes = monthlyReport?.totalOvertimeMinutes || 0;
-          const workingHours = attendanceService.getConfig().workingHoursPerDay || 8;
-          const hourlyRate = (basicSalary / 30) / workingHours;
-          const otMultiplier = attendanceService.getConfig().overtimeRateConfig?.normalDayMultiplier || 1.25;
-          const overtimePay = Math.round((overtimeMinutes / 60) * hourlyRate * otMultiplier * 1000) / 1000;
+          // Only deductions approved in the database can affect a payroll preview.
+          // Device-local punches and local penalty settings are not payroll evidence.
+          const attendancePenalty = authorizedDeductions
+            .filter(d => d.employee_id === emp.id)
+            .reduce((sum, d) => sum + amount('approved deduction', d.amount_bhd), 0);
+          const overtimeMinutes = employeeEarnings
+            .filter(e => e.source_type === 'overtime')
+            .reduce((sum, e) => sum + amount('approved overtime hours', e.hours) * 60, 0);
+          const overtimePay = approvedAmount('overtime');
 
           // Deductions
-          const gosiDeduction = matrix.gosi1Pct || Math.round((basicSalary + housingAllowance) * (settings.gosiPercentage / 100) * 1000) / 1000;
-          const dailyRate = basicSalary / 30;
-          const unpaidDeduction = Math.round(dailyRate * unpaidLeaveDays * 1000) / 1000;
-          const otherDeductions = (matrix.payrollDedLoan || 0) + (matrix.ewaFees || 0) + (matrix.othersDeduction || 0);
+          const gosiDeduction = 0;
+          if (Number(matrix.gosi1Pct || 0) !== 0) {
+            issues.push(`${emp.code}: legacy GOSI amount is excluded until approved.`);
+          }
+          const unpaidDeduction = 0;
+          if (unpaidLeaveDays) issues.push(`${emp.code}: unpaid leave calculation basis needs approval.`);
+          const unverifiedDeductions = ['payrollDedLoan', 'ewaFees', 'othersDeduction']
+            .some(key => Number(matrix[key as keyof typeof matrix] || 0) !== 0);
+          if (unverifiedDeductions) issues.push(`${emp.code}: legacy salary-matrix deductions need source/approval verification.`);
+          const otherDeductions = 0;
 
           // Custom Override
           const userOverride = overrides[emp.id] || { adjustment: 0, notes: '' };
 
-          const totalGross = totalFixed + nhraAllowance + responsibilityBonus + nightShiftPay + reliefShiftsPay + overtimePay + userOverride.adjustment;
+          if (Number(matrix.jobResponsibilityBonus || 0) !== 0) {
+            issues.push(`${emp.code}: legacy responsibility bonus is excluded until approved.`);
+          }
+          const totalGross = totalFixed + nhraAllowance + responsibilityBonus + nightShiftPay + reliefShiftsPay + overtimePay;
           const totalDeductions = gosiDeduction + unpaidDeduction + attendancePenalty + otherDeductions;
-          const netPayable = Math.max(0, Math.round((totalGross - totalDeductions) * 1000) / 1000);
+          const rawNet = Math.round((totalGross - totalDeductions) * 1000) / 1000;
+          if (rawNet < 0) issues.push(`${emp.code}: deductions exceed gross pay.`);
+          const netPayable = Math.max(0, rawNet);
 
           return {
             employeeId: emp.id,
@@ -221,10 +246,10 @@ export const StaffPayrollHub: React.FC = () => {
             employeeName: emp.full_name,
             category: emp.category || 'Staff',
             cprNumber: emp.cpr_number || matrix.expatCpr || '—',
-            iban: matrix.iban || 'BH00BMAG00000000000000',
-            bankName: 'National Bank of Bahrain',
+            iban,
+            bankName: iban ? iban.slice(4, 8) : '',
             primaryBranchName: branchName,
-            basicSalary,
+            basicSalary: safeBasicSalary,
             housingAllowance,
             transportAllowance,
             totalFixed,
@@ -245,8 +270,8 @@ export const StaffPayrollHub: React.FC = () => {
             overtimeMinutes,
             overtimePay,
             otherDeductions,
-            customAdjustment: userOverride.adjustment,
-            customNotes: userOverride.notes,
+            customAdjustment: 0,
+            customNotes: '',
             totalGross,
             totalDeductions,
             netPayable
@@ -254,16 +279,19 @@ export const StaffPayrollHub: React.FC = () => {
         });
 
       setPayrollRows(rows);
+      setPaymentIssues(issues);
     } catch (err) {
       console.error('Failed to load staff payroll data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Could not load payroll data.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSaveAdjustment = () => {
-    if (!editingRow) return;
-    const adj = parseFloat(editAdjustmentInput) || 0;
+    if (!canEditRules || !editingRow) return;
+    const adj = Number(editAdjustmentInput);
+    if (!Number.isFinite(adj) || !editNotesInput.trim()) return;
     setOverrides(prev => ({
       ...prev,
       [editingRow.employeeId]: {
@@ -272,62 +300,6 @@ export const StaffPayrollHub: React.FC = () => {
       }
     }));
     setEditingRow(null);
-  };
-
-  const handleExportIbanExcel = async () => {
-    const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
-      import('exceljs'),
-      import('file-saver')
-    ]);
-
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Tabarak Hub Payroll Engine';
-    workbook.created = new Date();
-
-    const sheet = workbook.addWorksheet(`Payroll_${selectedMonth}`);
-
-    sheet.columns = [
-      { header: 'Emp Code', key: 'code', width: 12 },
-      { header: 'Employee Full Name', key: 'name', width: 28 },
-      { header: 'Category', key: 'category', width: 14 },
-      { header: 'CPR Number', key: 'cpr', width: 16 },
-      { header: 'IBAN / Bank Account', key: 'iban', width: 26 },
-      { header: 'Basic (BHD)', key: 'basic', width: 14 },
-      { header: 'Allowances (BHD)', key: 'allowances', width: 16 },
-      { header: 'Night & Relief Pay', key: 'variable', width: 16 },
-      { header: 'Deductions (BHD)', key: 'deductions', width: 16 },
-      { header: 'Net Amount (BHD)', key: 'net', width: 16 },
-      { header: 'Payment Narrative', key: 'narrative', width: 30 }
-    ];
-
-    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF1E293B' }
-    };
-
-    filteredRows.forEach(r => {
-      const allowances = r.housingAllowance + r.transportAllowance + r.nhraAllowance + r.responsibilityBonus;
-      const variablePay = r.nightShiftPay + r.reliefShiftsPay + r.customAdjustment;
-      sheet.addRow({
-        code: r.employeeCode,
-        name: r.employeeName,
-        category: r.category,
-        cpr: r.cprNumber,
-        iban: r.iban,
-        basic: r.basicSalary.toFixed(3),
-        allowances: allowances.toFixed(3),
-        variable: variablePay.toFixed(3),
-        deductions: r.totalDeductions.toFixed(3),
-        net: r.netPayable.toFixed(3),
-        narrative: `SALARY FOR ${selectedMonth} - ${r.employeeName}`
-      });
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Tabarak_Salary_Transfer_IBAN_${selectedMonth}.xlsx`);
   };
 
   const filteredRows = useMemo(() => {
@@ -369,13 +341,13 @@ export const StaffPayrollHub: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black uppercase tracking-[0.2em] text-brand">Automated HR Compensation</span>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" /> Scheduler Synchronized
+            <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200 flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3" /> Preview Only
             </span>
           </div>
           <h3 className="text-2xl font-black text-slate-950">Staff &amp; Pharmacist Monthly Payroll</h3>
           <p className="text-xs text-slate-500 font-medium">
-            Calculated from contract salary matrix, duty scheduler shifts, relief hours, and approved leave balances.
+            Unapproved estimate from database records. Payment, bank export and payslips require approved payroll rules and a published run signed by Owner and Accounts.
           </p>
         </div>
 
@@ -399,29 +371,45 @@ export const StaffPayrollHub: React.FC = () => {
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
 
-          <button
+          {canEditRules && <button
             type="button"
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-colors"
+            disabled
+            title="Rates must be configured and approved in a persistent payroll policy."
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold border border-slate-200 opacity-50 cursor-not-allowed"
           >
             <Calculator className="h-3.5 w-3.5" /> Rates &amp; Rules
-          </button>
+          </button>}
 
           <button
             type="button"
-            onClick={handleExportIbanExcel}
-            className="btn-primary inline-flex items-center gap-1.5 text-xs font-bold"
+            disabled
+            title="A published payroll run approved by Owner and Accounts is required."
+            className="btn-primary inline-flex items-center gap-1.5 text-xs font-bold opacity-50 cursor-not-allowed"
           >
             <FileSpreadsheet className="h-4 w-4" /> Export IBAN Batch
           </button>
         </div>
       </div>
 
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          Payroll data could not be loaded: {loadError}
+        </div>
+      )}
+      {paymentIssues.length > 0 && (
+        <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <strong>Payroll is blocked for payment.</strong>
+          <ul className="mt-2 list-disc pl-5">
+            {paymentIssues.map(issue => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
+
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[10px] font-black uppercase tracking-wider">Total Net Disbursal</span>
+            <span className="text-[10px] font-black uppercase tracking-wider">Estimated Net (Not Payable)</span>
             <Wallet className="h-4 w-4 text-emerald-600" />
           </div>
           <p className="mt-2 text-2xl font-black text-slate-950">{formatBhd(metrics.totalNet)}</p>
@@ -510,7 +498,7 @@ export const StaffPayrollHub: React.FC = () => {
                   <th className="py-3 px-3">Duty Shifts</th>
                   <th className="py-3 px-3">Relief &amp; Night Pay</th>
                   <th className="py-3 px-3">Deductions</th>
-                  <th className="py-3 px-4 text-right">Net Payable</th>
+                  <th className="py-3 px-4 text-right">Estimated Net</th>
                   <th className="py-3 px-4 text-center">Actions</th>
                 </tr>
               </thead>
@@ -582,26 +570,19 @@ export const StaffPayrollHub: React.FC = () => {
 
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        <button
+                        {canEditRules && <button
                           type="button"
-                          onClick={() => {
-                            setEditingRow(row);
-                            setEditAdjustmentInput(String(row.customAdjustment || 0));
-                            setEditNotesInput(row.customNotes || '');
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-brand hover:bg-brand/10 rounded-lg transition-colors"
-                          title="Add Bonus or Deduction Adjustment"
+                          disabled
+                          className="p-1.5 text-slate-300 cursor-not-allowed"
+                          title="Adjustments require a saved proposal and approval."
                         >
                           <Edit2 className="h-3.5 w-3.5" />
-                        </button>
+                        </button>}
                         <button
                           type="button"
-                          onClick={() => {
-                            setPrintingRow(row);
-                            setTimeout(() => handlePrintPayslip(), 150);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                          title="Print Itemized Payslip"
+                          disabled
+                          className="p-1.5 text-slate-300 cursor-not-allowed"
+                          title="A published payroll run is required to print a payslip"
                         >
                           <Printer className="h-3.5 w-3.5" />
                         </button>

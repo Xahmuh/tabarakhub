@@ -3,6 +3,7 @@ import { isModuleEnabled } from '../../config/clientConfig';
 import { isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import { DeliveryDriverDutyReportRow, DeliveryOrder } from '../../types';
 import { truncateBhd } from '../../utils/money';
+import { deliverySourceLabel } from '../../lib/deliveryRecording';
 
 const assertExcelEnabled = () => {
   if (!isModuleEnabled('excelExport')) {
@@ -137,7 +138,13 @@ const buildKpis = (
 };
 
 const deliveryAreaLabel = (order: DeliveryOrder) => (
-  order.areaName || (order.blockNumber ? 'Unknown area' : 'No mapped area')
+  isTalabatDeliveryPayment(order.paymentType)
+    ? 'Talabat Deliveries'
+    : order.areaName || (order.blockNumber ? 'Unknown area' : 'No mapped area')
+);
+
+const deliveryTypeLabel = (order: DeliveryOrder) => (
+  isTalabatDeliveryPayment(order.paymentType) ? 'Talabat Delivery' : 'Tabarak Delivery'
 );
 
 const addKpiSheet = (
@@ -186,16 +193,23 @@ const addKpiSheet = (
 const deliveryOrderExportColumns: DeliveryOrderExportColumn[] = [
   { header: 'Order #', keepWhenEmpty: true, value: order => deliveryOrderNumber(order) },
   { header: 'Date', keepWhenEmpty: true, value: order => order.orderDate },
-  { header: 'Type', keepWhenEmpty: true, value: order => order.orderKind === 'internal_transfer' ? 'Internal transfer' : 'Actual delivery' },
+  { header: 'Type', keepWhenEmpty: true, value: deliveryTypeLabel },
   { header: 'Branch', keepWhenEmpty: true, value: order => order.branchName || '' },
   { header: 'From Branch', value: order => order.transferFromBranchName || '' },
   { header: 'To Branch', value: order => order.transferToBranchName || '' },
   { header: 'Value (BHD)', width: 16, numFmt: '0.000', keepWhenEmpty: true, value: order => truncateBhd(order.valueBhd) },
-  { header: 'Payment', keepWhenEmpty: true, value: order => order.paymentType },
+  { header: 'Payment', keepWhenEmpty: true, value: order => order.paymentType === 'CASH' ? 'Cash' : order.paymentType },
+  { header: 'Order source', keepWhenEmpty: true, value: order => deliverySourceLabel(order.externalSource) },
+  { header: 'External order ID', value: order => order.externalOrderId || '' },
+  { header: 'Dispatch mode', keepWhenEmpty: true, value: order => order.dispatchMode === 'log_only' ? 'Log Only' : 'System' },
+  { header: 'Detailed address', value: order => order.customerAddress || '' },
+  { header: 'Location URL', value: order => order.locationUrl || '' },
   { header: 'BP received time', width: 18, value: order => formatTimeValue(order.benefitPayReceivedTime) },
   { header: 'Pharmacist', value: order => order.pharmacistName || '' },
   { header: 'Driver ID', value: order => order.driverCode || '' },
   { header: 'Driver', value: order => order.driverName || '' },
+  { header: 'Recorded driver code', keepWhenEmpty: true, value: order => order.recordedDriverCode || '' },
+  { header: 'Recorded driver (no dispatch)', keepWhenEmpty: true, value: order => order.recordedDriverName || '' },
   { header: 'Block', value: order => order.blockNumber || '' },
   { header: 'Area', value: order => order.areaName || '' },
   { header: 'Governorate', value: order => order.governorate || '' },
@@ -264,7 +278,7 @@ export const exportOrdersToExcel = async (
   const talabatOrders = orders.filter(order => isTalabatDeliveryPayment(order.paymentType));
 
   addDeliveryOrdersSheet(workbook, 'Delivery Orders', title, orders);
-  addDeliveryOrdersSheet(workbook, 'Normal Delivery', `${title} - Normal Delivery`, normalOrders);
+  addDeliveryOrdersSheet(workbook, 'Tabarak Delivery', `${title} - Tabarak Delivery`, normalOrders);
   addDeliveryOrdersSheet(workbook, 'Talabat Delivery', `${title} - Talabat Delivery`, talabatOrders);
 
   addKpiSheet(
@@ -286,8 +300,12 @@ export const exportOrdersToExcel = async (
     'Driver',
     buildKpis(
       orders,
-      order => order.driverId || `name:${order.driverName || 'unassigned'}`,
-      order => order.driverName || 'Unassigned driver',
+      order => isTalabatDeliveryPayment(order.paymentType)
+        ? 'talabat-orders'
+        : order.driverId || `name:${order.driverName || 'unassigned'}`,
+      order => isTalabatDeliveryPayment(order.paymentType)
+        ? 'Talabat Orders'
+        : order.driverName || 'Unassigned driver',
       order => order.driverCode || undefined
     ),
     'Driver ID'
@@ -300,7 +318,9 @@ export const exportOrdersToExcel = async (
     'Area',
     buildKpis(
       orders,
-      order => `${order.governorate || 'No governorate'}|${deliveryAreaLabel(order)}`,
+      order => isTalabatDeliveryPayment(order.paymentType)
+        ? 'talabat-deliveries'
+        : `${order.governorate || 'No governorate'}|${deliveryAreaLabel(order)}`,
       deliveryAreaLabel,
       order => order.governorate || undefined
     ),

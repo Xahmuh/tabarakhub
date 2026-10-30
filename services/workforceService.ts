@@ -220,6 +220,61 @@ const getInitialDemoEmployees = (): Employee[] => [
 ];
 
 export const workforceService = {
+  /** Payroll must never use the local/demo merge returned by getAllEmployees. */
+  async getPayrollEmployeesFromDatabase(): Promise<Employee[]> {
+    const pageSize = 500;
+    const employeeRows: any[] = [];
+    const assignmentRows: any[] = [];
+
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabaseClient
+        .from('employees')
+        .select('id,code,full_name,category,cpr_number,status,salary_matrix')
+        .order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      employeeRows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabaseClient
+        .from('employee_branch_assignments')
+        .select('id,employee_id,branch_id,branch_name,lat,lng,geofence_radius_meters,is_primary')
+        .order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      assignmentRows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+
+    const assignmentsByEmployee = new Map<string, EmployeeBranchAssignment[]>();
+    for (const assignment of assignmentRows) {
+      const list = assignmentsByEmployee.get(assignment.employee_id) || [];
+      list.push({
+        id: assignment.id,
+        employee_id: assignment.employee_id,
+        branch_id: assignment.branch_id,
+        branch_name: assignment.branch_name || undefined,
+        lat: assignment.lat == null ? undefined : Number(assignment.lat),
+        lng: assignment.lng == null ? undefined : Number(assignment.lng),
+        geofence_radius_meters: assignment.geofence_radius_meters,
+        is_primary: Boolean(assignment.is_primary)
+      });
+      assignmentsByEmployee.set(assignment.employee_id, list);
+    }
+
+    return employeeRows.map(row => ({
+      id: row.id,
+      code: row.code,
+      full_name: row.full_name,
+      category: row.category,
+      cpr_number: row.cpr_number || undefined,
+      status: row.status,
+      salary_matrix: row.salary_matrix || undefined,
+      assignments: assignmentsByEmployee.get(row.id) || []
+    }));
+  },
   getDeletedIds(): Set<string> {
     if (typeof window === 'undefined') return new Set();
     const raw = localStorage.getItem(DELETED_STORAGE_KEY);
@@ -483,23 +538,26 @@ export const workforceService = {
       try {
         const payload: any = {
           name: emp.full_name,
+          driver_code: finalCode.trim().toUpperCase(),
           phone: emp.phone || null,
           notes: `Synced from HR Master Directory [${finalCode}]`,
           is_active: emp.status === 'Active'
         };
         if (driverId) payload.id = driverId;
 
-        const { data: driverRow } = await supabaseClient
+        const { data: driverRow, error: driverError } = await supabaseClient
           .from('delivery_drivers')
           .upsert(payload)
           .select()
           .maybeSingle();
 
-        if (driverRow) {
-          driverId = String(driverRow.id);
-        }
+        if (driverError) throw driverError;
+        if (!driverRow) throw new Error('Driver synchronization returned no record.');
+
+        driverId = String(driverRow.id);
       } catch (e) {
-        console.warn('Driver table upsert ignored:', e);
+        console.error('Driver synchronization failed:', e);
+        throw new Error(`Could not save driver ${finalCode}: ${(e as Error)?.message || 'driver code synchronization failed'}`);
       }
     }
 

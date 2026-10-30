@@ -329,7 +329,7 @@ export interface NHRAReportDocumentProps {
 }
 
 /**
- * Template 1 — NHRA Official Inspection Simulation Report (Section 7.4)
+ * Template 1 — Internal NHRA checklist simulation report (Section 7.4)
  * Pure functional React-PDF document mapping directly from domain entities.
  */
 export const NHRAReportDocument: React.FC<NHRAReportDocumentProps> = ({
@@ -352,7 +352,7 @@ export const NHRAReportDocument: React.FC<NHRAReportDocumentProps> = ({
     band.band === 'Green' ? '#15803D' : band.band === 'Amber' ? '#B45309' : '#B91C1C';
 
   return (
-    <Document title={`NHRA_Inspection_${branch.name}_${audit.date}`}>
+    <Document title={`Internal_Quality_Review_${branch.name}_${audit.date}`}>
       {/* ── Page 1: Executive Cover & Sections 1.0 to 4.0 ───── */}
       <Page size="A4" style={styles.page}>
         {/* Header Banner */}
@@ -361,7 +361,7 @@ export const NHRAReportDocument: React.FC<NHRAReportDocumentProps> = ({
             <View style={styles.logoBox}>
               <Text style={styles.logoText}>TABARAK QUALITY HUB</Text>
             </View>
-            <Text style={styles.reportSubtitle}>Official Regulatory Oversight Audit</Text>
+            <Text style={styles.reportSubtitle}>Internal quality review — not issued by NHRA</Text>
           </View>
           <Text style={styles.reportTitle}>NHRA Pharmacy Inspection Simulation Report</Text>
         </View>
@@ -560,13 +560,13 @@ export const NHRAReportDocument: React.FC<NHRAReportDocumentProps> = ({
           </View>
         )}
 
-        {/* Official Signatures Section */}
+        {/* Internal acknowledgment section */}
         <View style={styles.signaturesContainer} wrap={false}>
           <View style={styles.signatureBox}>
             <Text style={styles.signatureTitle}>Area Quality Supervisor:</Text>
             <Text style={styles.signatureName}>{supervisor.name}</Text>
             <View style={styles.signatureLine} />
-            <Text style={styles.signatureSubtext}>Official Signature & License Endorsement</Text>
+            <Text style={styles.signatureSubtext}>Internal reviewer acknowledgment</Text>
           </View>
 
           <View style={styles.signatureBox}>

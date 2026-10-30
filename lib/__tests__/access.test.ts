@@ -16,6 +16,12 @@ assert.equal(resolveAccessLevel('payroll:export', 'branch', branchOverrides, rol
 assert.equal(resolveAccessLevel('tqph', 'branch', branchOverrides, roleDefaults), 'none');
 assert.equal(resolveAccessLevel('tqph:appraisals', 'branch', branchOverrides, roleDefaults), 'none');
 assert.equal(resolveAccessLevel('hr_requests', 'employee', [], []), 'none');
-assert.equal(resolveAccessLevel('payroll', 'admin', [], []), 'edit');
+assert.equal(resolveAccessLevel('payroll', 'admin', [], []), 'none');
+assert.equal(resolveAccessLevel('payroll', 'supervisor', [], []), 'none');
+assert.equal(resolveAccessLevel('payroll', 'owner', [], []), 'edit');
+assert.equal(resolveAccessLevel('payroll', 'accounts', [], []), 'edit');
+assert.equal(resolveAccessLevel('payroll:salary_edit', 'accounts', [], []), 'none');
+assert.equal(resolveAccessLevel('payroll:salary_edit', 'owner', [], []), 'edit');
+assert.equal(resolveAccessLevel('driver_payroll', 'driver', [], []), 'read');
 
 console.log('Access boundary tests passed.');

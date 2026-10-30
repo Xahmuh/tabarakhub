@@ -11,14 +11,18 @@ import Swal from 'sweetalert2';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { PaginationControls } from '../shared';
 import { formatBhdAmount } from '../../utils/money';
+import { deliveryPaymentOrderLabel } from '../../lib/deliveryRecording';
 
-type ViewMode = 'all' | 'normal' | 'talabat';
+type ViewMode = 'all' | 'whatsapp' | 'talabat' | 'online';
 const DELIVERY_DASHBOARD_PAGE_SIZE = 20;
 
 const deliveryOrderNumber = (order: DeliveryOrder) => order.orderNumber || `#${order.id.slice(0, 8)}`;
 const isTalabatOrder = (order: DeliveryOrder) => isTalabatDeliveryPayment(order.paymentType);
 const bahrainTodayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bahrain' });
 const canDeleteRecordedOrder = (order: DeliveryOrder) => {
+  if (isTalabatOrder(order) || order.externalSource === 'talabat') return true;
+  if (order.externalSource === 'woocommerce') return false;
+  if (order.dispatchMode === 'log_only' && order.deliveryStatus !== 'recorded') return false;
   const status = order.deliveryStatus || 'recorded';
   const isRecordingDelete =
     ['recorded', 'assigned'].includes(status)
@@ -99,11 +103,24 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   }, [branch.id, range.from, range.to]);
 
   const talabatOrders = useMemo(() => orders.filter(isTalabatOrder), [orders]);
-  const normalOrders = useMemo(() => orders.filter(order => !isTalabatOrder(order)), [orders]);
+  const onlineOrders = useMemo(
+    () => orders.filter(order => !isTalabatOrder(order) && order.externalSource === 'woocommerce'),
+    [orders]
+  );
+  const whatsappOrders = useMemo(
+    () => orders.filter(order => !isTalabatOrder(order) && order.externalSource !== 'woocommerce'),
+    [orders]
+  );
 
   const visibleOrders = useMemo(
-    () => view === 'all' ? orders : view === 'talabat' ? talabatOrders : normalOrders,
-    [normalOrders, orders, talabatOrders, view]
+    () => view === 'all'
+      ? orders
+      : view === 'talabat'
+        ? talabatOrders
+        : view === 'online'
+          ? onlineOrders
+          : whatsappOrders,
+    [onlineOrders, orders, talabatOrders, view, whatsappOrders]
   );
   const totalOrderPages = Math.max(1, Math.ceil(visibleOrders.length / DELIVERY_DASHBOARD_PAGE_SIZE));
   const currentRecordsPage = Math.min(recordsPage, totalOrderPages);
@@ -139,6 +156,9 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
   };
 
   const handleDelete = async (order: DeliveryOrder) => {
+    const isTalabat = isTalabatOrder(order) || order.externalSource === 'talabat';
+    const isRecordedOnly = order.dispatchMode === 'log_only' && !isTalabat;
+    const isAuditedVoid = isTalabat || isRecordedOnly;
     if (!canDeleteRecordedOrder(order)) {
       Swal.fire(
         'Delete unavailable',
@@ -149,19 +169,33 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
     }
 
     const confirm = await Swal.fire({
-      title: 'Delete recorded invoice?',
-      text: `Delete this recorded invoice (${formatBhd(order.valueBhd)}) from recording and dispatch?`,
+      title: isTalabat ? 'Void Talabat order?' : isRecordedOnly ? 'Void Recorded only order?' : 'Delete recorded invoice?',
+      text: isRecordedOnly
+        ? `Remove this order (${formatBhd(order.valueBhd)}) from active views and preserve an audit record.`
+        : isTalabat
+          ? `Keep this Talabat order in the audited financial history and hide it from active lists?`
+        : `Delete this recorded invoice (${formatBhd(order.valueBhd)}) from recording and dispatch?`,
+      ...(isAuditedVoid ? {
+        input: 'textarea' as const,
+        inputPlaceholder: 'Reason for voiding this order',
+        inputAttributes: { 'aria-label': 'Reason for voiding this order' },
+        inputValidator: (value: string) => !value.trim() || value.trim().length < 3
+          ? 'Enter a reason with at least 3 characters.'
+          : undefined
+      } : {}),
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Delete recording',
+      confirmButtonText: isAuditedVoid ? 'Void order' : 'Delete order',
       confirmButtonColor: '#B91c1c'
     });
     if (!confirm.isConfirmed) return;
     try {
-      await deliveryService.orders.delete(order.id);
+      if (isTalabat) await deliveryService.orders.voidTalabat(order.id, String(confirm.value || '').trim());
+      else if (isRecordedOnly) await deliveryService.orders.voidRecordedOnly(order.id, String(confirm.value || '').trim());
+      else await deliveryService.orders.delete(order.id);
       setOrders(prev => prev.filter(o => o.id !== order.id));
     } catch (e: any) {
-      Swal.fire('Delete failed', e?.message || 'Could not delete this recorded delivery invoice.', 'error');
+      Swal.fire(isAuditedVoid ? 'Void failed' : 'Delete failed', e?.message || 'Could not update this recorded delivery invoice.', 'error');
     }
   };
 
@@ -187,19 +221,25 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
         <p className="text-sm">{label}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <KpiCard label="Total orders" value={String(orders.length)} sub={label} icon={<Package className="h-4 w-4" />} />
-        <KpiCard label="Total value" value={formatBhd(sumValue(orders))} icon={<Wallet className="h-4 w-4" />} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <KpiCard label="Registered orders" value={String(orders.length)} sub={label} icon={<Package className="h-4 w-4" />} />
+        <KpiCard label="Registered value" value={formatBhd(sumValue(orders))} icon={<Wallet className="h-4 w-4" />} />
         <KpiCard
-          label="Normal"
-          value={String(normalOrders.length)}
-          sub={formatBhd(sumValue(normalOrders))}
+          label="WhatsApp"
+          value={String(whatsappOrders.length)}
+          sub={formatBhd(sumValue(whatsappOrders))}
           icon={<Package className="h-4 w-4" />}
         />
         <KpiCard
           label="Talabat"
           value={String(talabatOrders.length)}
           sub={formatBhd(sumValue(talabatOrders))}
+          icon={<ShoppingBag className="h-4 w-4" />}
+        />
+        <KpiCard
+          label="Online"
+          value={String(onlineOrders.length)}
+          sub={formatBhd(sumValue(onlineOrders))}
           icon={<ShoppingBag className="h-4 w-4" />}
         />
       </div>
@@ -209,8 +249,9 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
           <div className="flex bg-slate-100/60 p-1 rounded-lg border border-slate-200/50">
             {([
               { id: 'all', label: 'All' },
-              { id: 'normal', label: 'Normal' },
-              { id: 'talabat', label: 'Talabat' }
+              { id: 'whatsapp', label: 'WhatsApp' },
+              { id: 'talabat', label: 'Talabat' },
+              { id: 'online', label: 'Online' }
             ] as Array<{ id: ViewMode; label: string }>).map(v => (
               <button
                 key={v.id}
@@ -240,7 +281,7 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                 <tr className="border-b border-slate-100 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <th className="py-2 pr-3">Order / date</th>
                   <th className="py-2 pr-3 text-right">Value (BHD)</th>
-                  <th className="py-2 px-3">Payment</th>
+                  <th className="py-2 px-3">Payment / order type</th>
                   <th className="py-2 pr-3">Pharmacist</th>
                   <th className="py-2 pr-3">Driver</th>
                   <th className="py-2 pr-3">Block</th>
@@ -253,16 +294,16 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                   <tr key={order.id} className="hover:bg-slate-50/50">
                     <td className="py-2 pr-3 text-xs font-bold text-slate-400">
                       <span className="block font-black text-brand">{deliveryOrderNumber(order)}</span>
-                      <span className="block text-slate-600">{order.orderDate}</span>
+                      <span className="block text-slate-600">{order.orderDate}{order.orderTime ? ` ${order.orderTime.slice(0, 5)}` : ''}</span>
                     </td>
                     <td className="py-2 pr-3 text-right font-black text-slate-900 tabular-nums">{formatBhdAmount(order.valueBhd)}</td>
                     <td className="py-2 px-3">
                       <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black ${paymentBadgeClass(order)}`}>
-                        {getDeliveryPaymentLabel(order.paymentType, paymentTypes)}
+                        {deliveryPaymentOrderLabel(getDeliveryPaymentLabel(order.paymentType, paymentTypes), order.externalSource, order.paymentType)}
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.pharmacistName || '—'}</td>
-                    <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.driverName || '—'}</td>
+                    <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.dispatchMode === 'log_only' ? (order.recordedDriverName ? `${order.recordedDriverName} · recorded only` : '—') : order.driverName || '—'}</td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">{order.blockNumber || '—'}</td>
                     <td className="py-2 pr-3 text-xs font-bold text-slate-500">
                       {order.areaName || '—'}
@@ -278,8 +319,8 @@ export const BranchDeliveryDashboard: React.FC<BranchDeliveryDashboardProps> = (
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                             </button>
                           )}
-                          {canDeleteRecordedOrder(order) && (
-                            <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title="Delete recording" aria-label="Delete recording">
+                          {(
+                            <button onClick={() => handleDelete(order)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100" title={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'} aria-label={order.dispatchMode === 'log_only' ? 'Void Recorded only order' : 'Delete recording'}>
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                             </button>
                           )}

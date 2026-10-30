@@ -920,15 +920,16 @@ export const AttendanceHub: React.FC<Props> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1 font-medium">
-              GPS Radius Validation • Disciplinary Escalation Engine • Supabase Authority
+              GPS preview only • Official server attendance is pending
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowConfigModal(true)}
-            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-xl flex items-center gap-2 border border-slate-200 transition shadow-sm hover:border-red-300"
+            disabled
+            title="Monetary attendance rules require owner entry and two-person approval."
+            className="px-4 py-2 bg-white text-slate-400 text-xs font-bold rounded-xl flex items-center gap-2 border border-slate-200 opacity-50 cursor-not-allowed"
           >
             <Sliders className="w-4 h-4 text-red-700" /> Disciplinary Settings &amp; Rules
           </button>
@@ -1015,6 +1016,9 @@ export const AttendanceHub: React.FC<Props> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Clock-In Card */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-8 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div role="alert" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+              Official clock-in/out is paused: this screen only stored punches in the browser. A signed-in employee app and server-verified geofence punch are required before attendance can affect payroll.
+            </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-red-700">
@@ -1107,7 +1111,7 @@ export const AttendanceHub: React.FC<Props> = ({
               {!todayRecord?.actualClockIn ? (
                 <button
                   onClick={handleClockIn}
-                  disabled={isPunching || isAcquiringGps || geofenceStatus === 'OUTSIDE'}
+                  disabled
                   className={`flex-1 py-4 font-black text-lg rounded-2xl shadow-xl flex items-center justify-center gap-3 transition transform active:scale-98 ${
                     geofenceStatus === 'OUTSIDE'
                       ? 'bg-slate-100 text-red-700/80 border border-red-200 cursor-not-allowed shadow-none'
@@ -1122,14 +1126,14 @@ export const AttendanceHub: React.FC<Props> = ({
                   ) : (
                     <>
                       <Check className="w-6 h-6" />
-                      {isPunching ? 'Verifying GPS...' : 'Punch Clock In'}
+                      Official Clock In Unavailable
                     </>
                   )}
                 </button>
               ) : !todayRecord?.actualClockOut ? (
                 <button
                   onClick={handleClockOut}
-                  disabled={isPunching || isAcquiringGps || geofenceStatus === 'OUTSIDE'}
+                  disabled
                   className={`flex-1 py-4 font-black text-lg rounded-2xl shadow-xl flex items-center justify-center gap-3 transition transform active:scale-98 ${
                     geofenceStatus === 'OUTSIDE'
                       ? 'bg-slate-100 text-red-700/80 border border-red-200 cursor-not-allowed shadow-none'
@@ -1144,7 +1148,7 @@ export const AttendanceHub: React.FC<Props> = ({
                   ) : (
                     <>
                       <X className="w-6 h-6" />
-                      {isPunching ? 'Verifying GPS...' : 'Punch Clock Out'}
+                      Official Clock Out Unavailable
                     </>
                   )}
                 </button>

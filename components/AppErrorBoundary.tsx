@@ -18,6 +18,17 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, App
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('Application render failure', error, info.componentStack);
+    if (/failed to fetch dynamically imported module|importing a module script failed|loading chunk .* failed|unable to preload css/i.test(error.message)) {
+      try {
+        const key = 'tabarak:stale-chunk-recovery-count';
+        const attempts = Number(sessionStorage.getItem(key) || '0');
+        if (attempts < 2) {
+          sessionStorage.setItem(key, String(attempts + 1));
+          sessionStorage.removeItem('tabarak_active_tab');
+          window.location.reload();
+        }
+      } catch { /* Keep the recovery screen available when storage is blocked. */ }
+    }
   }
 
   private reload = () => {

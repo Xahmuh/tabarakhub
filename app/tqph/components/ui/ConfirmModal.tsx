@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Lock, ShieldCheck, CheckCircle2, ArrowRight, Loader2, Send } from 'lucide-react';
-import { DistributionLog } from '../../types';
+import { AlertTriangle, Lock, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
 
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => Promise<{ success: boolean; logs: DistributionLog[]; error?: string }>;
+  onConfirm: () => Promise<{ success: boolean; error?: string }>;
   branchName: string;
   pharmacistName: string;
   complianceScore: number;
@@ -24,13 +23,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   capaCount
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [distributionLogs, setDistributionLogs] = useState<DistributionLog[] | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setIsProcessing(false);
-      setDistributionLogs(null);
+      setIsSaved(false);
       setErrorMessage(null);
     }
   }, [isOpen]);
@@ -56,9 +55,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     try {
       const result = await onConfirm();
       if (result.success) {
-        setDistributionLogs(result.logs);
+        setIsSaved(true);
       } else {
-        setErrorMessage(result.error || 'Distribution failed. Please check network logs.');
+        setErrorMessage(result.error || 'Saving the evaluation failed.');
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred.');
@@ -86,14 +85,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono font-black uppercase text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                Irreversible Action
+                Save Evaluation
               </span>
             </div>
             <h2 id="lock-modal-title" className="text-lg font-black text-slate-950 mt-1">
-              Confirm Official Lock & Multi-Portal Distribution
+              Confirm Evaluation Save
             </h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed font-medium">
-              Locking seals this evaluation permanently. Once submitted, the audit and appraisal become immutable and will auto-route to designated stakeholder portals.
+              This saves the audit, appraisal and CAPA tasks to the database. Portal notifications are not enabled yet.
             </p>
           </div>
         </div>
@@ -125,49 +124,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
         </div>
 
-        {/* Multi-Portal Routing Preview (Section 5.6) */}
-        <div className="space-y-2.5">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
-            <Send className="w-3.5 h-3.5 text-red-700" />
-            <span>Target Distribution Routes (Section 5.6):</span>
-          </span>
-
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <div className="w-2 h-2 rounded-full bg-emerald-600" />
-                <span>1. Branch Manager Portal</span>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">NHRA Audit PDF + CAPA</span>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <div className="w-2 h-2 rounded-full bg-emerald-600" />
-                <span>2. Pharmacist Personal Portal</span>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">Appraisal Performance Sheet</span>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                <div className="w-2 h-2 rounded-full bg-emerald-600" />
-                <span>3. Executive Admin Archive</span>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">Audit Trail + Ranking Feed</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Distribution Resolution Feedback */}
-        {distributionLogs && (
+        {isSaved && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1.5 text-xs text-emerald-800">
             <div className="flex items-center gap-2 font-bold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>All 3 Distribution Logs Created & Resolved</span>
+              <span>Evaluation saved</span>
             </div>
             <p className="text-[11px] text-emerald-600">
-              Receipt references logged. The record is now locked and immutable.
+              The database accepted the evaluation records.
             </p>
           </div>
         )}
@@ -181,7 +145,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-          {!distributionLogs ? (
+          {!isSaved ? (
             <>
               <button
                 type="button"
@@ -205,12 +169,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Sealing & Distributing...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-4 h-4 text-white" />
-                    <span>Confirm Lock & Distribute</span>
+                    <span>Save Evaluation</span>
                   </>
                 )}
               </button>

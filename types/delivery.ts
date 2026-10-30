@@ -192,11 +192,17 @@ export interface DeliveryDriverMonthlyTarget {
 }
 
 export interface DeliveryOrder {
+  externalSource?: string | null;
+  externalOrderId?: string | null;
+  dispatchMode?: 'system' | 'log_only';
+  locationUrl?: string | null;
+  customerAddress?: string | null;
   id: string;
   orderNumber?: string | null;
   branchId: string;
   branchName?: string;
   orderDate: string; // yyyy-mm-dd
+  orderTime?: string | null;
   valueBhd: number;
   paymentType: DeliveryPaymentType;
   paymentCollectionStatus: DeliveryPaymentCollectionStatus;
@@ -219,6 +225,9 @@ export interface DeliveryOrder {
   driverId?: string | null;
   driverCode?: string | null;
   driverName?: string | null;
+  recordedDriverId?: string | null;
+  recordedDriverCode?: string | null;
+  recordedDriverName?: string | null;
   transferFromBranchId?: string | null;
   transferFromBranchCode?: string | null;
   transferFromBranchName?: string | null;
@@ -245,6 +254,10 @@ export interface DeliveryOrder {
 export type BhdAmountInput = number | string;
 
 export interface DeliveryOrderInput {
+  dispatchMode?: 'system' | 'log_only';
+  locationUrl?: string | null;
+  customerAddress?: string | null;
+  idempotencyKey?: string;
   branchId: string;
   orderDate: string;
   valueBhd: BhdAmountInput;
@@ -258,6 +271,7 @@ export interface DeliveryOrderInput {
   pharmacistId?: string | null;
   pharmacistName?: string | null;
   driverId?: string | null;
+  recordedDriverId?: string | null;
   transferFromBranchId?: string | null;
   transferToBranchId?: string | null;
   blockNumber?: string | null;

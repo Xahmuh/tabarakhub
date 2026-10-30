@@ -3,6 +3,7 @@ import { isModuleEnabled } from '../config/clientConfig';
 import { supabaseClient } from '../lib/supabaseClient';
 import { DeliveryOrder, Governorate } from '../types';
 import { truncateBhd } from '../utils/money';
+import { deliverySourceLabel } from '../lib/deliveryRecording';
 
 export interface DeliveryCleanExportFilters {
   branchId?: string | null;
@@ -11,11 +12,18 @@ export interface DeliveryCleanExportFilters {
   dateTo?: string | null;
   paymentType?: string | null;
   driverId?: string | null;
+  recordedDriverId?: string | null;
   pharmacistId?: string | null;
   governorate?: Governorate | string | null;
 }
 
 export interface DeliveryOrderCleanExportRow {
+  externalSource?: string | null;
+  externalOrderId?: string | null;
+  dispatchMode?: string | null;
+  recordedDriverId?: string | null;
+  recordedDriverCode?: string | null;
+  recordedDriverName?: string | null;
   id: string;
   orderDate: string | null;
   branchCode: string | null;
@@ -54,6 +62,12 @@ export interface ShortageExportRow {
 }
 
 interface DeliveryOrderCleanExportDbRow {
+  external_source?: string | null;
+  external_order_id?: string | null;
+  dispatch_mode?: string | null;
+  recorded_driver_id?: string | null;
+  recorded_driver_code?: string | null;
+  recorded_driver_name?: string | null;
   id: string;
   order_date: string | null;
   branch_code: string | null;
@@ -156,6 +170,12 @@ const toNumberOrNull = (value: number | string | null | undefined) => {
 };
 
 const toCleanExportRow = (row: DeliveryOrderCleanExportDbRow): DeliveryOrderCleanExportRow => ({
+  externalSource: row.external_source || null,
+  externalOrderId: row.external_order_id || null,
+  dispatchMode: row.dispatch_mode || null,
+  recordedDriverId: row.recorded_driver_id || null,
+  recordedDriverCode: row.recorded_driver_code || null,
+  recordedDriverName: row.recorded_driver_name || null,
   id: row.id,
   orderDate: row.order_date,
   branchCode: row.branch_code,
@@ -178,13 +198,15 @@ const toCleanExportRow = (row: DeliveryOrderCleanExportDbRow): DeliveryOrderClea
 });
 
 const buildQuery = (filters: DeliveryCleanExportFilters = {}) => {
-  let query = supabaseClient.from('delivery_orders_clean').select(CLEAN_EXPORT_SELECT);
+  const columns = CLEAN_EXPORT_SELECT + ((import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' ? ',external_source,external_order_id,dispatch_mode,recorded_driver_id,recorded_driver_code,recorded_driver_name' : '');
+  let query = supabaseClient.from('delivery_orders_clean').select(columns);
   if (filters.branchId && filters.branchId !== 'all') query = query.eq('branch_id', filters.branchId);
   if (filters.branchIds && filters.branchIds.length > 0) query = query.in('branch_id', filters.branchIds);
   if (filters.dateFrom) query = query.gte('order_date', filters.dateFrom);
   if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
   if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
   if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
+  if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
   if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
   if (filters.governorate && filters.governorate !== 'all') query = query.eq('governorate', filters.governorate);
   return query;
@@ -204,12 +226,14 @@ export const listDeliveryOrderCleanExportRows = async (
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
-    rows.push(...data as DeliveryOrderCleanExportDbRow[]);
+    rows.push(...data as unknown as DeliveryOrderCleanExportDbRow[]);
     if (data.length < PAGE_SIZE || rows.length >= MAX_EXPORT_ROWS) break;
     from += PAGE_SIZE;
   }
 
-  return rows.map(toCleanExportRow);
+  return rows
+    .map(toCleanExportRow)
+    .filter(order => !order.cancelledReason?.startsWith('Recorded only void:'));
 };
 
 export async function fetchAllShortagesForExport(
@@ -343,12 +367,18 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
     rows.map(row => ({
       id: row.id,
       orderDate: row.orderDate,
-      orderKind: row.orderKind,
+      orderKind: String(row.paymentType || '').trim().toUpperCase() === 'TALABAT' ? 'Talabat Delivery' : 'Tabarak Delivery',
       deliveryStatus: row.deliveryStatus,
       branchCode: row.branchCode,
       branchName: row.branchName,
       valueBhd: row.valueBhd === null ? null : normalizeBhd(row.valueBhd),
       paymentType: row.paymentType,
+      source: deliverySourceLabel(row.externalSource, row.paymentType),
+      externalOrderId: row.externalOrderId || '',
+      dispatchMode: row.dispatchMode || '',
+      recordedDriverId: row.recordedDriverId || '',
+      recordedDriverCode: row.recordedDriverCode || '',
+      recordedDriverName: row.recordedDriverName || '',
       benefitPayReceivedTime: row.benefitPayReceivedTime ? row.benefitPayReceivedTime.slice(0, 5) : '',
       blockNumber: row.blockNumber,
       areaName: row.areaName,
@@ -364,12 +394,18 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
     [
       { key: 'id', label: 'Order ID', width: 38 },
       { key: 'orderDate', label: 'Date', width: 14 },
-      { key: 'orderKind', label: 'Type', width: 18 },
+      { key: 'orderKind', label: 'Type', width: 22 },
       { key: 'deliveryStatus', label: 'Status', width: 16 },
       { key: 'branchCode', label: 'Branch Code', width: 14 },
       { key: 'branchName', label: 'Branch', width: 24 },
       { key: 'valueBhd', label: 'Value (BHD)', numFmt: '0.000', width: 14 },
       { key: 'paymentType', label: 'Payment', width: 18 },
+      { key: 'source', label: 'Order source', width: 22 },
+      { key: 'externalOrderId', label: 'External order ID', width: 22 },
+      { key: 'dispatchMode', label: 'Dispatch mode', width: 18 },
+      { key: 'recordedDriverId', label: 'Recorded driver ID', width: 38 },
+      { key: 'recordedDriverCode', label: 'Recorded driver code', width: 22 },
+      { key: 'recordedDriverName', label: 'Recorded driver (no dispatch)', width: 30 },
       { key: 'benefitPayReceivedTime', label: 'BP received time', width: 18 },
       { key: 'blockNumber', label: 'Block', width: 12 },
       { key: 'areaName', label: 'Area', width: 24 },

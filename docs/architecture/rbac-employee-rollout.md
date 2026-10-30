@@ -14,13 +14,25 @@ truth.
 
 Current gaps verified in source:
 
-- TQPH policies authorize admin/owner/supervisor by role but do not restrict
-  supervisors to assigned branches. Branch and pharmacist views are not yet
-  backed by row-scoped access. TQPH service falls back to mock data on a failed
-  or empty query, so a denied query can appear successful in the UI.
-- `StaffPayrollHub` subtracts a browser-local attendance penalty immediately;
-  `DriverPayrollHub` does the same for missing punches. Neither is an approved
-  payroll ledger or a trustworthy server calculation.
+- Existing live TQPH policies may still authorize admin/owner/supervisor
+  without branch scope. The prepared `20261018030000_tqph_branch_rls.sql`
+  migration limits record reads and removes direct browser writes. The prepared
+  atomic submission function validates supervisor assignment, the current
+  checklist and appraisal scores, required CAPA tasks, and a verified reviewer
+  name. Both migrations passed in a disposable PostgreSQL 18 fixture but have
+  **not** been applied or validated against the live schema. The browser lists
+  only permitted branches; database RLS must still be applied before this is
+  a security guarantee. Historical records without a reviewer name snapshot
+  cannot produce a PDF until reviewed. Real portal notifications remain a
+  release blocker; the UI no longer claims they were delivered.
+  CAPA resolution is paused because the old form accepted demo URLs or browser
+  blob URLs as proof. The prepared RLS migration makes the evidence bucket
+  private and blocks browser access until object paths can be tied to authorized
+  audits or CAPA tasks. Re-enable only after a real upload, durable storage
+  path, signed read URL and branch-scoped authorization are verified.
+- `StaffPayrollHub` now reads database employees and approved deductions for a
+  preview; transfer export is blocked. `DriverPayrollHub` still needs the same
+  approval gate. Neither is a published, approved payroll run.
 - HR requests store names/CPR but no Auth-to-employee identity. Old requests
   cannot safely be assigned to a personal inbox by matching a name.
 - Custom roles in `roleRegistry.ts` are stored in localStorage and are not a
@@ -29,10 +41,11 @@ Current gaps verified in source:
 
 ## Decisions
 
-1. Keep `admin` as the super-admin role and `accounts` as Finance. The legacy
-   `manager` name stays only as a compatibility alias. Continue using existing
-   role defaults and per-user overrides. Add an `employee` role with no module
-   access until personal screens and RLS are ready.
+1. Keep `admin` as the technical super-admin role and `accounts` as Finance.
+   Payroll is a narrower financial boundary: only `owner` and `accounts` may
+   view and approve company pay; only `owner` may edit salary. The legacy
+   `manager` name stays only as a compatibility alias. Add an `employee` role
+   with no module access until personal screens and RLS are ready.
 2. Link each personal Auth account to exactly one `employees.id` through
    `app_user_employee_links`. Do this explicitly in Access Control. Never infer
    the link from name, CPR, email, or a shared branch login. Reuse existing
@@ -42,7 +55,7 @@ Current gaps verified in source:
    decide whether the operation is allowed; RLS limits which rows it touches.
    The client may hide buttons, but the database remains authoritative.
 4. Store a payroll deduction as an immutable proposal plus two immutable
-   decisions: one from Admin and one from Finance, by distinct Auth users. A
+   decisions: one from Owner and one from Accounts, by distinct Auth users. A
    security-invoker view exposes only proposals with both approvals. A reject
    leaves the proposal excluded. Published payslips are snapshots of a payroll
    run, created only by a server-side publication function after rechecking
@@ -56,8 +69,9 @@ Current gaps verified in source:
 
 | Actor | Modules | Data scope | Writes |
 | --- | --- | --- | --- |
-| Admin | All | All branches and employees | All except immutable approvals by Finance |
-| Accounts | Finance, payroll approvals, operational expenses | Finance scope defined by module | Finance decision only; cannot approve as Admin |
+| Owner | Company payroll and salary | All employees | Edit salary and owner approval |
+| Accounts | Finance, payroll approvals, operational expenses | All employees for payroll | Accounts approval; cannot edit salary |
+| Admin / Manager | Operational administration | Branch scope by module | No payroll approval or salary edit |
 | Supervisor | Dashboard, delivery, QA, codex, scheduler, leave, TQPH, feedback, contributions, attendance | `supervisor_branches` membership | Only allowed feature actions in assigned branches |
 | Branch | Operational branch modules and branch TQPH rating | `app_user_profiles.branch_id` | Branch-scoped actions; no payroll |
 | Warehouse | Shortages/stock/lost-sales dashboard | Network read for those features | Procurement actions only |
@@ -95,7 +109,7 @@ be seeded disabled, then enabled per role after data policies and UI are ready.
    Remove mock fallback on authorization errors. Keep the previous deployment
    available for immediate Vercel rollback; a frontend rollback cannot undo
    restrictive database policies, so policy rollout needs its own reverse SQL.
-5. **Payroll gate.** Ship proposal/decision UI for Admin and Finance. Convert
+5. **Payroll gate.** Ship proposal/decision UI for Owner and Accounts. Convert
    both staff and driver attendance penalties from immediate subtraction into
    proposals. Only approved rows enter server-calculated payroll. Validate the
    transfer export and payslip against the same saved payroll run. Do not
@@ -122,6 +136,14 @@ Release gates: role/scope matrix tests (allowed and denied cases), migration
 validation in staging, matching payroll totals with zero unapproved automatic
 deductions, document URL authorization tests, TypeScript/test/build checks,
 and smoke tests of current branch, supervisor, admin and finance workflows.
+The TQPH submission UI now calls `submit_tqph_evaluation` so the audit,
+appraisal and CAPA inserts succeed or fail as one database transaction. Apply
+`20261018020000_tqph_atomic_evaluation.sql` and then
+`20261018030000_tqph_branch_rls.sql` in staging, after the RBAC foundation.
+The local SQL fixture verifies server score calculation, branch scope, evidence
+closure, rollback and locked-row immutability. Live migration reconciliation and signed-in role
+tests remain required. Until the migrations are applied, submission displays
+the RPC error and does not claim success.
 Production changes should be sequenced schema → backend → UI → feature grants.
 
 ## Accepted trade-offs

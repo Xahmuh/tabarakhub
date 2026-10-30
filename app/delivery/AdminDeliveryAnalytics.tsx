@@ -18,6 +18,7 @@ import {
 } from '../../services/deliveryCleanExportService';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { truncateBhd } from '../../utils/money';
+import { registeredSourceSummary } from '../../lib/deliveryRecording';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -86,6 +87,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [governorateFilter, setGovernorateFilter] = useState<string | null>(null);
   const [paymentFilter, setPaymentFilter] = useState<string | null>(null);
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
+  const [recordedDriverFilter, setRecordedDriverFilter] = useState<string | null>(null);
   const [pharmacistFilter, setPharmacistFilter] = useState<string | null>(null);
 
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
@@ -124,6 +126,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       dateTo: range.to,
       paymentType: paymentFilter || undefined,
       driverId: driverFilter || undefined,
+      recordedDriverId: recordedDriverFilter || undefined,
       pharmacistId: pharmacistFilter || undefined,
       governorate: governorateFilter || undefined
     }).then(data => {
@@ -133,7 +136,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       .catch(e => { console.error('Analytics load failed', e); if (!cancelled) setOrders([]); })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, pharmacistFilter, governorateFilter]);
+  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, recordedDriverFilter, pharmacistFilter, governorateFilter]);
 
   const filteredOrders = useMemo(() => {
     const branchNames = new Map(branches.map(branch => [branch.id, branch.name]));
@@ -158,6 +161,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   );
   const totalValue = sumValue(filteredOrders);
   const avgValue = filteredOrders.length ? totalValue / filteredOrders.length : 0;
+  const sourceGroups = useMemo(() => registeredSourceSummary(filteredOrders), [filteredOrders]);
+  const sourceGroup = (source: 'WhatsApp' | 'Online' | 'Talabat') => sourceGroups[source] || { count: 0, fils: 0 };
 
   const pharmacistBoard = useMemo(
     () => buildLeaderboard(filteredOrders, o => o.pharmacistId || (o.pharmacistName ? `name:${o.pharmacistName}` : null), o => o.pharmacistName || 'Unknown'),
@@ -167,6 +172,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     () => buildLeaderboard(filteredOrders, o => o.driverId, o => (
       o.driverCode && o.driverName ? `${o.driverCode} - ${o.driverName}` : o.driverName || 'Unknown'
     )),
+    [filteredOrders]
+  );
+  const recordedDriverBoard = useMemo(
+    () => buildLeaderboard(filteredOrders, o => o.recordedDriverId || null, o =>
+      o.recordedDriverCode && o.recordedDriverName ? `${o.recordedDriverCode} - ${o.recordedDriverName}` : o.recordedDriverName || 'Unknown recorded driver'),
     [filteredOrders]
   );
   const branchBoard = useMemo(
@@ -186,7 +196,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     return [...map.values()].sort((a, b) => b.orders - a.orders || a.from.localeCompare(b.from));
   }, [internalTransfers]);
 
-  // Geography — WhatsApp/direct orders only.
+  // Geography follows payment classification; source is filtered independently.
   const govBoard = useMemo(
     () => buildLeaderboard(direct, o => o.governorate || null, o => o.governorate || 'Unknown'),
     [direct]
@@ -276,6 +286,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
         dateTo: range.to,
         paymentType: paymentFilter || undefined,
         driverId: driverFilter || undefined,
+        recordedDriverId: recordedDriverFilter || undefined,
         pharmacistId: pharmacistFilter || undefined,
         governorate: governorateFilter || undefined
       });
@@ -336,6 +347,9 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             onChange={setDriverFilter}
             placeholder="All drivers"
           />
+          {(import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && <SearchableSelect
+            options={drivers.map(d => ({ value: d.id, label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name }))}
+            value={recordedDriverFilter} onChange={setRecordedDriverFilter} placeholder="All recorded drivers" />}
           <SearchableSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} value={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" />
         </div>
         {exportErrorMessage && (
@@ -356,12 +370,15 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       ) : (
         <>
           {/* KPI row */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-            <KpiCard label="Total orders" value={String(filteredOrders.length)} sub={label} />
-            <KpiCard label="Total value" value={formatBhd(totalValue)} />
-            <KpiCard label="Actual delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-11">
+            <KpiCard label="Registered orders" value={String(filteredOrders.length)} sub={label} />
+            <KpiCard label="Registered value" value={formatBhd(totalValue)} />
+            <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
+            <KpiCard label="WhatsApp Orders" value={String(sourceGroup('WhatsApp').count)} sub={formatBhd(sourceGroup('WhatsApp').fils / 1000)} />
+            <KpiCard label="Online Orders" value={String(sourceGroup('Online').count)} sub={formatBhd(sourceGroup('Online').fils / 1000)} />
+            <KpiCard label="Talabat Orders" value={String(sourceGroup('Talabat').count)} sub={formatBhd(sourceGroup('Talabat').fils / 1000)} />
             <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
-            <KpiCard label="WhatsApp / Direct" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
+            <KpiCard label="Direct payment types" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
             <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
             <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
             <KpiCard label="Active branches" value={String(branchBoard.length)} sub="with orders in period" />
@@ -372,6 +389,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             <Leaderboard title="Orders per branch" rows={branchBoard} emptyLabel="No branch activity." />
             <Leaderboard title="Pharmacist performance" rows={pharmacistBoard} emptyLabel="No pharmacist-linked orders." />
             <Leaderboard title="Driver performance" rows={driverBoard} emptyLabel="No driver-linked orders." />
+            {(import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && <Leaderboard title="Recorded external driver value (no dispatch)" rows={recordedDriverBoard} emptyLabel="No externally assigned driver records." />}
           </div>
 
           <section className="operational-panel p-4 md:p-5">
@@ -404,7 +422,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Globe2 className="h-4 w-4 text-brand" />
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Geography — WhatsApp / direct only</h3>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Geography — direct payment types</h3>
               </div>
               {drilldownGov && (
                 <div className="flex items-center gap-2">

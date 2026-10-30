@@ -70,6 +70,7 @@ export interface NHRA_Audit {
   id: string;
   branch_id: string;
   supervisor_id: string;
+  supervisor_name_snapshot?: string | null;
   date: string; // ISO date
   status: AuditStatus;
   sections: NHRASection[]; // 1.0 License & Approvals, 2.0 Workplace Standards,
@@ -107,6 +108,7 @@ export interface Pharmacist_Appraisal {
   pharmacist_id: string;
   branch_id: string;
   supervisor_id: string;
+  supervisor_name_snapshot?: string | null;
   month: number; // 1–12
   year: number;
   sections: AppraisalSection[]; // I–VI, 7+4+5+7+3+4 = 30 criteria

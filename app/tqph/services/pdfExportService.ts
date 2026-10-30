@@ -7,7 +7,7 @@ import { Branch, CAPA_Task, NHRA_Audit, Pharmacist_Appraisal, User } from '../ty
  */
 
 /**
- * Generates Template 1: NHRA Official Inspection Simulation Report PDF Blob
+ * Generates an internal NHRA checklist simulation PDF blob.
  */
 export async function generateNHRAReportPDF(
   audit: NHRA_Audit,
@@ -77,7 +77,7 @@ export async function exportNHRAReport(
   capas: CAPA_Task[] = []
 ): Promise<void> {
   const sanitizedBranchName = branch.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `NHRA_Inspection_Report_${sanitizedBranchName}_${audit.date}.pdf`;
+  const filename = `Internal_Quality_Report_${sanitizedBranchName}_${audit.date}.pdf`;
   const blob = await generateNHRAReportPDF(audit, branch, supervisor, capas);
   downloadBlob(blob, filename);
 }

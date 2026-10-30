@@ -6,6 +6,7 @@ import {
   Branch,
   BranchLoginApproval,
   BenefitPayTransfer,
+  DeliveryOrder,
   DeliveryNotification,
   MaintenanceSettings
 } from './types';
@@ -642,11 +643,11 @@ const App: React.FC = () => {
     setShowPharmacistSelector(true);
   };
 
-  const handleOpenBenefitPayFromDelivery = (transfer: BenefitPayTransfer) => {
+  const handleOpenBenefitPayFromDelivery = (order: DeliveryOrder) => {
     setBenefitPayFocusTarget({
-      deliveryOrderId: transfer.deliveryOrderId,
-      transferDate: transfer.transferDate,
-      branchId: transfer.branchId
+      deliveryOrderId: order.id,
+      transferDate: order.orderDate,
+      branchId: order.branchId
     });
     handleTabChange('benefit-pay-ledger');
   };

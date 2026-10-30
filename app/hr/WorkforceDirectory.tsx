@@ -123,6 +123,9 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
   const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'Active' | 'Inactive'>('ALL');
   const [selectedGender, setSelectedGender] = useState<'ALL' | 'Male' | 'Female'>('ALL');
   const [selectedVisaType, setSelectedVisaType] = useState<'ALL' | 'Internal' | 'Flexi'>('ALL');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [expandedEmployeeIds, setExpandedEmployeeIds] = useState<string[]>([]);
   const [deletingEmpTarget, setDeletingEmpTarget] = useState<Employee | null>(null);
 
   // Bulk Selection & Deletion States
@@ -879,61 +882,55 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
         </div>
       )}
 
-      {/* Header Banner - Executive Dark Theme Card with Professional Actions Alignment */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white shadow-xl border border-slate-800/80">
-        {/* Ambient Glow Background Effects */}
-        <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
-
+      {/* Directory header */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
         <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           {/* Main Title Block */}
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-emerald-300">
-              <Users className="h-3.5 w-3.5 text-emerald-400" />
-              <span>{isRtl ? 'سجل الموارد البشرية والعمالة الموحد' : 'HR & Workforce Module'}</span>
-            </div>
-            <h2 className="mt-2.5 text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-              {isRtl ? 'دليل كادر العمل والتتمرك الجغرافي' : 'Workforce & Geofenced Location Directory'}
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              {isRtl ? 'دليل الموظفين والفروع' : 'Workforce directory'}
             </h2>
-            <p className="mt-1.5 text-xs sm:text-sm font-medium text-slate-300 max-w-2xl leading-relaxed">
+            <p className="mt-1 text-sm text-slate-500 max-w-2xl">
               {isRtl
-                ? 'مصدر البيانات الرئيسي للكادر بالأكواد الموحدة (E, D, W, M) ونطاق بصمة الحضور الجغرافية'
-                : 'Single Source of Truth for staff with prefixed codes (E, D, W, M) and multi-branch GPS geofencing'}
+                ? 'ابحث عن الموظفين، راجع فروعهم، وعدّل بياناتهم من مكان واحد.'
+                : 'Find staff, review their branches, and manage their records in one place.'}
             </p>
           </div>
 
-          {/* Action Toolbar Cluster - Professional Alignment & Styling */}
-          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 p-2.5 backdrop-blur-md shadow-inner self-start lg:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
             {/* Back Button */}
             {onBack && <BackToModulesButton onClick={onBack} />}
 
             {/* Add Employee Button (Hero Action) */}
             <button
               onClick={openAddModal}
-              className="group relative inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-xs font-black text-white shadow-md transition-all duration-200 hover:from-emerald-400 hover:to-teal-500 hover:shadow-emerald-500/25 active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 cursor-pointer"
             >
               <Plus className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
               <span>{isRtl ? 'إضافة موظف جديد' : 'Add New Employee'}</span>
             </button>
 
-            <div className="hidden h-5 w-px bg-slate-700 sm:block mx-0.5" />
-
+            <details className="relative">
+              <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                {isRtl ? 'خيارات أخرى' : 'More actions'}
+              </summary>
+              <div className={`absolute z-30 mt-2 flex min-w-48 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg ${isRtl ? 'left-0' : 'right-0'}`}>
             {/* Download Template Button */}
             <button
               onClick={handleDownloadTemplate}
-              className="inline-flex items-center gap-2 rounded-lg border border-purple-500/50 bg-purple-950/40 px-3.5 py-2.5 text-xs font-bold text-purple-200 transition-all hover:border-purple-400 hover:bg-purple-900/60 hover:text-white active:scale-95 cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               title={isRtl ? 'تحميل نموذج إكسيل رسمي جاهز بالصيغة الصحيحة والأمثلة (XLSX)' : 'Download official Excel template with sample records (XLSX)'}
             >
-              <FileSpreadsheet className="h-4 w-4 text-purple-400" />
+              <FileSpreadsheet className="h-4 w-4 text-purple-600" />
               <span>{isRtl ? 'نموذج إكسيل' : 'Excel Template'}</span>
             </button>
 
             {/* Import Excel Button */}
             <label
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-600/80 bg-slate-700/80 px-3.5 py-2.5 text-xs font-bold text-slate-200 transition-all hover:border-blue-500/50 hover:bg-slate-700 hover:text-white active:scale-95 cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               title={isRtl ? 'استيراد موظفين من ملف Excel/CSV (تعديل أو إضافة)' : 'Import staff from Excel/CSV (Rewrite/Add)'}
             >
-              <Upload className="h-4 w-4 text-blue-400" />
+              <Upload className="h-4 w-4 text-blue-600" />
               <span>{isRtl ? 'استيراد إكسيل' : 'Import Excel'}</span>
               <input
                 type="file"
@@ -946,214 +943,33 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
             {/* Export Excel Button */}
             <button
               onClick={handleExportExcel}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-600/80 bg-slate-700/80 px-3.5 py-2.5 text-xs font-bold text-slate-200 transition-all hover:border-emerald-500/50 hover:bg-slate-700 hover:text-white active:scale-95 cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               title={isRtl ? 'تصدير جميع الموظفين إلى ملف Excel/CSV' : 'Export all staff to Excel/CSV'}
             >
-              <Download className="h-4 w-4 text-emerald-400" />
+              <Download className="h-4 w-4 text-emerald-600" />
               <span>{isRtl ? 'تصدير إكسيل' : 'Export Excel'}</span>
             </button>
+              </div>
+            </details>
           </div>
         </div>
       </div>
 
-      {/* Category KPI Stats Grid - Premium Flat 2D Vector UI */}
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        {/* 1. Total Staff Card (ALL) */}
-        <div
-          onClick={() => setSelectedCategory('ALL')}
-          className={`group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-            selectedCategory === 'ALL'
-              ? 'border-slate-800 bg-gradient-to-b from-slate-900/[0.04] to-slate-900/[0.08] ring-2 ring-slate-800/20 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-slate-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-black tracking-wider shadow-2xs">
-                ALL
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                {isRtl ? 'الكل' : 'All'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-700 border border-slate-200/70 group-hover:scale-105 transition-transform">
-              <VectorAllStaff className="w-4 h-4 text-slate-800" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{stats.all.total}</p>
-          
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-slate-100 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{stats.all.active} {isRtl ? 'نشط' : 'Active'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{stats.all.inactive} {isRtl ? 'موقوف' : 'Inactive'}</span>
-            </span>
-          </div>
-          {selectedCategory === 'ALL' && (
-            <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-slate-800 rounded-full" />
-          )}
+      {/* Compact overview: category counts live in the tabs below. */}
+      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:max-w-xl">
+        <div className="border-e border-slate-100 px-2">
+          <p className="text-[11px] font-semibold text-slate-500">{isRtl ? 'إجمالي الموظفين' : 'Total staff'}</p>
+          <p className="text-xl font-black tabular-nums text-slate-900">{stats.all.total}</p>
         </div>
-
-        {/* 2. Pharmacists Card (E) */}
-        <div
-          onClick={() => setSelectedCategory('Pharmacist')}
-          className={`group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-            selectedCategory === 'Pharmacist'
-              ? 'border-blue-500 bg-gradient-to-b from-blue-50/70 to-blue-100/40 ring-2 ring-blue-500/20 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-blue-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-blue-600 text-white text-[10px] font-black tracking-wider shadow-2xs">
-                E
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">
-                {isRtl ? 'صيدلي' : 'Pharmacist'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200/70 group-hover:scale-105 transition-transform">
-              <VectorPharmacist className="w-4 h-4 text-blue-600" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{stats.pharmacists.total}</p>
-
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-blue-100/70 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{stats.pharmacists.active} {isRtl ? 'نشط' : 'Active'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{stats.pharmacists.inactive} {isRtl ? 'موقوف' : 'Inactive'}</span>
-            </span>
-          </div>
-          {selectedCategory === 'Pharmacist' && (
-            <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-blue-600 rounded-full" />
-          )}
+        <div className="border-e border-slate-100 px-2">
+          <p className="text-[11px] font-semibold text-slate-500">{isRtl ? 'نشط' : 'Active'}</p>
+          <p className="text-xl font-black tabular-nums text-emerald-700">{stats.all.active}</p>
         </div>
-
-        {/* 3. Drivers Card (D) - Flat 2D Vector Helmet Kept */}
-        <div
-          onClick={() => setSelectedCategory('Driver')}
-          className={`group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-            selectedCategory === 'Driver'
-              ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/70 to-emerald-100/40 ring-2 ring-emerald-500/20 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-emerald-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black tracking-wider shadow-2xs">
-                D
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                {isRtl ? 'سائق' : 'Driver'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/70 group-hover:scale-105 transition-transform">
-              <VectorDriver className="w-5 h-5 text-emerald-600" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{stats.drivers.total}</p>
-
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-emerald-100/70 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{stats.drivers.active} {isRtl ? 'نشط' : 'Active'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{stats.drivers.inactive} {isRtl ? 'موقوف' : 'Inactive'}</span>
-            </span>
-          </div>
-          {selectedCategory === 'Driver' && (
-            <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-emerald-600 rounded-full" />
-          )}
-        </div>
-
-        {/* 4. Workers Card (W) */}
-        <div
-          onClick={() => setSelectedCategory('Worker')}
-          className={`group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-            selectedCategory === 'Worker'
-              ? 'border-amber-500 bg-gradient-to-b from-amber-50/70 to-amber-100/40 ring-2 ring-amber-500/20 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-amber-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-amber-600 text-white text-[10px] font-black tracking-wider shadow-2xs">
-                W
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">
-                {isRtl ? 'عامل' : 'Worker'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200/70 group-hover:scale-105 transition-transform">
-              <VectorWorker className="w-4 h-4 text-amber-600" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{stats.workers.total}</p>
-
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-amber-100/70 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{stats.workers.active} {isRtl ? 'نشط' : 'Active'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{stats.workers.inactive} {isRtl ? 'موقوف' : 'Inactive'}</span>
-            </span>
-          </div>
-          {selectedCategory === 'Worker' && (
-            <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-amber-600 rounded-full" />
-          )}
-        </div>
-
-        {/* 5. Management Card (M) */}
-        <div
-          onClick={() => setSelectedCategory('Management')}
-          className={`group relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-            selectedCategory === 'Management'
-              ? 'border-purple-500 bg-gradient-to-b from-purple-50/70 to-purple-100/40 ring-2 ring-purple-500/20 shadow-md'
-              : 'border-slate-200/80 bg-white hover:border-purple-300'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-black tracking-wider shadow-2xs">
-                M
-              </span>
-              <p className="text-[10px] font-black uppercase tracking-wider text-purple-700">
-                {isRtl ? 'إدارة' : 'Management'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600 border border-purple-200/70 group-hover:scale-105 transition-transform">
-              <VectorManagement className="w-4 h-4 text-purple-600" />
-            </div>
-          </div>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950 tabular-nums">{stats.management.total}</p>
-
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-purple-100/70 text-[10px] font-bold">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>{stats.management.active} {isRtl ? 'نشط' : 'Active'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{stats.management.inactive} {isRtl ? 'موقوف' : 'Inactive'}</span>
-            </span>
-          </div>
-          {selectedCategory === 'Management' && (
-            <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-purple-600 rounded-full" />
-          )}
+        <div className="px-2">
+          <p className="text-[11px] font-semibold text-slate-500">{isRtl ? 'غير نشط' : 'Inactive'}</p>
+          <p className="text-xl font-black tabular-nums text-slate-600">{stats.all.inactive}</p>
         </div>
       </div>
-
       {/* Premium Search & Multi-Filter Control Console */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
         {/* Row 1: Search Input & Primary Category Filter Tabs */}
@@ -1190,11 +1006,11 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
           {/* Primary Category Segmented Control (Flat 2D Vector Badges) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 xl:pb-0 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80 self-start xl:self-auto w-full xl:w-auto">
             {[
-              { id: 'ALL', labelAr: 'الكل', labelEn: 'All', badge: 'ALL', badgeBg: 'bg-slate-800 text-white', vector: VectorAllStaff },
-              { id: 'Pharmacist', labelAr: 'صيدلي', labelEn: 'Pharmacist', badge: 'E', badgeBg: 'bg-blue-600 text-white', vector: VectorPharmacist },
-              { id: 'Driver', labelAr: 'سائق', labelEn: 'Driver', badge: 'D', badgeBg: 'bg-emerald-600 text-white', vector: VectorDriver },
-              { id: 'Worker', labelAr: 'عامل', labelEn: 'Worker', badge: 'W', badgeBg: 'bg-amber-600 text-white', vector: VectorWorker },
-              { id: 'Management', labelAr: 'إدارة', labelEn: 'Management', badge: 'M', badgeBg: 'bg-purple-600 text-white', vector: VectorManagement }
+              { id: 'ALL', labelAr: 'الكل', labelEn: 'All', badge: 'ALL', badgeBg: 'bg-slate-800 text-white', vector: VectorAllStaff, count: stats.all.total },
+              { id: 'Pharmacist', labelAr: 'صيدلي', labelEn: 'Pharmacist', badge: 'E', badgeBg: 'bg-blue-600 text-white', vector: VectorPharmacist, count: stats.pharmacists.total },
+              { id: 'Driver', labelAr: 'سائق', labelEn: 'Driver', badge: 'D', badgeBg: 'bg-emerald-600 text-white', vector: VectorDriver, count: stats.drivers.total },
+              { id: 'Worker', labelAr: 'عامل', labelEn: 'Worker', badge: 'W', badgeBg: 'bg-amber-600 text-white', vector: VectorWorker, count: stats.workers.total },
+              { id: 'Management', labelAr: 'إدارة', labelEn: 'Management', badge: 'M', badgeBg: 'bg-purple-600 text-white', vector: VectorManagement, count: stats.management.total }
             ].map(tab => {
               const VectorComp = tab.vector;
               const isSelected = selectedCategory === tab.id;
@@ -1213,6 +1029,7 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                     <span>{tab.badge}</span>
                   </span>
                   <span>{isRtl ? tab.labelAr : tab.labelEn}</span>
+                  <span className="text-[10px] tabular-nums text-slate-500">{tab.count}</span>
                 </button>
               );
             })}
@@ -1225,6 +1042,16 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
         {/* Row 2: Secondary Precision Filters Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters(value => !value)}
+              aria-expanded={showAdvancedFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {isRtl ? 'فلاتر إضافية' : 'More filters'}
+              {(selectedGender !== 'ALL' || selectedVisaType !== 'ALL') && <span className="h-2 w-2 rounded-full bg-blue-500" />}
+            </button>
             {/* Status Filter Segmented Control */}
             <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-xl border border-slate-200/70">
               <span className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-wider">
@@ -1252,6 +1079,8 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
               ))}
             </div>
 
+            {showAdvancedFilters && (
+              <>
             {/* Gender Filter Select */}
             <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-xl border border-slate-200/70">
               <span className="px-2 text-[10px] font-black text-slate-400 uppercase tracking-wider">
@@ -1287,10 +1116,24 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                 <option value="Flexi">{isRtl ? 'تأشيرة فلِكسي (Flexi)' : 'Flexi Visa'}</option>
               </select>
             </div>
+              </>
+            )}
           </div>
 
           {/* Right Action Cluster: Refresh, Reset Filters & Counter */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
+            {!loading && filteredEmployees.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectionMode(value => !value);
+                  setSelectedEmpIds([]);
+                }}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {selectionMode ? (isRtl ? 'إنهاء التحديد' : 'Done selecting') : (isRtl ? 'تحديد موظفين' : 'Select staff')}
+              </button>
+            )}
             {(searchTerm || selectedCategory !== 'ALL' || selectedStatus !== 'ALL' || selectedGender !== 'ALL' || selectedVisaType !== 'ALL') && (
               <button
                 onClick={() => {
@@ -1327,7 +1170,7 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
       </div>
 
       {/* Bulk Selection & Batch Actions Bar */}
-      {!loading && filteredEmployees.length > 0 && (
+      {!loading && filteredEmployees.length > 0 && selectionMode && (
         <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 transition-all">
           <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
             {/* Master Select All Checkbox Button */}
@@ -1435,23 +1278,25 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredEmployees.map(emp => {
             const catMeta = getCategoryMeta(emp.category);
             const CatIcon = catMeta.icon;
             const isSelected = selectedEmpIds.includes(emp.id);
+            const primaryAssignment = emp.assignments?.find(assignment => assignment.is_primary) || emp.assignments?.[0];
+            const primaryBranch = branches.find(branch => branch.id === primaryAssignment?.branch_id);
 
             return (
               <div
                 key={emp.id}
-                className={`group relative bg-white rounded-2xl border p-5 transition-all duration-200 flex flex-col justify-between ${
+                className={`group relative bg-white rounded-2xl border p-4 transition-all duration-200 flex flex-col justify-between ${
                   isSelected
                     ? 'border-brand ring-2 ring-brand/30 bg-brand/[0.015] shadow-md'
                     : 'border-slate-200/90 shadow-xs hover:border-slate-300 hover:shadow-lg'
                 }`}
               >
                 {/* Selection Checkbox */}
-                <button
+                {selectionMode && <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1466,11 +1311,11 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                   aria-label={isSelected ? 'Deselect employee' : 'Select employee'}
                 >
                   <Check className={`w-3.5 h-3.5 stroke-[3] transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
-                </button>
+                </button>}
 
                 <div>
                   {/* Top Bar: Employee Avatar + Category + Live Status Pulse + Name */}
-                  <div className={`flex items-start gap-3 mb-3.5 ${isRtl ? 'pl-7' : 'pr-7'}`}>
+                  <div className={`flex items-start gap-3 mb-3.5 ${selectionMode ? (isRtl ? 'pl-7' : 'pr-7') : ''}`}>
                     {/* Employee Avatar Box: logo.jpg for Pharmacist, Worker, Management; red VectorDriver helmet for Driver */}
                     <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 shadow-2xs overflow-hidden ${
                       emp.category === 'Driver'
@@ -1534,6 +1379,33 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                     </div>
                   </div>
 
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                      {primaryAssignment?.branch_name ||
+                        primaryBranch?.name ||
+                        primaryBranch?.code ||
+                        primaryAssignment?.branch_id ||
+                        (isRtl ? 'لم يحدد فرع' : 'No branch assigned')}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span>{emp.assignments?.length || 0} {isRtl ? 'فروع' : 'branches'}</span>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-2">
+                    <button
+                      type="button"
+                      aria-expanded={expandedEmployeeIds.includes(emp.id)}
+                      onClick={() => setExpandedEmployeeIds(ids =>
+                        ids.includes(emp.id) ? ids.filter(id => id !== emp.id) : [...ids, emp.id]
+                      )}
+                      className="rounded-lg px-2 py-1.5 text-xs font-bold text-brand hover:bg-brand/5 focus-visible:outline-2 focus-visible:outline-brand"
+                    >
+                      {expandedEmployeeIds.includes(emp.id)
+                        ? (isRtl ? 'إخفاء التفاصيل' : 'Hide details')
+                        : (isRtl ? 'عرض بيانات الموظف والفروع' : 'View profile and branches')}
+                    </button>
+                    {expandedEmployeeIds.includes(emp.id) && <div className="mt-3 space-y-3">
                   {/* Contact & Quick Connect Card (CPR Copy + Phone + WhatsApp) */}
                   <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/70 space-y-1.5 text-xs text-slate-600">
                     {emp.cpr_number && (
@@ -1856,84 +1728,7 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                     </div>
                   </div>
 
-                  {/* Salary Matrix & Financial Summary (With Privacy Mask) */}
-                  {emp.salary_matrix && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                          <CreditCard className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{isRtl ? 'الراتب والتعويضات:' : 'Payroll & Salary:'}</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleSalaryVisibility(emp.id)}
-                          title={unmaskedSalaries[emp.id] ? (isRtl ? 'إخفاء الرواتب' : 'Hide Salaries') : (isRtl ? 'إظهار الرواتب' : 'Reveal Salaries')}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                        >
-                          {unmaskedSalaries[emp.id] ? (
-                            <>
-                              <EyeOff className="w-3 h-3 shrink-0" />
-                              <span className="text-[9px] font-bold">{isRtl ? 'إخفاء' : 'Hide'}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3 h-3 shrink-0" />
-                              <span className="text-[9px] font-bold">{isRtl ? 'كشف' : 'Show'}</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {emp.salary_matrix.iban && (
-                        <div className="flex items-center justify-between text-[10px] font-bold">
-                          <span className="text-slate-400 uppercase tracking-wider">IBAN:</span>
-                          <span className="font-mono text-slate-700 tracking-tight font-black">{emp.salary_matrix.iban}</span>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-1.5 pt-1">
-                        {/* 1. Total Fixed (Calm Neutral Grey) */}
-                        <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-                          <span className="text-[9px] font-bold text-slate-400 block uppercase">{isRtl ? 'الراتب الثابت' : 'Total Fixed'}</span>
-                          <span className="text-xs font-black font-mono text-slate-800 tabular-nums">
-                            {unmaskedSalaries[emp.id]
-                              ? `${(emp.salary_matrix.totalFixed || 0).toFixed(3)} BHD`
-                              : '••••• BHD'}
-                          </span>
-                        </div>
-
-                        {/* 2. Total Variable (Calm Neutral Grey) */}
-                        <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-                          <span className="text-[9px] font-bold text-slate-400 block uppercase">{isRtl ? 'إجمالي المتغير' : 'Total Variable'}</span>
-                          <span className="text-xs font-black font-mono text-slate-800 tabular-nums">
-                            {unmaskedSalaries[emp.id]
-                              ? `${(emp.salary_matrix.totalVariable || 0) > 0 ? '+' : ''}${(emp.salary_matrix.totalVariable || 0).toFixed(3)} BHD`
-                              : '••••• BHD'}
-                          </span>
-                        </div>
-
-                        {/* 3. Total Deductions (Calm Neutral Grey) */}
-                        <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
-                          <span className="text-[9px] font-bold text-slate-400 block uppercase">{isRtl ? 'الاستقطاعات' : 'Total Deductions'}</span>
-                          <span className="text-xs font-black font-mono text-slate-800 tabular-nums">
-                            {unmaskedSalaries[emp.id]
-                              ? `${(emp.salary_matrix.totalDeductions || 0) > 0 ? '-' : ''}${(emp.salary_matrix.totalDeductions || 0).toFixed(3)} BHD`
-                              : '••••• BHD'}
-                          </span>
-                        </div>
-
-                        {/* 4. Net Salary (Prominent Emerald Green - Final Result) */}
-                        <div className="p-1.5 rounded-lg bg-emerald-50/80 border border-emerald-300/90 shadow-2xs">
-                          <span className="text-[9px] font-black text-emerald-700 block uppercase">{isRtl ? 'صافي الراتب' : 'Net Salary'}</span>
-                          <span className="text-xs font-black font-mono text-emerald-800 tabular-nums">
-                            {unmaskedSalaries[emp.id]
-                              ? `${(emp.salary_matrix.netSalary || 0).toFixed(3)} BHD`
-                              : '••••• BHD'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Salary and IBAN are shown only in the restricted payroll workflow. */}
 
                   {/* Fleet Vehicles Linkage (Driver & Worker) - Bahrain License Plate */}
                   {(emp.category === 'Driver' || emp.category === 'Worker') && (
@@ -2027,6 +1822,8 @@ export const WorkforceDirectory: React.FC<WorkforceDirectoryProps> = ({ lang = '
                         );
                       })}
                     </div>
+                  </div>
+                    </div>}
                   </div>
                 </div>
 

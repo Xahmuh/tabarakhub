@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { DropdownSearch } from '../ui/DropdownSearch';
 import { StatusBadge } from '../ui/StatusBadge';
 import { CAPACard } from '../capa/CAPACard';
-import { mockAuditStore } from '../../services/mockAuditStore';
 import { supabaseTqphService } from '../../services/supabaseTqphService';
-import { MOCK_AREAS, MOCK_BRANCHES, MOCK_USERS } from '../../data';
 import { Area, Branch, CAPA_Task, NHRA_Audit, User } from '../../types';
 import { exportNHRAReport } from '../../services/pdfExportService';
 import {
@@ -26,59 +24,45 @@ import {
 
 interface BranchInspectionsViewProps {
   initialBranchId?: string;
-  currentUser?: User;
   onExit?: () => void;
   className?: string;
 }
 
 export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
-  initialBranchId = MOCK_BRANCHES[0]?.id || '1b3b2924-ef34-4626-a77f-33227f2915ad',
-  currentUser,
+  initialBranchId,
   onExit,
   className = ''
 }) => {
-  const [branches, setBranches] = useState<Branch[]>(MOCK_BRANCHES);
-  const [areas, setAreas] = useState<Area[]>(MOCK_AREAS);
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(initialBranchId);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(initialBranchId || null);
+  const [branchAudits, setBranchAudits] = useState<NHRA_Audit[]>([]);
+  const [branchCapas, setBranchCapas] = useState<CAPA_Task[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'capa' | 'audits'>('capa');
   const [capaFilter, setCapaFilter] = useState<'all' | 'open' | 'resolved'>('all');
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
-
-  // Trigger state refresh when store updates
-  const [storeTick, setStoreTick] = useState(0);
-  const refreshStore = () => setStoreTick(t => t + 1);
 
   // Fetch real branches and areas from database
   useEffect(() => {
     let isMounted = true;
     Promise.all([
       supabaseTqphService.getBranches(),
-      supabaseTqphService.getAreas(),
-      supabaseTqphService.getPharmacists()
-    ]).then(([liveBranches, liveAreas, livePharmacists]) => {
+      supabaseTqphService.getAreas()
+    ]).then(([liveBranches, liveAreas]) => {
       if (!isMounted) return;
-      if (liveBranches && liveBranches.length > 0) {
-        setBranches(liveBranches);
-      }
-      if (liveAreas && liveAreas.length > 0) {
-        setAreas(liveAreas);
-      }
-      if (livePharmacists && livePharmacists.length > 0) {
-        setUsers(prev => {
-          const nonPh = prev.filter(u => u.role !== 'pharmacist');
-          return [...nonPh, ...livePharmacists];
-        });
-      }
+      setBranches(liveBranches);
+      setAreas(liveAreas);
+      if (!selectedBranchId && liveBranches[0]) setSelectedBranchId(liveBranches[0].id);
     }).catch(err => {
-      console.warn('Live branches/areas fetch warning:', err);
+      if (isMounted) setLoadError(err instanceof Error ? err.message : 'Failed to load branches');
     });
     return () => { isMounted = false; };
   }, []);
 
   // Find active branch
   const activeBranch = useMemo(() => {
-    return branches.find(b => b.id === selectedBranchId) || branches[0] || MOCK_BRANCHES[0];
+    return selectedBranchId ? branches.find(b => b.id === selectedBranchId) : branches[0];
   }, [branches, selectedBranchId]);
 
   // Area name lookup map
@@ -87,21 +71,10 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
   }, [areas]);
 
   // Audits for this branch (sorted newest first)
-  const branchAudits = useMemo(() => {
-    if (!selectedBranchId) return [];
-    const list = mockAuditStore.getAuditsByBranch(selectedBranchId);
-    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [selectedBranchId, storeTick]);
-
   // Latest audit
   const latestAudit = branchAudits[0] || null;
 
   // CAPA tasks for this branch
-  const branchCapas = useMemo(() => {
-    if (!selectedBranchId) return [];
-    return mockAuditStore.getCapaTasks(selectedBranchId);
-  }, [selectedBranchId, storeTick]);
-
   // Filtered CAPA tasks
   const filteredCapas = useMemo(() => {
     if (capaFilter === 'open') return branchCapas.filter(c => c.status === 'open');
@@ -133,59 +106,53 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
   useEffect(() => {
     if (!selectedBranchId) return;
     let isMounted = true;
+    setBranchAudits([]);
+    setBranchCapas([]);
     Promise.all([
       supabaseTqphService.getAudits(selectedBranchId),
       supabaseTqphService.getCapaTasks(selectedBranchId)
     ]).then(([liveAudits, liveCapas]) => {
       if (!isMounted) return;
-      if (liveAudits && liveAudits.length > 0) {
-        liveAudits.forEach(a => mockAuditStore.saveAudit(a));
-      }
-      if (liveCapas && liveCapas.length > 0) {
-        liveCapas.forEach(c => mockAuditStore.updateCapaTask(c));
-      }
-      refreshStore();
+      setBranchAudits(liveAudits);
+      setBranchCapas(liveCapas);
     }).catch(err => {
-      console.warn('Branch live fetch fallback:', err);
+      if (isMounted) setLoadError(err instanceof Error ? err.message : 'Failed to load branch inspections');
     });
     return () => { isMounted = false; };
   }, [selectedBranchId]);
-
-  // Handle CAPA Resolution
-  const handleResolveCapa = (taskId: string, proofUrl: string, resolutionComment: string) => {
-    const updatePayload = {
-      id: taskId,
-      status: 'resolved' as const,
-      resolved_by: currentUser?.name || activeBranch.manager_name,
-      resolved_at: new Date().toISOString(),
-      resolution_proof_url: proofUrl
-    };
-    mockAuditStore.updateCapaTask(updatePayload);
-    supabaseTqphService.updateCapaTask(updatePayload);
-    refreshStore();
-  };
 
   const [generatingPdfAuditId, setGeneratingPdfAuditId] = useState<string | null>(null);
 
   const handleDownloadPdf = async (audit: NHRA_Audit) => {
     try {
       setGeneratingPdfAuditId(audit.id);
-      const supervisor =
-        users.find(u => u.id === audit.supervisor_id) ||
-        users.find(u => u.role === 'supervisor') ||
-        MOCK_USERS[0];
+      if (!activeBranch || activeBranch.id !== audit.branch_id || !audit.supervisor_name_snapshot?.trim()) {
+        throw new Error('This report needs matching branch data and a verified supervisor name. Older records need review.');
+      }
+      const supervisor: User = {
+        id: audit.supervisor_id,
+        name: audit.supervisor_name_snapshot,
+        cpr: '',
+        role: 'supervisor'
+      };
       const auditCapas = branchCapas.filter(c => c.audit_id === audit.id);
       await exportNHRAReport(audit, activeBranch, supervisor, auditCapas);
     } catch (err) {
-      console.error('Failed to generate NHRA PDF:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to generate NHRA PDF');
     } finally {
       setGeneratingPdfAuditId(null);
     }
   };
 
+  if (!activeBranch) {
+    return <div className="p-6" role={loadError ? 'alert' : 'status'}>{loadError || 'No branch is available for this account.'}</div>;
+  }
+
   return (
     <div className={`min-h-screen bg-slate-50/60 text-slate-900 p-4 sm:p-6 md:p-8 font-sans ${className}`}>
       <div className="max-w-6xl mx-auto space-y-6">
+        {loadError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>}
+        {!activeBranch && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm">No branch is available for this account.</p>}
         {/* Header Ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
@@ -197,7 +164,7 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
               Branch Inspections &amp; CAPA Action Center (/branch/inspections)
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">
-              Official NHRA Compliance History &amp; Corrective Actions SLA Tracker
+              Internal quality review history &amp; corrective action tracker
             </p>
           </div>
 
@@ -377,7 +344,6 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                         <CAPACard
                           key={capa.id}
                           capa={capa}
-                          onResolve={handleResolveCapa}
                         />
                       ))}
                     </div>
@@ -402,7 +368,6 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                         <CAPACard
                           key={capa.id}
                           capa={capa}
-                          onResolve={handleResolveCapa}
                         />
                       ))}
                     </div>
@@ -427,7 +392,6 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                         <CAPACard
                           key={capa.id}
                           capa={capa}
-                          onResolve={handleResolveCapa}
                         />
                       ))}
                     </div>
@@ -466,7 +430,7 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">
-                          Audited by <strong className="text-slate-900">{audit.supervisor_id}</strong> · Status: <span className="capitalize text-emerald-700 font-bold font-mono">{audit.status.replace('_', ' ')}</span>
+                          Audited by <strong className="text-slate-900">{audit.supervisor_name_snapshot || 'Unverified historical record'}</strong> · Status: <span className="capitalize text-emerald-700 font-bold font-mono">{audit.status.replace('_', ' ')}</span>
                         </p>
                       </div>
 
@@ -476,10 +440,11 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                           size="md"
                         />
 
-                        {/* Download Official NHRA PDF Action */}
+                        {/* Historical rows without verified reviewer identity cannot be exported. */}
                         <button
                           type="button"
-                          disabled={generatingPdfAuditId === audit.id}
+                          disabled={generatingPdfAuditId === audit.id || !audit.supervisor_name_snapshot?.trim()}
+                          title={!audit.supervisor_name_snapshot?.trim() ? 'Verified supervisor name required for older records' : undefined}
                           onClick={() => handleDownloadPdf(audit)}
                           className="
                             inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all
@@ -495,7 +460,7 @@ export const BranchInspectionsView: React.FC<BranchInspectionsViewProps> = ({
                           ) : (
                             <>
                               <Download className="w-3.5 h-3.5" />
-                              <span>Download Official NHRA PDF</span>
+                              <span>Download Internal Quality Report</span>
                             </>
                           )}
                         </button>

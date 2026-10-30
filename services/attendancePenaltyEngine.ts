@@ -6,9 +6,8 @@
  * Key Design Decisions:
  *   - Grace period applied FIRST, lateness measured AFTER grace (§5.1)
  *   - TERMINATION_FLAG is INERT — only creates a flag, never auto-deactivates (§5.3)
- *   - BHD deduction formula: NOTE — HRMS formula port is a BLOCKING DEPENDENCY (§1)
- *     Current formula uses workingHoursPerDay/30 as placeholder until Ahmed confirms
- *     the exact GCC 26-day convention from the HRMS Laravel system.
+ *   - No attendance event calculates a monetary deduction. Owner sets the
+ *     amount in a proposal and Owner/Accounts approve it separately.
  *   - Escalation tiers reset per resetPeriod (MONTHLY/QUARTERLY/YEARLY/NEVER)
  *   - Waivers do NOT count toward escalation occurrence tracking
  */
@@ -55,107 +54,9 @@ function safeSetItem(key: string, value: string): void {
 // DEFAULT BAHRAIN LABOR LAW-ALIGNED PENALTY RULES
 // ============================================================================
 
-const makeRule = (
-  id: string,
-  ruleType: PenaltyRuleType,
-  name: string,
-  nameAr: string,
-  triggerCondition: AttendancePenaltyRule['triggerCondition'],
-  tiers: AttendancePenaltyRule['escalationTiers'],
-  resetPeriod: AttendancePenaltyRule['resetPeriod'] = 'MONTHLY'
-): AttendancePenaltyRule => ({
-  id,
-  ruleType,
-  name,
-  nameAr,
-  triggerCondition,
-  escalationTiers: tiers,
-  isActive: true,
-  appliesTo: ['Pharmacist', 'Driver', 'Worker', 'Management'],
-  resetPeriod,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
-
-export const DEFAULT_PENALTY_RULES: AttendancePenaltyRule[] = [
-  // Late 1-15 min (AFTER grace period — §5.1)
-  makeRule('rule-late-1-15', 'LATE_ARRIVAL', 'Late Arrival (1-15 min)', 'تأخر (1-15 دقيقة)',
-    { minLateMinutes: 1, maxLateMinutes: 15 },
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'VERBAL_WARNING', description: 'Verbal warning', descriptionAr: 'إنذار شفهي' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'WRITTEN_WARNING', description: 'Written warning', descriptionAr: 'إنذار كتابي' },
-      { tier: 3, occurrenceRange: [3, 3], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.25, description: '¼ day salary deduction', descriptionAr: 'خصم ربع يوم' },
-      { tier: 4, occurrenceRange: [4, 4], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.5, description: '½ day salary deduction', descriptionAr: 'خصم نصف يوم' },
-      { tier: 5, occurrenceRange: [5, 99], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 1, description: '1 day salary deduction', descriptionAr: 'خصم يوم واحد' },
-    ]
-  ),
-
-  // Late 16-30 min
-  makeRule('rule-late-16-30', 'LATE_ARRIVAL', 'Late Arrival (16-30 min)', 'تأخر (16-30 دقيقة)',
-    { minLateMinutes: 16, maxLateMinutes: 30 },
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'WRITTEN_WARNING', description: 'Written warning', descriptionAr: 'إنذار كتابي' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.5, description: '½ day salary deduction', descriptionAr: 'خصم نصف يوم' },
-      { tier: 3, occurrenceRange: [3, 3], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 1, description: '1 day salary deduction', descriptionAr: 'خصم يوم واحد' },
-      { tier: 4, occurrenceRange: [4, 4], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 2, description: '2 day salary deduction', descriptionAr: 'خصم يومين' },
-      { tier: 5, occurrenceRange: [5, 99], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 3, description: '3 day salary deduction', descriptionAr: 'خصم ثلاثة أيام' },
-    ]
-  ),
-
-  // Late 31-60 min
-  makeRule('rule-late-31-60', 'LATE_ARRIVAL', 'Late Arrival (31-60 min)', 'تأخر (31-60 دقيقة)',
-    { minLateMinutes: 31, maxLateMinutes: 60 },
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.5, description: '½ day salary deduction', descriptionAr: 'خصم نصف يوم' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 1, description: '1 day salary deduction', descriptionAr: 'خصم يوم واحد' },
-      { tier: 3, occurrenceRange: [3, 3], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 2, description: '2 day salary deduction', descriptionAr: 'خصم يومين' },
-      { tier: 4, occurrenceRange: [4, 4], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 3, description: '3 day salary deduction', descriptionAr: 'خصم ثلاثة أيام' },
-      { tier: 5, occurrenceRange: [5, 99], action: 'TERMINATION_FLAG', description: 'Flagged for HR review (termination consideration)', descriptionAr: 'رُفع للموارد البشرية (إنهاء خدمة)' },
-    ]
-  ),
-
-  // Absent without excuse
-  makeRule('rule-absent-no-excuse', 'ABSENT_NO_EXCUSE', 'Absent (No Excuse)', 'غياب بدون عذر',
-    {},
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 1, description: '1 day salary deduction', descriptionAr: 'خصم يوم واحد' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 2, description: '2 day salary deduction', descriptionAr: 'خصم يومين' },
-      { tier: 3, occurrenceRange: [3, 3], action: 'SUSPENSION_DAYS', deductionValue: 3, description: '3 day suspension', descriptionAr: 'إيقاف 3 أيام' },
-      { tier: 4, occurrenceRange: [4, 99], action: 'TERMINATION_FLAG', description: 'Flagged for HR review (termination consideration)', descriptionAr: 'رُفع للموارد البشرية (إنهاء خدمة)' },
-    ],
-    'QUARTERLY'
-  ),
-
-  // Absent without prior notice
-  makeRule('rule-absent-no-notice', 'ABSENT_NO_NOTICE', 'Absent (No Prior Notice)', 'غياب بدون إخطار مسبق',
-    {},
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 2, description: '2 day salary deduction', descriptionAr: 'خصم يومين' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'SUSPENSION_DAYS', deductionValue: 3, description: '3 day suspension', descriptionAr: 'إيقاف 3 أيام' },
-      { tier: 3, occurrenceRange: [3, 99], action: 'TERMINATION_FLAG', description: 'Flagged for HR review (termination consideration)', descriptionAr: 'رُفع للموارد البشرية (إنهاء خدمة)' },
-    ],
-    'QUARTERLY'
-  ),
-
-  // Missing Punch
-  makeRule('rule-missing-punch', 'MISSING_PUNCH', 'Missing Clock-In/Out Punch', 'نسيان بصمة الحضور/الانصراف',
-    {},
-    [
-      { tier: 1, occurrenceRange: [1, 2], action: 'SALARY_DEDUCTION_FIXED', deductionValue: 5, description: '5.000 BHD deduction', descriptionAr: 'خصم 5.000 د.ب' },
-      { tier: 2, occurrenceRange: [3, 99], action: 'SALARY_DEDUCTION_FIXED', deductionValue: 10, description: '10.000 BHD deduction', descriptionAr: 'خصم 10.000 د.ب' },
-    ]
-  ),
-
-  // Outside Geofence
-  makeRule('rule-outside-geofence', 'OUTSIDE_GEOFENCE', 'Clock-In Outside Geofence', 'تسجيل حضور خارج النطاق الجغرافي',
-    { geofenceRequired: true },
-    [
-      { tier: 1, occurrenceRange: [1, 1], action: 'VERBAL_WARNING', description: 'Verbal warning', descriptionAr: 'إنذار شفهي' },
-      { tier: 2, occurrenceRange: [2, 2], action: 'WRITTEN_WARNING', description: 'Written warning', descriptionAr: 'إنذار كتابي' },
-      { tier: 3, occurrenceRange: [3, 99], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.5, description: '½ day salary deduction', descriptionAr: 'خصم نصف يوم' },
-    ]
-  ),
-];
+// No monetary or disciplinary rules are seeded. Owner-defined deductions are
+// recorded as proposals and require Owner and Accounts approval.
+export const DEFAULT_PENALTY_RULES: AttendancePenaltyRule[] = [];
 
 // ============================================================================
 // PENALTY ENGINE
@@ -416,59 +317,14 @@ export const attendancePenaltyEngine = {
   // BHD DEDUCTION CALCULATION
   // ------------------------------------------------------------------
 
-  /**
-   * Calculate the BHD monetary deduction for a penalty action.
-   *
-   * ⚠️ HRMS MIGRATION NOTE (§1):
-   * This formula currently uses: dailyRate = basicSalary / 30
-   * The HRMS (Laravel) system is known to use a "GCC 26-day month" convention
-   * and may distinguish per-employee-category rules. The exact formula must be
-   * ported from HRMS and validated against historical output before this module
-   * is considered production-ready for payroll integration.
-   *
-   * TODO: Replace this placeholder with HRMS-validated formula after Ahmed
-   * confirms the calculation logic from the Laravel codebase.
-   */
+  /** Attendance flags are evidence; they never determine a monetary amount. */
   _calculateDeductionBhd(
-    action: PenaltyActionType,
-    deductionValue: number,
-    employee: Employee,
-    config: AttendanceModuleConfig
+    _action: PenaltyActionType,
+    _deductionValue: number,
+    _employee: Employee,
+    _config: AttendanceModuleConfig
   ): number {
-    const salary = employee.salary_matrix;
-    const basicSalary = salary?.basicSalary || 0;
-
-    // §1 PLACEHOLDER: Using /30 until HRMS formula is confirmed.
-    // HRMS may use /26 (GCC convention) — will be updated post-confirmation.
-    const dailyRate = basicSalary / 30;
-    const hourlyRate = dailyRate / config.workingHoursPerDay;
-
-    switch (action) {
-      case 'VERBAL_WARNING':
-      case 'WRITTEN_WARNING':
-        return 0; // warnings have no monetary deduction
-
-      case 'SALARY_DEDUCTION_HOURS':
-        return Math.round(hourlyRate * deductionValue * 1000) / 1000;
-
-      case 'SALARY_DEDUCTION_DAYS':
-        return Math.round(dailyRate * deductionValue * 1000) / 1000;
-
-      case 'SALARY_DEDUCTION_FIXED':
-        return deductionValue; // fixed BHD amount
-
-      case 'SUSPENSION_DAYS':
-        return Math.round(dailyRate * deductionValue * 1000) / 1000;
-
-      case 'TERMINATION_FLAG':
-        // §5.3: TERMINATION_FLAG is INERT. It NEVER triggers any automatic account
-        // deactivation, payroll stoppage, or system-initiated employment action.
-        // It only creates a flagged record for HR review.
-        return 0;
-
-      default:
-        return 0;
-    }
+    return 0;
   },
 
   _getDeductionUnit(action: PenaltyActionType): 'HOURS' | 'DAYS' | 'BHD' {

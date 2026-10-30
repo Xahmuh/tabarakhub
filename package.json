@@ -12,7 +12,10 @@
     "test:no-orders": "npx tsx app/delivery/components/__tests__/noOrdersClassification.test.ts",
     "test:money": "npx tsx utils/__tests__/money.test.ts",
     "test:access": "npx tsx lib/__tests__/access.test.ts",
-    "test": "npm run test:attendance && npm run test:demand && npm run test:no-orders && npm run test:money && npm run test:access",
+    "test:payroll-export": "npx tsx services/__tests__/payrollExportService.test.ts",
+    "test:tqph-data": "npx tsx app/tqph/__tests__/supabaseTqphService.test.ts",
+    "generate:payroll-templates": "npx tsx scripts/generate-payroll-templates.ts",
+    "test": "npm run test:attendance && npm run test:demand && npm run test:no-orders && npm run test:money && npm run test:access && npm run test:payroll-export && npm run test:tqph-data",
     "preview": "vite preview"
   },
   "dependencies": {

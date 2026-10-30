@@ -94,7 +94,7 @@ export interface AppRouterProps {
   onSetBenefitPayFocusTarget: (target: BenefitPayFocusTarget | null) => void;
   onSetHrLetterInitialData: (data: any) => void;
   onDeliveryNotificationUnreadCountChange: (count: number) => void;
-  onOpenBenefitPayFromDelivery: (transfer: BenefitPayTransfer) => void;
+  onOpenBenefitPayFromDelivery: (order: DeliveryOrder) => void;
   onOpenDeliveryFromBenefitPay: (transfer: BenefitPayTransfer) => void;
   onOpenDeliveryFromNotification: (notification: DeliveryNotification) => void;
   onSettingsChange: (settings: MaintenanceSettings | null) => void;
@@ -305,9 +305,8 @@ export const AppRouter: React.FC<AppRouterProps> = ({
                 ? {
                     id: authState.user.id,
                     name: authState.user.name,
-                    cpr: '990101010',
+                    cpr: '',
                     role: isManagerRole(authState.user.role) ? 'admin' : (authState.user.role === 'supervisor' ? 'supervisor' : 'admin'),
-                    branch_id: authState.user.id,
                   }
                 : undefined
             }

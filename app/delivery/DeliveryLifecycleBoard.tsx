@@ -14,7 +14,7 @@ import {
 import Swal from 'sweetalert2';
 import { deliveryService } from '../../services/deliveryService';
 import { Branch, DeliveryDriver, DeliveryLifecycleStatus, DeliveryOrder, DeliveryOrderEvent, DeliveryPaymentCollectionStatus, DeliveryPaymentTypeConfig } from '../../types';
-import { isDeliveryPaymentBlockExempt } from '../../lib/deliveryPaymentTypes';
+import { isDeliveryPaymentBlockExempt, isTalabatDeliveryPayment } from '../../lib/deliveryPaymentTypes';
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey, yesterdayKey } from './utils';
 
@@ -96,8 +96,19 @@ const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStat
 const isClosedOrder = (order: DeliveryOrder) =>
   order.deliveryStatus === 'delivered' || order.deliveryStatus === 'cancelled';
 
+const isManualRecordedOnlyOrder = (order: DeliveryOrder) =>
+  order.dispatchMode === 'log_only'
+  && order.orderKind !== 'internal_transfer'
+  && !isTalabatDeliveryPayment(order.paymentType);
+
+const isRecordedOnlyCompletion = (order: DeliveryOrder) =>
+  isManualRecordedOnlyOrder(order) && order.deliveryStatus !== 'cancelled';
+
+const dispatchDisplayStatus = (order: DeliveryOrder): DeliveryLifecycleStatus =>
+  isRecordedOnlyCompletion(order) ? 'delivered' : order.deliveryStatus;
+
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
-  order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes);
+  order.dispatchMode !== 'log_only' && (order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes));
 
 const isPendingCollectionOrder = (order: DeliveryOrder) =>
   order.paymentCollectionStatus !== 'paid' && order.amountToCollectBhd > 0;
@@ -309,13 +320,20 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     const counts = new Map<DeliveryLifecycleStatus, number>();
     STATUS_ORDER.forEach(status => counts.set(status, 0));
     orders
-      .filter(order => isDriverDispatchOrder(order, paymentTypes))
-      .forEach(order => counts.set(order.deliveryStatus, (counts.get(order.deliveryStatus) || 0) + 1));
+      .filter(order => isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order))
+      .forEach(order => {
+        const status = dispatchDisplayStatus(order);
+        counts.set(status, (counts.get(status) || 0) + 1);
+      });
     return counts;
   }, [orders, paymentTypes]);
 
   const internalDispatchOrders = useMemo(
     () => orders.filter(order => isDriverDispatchOrder(order, paymentTypes)),
+    [orders, paymentTypes]
+  );
+  const dispatchBoardOrders = useMemo(
+    () => orders.filter(order => isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order)),
     [orders, paymentTypes]
   );
   const actualDispatchOrders = useMemo(
@@ -326,19 +344,21 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     () => internalDispatchOrders.filter(order => order.orderKind === 'internal_transfer'),
     [internalDispatchOrders]
   );
-  const externalNoBlockCount = orders.length - internalDispatchOrders.length;
+  const externalNoBlockCount = orders.length - dispatchBoardOrders.length;
   const dispatchViews = useMemo(() => [
-    { id: 'all' as const, label: 'All orders', count: internalDispatchOrders.length },
+    { id: 'all' as const, label: 'All orders', count: dispatchBoardOrders.length },
     { id: 'recorded' as const, label: 'To assign', count: statusCounts.get('recorded') || 0 },
     { id: 'assigned' as const, label: 'Awaiting pickup', count: statusCounts.get('assigned') || 0 },
     { id: 'picked_up' as const, label: 'On the road', count: statusCounts.get('picked_up') || 0 },
     { id: 'closed' as const, label: 'Closed', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) }
-  ], [internalDispatchOrders.length, statusCounts]);
+  ], [dispatchBoardOrders.length, statusCounts]);
   const visibleDispatchOrders = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return internalDispatchOrders.filter(order => {
+    return dispatchBoardOrders.filter(order => {
       const matchesView = dispatchView === 'all'
-        || (dispatchView === 'closed' ? isClosedOrder(order) : order.deliveryStatus === dispatchView);
+        || (dispatchView === 'closed'
+          ? dispatchDisplayStatus(order) === 'delivered' || order.deliveryStatus === 'cancelled'
+          : dispatchDisplayStatus(order) === dispatchView);
       if (!matchesView) return false;
       if (!query) return true;
       return [
@@ -346,7 +366,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
         order.transferFromBranchName, order.transferToBranchName, order.paymentType
       ].some(value => String(value || '').toLocaleLowerCase().includes(query));
     });
-  }, [dispatchView, internalDispatchOrders, searchQuery]);
+  }, [dispatchBoardOrders, dispatchView, searchQuery]);
 
   const valueInMotion = useMemo(
     () => internalDispatchOrders
@@ -401,7 +421,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
       return [
         {
           label: 'Dispatch total',
-          value: String(internalDispatchOrders.length),
+          value: String(dispatchBoardOrders.length),
           sub: label,
           tone: 'brand',
           icon: <PackageCheck className="h-4 w-4" />
@@ -571,15 +591,18 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
       return;
     }
 
+    const isRecordedOnly = isManualRecordedOnlyOrder(order);
     const result = await Swal.fire({
-      title: 'Customer cancelled this order?',
-      html: `This will remove <b>${deliveryOrderNumber(order)}</b> from Dispatch, Recording, and driver history.`,
+      title: isRecordedOnly ? 'Customer cancelled this Recorded only order?' : 'Customer cancelled this order?',
+      html: isRecordedOnly
+        ? `This will mark <b>${deliveryOrderNumber(order)}</b> as Cancelled in Dispatch and keep its audit history.`
+        : `This will remove <b>${deliveryOrderNumber(order)}</b> from Dispatch, Recording, and driver history.`,
       input: 'text',
       inputLabel: 'Reason or note',
       inputPlaceholder: 'Example: customer cancelled before delivery',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Cancel and remove',
+      confirmButtonText: isRecordedOnly ? 'Mark customer cancelled' : 'Cancel and remove',
       confirmButtonColor: '#B91c1c'
     });
     if (!result.isConfirmed) return;
@@ -587,12 +610,19 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     const notes = result.value ? String(result.value).trim() : null;
     setSavingOrderId(order.id);
     try {
-      await deliveryService.lifecycle.cancelCustomerOrder({
-        orderId: order.id,
-        notes
-      });
+      if (isRecordedOnly) {
+        await deliveryService.lifecycle.cancelRecordedOnlyOrder({ orderId: order.id, notes });
+      } else {
+        await deliveryService.lifecycle.cancelCustomerOrder({ orderId: order.id, notes });
+      }
       await load();
-      await Swal.fire('Customer order cancelled', `${deliveryOrderNumber(order)} was removed from delivery records.`, 'success');
+      await Swal.fire(
+        isRecordedOnly ? 'Customer cancellation recorded' : 'Customer order cancelled',
+        isRecordedOnly
+          ? `${deliveryOrderNumber(order)} is marked Cancelled and remains in the audited history.`
+          : `${deliveryOrderNumber(order)} was removed from delivery records.`,
+        'success'
+      );
     } catch (cancelError: any) {
       console.error('Customer delivery cancellation failed', cancelError);
       await Swal.fire('Cancel failed', cancelError?.message || 'Could not cancel and remove this delivery order.', 'error');
@@ -801,7 +831,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                 className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none"
               />
             </label>
-            <span className="font-mono text-[11px] text-slate-500" role="status">{visibleDispatchOrders.length} shown / {internalDispatchOrders.length} total</span>
+            <span className="font-mono text-[11px] text-slate-500" role="status">{visibleDispatchOrders.length} shown / {dispatchBoardOrders.length} total</span>
           </div>
 
           {isLoading ? (
@@ -817,12 +847,24 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
           ) : (
             <div className="space-y-2">
               {visibleDispatchOrders.map(order => {
-                const canActOnOrder = canTransition
+                const isRecordedOnly = isManualRecordedOnlyOrder(order);
+                const isInstantRecordedCompletion = isRecordedOnlyCompletion(order);
+                const displayStatus = dispatchDisplayStatus(order);
+                const displayDriverName = isRecordedOnly
+                  ? order.recordedDriverName || order.recordedDriverCode || order.driverName
+                  : order.driverName;
+                const canActOnOrder = !isRecordedOnly
+                  && canTransition
+                  && !lifecycleUnavailable
+                  && (canManageAll || isInsideBranchTransitionWindow(order));
+                const canCancelRecordedOnly = isRecordedOnly
+                  && order.deliveryStatus === 'recorded'
+                  && canTransition
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
                 const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
                 const canReturnOrder = canActOnOrder && isClosedOrder(order);
-                const nextStatuses = nextStatusesFor(order.deliveryStatus);
+                const nextStatuses = isRecordedOnly ? [] : nextStatusesFor(order.deliveryStatus);
                 const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
                 const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
                 const totalFulfillment = minutesBetween(order.assignedAt || order.createdAt, order.deliveredAt);
@@ -837,7 +879,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                   <article
                     key={order.id}
                     className={`overflow-hidden rounded-xl border border-l-4 bg-white shadow-sm transition hover:shadow-md ${
-                      isHighlightedOrder ? 'border-brand ring-2 ring-brand/20' : order.deliveryStatus === 'recorded' ? 'border-slate-200 border-l-brand' : order.deliveryStatus === 'picked_up' ? 'border-slate-200 border-l-amber-500' : order.deliveryStatus === 'assigned' ? 'border-slate-200 border-l-blue-500' : 'border-slate-200 border-l-slate-300'
+                      isHighlightedOrder ? 'border-brand ring-2 ring-brand/20' : displayStatus === 'recorded' ? 'border-slate-200 border-l-brand' : displayStatus === 'picked_up' ? 'border-slate-200 border-l-amber-500' : displayStatus === 'assigned' ? 'border-slate-200 border-l-blue-500' : 'border-slate-200 border-l-slate-300'
                     }`}
                   >
                     <div className="flex flex-col gap-3 p-3.5 md:flex-row md:items-center md:justify-between md:gap-5 md:p-4">
@@ -864,7 +906,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                           }`}>
                             {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
                           </span>
-                          <StatusBadge status={order.deliveryStatus} />
+                          {isInstantRecordedCompletion && <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">Picked up</span>}
+                          <StatusBadge status={displayStatus} />
                           {isPendingCollectionOrder(order) && (
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${collectionValueBadgeClass(order)}`}>
                               Collect {formatBhd(order.amountToCollectBhd)}
@@ -873,7 +916,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                         </div>
                         <p className="mt-2 break-words text-sm font-black leading-5 text-slate-950">{routeLabel}</p>
                         <p className="mt-1 text-xs font-medium text-slate-500">
-                          {order.orderDate}{!branch ? ` · ${branchLabel}` : ''} · <span className={order.driverName ? 'text-slate-700' : 'font-bold text-brand'}>{order.driverName || 'Driver not assigned'}</span>
+                          {order.orderDate}{!branch ? ` · ${branchLabel}` : ''} · <span className={displayDriverName ? 'text-slate-700' : 'font-bold text-brand'}>{displayDriverName || 'Driver not assigned'}</span>
                         </p>
                       </div>
 
@@ -897,7 +940,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                         </span>
                         {isPendingCollectionOrder(order) && (
                           <span className={`inline-flex rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${collectionValueBadgeClass(order)}`}>
-                            COD {formatBhd(order.amountToCollectBhd)}
+                            Cash {formatBhd(order.amountToCollectBhd)}
                           </span>
                         )}
                         {order.cashHandedToDriverBhd > 0 && (
@@ -921,17 +964,26 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                         </DispatchMetaItem>
                       )}
                       <DispatchMetaItem label="Driver">
-                        <span className={order.driverName ? 'text-slate-900' : 'text-slate-300'}>
-                          {order.driverName || 'Unassigned'}
+                        <span className={displayDriverName ? 'text-slate-900' : 'text-slate-300'}>
+                          {displayDriverName || 'Unassigned'}
+                          {isRecordedOnly && <span className="ml-1 text-slate-500">· Recorded only</span>}
                         </span>
                       </DispatchMetaItem>
                       <DispatchMetaItem label="Timing">
-                        <p>Pickup wait: <span className="text-slate-900">{formatDuration(pickupWait)}</span></p>
-                        <p>Driver time: <span className="text-slate-900">{formatDuration(driverDelivery)}</span></p>
-                        <p>Total: <span className="text-slate-900">{formatDuration(totalFulfillment)}</span></p>
+                        {isRecordedOnly ? (
+                          <span className="text-slate-500">Not recorded for Log Only orders</span>
+                        ) : (
+                          <>
+                            <p>Pickup wait: <span className="text-slate-900">{formatDuration(pickupWait)}</span></p>
+                            <p>Driver time: <span className="text-slate-900">{formatDuration(driverDelivery)}</span></p>
+                            <p>Total: <span className="text-slate-900">{formatDuration(totalFulfillment)}</span></p>
+                          </>
+                        )}
                       </DispatchMetaItem>
                       <DispatchMetaItem label="Pickup run">
-                        {order.pickupBatchId ? (
+                        {isRecordedOnly ? (
+                          <span className="text-slate-500">No driver run</span>
+                        ) : order.pickupBatchId ? (
                           <>
                             <p className="font-black text-slate-900">Run #{shortRunId(order.pickupBatchId)}</p>
                             <p>{batchSize} order{batchSize === 1 ? '' : 's'} together</p>
@@ -951,7 +1003,16 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                     {canTransition && (
                       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-3.5 py-2.5 md:px-4">
                         {nextStatuses.length === 0 ? (
-                          canReturnOrder ? (
+                          canCancelRecordedOnly ? (
+                            <button
+                              type="button"
+                              disabled={savingOrderId === order.id}
+                              onClick={() => void handleCustomerCancel(order)}
+                              className="min-h-9 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              {savingOrderId === order.id ? 'Saving' : 'Customer cancel'}
+                            </button>
+                          ) : canReturnOrder ? (
                             <button
                               type="button"
                               disabled={savingOrderId === order.id}

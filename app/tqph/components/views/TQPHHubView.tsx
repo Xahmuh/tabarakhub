@@ -15,7 +15,6 @@ import { SupervisorEvaluationFlow } from './SupervisorEvaluationFlow';
 import { BranchInspectionsView } from './BranchInspectionsView';
 import { PharmacistPerformanceView } from './PharmacistPerformanceView';
 import { User } from '../../types';
-import { MOCK_BRANCHES, MOCK_USERS } from '../../data';
 
 export type TQPHViewTab = 'admin' | 'supervisor' | 'branch' | 'pharmacist';
 
@@ -37,17 +36,13 @@ interface TQPHHubViewProps {
  */
 export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
   initialTab = 'admin',
-  currentUser = MOCK_USERS[0], // Default to Admin
+  currentUser,
   onBackToModules,
   className = ''
 }) => {
-  const [activeTab, setActiveTab] = useState<TQPHViewTab>(initialTab);
-  const [targetBranchId, setTargetBranchId] = useState<string>(
-    MOCK_BRANCHES[0]?.id || '1b3b2924-ef34-4626-a77f-33227f2915ad'
-  );
-  const [targetPharmacistId, setTargetPharmacistId] = useState<string>(
-    MOCK_USERS.find(u => u.role === 'pharmacist')?.id || '43ccc615-b329-4d26-b868-c032983e9b59'
-  );
+  const [activeTab, setActiveTab] = useState<TQPHViewTab>(currentUser?.role === 'supervisor' ? 'supervisor' : initialTab);
+  const [targetBranchId, setTargetBranchId] = useState<string | undefined>();
+  const [targetPharmacistId, setTargetPharmacistId] = useState<string | undefined>();
 
   // Navigation callbacks between views
   const handleNavigateToBranch = (branchId: string) => {
@@ -59,6 +54,10 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
     setTargetPharmacistId(pharmacistId);
     setActiveTab('pharmacist');
   };
+
+  if (!currentUser?.id) {
+    return <div role="alert" className="p-6 text-sm text-red-800">Sign in to use TQPH.</div>;
+  }
 
   return (
     <div className={`min-h-screen bg-slate-50/60 text-slate-900 font-sans selection:bg-red-100 ${className}`}>
@@ -93,7 +92,7 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs font-medium text-slate-500 hidden sm:block">
-                  National NHRA Compliance Oversight, Audit Distribution, & Staff Performance
+                  NHRA audit records and staff performance
                 </p>
               </div>
             </div>
@@ -102,7 +101,7 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
           {/* Right: 4-View Switcher Bar */}
           <nav className="inline-flex items-center gap-1 bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 shadow-inner overflow-x-auto">
             {/* View 1: Admin Command Board */}
-            <button
+            {currentUser.role === 'admin' && <button
               type="button"
               onClick={() => setActiveTab('admin')}
               className={`
@@ -116,7 +115,7 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
             >
               <BarChart3 className={`w-3.5 h-3.5 ${activeTab === 'admin' ? 'text-red-700' : 'text-slate-400'}`} />
               <span>Admin Board</span>
-            </button>
+            </button>}
 
             {/* View 2: Supervisor Evaluation Flow */}
             <button
@@ -184,7 +183,7 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
         {activeTab === 'supervisor' && (
           <SupervisorEvaluationFlow
             currentUser={currentUser}
-            onCompleted={() => setActiveTab('admin')}
+            onCompleted={() => setActiveTab(currentUser.role === 'supervisor' ? 'supervisor' : 'admin')}
             onExit={onBackToModules}
           />
         )}
@@ -192,16 +191,14 @@ export const TQPHHubView: React.FC<TQPHHubViewProps> = ({
         {activeTab === 'branch' && (
           <BranchInspectionsView
             initialBranchId={targetBranchId}
-            currentUser={currentUser}
-            onExit={() => setActiveTab('admin')}
+            onExit={() => setActiveTab(currentUser.role === 'supervisor' ? 'supervisor' : 'admin')}
           />
         )}
 
         {activeTab === 'pharmacist' && (
           <PharmacistPerformanceView
             initialPharmacistId={targetPharmacistId}
-            currentUser={currentUser}
-            onExit={() => setActiveTab('admin')}
+            onExit={() => setActiveTab(currentUser.role === 'supervisor' ? 'supervisor' : 'admin')}
           />
         )}
       </main>

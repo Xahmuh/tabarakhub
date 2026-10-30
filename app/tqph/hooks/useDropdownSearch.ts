@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type KeyboardEvent } from 'react';
 import { DropdownSearchProps } from '../types';
 
 /**
@@ -168,7 +168,7 @@ export function useDropdownSearch<T>({
 
   // Clear selection
   const clearSelection = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation();
       onChange(null);
       setSearchQuery('');
@@ -211,7 +211,7 @@ export function useDropdownSearch<T>({
   }, [highlightedIndex, isOpen]);
 
   // Keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (disabled) return;
 
     if (!isOpen) {

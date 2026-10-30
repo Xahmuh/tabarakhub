@@ -286,7 +286,7 @@ export const AppraisalReportDocument: React.FC<AppraisalReportDocumentProps> = (
 }) => {
   // Section 9 CPR privacy protection
   const maskCPR = (cpr: string) => {
-    if (!cpr || cpr.length < 4) return '*********';
+    if (!cpr || cpr.length < 4) return 'Not available';
     return `******${cpr.slice(-3)}`;
   };
 
@@ -343,7 +343,7 @@ export const AppraisalReportDocument: React.FC<AppraisalReportDocumentProps> = (
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Evaluating Supervisor:</Text>
               <Text style={styles.metaValue}>
-                {supervisor?.name || 'Dr. Abdelrahman Ahmed (Area Operations & Quality Supervisor)'}
+                {supervisor?.name || 'Unverified supervisor'}
               </Text>
             </View>
           </View>
@@ -484,7 +484,7 @@ export const AppraisalReportDocument: React.FC<AppraisalReportDocumentProps> = (
           <View style={styles.signatureBox}>
             <Text style={styles.signatureTitle}>Evaluating Supervisor:</Text>
             <Text style={styles.signatureName}>
-              {supervisor?.name || 'Dr. Abdelrahman Ahmed'}
+              {supervisor?.name || 'Unverified supervisor'}
             </Text>
             <View style={styles.signatureLine} />
             <Text style={styles.signatureSubtext}>Supervisor Signature & Professional License No.</Text>

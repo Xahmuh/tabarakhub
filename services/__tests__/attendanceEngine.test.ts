@@ -137,9 +137,9 @@ assert(computeLateMins('08:00', '08:05', 5) === 0, 'Arrival at exactly 08:05 wit
 assert(computeLateMins('08:00', '08:12', 5) === 7, 'Arrival at 08:12 with 5m grace -> 7 late minutes (measured after grace)');
 
 // ----------------------------------------------------------------------------
-// TEST SUITE 4: Tiered Penalty Escalation & Inert Termination (§5.2, §5.3)
+// TEST SUITE 4: No automatic monetary penalties
 // ----------------------------------------------------------------------------
-console.log('\n--- 4. Tiered Disciplinary Escalation & Inert Termination ---');
+console.log('\n--- 4. No Automatic Payroll Deductions ---');
 
 const mockEmployee: Employee = {
   id: 'emp-test-1',
@@ -148,63 +148,48 @@ const mockEmployee: Employee = {
   category: 'Pharmacist',
   status: 'Active',
   salary_matrix: {
-    basicSalary: 300, // 300 BHD / 30 = 10 BHD/day = 1.25 BHD/hr
+    basicSalary: 300,
     totalSalary: 350
   }
 };
 
-// Test Late 1-15 min rule:
-// 1st offense -> Verbal Warning (0 BHD)
-// 2nd offense -> Written Warning (0 BHD)
-// 3rd offense -> 1/4 day deduction (0.25 * 10 = 2.500 BHD)
-// 4th offense -> 1/2 day deduction (0.50 * 10 = 5.000 BHD)
-// 5th offense -> 1 day deduction (1.00 * 10 = 10.000 BHD)
-
-const sim1 = attendancePenaltyEngine.simulatePenalty(mockEmployee, 'LATE_ARRIVAL', 10, graceConfig, 0);
-assert(sim1.matchingTier?.action === 'VERBAL_WARNING', '1st late offense yields VERBAL_WARNING');
-assert(sim1.calculatedBhd === 0, '1st offense deduction is 0.000 BHD');
-
-const sim2 = attendancePenaltyEngine.simulatePenalty(mockEmployee, 'LATE_ARRIVAL', 10, graceConfig, 1);
-assert(sim2.matchingTier?.action === 'WRITTEN_WARNING', '2nd late offense yields WRITTEN_WARNING');
-assert(sim2.calculatedBhd === 0, '2nd offense deduction is 0.000 BHD');
-
-const sim3 = attendancePenaltyEngine.simulatePenalty(mockEmployee, 'LATE_ARRIVAL', 10, graceConfig, 2);
-assert(sim3.matchingTier?.action === 'SALARY_DEDUCTION_DAYS', '3rd late offense yields SALARY_DEDUCTION_DAYS');
-assert(Math.abs(sim3.calculatedBhd - 2.5) < 0.01, `3rd offense deduction is 2.500 BHD (got ${sim3.calculatedBhd.toFixed(3)})`);
-
-const sim5 = attendancePenaltyEngine.simulatePenalty(mockEmployee, 'LATE_ARRIVAL', 10, graceConfig, 4);
-assert(Math.abs(sim5.calculatedBhd - 10.0) < 0.01, `5th offense deduction is 10.000 BHD (got ${sim5.calculatedBhd.toFixed(3)})`);
-
-// §5.3: Test TERMINATION_FLAG is inert
-const simTerm = attendancePenaltyEngine.simulatePenalty(mockEmployee, 'ABSENT_NO_NOTICE', 0, graceConfig, 2);
-assert(simTerm.matchingTier?.action === 'TERMINATION_FLAG', 'Repeated unexcused absence triggers TERMINATION_FLAG');
-assert(mockEmployee.status === 'Active', 'TERMINATION_FLAG is inert: employee status remains Active (never deactivates)');
+assert(attendancePenaltyEngine.getRules().length === 0, 'No penalty rules are seeded');
+assert(attendancePenaltyEngine._calculateDeductionBhd('SALARY_DEDUCTION_FIXED', 50, mockEmployee, graceConfig) === 0,
+  'A historical fixed-amount rule cannot calculate a payable deduction');
+assert(attendancePenaltyEngine._calculateDeductionBhd('SALARY_DEDUCTION_DAYS', 2, mockEmployee, graceConfig) === 0,
+  'A historical day-based rule cannot calculate a payable deduction');
+assert(mockEmployee.status === 'Active', 'Attendance review never deactivates the employee');
 
 // ----------------------------------------------------------------------------
-// TEST SUITE 5: Hard Geofence Enforcement (Cannot Punch Outside GPS Area)
+// TEST SUITE 5: Official punches fail closed until the server flow exists
 // ----------------------------------------------------------------------------
-console.log('\n--- 5. Hard Geofence Enforcement (Blocked Outside Area) ---');
+console.log('\n--- 5. Official Punches Require Server Verification ---');
 
 const assignedEmp: Employee = {
   ...mockEmployee,
   assignments: [assignment]
 };
 
-let clockInBlocked = false;
-try {
-  await attendanceService.clockIn(assignedEmp, riffaLat, riffaLng, 10);
-} catch (e: any) {
-  clockInBlocked = e.message.includes('Outside Geofence Area');
+const initialPunchCount = attendanceService.getAllPunches().length;
+for (const [action, punch] of [
+  ['Clock-In', attendanceService.clockIn.bind(attendanceService)],
+  ['Clock-Out', attendanceService.clockOut.bind(attendanceService)]
+] as const) {
+  for (const [place, lat, lng] of [
+    ['inside', nearbyLat, nearbyLng],
+    ['outside', riffaLat, riffaLng]
+  ] as const) {
+    let blocked = false;
+    try {
+      await punch(assignedEmp, lat, lng, 10);
+    } catch (error) {
+      blocked = error instanceof Error && error.message.includes('server-verified geofence');
+    }
+    assert(blocked, `${action} ${place} geofence cannot create a client-confirmed punch`);
+  }
 }
-assert(clockInBlocked === true, 'Clock-In outside geofence perimeter is strictly blocked');
-
-let clockOutBlocked = false;
-try {
-  await attendanceService.clockOut(assignedEmp, riffaLat, riffaLng, 10);
-} catch (e: any) {
-  clockOutBlocked = e.message.includes('Outside Geofence Area');
-}
-assert(clockOutBlocked === true, 'Clock-Out outside geofence perimeter is strictly blocked');
+assert(attendanceService.getAllPunches().length === initialPunchCount,
+  'Rejected attempts do not persist attendance punches');
 
 // ----------------------------------------------------------------------------
 // TEST SUITE 6: Multi-Category Excel Workbook Export
@@ -344,5 +329,5 @@ console.log('======================================================\n');
 if (failCount > 0) {
   process.exit(1);
 } else {
-  console.log('🎉 ALL ATTENDANCE & GEOFENCING TESTS PASSED PERFECTLY!\n');
+  console.log('Attendance preview and fail-closed tests passed; server attendance is not implemented.\n');
 }

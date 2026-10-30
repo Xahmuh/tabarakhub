@@ -6,7 +6,7 @@ import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Clock, ExternalLink
 
 interface CAPACardProps {
   capa: CAPA_Task;
-  onResolve: (taskId: string, proofUrl: string, resolutionComment: string) => void;
+  onResolve?: (taskId: string, proofUrl: string, resolutionComment: string) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -140,12 +140,14 @@ export const CAPACard: React.FC<CAPACardProps> = ({
                 </span>
               )}
             </div>
-          ) : (
+          ) : onResolve ? (
             <CAPAProofUpload
               taskId={capa.id}
               disabled={disabled}
               onResolve={(proofUrl, comment) => onResolve(capa.id, proofUrl, comment)}
             />
+          ) : (
+            <span className="text-xs text-amber-700 font-medium">Proof upload and resolution are awaiting secure storage access.</span>
           )}
         </div>
       </div>

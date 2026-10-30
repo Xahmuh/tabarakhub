@@ -3,10 +3,10 @@
  * ========================================================
  * Hardened Spec v1.0
  *
- * Architecture:
- *   - Supabase-first: all authoritative decisions are server-side (§4)
- *   - Geofence validation via Haversine formula (§3)
- *   - Anti-spoofing: accuracy check, impossible-travel, device fingerprint (§3.1-3.3)
+ * Local attendance preview and geofence calculations only.
+ * Official punches require an authenticated server endpoint and server time.
+ *   - Geofence preview via Haversine formula (§3)
+ *   - Risk signals: accuracy check and impossible travel (§3.1-3.3)
  *   - Leave status via dutySchedulerService.getApprovedLeaveForEmployee (§7)
  *   - Weekend days from DutySchedulerSettings.weekendDays — not duplicated (§2.1)
  *   - Grace period applied first, penalty rules measure lateness AFTER grace (§5.1)
@@ -62,9 +62,8 @@ export interface GeofenceCheckResult {
 }
 
 /**
- * Server-side-only geofence validation (§3).
- * Validates employee GPS against all assigned branch geofences.
- * Applies anti-spoofing checks: accuracy sanity, impossible travel.
+ * Client-side geofence preview (§3). This result is not proof of attendance.
+ * The server must independently validate the authenticated employee and branch.
  */
 export function validateGeofence(
   lat: number | null,
@@ -178,9 +177,9 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceModuleConfig = {
   geofenceRadiusOverrideMeters: null,
   overtimeThresholdMinutes: 15,
   overtimeRateConfig: {
-    normalDayMultiplier: 1.25,
-    weekendMultiplier: 1.5,
-    publicHolidayMultiplier: 1.5,
+    normalDayMultiplier: 0,
+    weekendMultiplier: 0,
+    publicHolidayMultiplier: 0,
   },
   workingHoursPerDay: 8,
   updatedAt: new Date().toISOString(),
@@ -339,73 +338,18 @@ export const attendanceService = {
   },
 
   // ------------------------------------------------------------------
-  // CLOCK IN (§3, §4)
+  // OFFICIAL PUNCHES ARE NOT AVAILABLE FROM THE CLIENT (§3, §4)
   // ------------------------------------------------------------------
 
-  /**
-   * Process a clock-in attempt.
-   * This runs the full server-side geofence validation pipeline (§3).
-   * If offline, the punch is queued for retry — NOT confirmed (§4).
-   */
+  /** Never convert client GPS or client time into an official punch. */
   async clockIn(
-    employee: Employee,
-    lat: number | null,
-    lng: number | null,
-    accuracy: number | null,
-    deviceFingerprint?: string
+    _employee: Employee,
+    _lat: number | null,
+    _lng: number | null,
+    _accuracy: number | null,
+    _deviceFingerprint?: string
   ): Promise<{ punch: AttendancePunch; geofenceResult: GeofenceCheckResult }> {
-    const config = this.getConfig();
-    const now = new Date().toISOString();
-    const assignments = employee.assignments || [];
-
-    // Get previous punch for impossible-travel check (§3.2)
-    const allPunches = this.getAllPunches();
-    const empPunches = allPunches.filter(p => p.employeeId === employee.id);
-    const prevPunch = empPunches.length > 0
-      ? empPunches.sort((a, b) => new Date(b.punchTime).getTime() - new Date(a.punchTime).getTime())[0]
-      : null;
-
-    // Server-side geofence validation (§3)
-    const geofenceResult = validateGeofence(lat, lng, accuracy, assignments, config, prevPunch);
-
-    // Hard Geofence Enforcement: Block clock-in if outside geofence area
-    if (config.requireGeofenceForClockIn && geofenceResult.validation === 'OUTSIDE') {
-      const dist = geofenceResult.distanceMeters ?? 'unknown';
-      const branchName = geofenceResult.matchedBranch?.name || 'assigned branch';
-      throw new Error(
-        `Outside Geofence Area: Clock-in is strictly blocked outside your assigned branch perimeter. You are ${dist}m away from ${branchName} (allowed radius: ${config.geofenceRadiusMeters}m).`
-      );
-    }
-
-    const punch: AttendancePunch = {
-      id: `punch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      employeeId: employee.id,
-      punchType: 'CLOCK_IN',
-      punchTime: now,
-      serverReceivedAt: now,
-      lat,
-      lng,
-      accuracy,
-      matchedBranchId: geofenceResult.matchedBranch?.id || null,
-      matchedBranchName: geofenceResult.matchedBranch?.name,
-      distanceFromBranch: geofenceResult.distanceMeters,
-      geofenceValidation: geofenceResult.validation,
-      syncStatus: 'CONFIRMED',
-      deviceFingerprint,
-      flaggedForReview: geofenceResult.flaggedForReview,
-      flagReasons: geofenceResult.flagReasons,
-      createdAt: now,
-    };
-
-    // Persist
-    const punches = this.getAllPunches();
-    punches.push(punch);
-    this.savePunches(punches);
-
-    // Create or update daily record
-    this._ensureDailyRecord(employee, isoToDate(now), punch);
-
-    return { punch, geofenceResult };
+    throw new Error('Official attendance requires server-verified geofence and employee identity.');
   },
 
   // ------------------------------------------------------------------
@@ -413,61 +357,13 @@ export const attendanceService = {
   // ------------------------------------------------------------------
 
   async clockOut(
-    employee: Employee,
-    lat: number | null,
-    lng: number | null,
-    accuracy: number | null,
-    deviceFingerprint?: string
+    _employee: Employee,
+    _lat: number | null,
+    _lng: number | null,
+    _accuracy: number | null,
+    _deviceFingerprint?: string
   ): Promise<{ punch: AttendancePunch; geofenceResult: GeofenceCheckResult }> {
-    const config = this.getConfig();
-    const now = new Date().toISOString();
-    const assignments = employee.assignments || [];
-
-    const allPunches = this.getAllPunches();
-    const empPunches = allPunches.filter(p => p.employeeId === employee.id);
-    const prevPunch = empPunches.length > 0
-      ? empPunches.sort((a, b) => new Date(b.punchTime).getTime() - new Date(a.punchTime).getTime())[0]
-      : null;
-
-    const geofenceResult = validateGeofence(lat, lng, accuracy, assignments, config, prevPunch);
-
-    // Hard Geofence Enforcement: Block clock-out if outside geofence area
-    if (config.requireGeofenceForClockOut && geofenceResult.validation === 'OUTSIDE') {
-      const dist = geofenceResult.distanceMeters ?? 'unknown';
-      const branchName = geofenceResult.matchedBranch?.name || 'assigned branch';
-      throw new Error(
-        `Outside Geofence Area: Clock-out is strictly blocked outside your assigned branch perimeter. You are ${dist}m away from ${branchName} (allowed radius: ${config.geofenceRadiusMeters}m).`
-      );
-    }
-
-    const punch: AttendancePunch = {
-      id: `punch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      employeeId: employee.id,
-      punchType: 'CLOCK_OUT',
-      punchTime: now,
-      serverReceivedAt: now,
-      lat,
-      lng,
-      accuracy,
-      matchedBranchId: geofenceResult.matchedBranch?.id || null,
-      matchedBranchName: geofenceResult.matchedBranch?.name,
-      distanceFromBranch: geofenceResult.distanceMeters,
-      geofenceValidation: geofenceResult.validation,
-      syncStatus: 'CONFIRMED',
-      deviceFingerprint,
-      flaggedForReview: geofenceResult.flaggedForReview,
-      flagReasons: geofenceResult.flagReasons,
-      createdAt: now,
-    };
-
-    const punches = this.getAllPunches();
-    punches.push(punch);
-    this.savePunches(punches);
-
-    // Finalize daily record
-    this._finalizeDailyRecord(employee, isoToDate(now), punch);
-
-    return { punch, geofenceResult };
+    throw new Error('Official attendance requires server-verified geofence and employee identity.');
   },
 
   // ------------------------------------------------------------------

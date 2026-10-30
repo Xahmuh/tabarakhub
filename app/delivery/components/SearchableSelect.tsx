@@ -20,6 +20,7 @@ interface SearchableSelectProps {
   noMatchesLabel?: string;
   renderOption?: (option: SelectOption, isSelected: boolean) => React.ReactNode;
   renderSelected?: (option: SelectOption) => React.ReactNode;
+  onOpen?: () => void;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -33,7 +34,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   searchPlaceholder = 'Search...',
   noMatchesLabel = 'No matches',
   renderOption,
-  renderSelected
+  renderSelected,
+  onOpen
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -64,7 +66,10 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(o => !o)}
+        onClick={() => {
+          if (!isOpen) onOpen?.();
+          setIsOpen(open => !open);
+        }}
         className={`flex w-full min-h-[48px] items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition-colors ${isRtl ? 'text-right' : 'text-left'} ${
           disabled
             ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
@@ -73,7 +78,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
               : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-brand/30'
         }`}
       >
-        <span className={`truncate flex items-center ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
+        <span className={`min-w-0 truncate flex items-center ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
           {selected ? (renderSelected ? renderSelected(selected) : selected.label) : placeholder}
         </span>
         <span className="flex shrink-0 items-center gap-1">

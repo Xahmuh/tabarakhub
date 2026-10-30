@@ -8,12 +8,9 @@ import { AppraisalSectionCard } from '../appraisal/AppraisalSectionCard';
 import { CreditScoreIndicator } from '../appraisal/CreditScoreIndicator';
 import { useAuditDraft } from '../../hooks/useAuditDraft';
 import { useAppraisalDraft } from '../../hooks/useAppraisalDraft';
-import { mockAuditStore } from '../../services/mockAuditStore';
 import { supabaseTqphService } from '../../services/supabaseTqphService';
-import { distributeLockedEvaluation } from '../../services/distributionService';
 import { generateCapaTasksFromAudit } from '../../services/capaService';
-import { MOCK_AREAS, MOCK_BRANCHES, MOCK_USERS } from '../../data';
-import { Area, Branch, CAPA_Task, DistributionLog, NHRA_Audit, Pharmacist_Appraisal, User } from '../../types';
+import { Area, Branch, CAPA_Task, NHRA_Audit, Pharmacist_Appraisal, User } from '../../types';
 import {
   Building2,
   Calendar,
@@ -46,10 +43,11 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
   onCompleted,
   className = ''
 }) => {
-  const supervisorUser = currentSupervisor || currentUser || MOCK_USERS.find(u => u.role === 'supervisor') || MOCK_USERS[0];
-  const [branches, setBranches] = useState<Branch[]>(MOCK_BRANCHES);
-  const [areas, setAreas] = useState<Area[]>(MOCK_AREAS);
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const supervisorUser = currentSupervisor || currentUser || { id: '', name: '', cpr: '', role: 'supervisor' as const };
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<StepperTabId>('A');
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -59,7 +57,6 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
     audit: NHRA_Audit;
     appraisal: Pharmacist_Appraisal;
     capas: CAPA_Task[];
-    distributionLogs: DistributionLog[];
   } | null>(null);
 
   // Fetch real branches, areas, and pharmacists from database
@@ -71,20 +68,11 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
       supabaseTqphService.getPharmacists()
     ]).then(([liveBranches, liveAreas, livePharmacists]) => {
       if (!isMounted) return;
-      if (liveBranches && liveBranches.length > 0) {
-        setBranches(liveBranches);
-      }
-      if (liveAreas && liveAreas.length > 0) {
-        setAreas(liveAreas);
-      }
-      if (livePharmacists && livePharmacists.length > 0) {
-        setUsers(prev => {
-          const nonPh = prev.filter(u => u.role !== 'pharmacist');
-          return [...nonPh, ...livePharmacists];
-        });
-      }
+      setBranches(liveBranches);
+      setAreas(liveAreas);
+      setUsers(livePharmacists);
     }).catch(err => {
-      console.warn('SupervisorFlow live fetch warning:', err);
+      if (isMounted) setLoadError(err instanceof Error ? err.message : 'Failed to load TQPH form data');
     });
     return () => { isMounted = false; };
   }, []);
@@ -131,8 +119,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
   // Pharmacists assigned to the selected branch
   const branchPharmacists = useMemo(() => {
     if (!auditDraft.branchId) return pharmacists;
-    const assigned = pharmacists.filter(p => p.branch_id === auditDraft.branchId);
-    return assigned.length > 0 ? assigned : pharmacists;
+    return pharmacists.filter(p => p.branch_id === auditDraft.branchId);
   }, [auditDraft.branchId, pharmacists]);
 
   // Selected pharmacist object
@@ -189,10 +176,10 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
     }
   };
 
-  // Execute Lock & Multi-Portal Distribution (Tab D)
+  // Save the evaluation (Tab D)
   const handleConfirmLock = async () => {
-    if (!activeBranch || !activePharmacist) {
-      return { success: false, logs: [], error: 'Branch or Pharmacist not selected.' };
+    if (!supervisorUser.id || !activeBranch || !activePharmacist) {
+      return { success: false, logs: [], error: 'Signed-in supervisor, branch and pharmacist are required.' };
     }
 
     const lockedAt = new Date().toISOString();
@@ -241,27 +228,12 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
       amended: false
     };
 
-    // 3. Multi-Portal Distribution (Section 5.6)
-    const distResult = await distributeLockedEvaluation(finalAudit, finalAppraisal);
-    if (!distResult.success) {
-      return { success: false, logs: [], error: distResult.error };
-    }
-
-    // 4. Save to Mock Store / Adapter & Live Supabase
-    mockAuditStore.saveAudit(finalAudit);
-    mockAuditStore.saveAppraisal(finalAppraisal);
-    mockAuditStore.saveCapaTasks(generatedCapas);
-    mockAuditStore.saveDistributionLogs(distResult.logs);
-
+    // The database RPC commits all records together or rolls them all back.
+    // Portal notifications remain unavailable until a real workflow exists.
     try {
-      await Promise.all([
-        supabaseTqphService.saveAudit(finalAudit),
-        supabaseTqphService.saveAppraisal(finalAppraisal),
-        supabaseTqphService.saveCapaTasks(generatedCapas),
-        supabaseTqphService.saveDistributionLogs(distResult.logs)
-      ]);
+      await supabaseTqphService.submitEvaluation(finalAudit, finalAppraisal, generatedCapas);
     } catch (persistErr) {
-      console.warn('Supabase live persistence warning:', persistErr);
+      return { success: false, logs: [], error: persistErr instanceof Error ? persistErr.message : 'Failed to save evaluation' };
     }
 
     // 5. Clear Drafts
@@ -271,14 +243,13 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
     setLockedSummary({
       audit: finalAudit,
       appraisal: finalAppraisal,
-      capas: generatedCapas,
-      distributionLogs: distResult.logs
+      capas: generatedCapas
     });
     setIsLockedSubmitted(true);
 
     return {
       success: true,
-      logs: distResult.logs
+      logs: []
     };
   };
 
@@ -302,10 +273,10 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black text-slate-950">
-              Evaluation Sealed &amp; Distributed
+              Evaluation Saved
             </h1>
             <p className="text-sm text-slate-500 max-w-lg mx-auto leading-relaxed font-medium">
-              Official audit for <span className="text-slate-900 font-bold">{activeBranch?.name}</span> and appraisal for <span className="text-slate-900 font-bold">{activePharmacist?.name}</span> have been permanently locked and distributed across all 3 portals.
+              The audit for <span className="text-slate-900 font-bold">{activeBranch?.name}</span> and appraisal for <span className="text-slate-900 font-bold">{activePharmacist?.name}</span> were saved to the database. Portal notifications are not enabled yet.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 max-w-2xl mx-auto text-left">
@@ -332,31 +303,8 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
                 <span className="text-2xl font-black font-mono text-red-700 block mt-1 tabular-nums">
                   {lockedSummary.capas.length} Tasks
                 </span>
-                <span className="text-xs text-slate-500 mt-0.5 block font-medium">48-Hour SLA Assigned</span>
+                <span className="text-xs text-slate-500 mt-0.5 block font-medium">Due in 48 hours</span>
               </div>
-            </div>
-
-            {/* Distribution Log Receipts */}
-            <div className="pt-4 max-w-2xl mx-auto text-left space-y-2">
-              <span className="text-xs font-bold text-slate-700 block">
-                Official Dispatch Records (DistributionLog):
-              </span>
-              {lockedSummary.distributionLogs.map(log => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <Send className="w-3.5 h-3.5 text-red-700" />
-                    <span className="text-slate-900 font-bold capitalize">
-                      {log.recipient_type.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono font-bold text-emerald-700">
-                    Status: {log.status} · Sent: {new Date(log.sent_at || '').toLocaleTimeString()}
-                  </span>
-                </div>
-              ))}
             </div>
 
             {/* Actions */}
@@ -393,6 +341,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
   return (
     <div className={`min-h-screen bg-slate-50/60 text-slate-900 p-4 sm:p-6 md:p-8 font-sans ${className}`}>
       <div className="max-w-6xl mx-auto space-y-6">
+        {loadError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>}
         {/* Header Ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
@@ -483,7 +432,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
                     getValue={b => b.id}
                     value={auditDraft.branchId}
                     onChange={handleSelectBranch}
-                    placeholder="Search 20 Bahrain Branches (e.g. Manama, Riffa, Saar)..."
+                    placeholder="Search available pharmacy branches..."
                     groupBy={b => areaNameMap.get(b.area_id) || 'General'}
                     clearable={true}
                     emptyStateLabel="No branches found matching filter"
@@ -532,7 +481,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
               ) : (
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" />
-                  <span className="font-semibold">Please select a branch above to proceed with the simulated checklist (Tab B).</span>
+                  <span className="font-semibold">Please select a branch above to continue to the checklist (Tab B).</span>
                 </div>
               )}
 
@@ -730,7 +679,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
                   <span>Tab D — Audit &amp; Appraisal Final Review &amp; Lock</span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-1 font-medium">
-                  Review complete evaluation metrics. Sealing triggers immediate irreversible multi-portal dispatch.
+                  Review the evaluation before saving it to the database.
                 </p>
               </div>
 
@@ -857,7 +806,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
                   <span>Permanent Seal &amp; Post-Lock Immutability (Section 5.5 &amp; 5.6):</span>
                 </p>
                 <p className="text-amber-800 leading-relaxed pl-6 font-medium">
-                  Once confirmed, this audit cannot be modified or re-submitted. Both the NHRA inspection report and staff appraisal will auto-route to the Branch Account, Pharmacist Personal Portal, and Executive Admin archive.
+                  The audit, appraisal and CAPA tasks will be saved to the database. This operation still needs a server-side transaction before it can be treated as an official immutable submission.
                 </p>
               </div>
 
@@ -880,7 +829,7 @@ export const SupervisorEvaluationFlow: React.FC<SupervisorEvaluationFlowProps> =
                   "
                 >
                   <Lock className="w-4 h-4 text-white" />
-                  <span>Lock &amp; Distribute Evaluation</span>
+                  <span>Save Evaluation</span>
                 </button>
               </div>
             </div>

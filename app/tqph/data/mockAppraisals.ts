@@ -16,7 +16,7 @@ export const STANDARD_APPRAISAL_SECTIONS_TEMPLATE: AppraisalSection[] = [
     criteria: [
       { code: 'I.1', label: 'Pharmacological knowledge of drug interactions and contraindications', grade: 'A', points: 4 },
       { code: 'I.2', label: 'Dispensing speed, accuracy, and double-check protocol', grade: 'A', points: 4 },
-      { code: 'I.3', label: 'Proficiency in pharmacy management system (POS & ERP)', grade: 'A', points: 4 },
+      { code: 'I.3', label: 'Accurate Tabarak Hub entry of lost sales and shortages', grade: 'A', points: 4 },
       { code: 'I.4', label: 'Compounding skills and extemporaneous preparation techniques', grade: 'B', points: 3 },
       { code: 'I.5', label: 'Handling of OTC inquiries and self-care recommendations', grade: 'A', points: 4 },
       { code: 'I.6', label: 'Insurance claim processing and pre-authorization handling', grade: 'A', points: 4 },

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { toRecordingPayload, deliverySourceLabel, deliveryLockKey, registeredSourceSummary } from '../deliveryRecording';
+const base={branchId:'b',orderDate:'2026-10-26',valueBhd:'12.345',paymentType:'CASH',pharmacistId:'p',driverId:'d',blockNumber:'101',cashHandedToDriverBhd:'2.000'};
+const talabat=toRecordingPayload({...base,paymentType:'TALABAT',customerAddress:'stale',locationUrl:'https://maps.google.com'});
+assert.equal(talabat.dispatch_mode,'log_only');assert.equal('driver_id' in talabat,false);assert.equal('customer_address' in talabat,false);
+assert.equal(toRecordingPayload({...base,dispatchMode:'log_only'}).driver_id,null);
+const recorded=toRecordingPayload({...base,dispatchMode:'log_only',recordedDriverId:'external-driver'});
+assert.equal(recorded.recorded_driver_id,'external-driver');assert.equal(recorded.driver_id,null);
+assert.equal(toRecordingPayload(base).cash_handed_to_driver_bhd,'2.000');
+assert.equal(deliverySourceLabel(null),'Unknown / legacy');assert.equal(deliverySourceLabel('woocommerce'),'Online');
+const grouped=registeredSourceSummary([{id:'a',externalSource:'woocommerce',valueBhd:1.001},{id:'a',externalSource:'woocommerce',valueBhd:1.001},{id:'b',valueBhd:2}]);
+assert.equal(grouped.Online.count,1);assert.equal(grouped.Online.fils,1001);assert.equal(grouped['Unknown / legacy'].count,1);
+assert.notEqual(deliveryLockKey('prod','u1','b'),deliveryLockKey('stage','u1','b'));assert.notEqual(deliveryLockKey('prod','u1','b'),deliveryLockKey('prod','u2','b'));
+console.log('PASS Hub source, typed recording payload, Talabat, float, deduplicated totals and lock scopes');

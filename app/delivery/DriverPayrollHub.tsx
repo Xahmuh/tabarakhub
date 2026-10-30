@@ -11,11 +11,11 @@ interface DriverPayrollHubProps {
 }
 
 export interface PayrollSettings {
-  defaultBaseSalary: number; // e.g. 300.000 BHD
-  commissionPerOrder: number; // e.g. 0.400 BHD per actual delivery
-  targetOrdersThreshold: number; // e.g. 250 orders
-  targetBonusAmount: number; // e.g. 40.000 BHD
-  missingPunchPenalty: number; // e.g. 5.000 BHD per missing punch
+  defaultBaseSalary: number;
+  commissionPerOrder: number;
+  targetOrdersThreshold: number;
+  targetBonusAmount: number;
+  missingPunchPenalty: number;
 }
 
 export interface DriverPayrollRow {
@@ -40,11 +40,11 @@ export interface DriverPayrollRow {
 }
 
 const DEFAULT_SETTINGS: PayrollSettings = {
-  defaultBaseSalary: 300.0,
-  commissionPerOrder: 0.4,
-  targetOrdersThreshold: 250,
-  targetBonusAmount: 40.0,
-  missingPunchPenalty: 5.0
+  defaultBaseSalary: 0,
+  commissionPerOrder: 0,
+  targetOrdersThreshold: 0,
+  targetBonusAmount: 0,
+  missingPunchPenalty: 0
 };
 
 const monthKeyFromDate = (date: Date) =>
@@ -120,6 +120,12 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
   const loadAttendanceData = () => {
     setIsLoading(true);
     setErrorMessage(null);
+    if (selfOnly) {
+      setDutyRows([]);
+      setErrorMessage('Personal driver payroll is unavailable until driver identity and row-level access are verified.');
+      setIsLoading(false);
+      return;
+    }
     deliveryService.driverDuty.list({
       driverId: selfOnly ? undefined : driverFilter || undefined,
       dateFrom: range.from,
@@ -278,7 +284,7 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
               </div>
             </div>
             <p className="text-xs font-medium text-slate-500">
-              Calculate monthly driver salaries, delivery commissions, performance bonuses, and missing punch deductions.
+              Unapproved estimate only. No default salary, commission, bonus or missing-punch deduction is authorized for payment.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
@@ -312,8 +318,9 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
             {!selfOnly && (
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="btn-secondary text-[11px] uppercase tracking-wider font-bold"
+                disabled
+                title="Persisted, approved payroll rules are required."
+                className="btn-secondary text-[11px] uppercase tracking-wider font-bold opacity-50 cursor-not-allowed"
               >
                 <Settings className="h-3.5 w-3.5" /> Commission &amp; Rules
               </button>
@@ -341,7 +348,7 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 print:hidden">
         <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-800 p-4 text-white shadow-md">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Net Payroll</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Estimated Net (Not Payable)</p>
             <Banknote className="h-4 w-4 text-emerald-400" />
           </div>
           <p className="mt-2 text-2xl font-black tracking-tight text-emerald-400 tabular-nums">{formatBhd(totals.netPayable)}</p>
@@ -447,18 +454,18 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
                         {!selfOnly && (
                           <button
                             type="button"
-                            onClick={() => setEditingDriverRow(row)}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition-all hover:border-brand/40 hover:text-brand"
-                            title="Adjust base salary or add loan/bonus"
+                            disabled
+                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-400 cursor-not-allowed"
+                            title="Adjustments must be saved and approved in a payroll run"
                           >
                             <Edit2 className="h-3 w-3" /> Adjust
                           </button>
                         )}
                         <button
                           type="button"
-                          onClick={() => handlePrintPayslip(row)}
-                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 shadow-sm transition-all hover:border-slate-400 hover:text-slate-950"
-                          title="Generate printable payslip"
+                          disabled
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-400 cursor-not-allowed"
+                          title="Official payslips require a published payroll run"
                         >
                           <FileText className="h-3 w-3" /> Payslip
                         </button>
@@ -645,7 +652,7 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
                   type="number"
                   step="0.050"
                   defaultValue={editingDriverRow.commissionRate}
-                  placeholder="0.400"
+                  placeholder="Owner-approved amount"
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold outline-none focus:border-brand"
                 />
               </div>
@@ -657,7 +664,7 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
                   type="number"
                   step="0.100"
                   defaultValue={editingDriverRow.customAdjustment}
-                  placeholder="e.g. -20.000 for loan repayment or 15.000 for bonus"
+                  placeholder="Saved proposal and approval required"
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-bold outline-none focus:border-brand"
                 />
               </div>
@@ -822,8 +829,8 @@ export const DriverPayrollHub: React.FC<DriverPayrollHubProps> = ({ selfOnly = f
               </button>
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="btn-primary text-xs font-bold"
+                disabled
+                className="btn-primary text-xs font-bold opacity-50 cursor-not-allowed"
               >
                 <Printer className="h-3.5 w-3.5" /> Print Official Payslip
               </button>

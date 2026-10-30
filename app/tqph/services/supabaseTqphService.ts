@@ -9,148 +9,120 @@ import {
   Pharmacist_Appraisal,
   User
 } from '../types';
-import { mockAuditStore } from './mockAuditStore';
-import { MOCK_AREAS, MOCK_BRANCHES, MOCK_USERS } from '../data';
+/** Production TQPH reads and writes must never silently use demo data. */
+export class SupabaseTQPHService {
+  constructor(private readonly client: typeof supabaseClient = supabaseClient) {}
 
-/**
- * Production Supabase Service for TQPH
- * Provides database operations with automatic fallback to mockAuditStore
- * when running offline, in test environments, or prior to database migration.
- */
-class SupabaseTQPHService {
-  private useMockFallback = false;
+  /** UI list scope; the database RLS independently protects record reads. */
+  private async getVisibleBranchIds(): Promise<string[] | null> {
+    const { data: authData, error: authError } = await this.client.auth.getUser();
+    if (authError) throw authError;
+    const userId = authData.user?.id;
+    if (!userId) throw new Error('Sign in to view TQPH records.');
+
+    const { data: profile, error: profileError } = await (this.client as any)
+      .from('app_user_profiles')
+      .select('role, branch_id, is_active')
+      .eq('user_id', userId)
+      .single();
+    if (profileError) throw profileError;
+    if (!profile?.is_active) throw new Error('This account is not active.');
+
+    if (['owner', 'manager', 'admin'].includes(profile.role)) return null;
+    if (profile.role === 'branch') return profile.branch_id ? [profile.branch_id] : [];
+    if (profile.role !== 'supervisor') return [];
+
+    const { data: assignments, error: scopeError } = await (this.client as any)
+      .from('supervisor_branches')
+      .select('branch_id')
+      .eq('supervisor_user_id', userId);
+    if (scopeError) throw scopeError;
+    return (assignments || []).map((assignment: { branch_id: string }) => assignment.branch_id);
+  }
 
   // ── Entities (Real Database Records) ────────────────────────
   async getBranches(): Promise<Branch[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return MOCK_BRANCHES;
-    }
-
-    try {
-      const { data, error } = await (supabaseClient as any)
+      const visibleBranchIds = await this.getVisibleBranchIds();
+      if (visibleBranchIds?.length === 0) return [];
+      let query = (this.client as any)
         .from('branches')
         .select('id, code, name, nhra_license_no, cr_number, branch_manager_name, region_id')
-        .eq('role', 'branch')
-        .neq('code', 'Test-01')
-        .order('code');
+        .or('role.eq.branch,role.is.null')
+        .neq('code', 'Test-01');
+      if (visibleBranchIds) query = query.in('id', visibleBranchIds);
+      const { data, error } = await query.order('code');
 
-      if (error || !data || data.length === 0) {
-        return MOCK_BRANCHES;
-      }
+      if (error) throw error;
 
-      return data.map((b: any) => ({
+      return (data || []).map((b: any) => ({
         id: b.id,
         code: b.code,
         name: b.name,
-        area_id: b.region_id || 'a0000000-0000-0000-0000-000000000001',
-        cr_number: b.cr_number || '127506-01',
-        license_no: b.nhra_license_no || '32000100',
-        manager_name: b.branch_manager_name || 'Pharmacist-in-Charge'
+        area_id: b.region_id || '',
+        cr_number: b.cr_number || '',
+        license_no: b.nhra_license_no || '',
+        manager_name: b.branch_manager_name || ''
       }));
-    } catch {
-      return MOCK_BRANCHES;
-    }
   }
 
   async getAreas(): Promise<Area[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return MOCK_AREAS;
-    }
-
-    try {
-      const { data, error } = await (supabaseClient as any)
+      const { data, error } = await (this.client as any)
         .from('regions')
         .select('id, name, code')
         .eq('is_active', true)
         .order('name');
 
-      if (error || !data || data.length === 0) {
-        return MOCK_AREAS;
-      }
+      if (error) throw error;
 
-      return data.map((r: any) => ({
+      return (data || []).map((r: any) => ({
         id: r.id,
         name: r.name,
         code: r.code
       }));
-    } catch {
-      return MOCK_AREAS;
-    }
   }
 
   async getPharmacists(): Promise<User[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return MOCK_USERS.filter(u => u.role === 'pharmacist');
-    }
-
-    try {
-      const { data, error } = await (supabaseClient as any)
+      const visibleBranchIds = await this.getVisibleBranchIds();
+      if (visibleBranchIds?.length === 0) return [];
+      let query = (this.client as any)
         .from('pharmacists')
         .select('id, name, code, branch_id')
-        .eq('is_active', true)
-        .order('name');
+        .eq('is_active', true);
+      if (visibleBranchIds) query = query.in('branch_id', visibleBranchIds);
+      const { data, error } = await query.order('name');
 
-      if (error || !data || data.length === 0) {
-        return MOCK_USERS.filter(u => u.role === 'pharmacist');
-      }
+      if (error) throw error;
 
-      return data.map((p: any, idx: number) => ({
+      return (data || []).map((p: any) => ({
         id: p.id,
         name: `Dr. ${p.name}`,
-        cpr: `90010${String(100 + idx).slice(-3)}291`,
+        cpr: '',
         role: 'pharmacist' as const,
         branch_id: p.branch_id || undefined
       }));
-    } catch {
-      return MOCK_USERS.filter(u => u.role === 'pharmacist');
-    }
   }
 
   // ── Audits ──────────────────────────────────────────────────
   async getAudits(branchId?: string): Promise<NHRA_Audit[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return branchId ? mockAuditStore.getAuditsByBranch(branchId) : mockAuditStore.getAudits();
-    }
-
-    try {
-      let query = (supabaseClient as any).from('tqph_audits').select('*').order('date', { ascending: false });
+      let query = (this.client as any).from('tqph_audits').select('*').order('date', { ascending: false });
       if (branchId) {
         query = query.eq('branch_id', branchId);
       }
 
       const { data, error } = await query;
-      if (error || !data || data.length === 0) {
-        return branchId ? mockAuditStore.getAuditsByBranch(branchId) : mockAuditStore.getAudits();
-      }
+      if (error) throw error;
 
-      return data as NHRA_Audit[];
-    } catch {
-      return branchId ? mockAuditStore.getAuditsByBranch(branchId) : mockAuditStore.getAudits();
-    }
+      return (data || []) as NHRA_Audit[];
   }
 
   async saveAudit(audit: NHRA_Audit): Promise<void> {
-    mockAuditStore.saveAudit(audit);
-
-    if (!this.useMockFallback && supabaseClient) {
-      try {
-        await (supabaseClient as any).from('tqph_audits').upsert(audit);
-      } catch (err) {
-        console.warn('Failed to upsert audit to Supabase, saved to local store:', err);
-      }
-    }
+    const { error } = await (this.client as any).from('tqph_audits').insert(audit);
+    if (error) throw error;
   }
 
   // ── Appraisals ──────────────────────────────────────────────
   async getAppraisals(pharmacistId?: string): Promise<Pharmacist_Appraisal[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return pharmacistId
-        ? mockAuditStore.getAppraisalsByPharmacist(pharmacistId)
-        : mockAuditStore.getAppraisals();
-    }
-
-    try {
-      let query = (supabaseClient as any)
+      let query = (this.client as any)
         .from('tqph_appraisals')
         .select('*')
         .order('year', { ascending: false })
@@ -161,49 +133,26 @@ class SupabaseTQPHService {
       }
 
       const { data, error } = await query;
-      if (error || !data || data.length === 0) {
-        return pharmacistId
-          ? mockAuditStore.getAppraisalsByPharmacist(pharmacistId)
-          : mockAuditStore.getAppraisals();
-      }
+      if (error) throw error;
 
-      return data as Pharmacist_Appraisal[];
-    } catch {
-      return pharmacistId
-        ? mockAuditStore.getAppraisalsByPharmacist(pharmacistId)
-        : mockAuditStore.getAppraisals();
-    }
+      return (data || []) as Pharmacist_Appraisal[];
   }
 
   async saveAppraisal(appraisal: Pharmacist_Appraisal): Promise<void> {
-    mockAuditStore.saveAppraisal(appraisal);
-
-    if (!this.useMockFallback && supabaseClient) {
-      try {
-        await (supabaseClient as any).from('tqph_appraisals').upsert(appraisal);
-      } catch (err) {
-        console.warn('Failed to upsert appraisal to Supabase, saved to local store:', err);
-      }
-    }
+    const { error } = await (this.client as any).from('tqph_appraisals').insert(appraisal);
+    if (error) throw error;
   }
 
   // ── CAPA Tasks ──────────────────────────────────────────────
   async getCapaTasks(branchId?: string): Promise<CAPA_Task[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return mockAuditStore.getCapaTasks(branchId);
-    }
-
-    try {
-      const { data, error } = await (supabaseClient as any)
+      const { data, error } = await (this.client as any)
         .from('tqph_capa_tasks')
         .select('*')
         .order('due_date', { ascending: true });
 
-      if (error || !data || data.length === 0) {
-        return mockAuditStore.getCapaTasks(branchId);
-      }
+      if (error) throw error;
 
-      const tasks = data as CAPA_Task[];
+      const tasks = (data || []) as CAPA_Task[];
       if (branchId) {
         const branchAudits = await this.getAudits(branchId);
         const branchAuditIds = new Set(branchAudits.map(a => a.id));
@@ -211,75 +160,53 @@ class SupabaseTQPHService {
       }
 
       return tasks;
-    } catch {
-      return mockAuditStore.getCapaTasks(branchId);
-    }
   }
 
   async updateCapaTask(taskUpdate: Partial<CAPA_Task> & { id: string }): Promise<void> {
-    mockAuditStore.updateCapaTask(taskUpdate);
-
-    if (!this.useMockFallback && supabaseClient) {
-      try {
-        await (supabaseClient as any).from('tqph_capa_tasks').update(taskUpdate).eq('id', taskUpdate.id);
-      } catch (err) {
-        console.warn('Failed to update CAPA in Supabase, updated in local store:', err);
-      }
-    }
+    const { error } = await (this.client as any).from('tqph_capa_tasks').update(taskUpdate).eq('id', taskUpdate.id);
+    if (error) throw error;
   }
 
   async saveCapaTasks(tasks: CAPA_Task[]): Promise<void> {
-    mockAuditStore.saveCapaTasks(tasks);
+    if (tasks.length === 0) return;
+    const { error } = await (this.client as any).from('tqph_capa_tasks').insert(tasks);
+    if (error) throw error;
+  }
 
-    if (!this.useMockFallback && supabaseClient && tasks.length > 0) {
-      try {
-        await (supabaseClient as any).from('tqph_capa_tasks').upsert(tasks, { onConflict: 'id' });
-      } catch (err) {
-        console.warn('Failed to upsert CAPA tasks to Supabase, saved to local store:', err);
-      }
-    }
+  /** Submit all three records in one database transaction. */
+  async submitEvaluation(audit: NHRA_Audit, appraisal: Pharmacist_Appraisal, tasks: CAPA_Task[]): Promise<void> {
+    const { error } = await (this.client as any).rpc('submit_tqph_evaluation', {
+      p_audit: audit,
+      p_appraisal: appraisal,
+      p_capas: tasks
+    });
+    if (error) throw error;
   }
 
   // ── Distribution Logs ───────────────────────────────────────
   async saveDistributionLogs(logs: DistributionLog[]): Promise<void> {
-    mockAuditStore.saveDistributionLogs(logs);
-
-    if (!this.useMockFallback && supabaseClient && logs.length > 0) {
-      try {
-        await (supabaseClient as any).from('tqph_distribution_logs').insert(logs);
-      } catch (err) {
-        console.warn('Failed to insert distribution logs to Supabase, saved to local store:', err);
-      }
-    }
+    if (logs.length === 0) return;
+    const { error } = await (this.client as any).from('tqph_distribution_logs').insert(logs);
+    if (error) throw error;
   }
 
   async getDistributionLogs(): Promise<DistributionLog[]> {
-    if (this.useMockFallback || !supabaseClient) {
-      return mockAuditStore.getDistributionLogs();
-    }
-
-    try {
-      const { data, error } = await (supabaseClient as any)
+      const { data, error } = await (this.client as any)
         .from('tqph_distribution_logs')
         .select('*')
         .order('timestamp', { ascending: false });
 
-      if (error || !data || data.length === 0) {
-        return mockAuditStore.getDistributionLogs();
-      }
+      if (error) throw error;
 
-      return data as DistributionLog[];
-    } catch {
-      return mockAuditStore.getDistributionLogs();
-    }
+      return (data || []) as DistributionLog[];
   }
 
   // ── Evidence Storage ────────────────────────────────────────
   async uploadEvidenceFile(file: File, path: string): Promise<string | null> {
-    if (!supabaseClient) return null;
+    if (!this.client) return null;
 
     try {
-      const { data, error } = await (supabaseClient as any).storage
+      const { data, error } = await (this.client as any).storage
         .from('tqph-evidence')
         .upload(path, file, { upsert: true });
 
@@ -288,7 +215,7 @@ class SupabaseTQPHService {
         return null;
       }
 
-      const { data: signedUrlData, error: signedUrlError } = await (supabaseClient as any).storage
+      const { data: signedUrlData, error: signedUrlError } = await (this.client as any).storage
         .from('tqph-evidence')
         .createSignedUrl(data.path, 60 * 60);
 

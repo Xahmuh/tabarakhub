@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Banknote, Building2, Calculator, CalendarCheck, Coins, CreditCard, Download, FileSpreadsheet, FileText, Layers, ShieldCheck, Sparkles, Truck, Users, UsersRound, Wallet, Sliders } from 'lucide-react';
 import { Branch, Role } from '../../types';
-import { isManagerRole } from '../../lib/access';
 import { DriverPayrollHub } from '../delivery/DriverPayrollHub';
 import { StaffPayrollHub } from './StaffPayrollHub';
 import { AttendancePenaltyConfigPanel } from '../attendance/AttendancePenaltyConfigPanel';
@@ -18,25 +17,34 @@ interface PayrollModuleHubProps {
 export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
   user,
   onBack,
-  checkPermission
+  checkPermission: _checkPermission
 }) => {
   const role: Role = user.role;
-  const isManager = isManagerRole(role);
   const isOwner = role === 'owner';
+  const isAccounts = role === 'accounts';
   const isDriver = role === 'driver';
-  const isBranch = role === 'branch';
+  const canViewCompanyPayroll = isOwner || isAccounts;
 
   const [activeTab, setActiveTab] = useState<PayrollTab>(isDriver ? 'driver-payroll' : 'staff-payroll');
   const [showAttendanceConfigModal, setShowAttendanceConfigModal] = useState<boolean>(false);
 
   const tabs: Array<{ id: PayrollTab; label: string; icon: React.ElementType; visible: boolean; badge?: string }> = [
-    { id: 'staff-payroll', label: 'Staff & Pharmacist Payroll', icon: UsersRound, visible: !isDriver, badge: 'Live Scheduler' },
-    { id: 'driver-payroll', label: 'Driver Payroll & Commissions', icon: Truck, visible: true, badge: 'Active' },
-    { id: 'salary-structure', label: 'Incentive & Rule Engine', icon: Calculator, visible: isManager || isOwner },
-    { id: 'payroll-archive', label: 'Disbursal & Bank Exports', icon: FileSpreadsheet, visible: isManager || isOwner }
+    { id: 'staff-payroll', label: 'Staff & Pharmacist Payroll', icon: UsersRound, visible: canViewCompanyPayroll, badge: 'Live Scheduler' },
+    { id: 'driver-payroll', label: 'Driver Payroll & Commissions', icon: Truck, visible: canViewCompanyPayroll || isDriver, badge: 'Active' },
+    { id: 'salary-structure', label: 'Incentive & Rule Engine', icon: Calculator, visible: isOwner },
+    { id: 'payroll-archive', label: 'Disbursal & Bank Exports', icon: FileSpreadsheet, visible: canViewCompanyPayroll }
   ];
 
   const visibleTabs = tabs.filter(t => t.visible);
+
+  if (!canViewCompanyPayroll && !isDriver) {
+    return (
+      <div className="operational-panel p-6 text-sm text-slate-700">
+        Payroll is restricted to Owner and Accounts.
+        <BackToModulesButton onClick={onBack} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 page-enter">
@@ -46,12 +54,12 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
           <div className="flex items-center gap-2">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Enterprise HR &amp; Finance</p>
             <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 border border-emerald-200">
-              Cross-Module Integrated
+              Payroll Preview
             </span>
           </div>
           <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Payroll &amp; Incentive Engine</h2>
           <p className="mt-1 text-sm font-medium text-slate-500">
-            Automated monthly pharmacist compensation, scheduler relief hours, delivery volume commissions, and official Bahrain IBAN transfers.
+            Review payroll source records while salary rules, approval workflow, and bank transfer format are being finalized.
           </p>
         </div>
         <BackToModulesButton onClick={onBack} />
@@ -82,17 +90,17 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
       )}
 
       {/* Tab 1: Staff & Pharmacist Payroll */}
-      {activeTab === 'staff-payroll' && !isDriver && (
-        <StaffPayrollHub />
+      {activeTab === 'staff-payroll' && canViewCompanyPayroll && (
+        <StaffPayrollHub canEditRules={isOwner} />
       )}
 
       {/* Tab 2: Driver Payroll */}
-      {activeTab === 'driver-payroll' && (
+      {activeTab === 'driver-payroll' && (canViewCompanyPayroll || isDriver) && (
         <DriverPayrollHub selfOnly={isDriver} />
       )}
 
       {/* Tab 3: Salary & Incentive Rules */}
-      {activeTab === 'salary-structure' && (isManager || isOwner) && (
+      {activeTab === 'salary-structure' && isOwner && (
         <div className="space-y-6">
           <div className="operational-panel p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -109,12 +117,10 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
                   <Truck className="h-4 w-4 text-brand" /> Driver Delivery Tiers
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  Set baseline per-order delivery commission rates (e.g. 0.400 BHD per actual delivery) and monthly delivery count thresholds for target bonuses.
+                  Driver commission and target rules require the company's approved payroll policy.
                 </p>
                 <div className="rounded-lg bg-slate-50 p-3 text-xs font-bold text-slate-700 space-y-1">
-                  <p>• Standard Commission: <span className="text-brand">0.400 BHD / order</span></p>
-                  <p>• Monthly Target Bonus: <span className="text-emerald-700">40.000 BHD (at 250 orders)</span></p>
-                  <p>• Missing Punch Penalty: <span className="text-amber-700">5.000 BHD per punch</span></p>
+                  <p>No driver commission or punch penalty is authorized from these example values.</p>
                 </div>
               </div>
 
@@ -123,12 +129,10 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
                   <Building2 className="h-4 w-4 text-brand" /> Branch Pharmacist Tiers
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  Configure branch sales commission percentages, shift attendance bonuses, and overtime multipliers for branch personnel.
+                  Shift bonuses, overtime, leave and insurance calculations need an approved rule set before payment.
                 </p>
                 <div className="rounded-lg bg-slate-50 p-3 text-xs font-bold text-slate-700 space-y-1">
-                  <p>• License Allowance: <span className="text-brand">50.000 BHD / month</span></p>
-                  <p>• Overtime Multiplier: <span className="text-emerald-700">1.25× Hourly Rate</span></p>
-                  <p>• Attendance Grace Period: <span className="text-sky-700 font-black">5 Minutes (Configurable)</span></p>
+                  <p>Rates shown in older previews are not approved payroll policy.</p>
                 </div>
               </div>
 
@@ -139,20 +143,21 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
                     <Sliders className="h-4 w-4 text-sky-600" /> Attendance Geofencing &amp; Disciplinary Penalties Engine
                   </div>
                   <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-full font-bold">
-                    Bahrain Labor Law
+                    Requires Policy Review
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 font-medium">
-                  Authoritative attendance tracking with GPS geofencing radius, tiered lateness/absence deductions, and grace period calculations feeding directly into net salary deductions.
+                  Attendance and geofencing settings are under review. Attendance records must be verified and deductions separately approved before they affect payroll.
                 </p>
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
                   <div className="text-xs text-slate-600 font-bold">
-                    Deductions auto-populate into Staff Payroll net payable calculations.
+                    Only approved deductions from the database may appear in the payroll estimate.
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowAttendanceConfigModal(true)}
-                    className="btn-primary text-xs font-bold bg-sky-600 hover:bg-sky-500"
+                    disabled
+                    title="Monetary rules require owner entry and two-person approval."
+                    className="btn-primary text-xs font-bold opacity-50 cursor-not-allowed"
                   >
                     <Sliders className="h-3.5 w-3.5" /> Configure Attendance &amp; Penalties Rules
                   </button>
@@ -173,7 +178,7 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
       )}
 
       {/* Tab 4: Disbursal & Bank Archives */}
-      {activeTab === 'payroll-archive' && (isManager || isOwner) && (
+      {activeTab === 'payroll-archive' && canViewCompanyPayroll && (
         <div className="space-y-6">
           <div className="operational-panel p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -185,13 +190,13 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
             </div>
 
             <p className="text-xs font-medium text-slate-500">
-              Generate standardized Excel disbursal files formatted for Bahrain bank salary transfers (IBAN salary batch files) and accounting software integration.
+              Bank export and official payslips are unavailable until the payroll policy and dual approval workflow are implemented and verified.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl border border-slate-200 p-5 bg-white space-y-3">
                 <h4 className="text-sm font-black text-slate-900">Bahrain Salary Transfer File (IBAN)</h4>
-                <p className="text-xs text-slate-500 font-medium">Consolidated payout list with driver codes, IBAN numbers, and net BHD amounts.</p>
+                <p className="text-xs text-slate-500 font-medium">Review the staff payroll estimate. No bank payment file can be exported yet.</p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('staff-payroll')}
@@ -203,11 +208,11 @@ export const PayrollModuleHub: React.FC<PayrollModuleHubProps> = ({
 
               <div className="rounded-xl border border-slate-200 p-5 bg-white space-y-3">
                 <h4 className="text-sm font-black text-slate-900">Bulk Payslip PDF Export</h4>
-                <p className="text-xs text-slate-500 font-medium">Export itemized payslips for all drivers and employees for the active month.</p>
+                <p className="text-xs text-slate-500 font-medium">Official payslips require an approved, published payroll run.</p>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="btn-secondary text-xs font-bold"
+                  disabled
+                  className="btn-secondary text-xs font-bold opacity-50 cursor-not-allowed"
                 >
                   <CreditCard className="h-3.5 w-3.5" /> Batch Print All Payslips
                 </button>

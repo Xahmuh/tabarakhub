@@ -24,6 +24,7 @@ import {
 } from '../lib/deliveryPaymentTypes';
 import { generateUUID } from '../utils/uuid';
 import { toBhdStorageValue } from '../utils/money';
+import { toRecordingPayload } from '../lib/deliveryRecording';
 
 const LIFECYCLE_STATUSES: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
 const PAYMENT_COLLECTION_STATUSES: DeliveryPaymentCollectionStatus[] = ['paid', 'collect_on_delivery', 'partial'];
@@ -82,6 +83,12 @@ const toDriver = (row: any, branchIds: string[] = []): DeliveryDriver => ({
   createdAt: row.created_at || null,
   updatedAt: row.updated_at || null
 });
+
+export interface DeliveryDriverDutyStatus {
+  driverId: string;
+  isIn: boolean;
+  inBranchCode: string | null;
+}
 
 const toArea = (row: any): DeliveryArea => {
   return {
@@ -289,11 +296,17 @@ const toOrderKind = (value: string | null | undefined) =>
   value === 'internal_transfer' ? 'internal_transfer' : 'actual_delivery';
 
 const toOrder = (row: any): DeliveryOrder => ({
+  externalSource: row.external_source || null,
+  externalOrderId: row.external_order_id || null,
+  dispatchMode: row.dispatch_mode || 'system',
+  locationUrl: row.location_url || null,
+  customerAddress: row.customer_address || null,
   id: row.id,
   orderNumber: row.order_number || null,
   branchId: row.branch_id,
   branchName: row.branch?.name,
   orderDate: row.order_date,
+  orderTime: row.order_time || null,
   valueBhd: Number(row.value_bhd || 0),
   paymentType: row.payment_type,
   paymentCollectionStatus: toPaymentCollectionStatus(row.payment_collection_status),
@@ -316,6 +329,9 @@ const toOrder = (row: any): DeliveryOrder => ({
   driverId: row.driver_id,
   driverCode: row.driver?.driver_code || null,
   driverName: row.driver?.name || null,
+  recordedDriverId: row.recorded_driver_id || null,
+  recordedDriverCode: row.recorded_driver?.driver_code || null,
+  recordedDriverName: row.recorded_driver?.name || null,
   transferFromBranchId: row.transfer_from_branch_id || null,
   transferFromBranchCode: row.transfer_from_branch?.code || null,
   transferFromBranchName: row.transfer_from_branch?.name || null,
@@ -400,7 +416,7 @@ const normalizeImageUrl = (value?: string | null) => value?.trim() || '';
 
 const cleanBlockSearchTerm = (value: string) => value.trim().replace(/[,%()]/g, ' ').replace(/\s+/g, ' ');
 
-const ORDER_SELECT = `
+const ORDER_SELECT_BASE = `
   *,
   branch:branches!delivery_orders_branch_id_fkey(code, name),
   driver:delivery_drivers(name, driver_code),
@@ -408,6 +424,10 @@ const ORDER_SELECT = `
   transfer_from_branch:branches!delivery_orders_transfer_from_branch_id_fkey(code, name),
   transfer_to_branch:branches!delivery_orders_transfer_to_branch_id_fkey(code, name)
 `;
+const ORDER_SELECT = (import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1'
+  ? ORDER_SELECT_BASE.replace('driver:delivery_drivers(', 'driver:delivery_drivers!driver_id(')
+    + ', recorded_driver:delivery_drivers!recorded_driver_id(name, driver_code)'
+  : ORDER_SELECT_BASE;
 
 export interface DeliveryOrderFilters {
   branchId?: string;
@@ -417,6 +437,7 @@ export interface DeliveryOrderFilters {
   paymentType?: string;
   orderKind?: string;
   driverId?: string;
+  recordedDriverId?: string;
   pharmacistId?: string;
   governorate?: string;
 }
@@ -441,6 +462,7 @@ export const deliveryService = {
       // Supabase query builders are mutable, so build a fresh one per page.
       const buildQuery = () => {
         let query = supabaseClient.from('delivery_orders').select(ORDER_SELECT);
+        query = query.is('deleted_at', null);
         if (filters.branchIds && filters.branchIds.length > 0) {
           query = query.in('branch_id', filters.branchIds);
         } else if (filters.branchId && filters.branchId !== 'all') {
@@ -451,6 +473,7 @@ export const deliveryService = {
         if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
         if (filters.orderKind && filters.orderKind !== 'all') query = query.eq('order_kind', filters.orderKind);
         if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
+        if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
         if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
         if (filters.governorate && filters.governorate !== 'all') query = query.eq('governorate', filters.governorate);
         return query;
@@ -471,10 +494,34 @@ export const deliveryService = {
         if (data.length < pageSize || all.length >= 50000) break;
         from += pageSize;
       }
-      return all.map(toOrder);
+      const voidedOrderIds = new Set<string>();
+      const orderIds = all.map(row => row.id).filter(Boolean);
+      for (let offset = 0; offset < orderIds.length; offset += 500) {
+        const { data: voids, error: voidError } = await supabaseClient
+          .from('delivery_recording_voids' as any)
+          .select('order_id')
+          .in('order_id', orderIds.slice(offset, offset + 500));
+        if (voidError) throw voidError;
+        (voids || []).forEach((item: any) => item.order_id && voidedOrderIds.add(item.order_id));
+      }
+
+      // Audited voids remain in the financial history but stay out of active
+      // operational lists, including Dispatch and Reassign.
+      return all
+        .map(toOrder)
+        .filter(order => !order.cancelledReason?.startsWith('Recorded only void:') && !voidedOrderIds.has(order.id));
     },
 
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {
+      if ((import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && input.orderKind !== 'internal_transfer') {
+        if (!input.idempotencyKey) throw new Error('Save a stable recording request key before submission.');
+        const { data, error } = await supabaseClient.rpc('app_record_delivery' as any, {
+          p_payload: toRecordingPayload(input), p_request_key: input.idempotencyKey,
+        });
+        if (error) throw error;
+        return toOrder((data as any).order);
+      }
+      if (input.dispatchMode === 'log_only') throw new Error('Log Only requires the approved recording upgrade.');
       const normalized = await normalizeOrderInput(input);
       const pharmacistName = await resolveActivePharmacistForBranch(normalized.branchId, normalized.pharmacistId);
       await resolveActiveDriverForBranch(normalized.branchId, normalized.driverId);
@@ -642,6 +689,24 @@ export const deliveryService = {
       return true;
     },
 
+    voidRecordedOnly: async (id: string, reason: string) => {
+      const { error } = await supabaseClient.rpc('app_delivery_void_recorded_only' as any, {
+        p_order_id: id,
+        p_reason: reason
+      });
+      if (error) throw error;
+      return true;
+    },
+
+    voidTalabat: async (id: string, reason: string) => {
+      const { error } = await supabaseClient.rpc('app_delivery_void_talabat_order' as any, {
+        p_order_id: id,
+        p_reason: reason
+      });
+      if (error) throw error;
+      return true;
+    },
+
     reconcilePayment: async (
       id: string,
       collectedAmountBhd?: number | null,
@@ -743,6 +808,16 @@ export const deliveryService = {
       });
       if (error) throw error;
       return true;
+    },
+
+    cancelRecordedOnlyOrder: async (input: Pick<DeliveryOrderLifecycleInput, 'orderId' | 'notes'>): Promise<boolean> => {
+      if (!input.orderId) throw new Error('Delivery order is required.');
+      const { error } = await supabaseClient.rpc('app_delivery_cancel_recorded_only_order' as any, {
+        p_order_id: input.orderId,
+        p_notes: input.notes?.trim() || null
+      });
+      if (error) throw error;
+      return true;
     }
   },
 
@@ -772,6 +847,17 @@ export const deliveryService = {
   },
 
   drivers: {
+    listDropdownDutyStatus: async (branchId: string): Promise<DeliveryDriverDutyStatus[]> => {
+      const { data, error } = await supabaseClient.rpc('app_delivery_driver_dropdown_status' as any, {
+        p_branch_id: branchId
+      });
+      if (error) throw error;
+      return ((data || []) as Array<{ driver_id: string; is_in: boolean; in_branch_code: string | null }>).map(row => ({
+        driverId: row.driver_id,
+        isIn: row.is_in === true,
+        inBranchCode: row.is_in ? row.in_branch_code : null
+      }));
+    },
     list: async (includeInactive = false): Promise<DeliveryDriver[]> => {
       let query = supabaseClient.from('delivery_drivers').select('*').order('name');
       if (!includeInactive) query = query.eq('is_active', true);
@@ -1061,8 +1147,10 @@ export const deliveryService = {
         });
     },
     resolve: async (queryStr: string): Promise<DeliveryBlock | null> => {
-      const matches = await deliveryService.blocks.search(queryStr, 1);
-      return matches[0] || null;
+      const { data, error } = await supabaseClient.from('delivery_blocks').select('*')
+        .eq('block_number', queryStr.trim()).eq('is_active', true).maybeSingle();
+      if (error) throw error;
+      return data ? toBlock(data) : null;
     },
     upsert: async (block: DeliveryBlock) => {
       const { error } = await supabaseClient.from('delivery_blocks').upsert({

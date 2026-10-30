@@ -54,12 +54,19 @@ export const resolveAccessLevel = (
   overrides: FeaturePermission[] | undefined,
   roleDefaults: RolePermission[] | undefined
 ): AccessLevel => {
-  if (isAdminRole(role)) return 'edit';
-
-  // Hard boundary: Branch role must never access payroll
-  if (role === 'branch' && (feature === 'payroll' || feature === 'driver_payroll' || feature === 'driver-payroll' || feature.startsWith('payroll:'))) {
-    return 'none';
+  // Payroll is limited to the two company pay-run approvers. Salary edits are
+  // reserved for the owner; the driver view remains self-only in its module.
+  if (feature === 'payroll:salary' || feature === 'payroll:salary_edit') {
+    return role === 'owner' ? 'edit' : 'none';
   }
+  if (feature === 'payroll' || feature.startsWith('payroll:')) {
+    return role === 'owner' || role === 'accounts' ? 'edit' : 'none';
+  }
+  if (feature === 'driver_payroll' || feature === 'driver-payroll') {
+    if (role === 'owner' || role === 'accounts') return 'edit';
+    return role === 'driver' ? 'read' : 'none';
+  }
+  if (isAdminRole(role)) return 'edit';
 
   // Hard boundary: Branch role must never access TQPH
   if (role === 'branch' && (feature === 'tqph' || feature.startsWith('tqph:') || feature.startsWith('tqph_'))) {

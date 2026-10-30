@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DropdownSearch } from '../ui/DropdownSearch';
 import { StatusBadge } from '../ui/StatusBadge';
-import { mockAuditStore } from '../../services/mockAuditStore';
 import { supabaseTqphService } from '../../services/supabaseTqphService';
-import { MOCK_BRANCHES, MOCK_USERS } from '../../data';
 import { AppraisalSection, Branch, Pharmacist_Appraisal, User } from '../../types';
 import { exportAppraisalReport } from '../../services/pdfExportService';
 import {
@@ -23,21 +21,21 @@ import {
 
 interface PharmacistPerformanceViewProps {
   initialPharmacistId?: string;
-  currentUser?: User;
   onExit?: () => void;
   className?: string;
 }
 
 export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps> = ({
-  initialPharmacistId = MOCK_USERS.find(u => u.role === 'pharmacist')?.id || '43ccc615-b329-4d26-b868-c032983e9b59',
-  currentUser,
+  initialPharmacistId,
   onExit,
   className = ''
 }) => {
-  const [branches, setBranches] = useState<Branch[]>(MOCK_BRANCHES);
-  const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
-  const [selectedPharmacistId, setSelectedPharmacistId] = useState<string | null>(initialPharmacistId);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [selectedPharmacistId, setSelectedPharmacistId] = useState<string | null>(initialPharmacistId || null);
   const [selectedAppraisalId, setSelectedAppraisalId] = useState<string | null>(null);
+  const [appraisals, setAppraisals] = useState<Pharmacist_Appraisal[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Pharmacists list
   const pharmacists = useMemo(() => {
@@ -46,10 +44,8 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
 
   // Active pharmacist
   const activePharmacist = useMemo(() => {
-    return allUsers.find(u => u.id === selectedPharmacistId) || pharmacists[0] || MOCK_USERS[0];
+    return selectedPharmacistId ? allUsers.find(u => u.id === selectedPharmacistId) : pharmacists[0];
   }, [selectedPharmacistId, pharmacists, allUsers]);
-
-  const [storeTick, setStoreTick] = useState(0);
 
   // Fetch real pharmacists and branches from database
   useEffect(() => {
@@ -59,17 +55,11 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
       supabaseTqphService.getBranches()
     ]).then(([livePharmacists, liveBranches]) => {
       if (!isMounted) return;
-      if (liveBranches && liveBranches.length > 0) {
-        setBranches(liveBranches);
-      }
-      if (livePharmacists && livePharmacists.length > 0) {
-        setAllUsers(prev => {
-          const nonPh = prev.filter(u => u.role !== 'pharmacist');
-          return [...nonPh, ...livePharmacists];
-        });
-      }
+      setBranches(liveBranches);
+      setAllUsers(livePharmacists);
+      if (!selectedPharmacistId && livePharmacists[0]) setSelectedPharmacistId(livePharmacists[0].id);
     }).catch(err => {
-      console.warn('Live pharmacists/branches fetch warning:', err);
+      if (isMounted) setLoadError(err instanceof Error ? err.message : 'Failed to load pharmacists');
     });
     return () => { isMounted = false; };
   }, []);
@@ -78,14 +68,12 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
   useEffect(() => {
     if (!selectedPharmacistId) return;
     let isMounted = true;
+    setAppraisals([]);
     supabaseTqphService.getAppraisals(selectedPharmacistId).then(liveList => {
       if (!isMounted) return;
-      if (liveList && liveList.length > 0) {
-        liveList.forEach(ap => mockAuditStore.saveAppraisal(ap));
-        setStoreTick(t => t + 1);
-      }
+      setAppraisals(liveList);
     }).catch(err => {
-      console.warn('Pharmacist live fetch fallback:', err);
+      if (isMounted) setLoadError(err instanceof Error ? err.message : 'Failed to load appraisals');
     });
     return () => { isMounted = false; };
   }, [selectedPharmacistId]);
@@ -93,12 +81,12 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
   // Appraisals for this pharmacist (sorted newest first)
   const pharmacistAppraisals = useMemo(() => {
     if (!selectedPharmacistId) return [];
-    const list = mockAuditStore.getAppraisalsByPharmacist(selectedPharmacistId);
+    const list = appraisals.filter(a => a.pharmacist_id === selectedPharmacistId);
     return list.sort((a, b) => {
       if (b.year !== a.year) return b.year - a.year;
       return b.month - a.month;
     });
-  }, [selectedPharmacistId, storeTick]);
+  }, [selectedPharmacistId, appraisals]);
 
   // Active appraisal (defaults to most recent)
   const activeAppraisal = useMemo(() => {
@@ -114,14 +102,19 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
   const handleDownloadPdf = async (appraisal: Pharmacist_Appraisal) => {
     try {
       setIsGeneratingPdf(true);
-      const branch =
-        branches.find(b => b.id === appraisal.branch_id) || branches[0] || MOCK_BRANCHES[0];
-      const supervisor =
-        allUsers.find(u => u.id === appraisal.supervisor_id) ||
-        MOCK_USERS.find(u => u.role === 'supervisor');
+      const branch = branches.find(b => b.id === appraisal.branch_id);
+      if (!activePharmacist || !branch || !appraisal.supervisor_name_snapshot?.trim()) {
+        throw new Error('Verified pharmacist, branch and supervisor details are required for this PDF. Older records need review.');
+      }
+      const supervisor: User = {
+        id: appraisal.supervisor_id,
+        name: appraisal.supervisor_name_snapshot,
+        cpr: '',
+        role: 'supervisor'
+      };
       await exportAppraisalReport(appraisal, activePharmacist, branch, supervisor);
     } catch (err) {
-      console.error('Failed to export appraisal PDF:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to export appraisal PDF');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -135,8 +128,14 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
     return monthNames[monthNum - 1] || `Month ${monthNum}`;
   };
 
+  if (!activePharmacist) {
+    return <div className="p-6" role={loadError ? 'alert' : 'status'}>{loadError || 'No pharmacist is available for this account.'}</div>;
+  }
+
   return (
     <div className={`min-h-screen bg-slate-50/60 text-slate-900 p-4 sm:p-6 md:p-8 font-sans ${className}`}>
+      {loadError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{loadError}</p>}
+      {!activePharmacist && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm">No pharmacist is available for this account.</p>}
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header Ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
@@ -249,7 +248,7 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
                         {activePharmacist.name}
                       </h2>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        Masked Bahrain CPR: <span className="font-mono text-slate-900 font-bold">******{activePharmacist.cpr.slice(-3)}</span> · Evaluated by {activeAppraisal.supervisor_id}
+                        Bahrain CPR: <span className="font-mono text-slate-900 font-bold">{activePharmacist.cpr ? `******${activePharmacist.cpr.slice(-3)}` : 'Not available'}</span> · Evaluated by {activeAppraisal.supervisor_name_snapshot || 'Unverified historical record'}
                       </p>
                     </div>
 
@@ -266,7 +265,8 @@ export const PharmacistPerformanceView: React.FC<PharmacistPerformanceViewProps>
                       {/* Download Performance Sheet PDF Button */}
                       <button
                         type="button"
-                        disabled={isGeneratingPdf}
+                        disabled={isGeneratingPdf || !activeAppraisal.supervisor_name_snapshot?.trim()}
+                        title={!activeAppraisal.supervisor_name_snapshot?.trim() ? 'Verified supervisor name required for older records' : undefined}
                         onClick={() => handleDownloadPdf(activeAppraisal)}
                         className="
                           inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs transition-all

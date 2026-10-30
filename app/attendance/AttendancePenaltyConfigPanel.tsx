@@ -165,8 +165,8 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
       escalationTiers: [
         { tier: 1, occurrenceRange: [1, 1], action: 'VERBAL_WARNING', description: 'Verbal Warning', descriptionAr: 'إنذار شفهي' },
         { tier: 2, occurrenceRange: [2, 2], action: 'WRITTEN_WARNING', description: 'Written Warning', descriptionAr: 'إنذار كتابي' },
-        { tier: 3, occurrenceRange: [3, 3], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 0.5, description: '½ Day Salary Deduction', descriptionAr: 'خصم نصف يوم' },
-        { tier: 4, occurrenceRange: [4, 4], action: 'SALARY_DEDUCTION_DAYS', deductionValue: 1, description: '1 Day Salary Deduction', descriptionAr: 'خصم يوم كامل' },
+        { tier: 3, occurrenceRange: [3, 3], action: 'WRITTEN_WARNING', description: 'Review required', descriptionAr: 'تحتاج مراجعة' },
+        { tier: 4, occurrenceRange: [4, 4], action: 'WRITTEN_WARNING', description: 'Review required', descriptionAr: 'تحتاج مراجعة' },
         { tier: 5, occurrenceRange: [5, 99], action: 'TERMINATION_FLAG', description: 'Flagged for HR Review (Inert Flag)', descriptionAr: 'رُفع للموارد البشرية (إنهاء خدمة)' }
       ],
       isActive: true,
@@ -273,7 +273,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
       if (value === 'VERBAL_WARNING' || value === 'WRITTEN_WARNING' || value === 'TERMINATION_FLAG') {
         currentTier.deductionValue = undefined;
       } else if (currentTier.deductionValue === undefined) {
-        currentTier.deductionValue = value.includes('HOURS') ? 2 : value.includes('DAYS') ? 1 : 10;
+        currentTier.deductionValue = 0;
       }
     } else if (field === 'deductionValue') {
       currentTier.deductionValue = parseFloat(value) || 0;
@@ -296,10 +296,9 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
     const newTier: AttendancePenaltyRule['escalationTiers'][0] = {
       tier: nextTierNum,
       occurrenceRange: [nextStartOcc, nextStartOcc],
-      action: 'SALARY_DEDUCTION_DAYS',
-      deductionValue: 1,
-      description: `${nextTierNum} Day Salary Deduction`,
-      descriptionAr: `خصم راتب المستوى ${nextTierNum}`
+      action: 'WRITTEN_WARNING',
+      description: `Review tier ${nextTierNum}`,
+      descriptionAr: `مراجعة المستوى ${nextTierNum}`
     };
 
     setDraftRule({
@@ -335,7 +334,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
   const handleRunSimulation = () => {
     const selectedEmp = employees.find(e => e.id === simEmployeeId) || employees[0];
     if (!selectedEmp) return;
-    const basicSalary = selectedEmp.salary_matrix?.basicSalary || 250;
+    const basicSalary = selectedEmp.salary_matrix?.basicSalary || 0;
 
     const result = attendancePenaltyEngine.simulatePenalty(
       selectedEmp,
@@ -581,57 +580,57 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
                   <input
                     type="number"
                     step="0.05"
-                    value={config.overtimeRateConfig?.normalDayMultiplier || 1.25}
+                    value={config.overtimeRateConfig?.normalDayMultiplier ?? 0}
                     onChange={e =>
                       setConfig({
                         ...config,
                         overtimeRateConfig: {
                           ...config.overtimeRateConfig,
-                          normalDayMultiplier: parseFloat(e.target.value) || 1.25
+                          normalDayMultiplier: parseFloat(e.target.value) || 0
                         }
                       })
                     }
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1 font-medium">Default 1.25× (Bahrain Labor Law)</p>
+                  <p className="text-[11px] text-slate-400 mt-1 font-medium">No default multiplier is approved.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Weekend Day Multiplier</label>
                   <input
                     type="number"
                     step="0.05"
-                    value={config.overtimeRateConfig?.weekendMultiplier || 1.5}
+                    value={config.overtimeRateConfig?.weekendMultiplier ?? 0}
                     onChange={e =>
                       setConfig({
                         ...config,
                         overtimeRateConfig: {
                           ...config.overtimeRateConfig,
-                          weekendMultiplier: parseFloat(e.target.value) || 1.5
+                          weekendMultiplier: parseFloat(e.target.value) || 0
                         }
                       })
                     }
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1 font-medium">Default 1.50× for Fridays / Rest days</p>
+                  <p className="text-[11px] text-slate-400 mt-1 font-medium">No default multiplier is approved.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Public Holiday Multiplier</label>
                   <input
                     type="number"
                     step="0.05"
-                    value={config.overtimeRateConfig?.publicHolidayMultiplier || 2.0}
+                    value={config.overtimeRateConfig?.publicHolidayMultiplier ?? 0}
                     onChange={e =>
                       setConfig({
                         ...config,
                         overtimeRateConfig: {
                           ...config.overtimeRateConfig,
-                          publicHolidayMultiplier: parseFloat(e.target.value) || 2.0
+                          publicHolidayMultiplier: parseFloat(e.target.value) || 0
                         }
                       })
                     }
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 shadow-sm"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1 font-medium">Default 2.00× (Double pay)</p>
+                  <p className="text-[11px] text-slate-400 mt-1 font-medium">No default multiplier is approved.</p>
                 </div>
               </div>
             </div>
@@ -658,7 +657,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
                   <Shield className="w-4 h-4 text-red-700" /> Tiered Escalation Matrix
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  Complies with Bahrain Labor Law Decree No. 36 of 2012. Fully customize disciplinary rules, occurrence thresholds, and 5-tier penalties.
+                  Attendance events are for review only. No automatic monetary penalty is authorized.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -935,7 +934,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
                               type="number"
                               step={tier.action.includes('DAYS') ? '0.25' : '1'}
                               min={0}
-                              value={tier.deductionValue ?? 1}
+                              value={tier.deductionValue ?? 0}
                               onChange={e => handleUpdateDraftTier(idx, 'deductionValue', e.target.value)}
                               className="w-full bg-white border border-red-200 rounded px-2 py-1 text-xs text-red-700 font-black shadow-sm"
                             />
@@ -1232,7 +1231,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
                                     type="number"
                                     step={tier.action.includes('DAYS') ? '0.25' : '1'}
                                     min={0}
-                                    value={tier.deductionValue ?? 1}
+                                    value={tier.deductionValue ?? 0}
                                     onChange={e => handleUpdateDraftTier(idx, 'deductionValue', e.target.value)}
                                     className="w-full bg-white border border-red-200 rounded px-2 py-1 text-xs text-red-700 font-black shadow-sm"
                                   />
@@ -1397,7 +1396,7 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
                 >
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.code} - {emp.full_name} ({emp.category}) - Basic: {emp.salary_matrix?.basicSalary || 250} BHD
+                      {emp.code} - {emp.full_name} ({emp.category}) - Basic: {emp.salary_matrix?.basicSalary || 0} BHD
                     </option>
                   ))}
                 </select>
@@ -1491,9 +1490,8 @@ export const AttendancePenaltyConfigPanel: React.FC<Props> = ({ onClose }) => {
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-xs text-slate-700 space-y-1">
                   <div className="text-slate-400 font-sans font-bold text-[11px] uppercase tracking-wider mb-1">Mathematical Formula:</div>
-                  <div>• Daily Rate = Basic Salary ({simResult.basicSalary} BHD) ÷ 30 days = {(simResult.basicSalary / 30).toFixed(3)} BHD/day</div>
-                  <div>• Hourly Rate = Daily Rate ÷ {config.workingHoursPerDay || 8} hrs = {(simResult.basicSalary / 30 / (config.workingHoursPerDay || 8)).toFixed(3)} BHD/hr</div>
-                  <div className="text-red-700 font-black pt-1">• Final Deduction = {simResult.deductionBhd?.toFixed(3)} BHD</div>
+                  <div>• No automatic daily or hourly salary deduction formula is active.</div>
+                  <div className="text-red-700 font-black pt-1">• Owner must enter an exact amount and Accounts must approve it.</div>
                 </div>
               </div>
             )}
