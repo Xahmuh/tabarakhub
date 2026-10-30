@@ -1924,7 +1924,6 @@ const OrderCard = ({
   const orderByName = order.pharmacistName || copy.common.notRecorded;
   const [selectedDetailCell, setSelectedDetailCell] = useState<string | null>(null);
   const [destinationDetailsOpen, setDestinationDetailsOpen] = useState(false);
-  const hasDestinationDetails = Boolean(order.customerAddress || order.locationUrl || order.customerPhone);
   const destinationLabels = language === 'ar'
     ? { title: 'تفاصيل التوصيل', gps: 'موقع GPS', address: 'العنوان التفصيلي', phone: 'رقم التواصل', open: 'اتصال' }
     : language === 'ur'
@@ -1989,14 +1988,26 @@ const OrderCard = ({
             </>
           ) : (
             <>
-              <InfoRow
-                label={copy.order.deliveryBlock}
-                value={order.blockNumber || copy.order.notEntered}
-                isRtl={isRtl}
-                stacked
-                selected={selectedDetailCell === 'delivery-block'}
-                onPress={() => setSelectedDetailCell('delivery-block')}
-              />
+              <View style={{ flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'stretch', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <InfoRow
+                    label={copy.order.deliveryBlock}
+                    value={order.blockNumber || copy.order.notEntered}
+                    isRtl={isRtl}
+                    stacked
+                    selected={selectedDetailCell === 'delivery-block'}
+                    onPress={() => setSelectedDetailCell('delivery-block')}
+                  />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={destinationLabels.title}
+                  onPress={() => setDestinationDetailsOpen(true)}
+                  style={{ width: 44, minHeight: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#ffff99' }}
+                >
+                  <Text style={{ color: '#292900', fontSize: 21, fontWeight: '900' }}>⌄</Text>
+                </Pressable>
+              </View>
               <InfoRow
                 label={copy.order.area}
                 value={order.areaName || order.governorate || copy.common.pending}
@@ -2028,17 +2039,7 @@ const OrderCard = ({
         </View>
       </View>
 
-      {!isTransfer && hasDestinationDetails ? (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={destinationLabels.title}
-            onPress={() => setDestinationDetailsOpen(true)}
-            style={{ marginTop: 10, alignSelf: isRtl ? 'flex-end' : 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, backgroundColor: '#ffff99', paddingHorizontal: 14, paddingVertical: 10 }}
-          >
-            <Text style={{ color: '#292900', fontWeight: '900' }}>{destinationLabels.title}</Text>
-            <Text style={{ color: '#292900', fontSize: 18, fontWeight: '900' }}>⌄</Text>
-          </Pressable>
+      {!isTransfer ? (
           <Modal visible={destinationDetailsOpen} transparent animationType="fade" onRequestClose={() => setDestinationDetailsOpen(false)}>
             <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.48)' }}>
               <View style={{ borderRadius: 18, backgroundColor: colors.surface, padding: 18, gap: 12 }}>
@@ -2061,7 +2062,6 @@ const OrderCard = ({
               </View>
             </View>
           </Modal>
-        </>
       ) : null}
 
       <PaymentCollectionPanel

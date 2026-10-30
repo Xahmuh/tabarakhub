@@ -487,6 +487,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [reassigningOrder, setReassigningOrder] = useState<DeliveryOrder | null>(null);
+  const [destinationDetails, setDestinationDetails] = useState<{ order: DeliveryOrder; locationUrl: string | null; customerAddress: string | null; customerPhone: string | null } | null>(null);
+  const [destinationDetailsLoadingId, setDestinationDetailsLoadingId] = useState<string | null>(null);
   const [reassignDriverId, setReassignDriverId] = useState<string | null>(null);
   const [isReassigning, setIsReassigning] = useState(false);
   const [historyView, setHistoryView] = useState<HistoryViewMode>('all');
@@ -1254,6 +1256,25 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       return;
     }
     onOpenBenefitPayTransfer?.(order);
+  };
+
+  const handleOpenDestinationDetails = async (order: DeliveryOrder) => {
+    setDestinationDetailsLoadingId(order.id);
+    try {
+      const { data, error } = await supabaseClient.rpc('app_delivery_get_order_destination_details', { p_order_id: order.id });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      setDestinationDetails({
+        order,
+        locationUrl: row?.location_url || null,
+        customerAddress: row?.customer_address || null,
+        customerPhone: row?.customer_phone || null
+      });
+    } catch (error: any) {
+      void Swal.fire('Could not load delivery details', error?.message || 'Please try again.', 'error');
+    } finally {
+      setDestinationDetailsLoadingId(null);
+    }
   };
 
   const handleReconcilePayment = async (order: DeliveryOrder) => {
@@ -2080,26 +2101,28 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer location &amp; Contact</h4>
               </div>
               <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
-                <label className="block space-y-1">
-                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                  <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                </label>
-                <label className="block space-y-1">
-                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Contact no. <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                  <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Customer phone number" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                </label>
-                <label className="block space-y-1 md:col-span-2">
-                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                  <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                </label>
-                <div className="grid gap-4">
+                <div className="grid min-w-0 gap-4">
+                  <label className="block space-y-1">
+                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Contact no. <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                    <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Customer phone number" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                    <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                    <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </label>
+                </div>
+                <div className="grid min-w-0 gap-4">
                   <div className="space-y-1">
                     <label className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Block / Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}</label>
                     <SearchableSelect options={blockOptions} value={!requiresBlock ? null : blockInput || null} onChange={handleBlockChange} placeholder={!requiresBlock ? `Disabled for ${selectedPaymentType?.label || paymentType}` : 'Search customer area or block...'} disabled={!requiresBlock || blocks.length === 0} allowClear />
                   </div>
                   <div className="space-y-1">
                     <label className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Area {requiresBlock && <RequiredMark />}</label>
-                    <div className={`flex min-h-[48px] items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${resolvedBlock ? 'border-emerald-200 bg-emerald-50 text-slate-950' : blockMatches.length > 0 && blockInput.trim() ? 'border-blue-100 bg-blue-50 text-blue-700' : blockNotFound && blockInput.trim() ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-400'}`}>
+                    <div className={`flex min-h-[48px] w-full items-center rounded-lg border px-3 py-2.5 text-sm font-bold ${resolvedBlock ? 'border-emerald-200 bg-emerald-50 text-slate-950' : blockMatches.length > 0 && blockInput.trim() ? 'border-blue-100 bg-blue-50 text-blue-700' : blockNotFound && blockInput.trim() ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-400'}`}>
                       {requiresBlock && selectedBlock ? <span className="min-w-0 truncate"><span className="font-black text-slate-950">{selectedBlock.areaName}</span><span className="font-extrabold text-emerald-700"> · {selectedBlock.governorate}</span></span> : areaPreview}
                     </div>
                     {requiresBlock && isBlockSearching && <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>}
@@ -2349,7 +2372,26 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         )}
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top text-xs font-bold text-slate-500">
-                        <span className="block break-words leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                        {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? (
+                          <span className="block break-words leading-5">-</span>
+                        ) : order.blockNumber ? (
+                          <span className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>
+                            <span>{order.blockNumber}</span>
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenDestinationDetails(order)}
+                              disabled={destinationDetailsLoadingId === order.id}
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#ffff99] text-amber-900 transition hover:bg-[#fff266] disabled:opacity-50"
+                              title="Open customer location and contact details"
+                              aria-label="Open customer location and contact details"
+                            >
+                              <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
+                            </button>
+                            <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
+                          </span>
+                        ) : (
+                          <span className="block break-words leading-5">-</span>
+                        )}
                         {order.isOutsideGovernorate && (
                           <span className="ml-2 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">OUTSIDE</span>
                         )}
@@ -2484,7 +2526,20 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     {(order.driverName || order.recordedDriverName) && <span title={order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName || '' : order.driverName || ''}>🛵 {driverDisplayName(order, paymentTypes)}</span>}
                     {!order.driverName && !order.recordedDriverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
-                      <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span>{order.blockNumber}</span>
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenDestinationDetails(order)}
+                          disabled={destinationDetailsLoadingId === order.id}
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#ffff99] text-amber-900 transition hover:bg-[#fff266] disabled:opacity-50"
+                          title="Open customer location and contact details"
+                          aria-label="Open customer location and contact details"
+                        >
+                          <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
+                        </button>
+                        <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
+                      </span>
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
                   </div>
@@ -2552,6 +2607,44 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
           </>
         )}
       </section>
+
+      {destinationDetails && (
+        <div
+          className="fixed inset-0 z-[3100] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={event => { if (event.target === event.currentTarget) setDestinationDetails(null); }}
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="delivery-destination-details-title">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 id="delivery-destination-details-title" className="text-base font-black text-slate-900">Customer location &amp; Contact</h3>
+                <p className="mt-1 text-xs font-bold text-slate-500">{deliveryOrderNumber(destinationDetails.order)} · Block {destinationDetails.order.blockNumber || '-'}</p>
+              </div>
+              <button type="button" onClick={() => setDestinationDetails(null)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Close details">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid gap-3">
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h4 className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL</h4>
+                {destinationDetails.locationUrl ? (
+                  <a href={destinationDetails.locationUrl} target="_blank" rel="noreferrer" className="break-all text-sm font-bold text-brand underline">Open delivery location</a>
+                ) : <p className="text-sm font-bold text-slate-400">Not provided</p>}
+              </section>
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h4 className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address</h4>
+                <p className="break-words text-sm font-bold text-slate-700">{destinationDetails.customerAddress || 'Not provided'}</p>
+              </section>
+              <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <h4 className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Contact no.</h4>
+                {destinationDetails.customerPhone ? (
+                  <a href={`tel:${destinationDetails.customerPhone.replace(/[^+\d]/g, '')}`} className="text-sm font-bold text-brand">{destinationDetails.customerPhone}</a>
+                ) : <p className="text-sm font-bold text-slate-400">Not provided</p>}
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
 
       {reassigningOrder && (
         <div
