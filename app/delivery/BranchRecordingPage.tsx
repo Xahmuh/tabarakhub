@@ -2432,7 +2432,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                               title="Open customer location and contact details"
                               aria-label="Open customer location and contact details"
                             >
-                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><circle cx="12" cy="12" r="10" className={`stroke-black transition-colors ${destinationDetails?.order.id === order.id ? 'fill-red-600' : 'fill-transparent group-hover:fill-red-600'}`} /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'stroke-white' : 'stroke-black group-hover:stroke-white'}`} /></svg>
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="12" cy="12" r="10" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'fill-red-600 stroke-red-600' : 'fill-transparent stroke-black group-hover:fill-red-600 group-hover:stroke-red-600'}`} /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'stroke-white' : 'stroke-black group-hover:stroke-white'}`} /></svg>
                             </button>
                           ) : null}
                         </div>
@@ -2591,7 +2591,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           title="Open customer location and contact details"
                           aria-label="Open customer location and contact details"
                         >
-                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><circle cx="12" cy="12" r="10" className={`stroke-black transition-colors ${destinationDetails?.order.id === order.id ? 'fill-red-600' : 'fill-transparent group-hover:fill-red-600'}`} /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'stroke-white' : 'stroke-black group-hover:stroke-white'}`} /></svg>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="12" cy="12" r="10" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'fill-red-600 stroke-red-600' : 'fill-transparent stroke-black group-hover:fill-red-600 group-hover:stroke-red-600'}`} /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" className={`transition-colors ${destinationDetails?.order.id === order.id ? 'stroke-white' : 'stroke-black group-hover:stroke-white'}`} /></svg>
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
