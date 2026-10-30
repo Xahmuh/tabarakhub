@@ -487,10 +487,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [highlightedOrderId, setHighlightedOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [reassigningOrder, setReassigningOrder] = useState<DeliveryOrder | null>(null);
-  const [destinationDetails, setDestinationDetails] = useState<{ order: DeliveryOrder; locationUrl: string | null; customerAddress: string | null; customerPhone: string | null } | null>(null);
+  const [destinationDetails, setDestinationDetails] = useState<{ order: DeliveryOrder; locationUrl: string | null; customerAddress: string | null; customerPhone: string | null; position: { top: number; left: number; width: number; maxHeight: number } } | null>(null);
   const [destinationDetailsLoadingId, setDestinationDetailsLoadingId] = useState<string | null>(null);
   const [destinationDetailsAvailable, setDestinationDetailsAvailable] = useState<Set<string>>(() => new Set());
   const destinationFlagsRequest = useRef(0);
+  const destinationPopupRef = useRef<HTMLDivElement>(null);
   const [reassignDriverId, setReassignDriverId] = useState<string | null>(null);
   const [isReassigning, setIsReassigning] = useState(false);
   const [historyView, setHistoryView] = useState<HistoryViewMode>('all');
@@ -735,6 +736,21 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
     return () => { destinationFlagsRequest.current += 1; };
   }, [paginatedHistoryOrderIds]);
+  useEffect(() => {
+    if (!destinationDetails) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!destinationPopupRef.current?.contains(event.target as Node)) setDestinationDetails(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDestinationDetails(null);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [Boolean(destinationDetails)]);
   useEffect(() => {
     if (!focusOrderId) return;
     setHighlightedOrderId(focusOrderId);
@@ -1288,7 +1304,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     onOpenBenefitPayTransfer?.(order);
   };
 
-  const handleOpenDestinationDetails = async (order: DeliveryOrder) => {
+  const handleOpenDestinationDetails = async (order: DeliveryOrder, event: React.MouseEvent<HTMLButtonElement>) => {
+    const iconRect = event.currentTarget.getBoundingClientRect();
+    const popupWidth = Math.min(352, window.innerWidth - 24);
+    const popupMaxHeight = Math.min(544, window.innerHeight - 24);
+    const left = Math.max(12, Math.min(iconRect.right - popupWidth, window.innerWidth - popupWidth - 12));
+    let top = iconRect.bottom + 8;
+    if (top + popupMaxHeight > window.innerHeight - 12) {
+      top = Math.max(12, iconRect.top - popupMaxHeight - 8);
+    }
+    const position = { top, left, width: popupWidth, maxHeight: popupMaxHeight };
     setDestinationDetailsLoadingId(order.id);
     try {
       const { data, error } = await supabaseClient.rpc('app_delivery_get_order_destination_details', { p_order_id: order.id });
@@ -1298,7 +1323,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         order,
         locationUrl: row?.location_url || null,
         customerAddress: row?.customer_address || null,
-        customerPhone: row?.customer_phone || null
+        customerPhone: row?.customer_phone || null,
+        position
       });
     } catch (error: any) {
       void Swal.fire('Could not load delivery details', error?.message || 'Please try again.', 'error');
@@ -2407,13 +2433,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && destinationDetailsAvailable.has(order.id) ? (
                             <button
                               type="button"
-                              onClick={() => void handleOpenDestinationDetails(order)}
+                              onClick={event => void handleOpenDestinationDetails(order, event)}
                               disabled={destinationDetailsLoadingId === order.id}
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#ffff99] text-amber-900 transition hover:bg-[#fff266] disabled:opacity-50"
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center bg-transparent p-0 text-black disabled:opacity-50"
                               title="Open customer location and contact details"
                               aria-label="Open customer location and contact details"
                             >
-                              <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
+                              <span aria-hidden="true" className="text-[13px] leading-none text-black">▼</span>
                             </button>
                           ) : null}
                         </div>
@@ -2555,13 +2581,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
                         {destinationDetailsAvailable.has(order.id) ? <button
                           type="button"
-                          onClick={() => void handleOpenDestinationDetails(order)}
+                          onClick={event => void handleOpenDestinationDetails(order, event)}
                           disabled={destinationDetailsLoadingId === order.id}
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#ffff99] text-amber-900 transition hover:bg-[#fff266] disabled:opacity-50"
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center bg-transparent p-0 text-black disabled:opacity-50"
                           title="Open customer location and contact details"
                           aria-label="Open customer location and contact details"
                         >
-                          <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
+                          <span aria-hidden="true" className="text-[13px] leading-none text-black">▼</span>
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
@@ -2634,11 +2660,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
       {destinationDetails && (
         <div
-          className="fixed inset-0 z-[3100] flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm"
-          role="presentation"
-          onMouseDown={event => { if (event.target === event.currentTarget) setDestinationDetails(null); }}
+          ref={destinationPopupRef}
+          className="fixed z-[3100] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
+          style={{ top: destinationDetails.position.top, left: destinationDetails.position.left, width: destinationDetails.position.width, maxHeight: destinationDetails.position.maxHeight }}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="delivery-destination-details-title"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="delivery-destination-details-title">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 id="delivery-destination-details-title" className="text-base font-black text-slate-900">Customer location &amp; Contact</h3>
@@ -2666,7 +2694,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 ) : <p className="text-sm font-bold text-slate-400">Not provided</p>}
               </section>
             </div>
-          </div>
         </div>
       )}
 
