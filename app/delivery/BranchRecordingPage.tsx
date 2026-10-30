@@ -594,6 +594,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       : Number.isFinite(amountReceivedNumber)
         ? Math.max(orderValueNumber - amountReceivedNumber, 0)
         : 0;
+  const driverChangePreview = paymentCollectionStatus === 'collect_on_delivery' && Number.isFinite(Number(cashHandedToDriver))
+    ? Math.max(Number(cashHandedToDriver), 0)
+    : 0;
+  const driverShouldCollectPreview = amountToCollectPreview + driverChangePreview;
   const areaPreview = !requiresBlock
     ? `Not required for ${selectedPaymentType?.label || paymentType}`
     : selectedBlock
@@ -1958,14 +1962,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       />
                     </div>
                   )}
-                  <div className="space-y-1">
-                    <label className={collectionFieldLabelClass}>
-                      Driver should collect
-                    </label>
-                    <div className="flex h-8 items-center rounded-lg border border-red-100 bg-white px-2 text-sm font-black text-red-800 tabular-nums">
-                      {Number.isFinite(amountToCollectPreview) ? formatBhd(amountToCollectPreview) : formatBhd(0)}
-                    </div>
-                  </div>
                   {paymentCollectionStatus === 'collect_on_delivery' && (
                     <div className="space-y-1">
                       <label className={collectionFieldLabelClass}>
@@ -1983,6 +1979,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       />
                     </div>
                   )}
+                  <div className="space-y-1">
+                    <label className={collectionFieldLabelClass}>
+                      Driver should collect
+                    </label>
+                    <div className="flex h-8 items-center rounded-lg border border-red-100 bg-white px-2 text-sm font-black text-red-800 tabular-nums">
+                      {Number.isFinite(driverShouldCollectPreview) ? formatBhd(driverShouldCollectPreview) : formatBhd(0)}
+                    </div>
+                  </div>
                   <div className="space-y-1">
                     <label className={collectionFieldLabelClass}>
                       Driver note
