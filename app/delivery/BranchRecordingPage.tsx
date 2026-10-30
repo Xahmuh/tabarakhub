@@ -232,10 +232,10 @@ const canDeleteRecordedOrder = (order: DeliveryOrder) => {
 
   return isRecordingDelete || isTodayCancelledDelete;
 };
-const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
-const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
+const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
+const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
 const reconcileActionClass = 'inline-flex h-9 w-28 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-700 bg-red-700 px-2.5 text-[9px] font-black uppercase tracking-widest text-white shadow-sm transition hover:border-red-800 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50';
-const confirmBpActionClass = 'inline-flex h-9 w-28 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-700 bg-red-700 px-2.5 text-[9px] font-black uppercase tracking-widest text-white shadow-sm transition hover:border-red-800 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50';
+const confirmBpActionClass = 'inline-flex h-9 w-28 shrink-0 items-center justify-center gap-1 rounded-md border border-red-700 bg-red-700 px-2.5 text-[9px] font-black uppercase tracking-widest text-white shadow-sm transition hover:border-red-800 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50';
 const reconciliationStatusClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border px-2.5 text-[9px] font-black uppercase tracking-widest shadow-sm';
 const benefitPayTraceIconClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const collectionPanelBaseClass = 'rounded-lg border p-2';
