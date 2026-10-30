@@ -1873,7 +1873,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               )}
             </div>
 
-            <div className={recordingV1 && !editingOrder && isTalabatDeliveryPayment(paymentType) ? 'hidden' : 'order-6 flex flex-col items-start gap-2 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6'}>
+            <div className={recordingV1 && !editingOrder && isTalabatDeliveryPayment(paymentType) ? 'hidden' : 'order-6 flex min-h-[260px] flex-col items-start gap-2 lg:col-start-2 lg:row-start-3 lg:border-l lg:border-slate-100 lg:pl-6'}>
               <label className="block w-full text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
                 Payment collection
               </label>
