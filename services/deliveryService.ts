@@ -800,6 +800,14 @@ export const deliveryService = {
       return toOrderEvent(data);
     },
 
+    customerReturnCompletedOrder: async (orderId: string, notes?: string | null): Promise<boolean> => {
+      const { error } = await supabaseClient.rpc('app_delivery_customer_return_completed_order' as any, {
+        p_order_id: orderId, p_notes: notes?.trim() || null
+      });
+      if (error) throw error;
+      return true;
+    },
+
     cancelCustomerOrder: async (input: Pick<DeliveryOrderLifecycleInput, 'orderId' | 'notes'>): Promise<boolean> => {
       if (!input.orderId) throw new Error('Delivery order is required.');
       const { error } = await supabaseClient.rpc('app_delivery_cancel_customer_order' as any, {

@@ -711,7 +711,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         dateTo: historyRange.to,
         orderKind: 'actual_delivery'
       });
-      setHistoryOrders(orders);
+      setHistoryOrders(orders.filter(order => !order.cancelledReason?.startsWith('Customer return:')));
     } catch (e) {
       console.error('Delivery list failed', e);
     } finally {

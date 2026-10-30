@@ -18,7 +18,8 @@ import { isDeliveryPaymentBlockExempt, isTalabatDeliveryPayment } from '../../li
 import { PeriodFilter } from './components/PeriodFilter';
 import { PeriodPreset, formatBhd, getPresetRange, periodLabel, todayKey, yesterdayKey } from './utils';
 
-const STATUS_META: Record<DeliveryLifecycleStatus, { label: string; className: string; icon: React.ElementType }> = {
+type DispatchStatus = DeliveryLifecycleStatus | 'returned';
+const STATUS_META: Record<DispatchStatus, { label: string; className: string; icon: React.ElementType }> = {
   recorded: {
     label: 'Recorded',
     className: 'border-slate-200 bg-slate-50 text-slate-600',
@@ -43,11 +44,16 @@ const STATUS_META: Record<DeliveryLifecycleStatus, { label: string; className: s
     label: 'Cancelled',
     className: 'border-red-200 bg-red-50 text-red-700',
     icon: XCircle
+  },
+  returned: {
+    label: 'Returned',
+    className: 'border-amber-200 bg-amber-50 text-amber-700',
+    icon: Route
   }
 };
 
-const STATUS_ORDER: DeliveryLifecycleStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled'];
-type DispatchView = 'all' | 'recorded' | 'assigned' | 'picked_up' | 'closed';
+const STATUS_ORDER: DispatchStatus[] = ['recorded', 'assigned', 'picked_up', 'delivered', 'cancelled', 'returned'];
+type DispatchView = 'all' | 'recorded' | 'assigned' | 'picked_up' | 'closed' | 'returned';
 
 const PAYMENT_COLLECTION_META: Record<DeliveryPaymentCollectionStatus, { label: string; className: string }> = {
   paid: { label: 'Paid', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
@@ -104,8 +110,10 @@ const isManualRecordedOnlyOrder = (order: DeliveryOrder) =>
 const isRecordedOnlyCompletion = (order: DeliveryOrder) =>
   isManualRecordedOnlyOrder(order) && order.deliveryStatus !== 'cancelled';
 
-const dispatchDisplayStatus = (order: DeliveryOrder): DeliveryLifecycleStatus =>
-  isRecordedOnlyCompletion(order) ? 'delivered' : order.deliveryStatus;
+const dispatchDisplayStatus = (order: DeliveryOrder): DispatchStatus =>
+  order.deliveryStatus === 'cancelled' && order.cancelledReason?.startsWith('Customer return:')
+    ? 'returned'
+    : isRecordedOnlyCompletion(order) ? 'delivered' : order.deliveryStatus;
 
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
   order.dispatchMode !== 'log_only' && (order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes));
@@ -126,7 +134,7 @@ const collectionValueBadgeClass = (order: DeliveryOrder) =>
 
 const benefitPayTraceIconClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 
-const StatusBadge: React.FC<{ status: DeliveryLifecycleStatus }> = ({ status }) => {
+const StatusBadge: React.FC<{ status: DispatchStatus }> = ({ status }) => {
   const meta = STATUS_META[status];
   const Icon = meta.icon;
   return (
@@ -317,7 +325,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
   }, [focusOrderDate, focusOrderId, onFocusConsumed]);
 
   const statusCounts = useMemo(() => {
-    const counts = new Map<DeliveryLifecycleStatus, number>();
+    const counts = new Map<DispatchStatus, number>();
     STATUS_ORDER.forEach(status => counts.set(status, 0));
     orders
       .filter(order => isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order))
@@ -350,14 +358,15 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     { id: 'recorded' as const, label: 'To assign', count: statusCounts.get('recorded') || 0 },
     { id: 'assigned' as const, label: 'Awaiting pickup', count: statusCounts.get('assigned') || 0 },
     { id: 'picked_up' as const, label: 'On the road', count: statusCounts.get('picked_up') || 0 },
-    { id: 'closed' as const, label: 'Complete / Cancelled', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) }
+    { id: 'closed' as const, label: 'Complete / Cancelled', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) },
+    { id: 'returned' as const, label: 'Returned', count: statusCounts.get('returned') || 0 }
   ], [dispatchBoardOrders.length, statusCounts]);
   const visibleDispatchOrders = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     return dispatchBoardOrders.filter(order => {
       const matchesView = dispatchView === 'all'
         || (dispatchView === 'closed'
-          ? dispatchDisplayStatus(order) === 'delivered' || order.deliveryStatus === 'cancelled'
+          ? dispatchDisplayStatus(order) === 'delivered' || dispatchDisplayStatus(order) === 'cancelled'
           : dispatchDisplayStatus(order) === dispatchView);
       if (!matchesView) return false;
       if (!query) return true;
@@ -416,6 +425,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     const assignedCount = statusCounts.get('assigned') || 0;
     const pickedUpCount = statusCounts.get('picked_up') || 0;
     const deliveredCount = statusCounts.get('delivered') || 0;
+    const returnedCount = statusCounts.get('returned') || 0;
 
     if (!canManageAll) {
       return [
@@ -447,6 +457,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
           tone: 'emerald',
           icon: <CheckCircle2 className="h-4 w-4" />
         },
+        { label: 'Returned orders', value: String(returnedCount), tone: 'amber', icon: <Route className="h-4 w-4" /> },
         {
           label: 'Pending collect',
           value: formatBhd(pendingCollectionValue),
@@ -502,6 +513,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
         tone: 'emerald',
         icon: <CheckCircle2 className="h-4 w-4" />
       },
+      { label: 'Returned orders', value: String(returnedCount), tone: 'amber', icon: <Route className="h-4 w-4" /> },
       {
         label: 'Pending collect',
         value: formatBhd(pendingCollectionValue),
@@ -638,8 +650,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     }
 
     const result = await Swal.fire({
-      title: 'Return closed order?',
-      html: `This will reopen <b>${deliveryOrderNumber(order)}</b> so it can be cancelled or processed again.`,
+      title: 'Customer return?',
+      html: `This will mark <b>${deliveryOrderNumber(order)}</b> as Returned in Dispatch.`,
       input: 'text',
       inputLabel: 'Return note',
       inputPlaceholder: 'Example: customer requested cancellation after close',
@@ -653,13 +665,9 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     const notes = result.value ? String(result.value).trim() : null;
     setSavingOrderId(order.id);
     try {
-      const event = await deliveryService.lifecycle.returnOrder({
-        orderId: order.id,
-        notes,
-        idempotencyKey: `${order.id}:return:${Date.now()}`
-      });
+      await deliveryService.lifecycle.customerReturnCompletedOrder(order.id, notes);
       await load();
-      await Swal.fire('Order returned', `Delivery reopened as ${STATUS_META[event.newStatus].label.toLowerCase()}.`, 'success');
+      await Swal.fire('Order returned', `${deliveryOrderNumber(order)} is now Returned in Dispatch.`, 'success');
     } catch (returnError: any) {
       console.error('Delivery return failed', returnError);
       await Swal.fire('Return failed', returnError?.message || 'Could not return this delivery order.', 'error');
