@@ -325,7 +325,6 @@ const PaymentSummary: React.FC<{
     ? paymentCollectionMeta[order.paymentCollectionStatus]
     : null;
   const benefitPayTime = benefitPayTimeLabel(order);
-  const reconciliationBadge = driverCashReconciliationBadge(order);
   const detailItems: Array<{ label: string; className: string; title?: string }> = [];
 
   if (collectionBadge) {
@@ -346,14 +345,6 @@ const PaymentSummary: React.FC<{
     detailItems.push({
       label: collectionDueLabel(order),
       className: collectionValueBadgeClass(order)
-    });
-  }
-
-  if (reconciliationBadge) {
-    detailItems.push({
-      label: reconciliationBadge.label,
-      className: reconciliationBadge.className,
-      title: reconciliationBadge.title
     });
   }
 
@@ -2366,6 +2357,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   {paginatedHistoryOrders.map(order => {
                     const isHighlightedOrder = highlightedOrderId === order.id;
                     const canOpenBenefitPayTrace = isBenefitPayOrder(order) && Boolean(onOpenBenefitPayTransfer);
+                    const reconciliationBadge = driverCashReconciliationBadge(order);
 
                     const isDriverCancelled = isCancelledByDriver(order);
                     return (
@@ -2456,8 +2448,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </div>
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-3 pr-4 text-right align-top">
+                        <div className="flex min-w-0 items-center gap-1">
+                          {reconciliationBadge && (
+                            <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[9px] font-extrabold leading-4 ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
+                              {reconciliationBadge.label}
+                            </span>
+                          )}
                         {canEdit && (
-                          <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+                          <div className="ml-auto flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
                             {isBenefitPayPending(order) && (
                               <button
                                 onClick={() => handleConfirmBenefitPayReceived(order)}
@@ -2505,6 +2503,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                             )}
                           </div>
                         )}
+                        </div>
                       </td>
                     </tr>
                     );
@@ -2517,6 +2516,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               {paginatedHistoryOrders.map(order => {
                 const isHighlightedOrder = highlightedOrderId === order.id;
                 const canOpenBenefitPayTrace = isBenefitPayOrder(order) && Boolean(onOpenBenefitPayTransfer);
+                const reconciliationBadge = driverCashReconciliationBadge(order);
 
                 const isDriverCancelled = isCancelledByDriver(order);
                 return (
@@ -2593,8 +2593,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
                   </div>
-                  {canEdit && (
-                    <div className="mt-3 flex flex-nowrap justify-end gap-2">
+                  {(reconciliationBadge || canEdit) && (
+                    <div className="mt-3 flex items-center gap-1">
+                      {reconciliationBadge && (
+                        <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[9px] font-extrabold leading-4 ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
+                          {reconciliationBadge.label}
+                        </span>
+                      )}
+                      {canEdit && <div className="ml-auto flex flex-nowrap items-center justify-end gap-2">
                       {isBenefitPayPending(order) && (
                         <button
                           onClick={() => handleConfirmBenefitPayReceived(order)}
@@ -2640,6 +2646,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </button>
                       </>
                       )}
+                      </div>}
                     </div>
                   )}
                 </div>
