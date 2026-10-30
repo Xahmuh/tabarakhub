@@ -2377,6 +2377,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         ) : order.blockNumber ? (
                           <span className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>
                             <span>{order.blockNumber}</span>
+                            <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
                             <button
                               type="button"
                               onClick={() => void handleOpenDestinationDetails(order)}
@@ -2387,7 +2388,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                             >
                               <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
                             </button>
-                            <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
                           </span>
                         ) : (
                           <span className="block break-words leading-5">-</span>
@@ -2528,6 +2528,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span className="inline-flex items-center gap-1">
                         <span>{order.blockNumber}</span>
+                        <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
                         <button
                           type="button"
                           onClick={() => void handleOpenDestinationDetails(order)}
@@ -2538,7 +2539,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         >
                           <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
                         </button>
-                        <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
                       </span>
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
