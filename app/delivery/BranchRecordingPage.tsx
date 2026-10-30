@@ -151,7 +151,7 @@ const firstDriverName = (name?: string | null) => name?.trim().split(/\s+/)[0] |
 
 const driverDisplayName = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
   isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes)
-    ? talabatChannelLabel
+    ? '-'
     : firstDriverName(order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName : order.driverName);
 
 const TalabatChannelBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -352,7 +352,9 @@ const PaymentSummary: React.FC<{
           }
           title={deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         >
-          {deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
+          {isTalabatPayment ? (
+            <img src="/talabat-wordmark.png" alt="Talabat" className="h-5 max-w-[76px] object-contain" />
+          ) : deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         </span>
         {primaryDetailItem && (
           <span
@@ -2431,11 +2433,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         <span className="block break-words leading-5" title={order.pharmacistName || '-'}>{order.pharmacistName || '-'}</span>
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top font-bold text-slate-600">
-                        {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? (
-                          <TalabatChannelBadge />
-                        ) : (
-                          <span className="block break-words leading-5" title={driverDisplayName(order, paymentTypes)}>{driverDisplayName(order, paymentTypes)}</span>
-                        )}
+                        <span className="block break-words leading-5" title={driverDisplayName(order, paymentTypes)}>{driverDisplayName(order, paymentTypes)}</span>
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top text-xs font-bold text-slate-500">
                         <div className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
@@ -2596,7 +2594,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-500">
                     {order.pharmacistName && <span>{order.pharmacistName}</span>}
                     {(order.driverName || order.recordedDriverName) && <span title={order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName || '' : order.driverName || ''}>🛵 {driverDisplayName(order, paymentTypes)}</span>}
-                    {!order.driverName && !order.recordedDriverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
+                    {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <span>-</span>}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
                         <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
