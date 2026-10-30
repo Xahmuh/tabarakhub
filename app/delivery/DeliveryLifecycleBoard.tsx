@@ -93,9 +93,9 @@ const isInsideBranchTransitionWindow = (order: DeliveryOrder) =>
   order.orderDate >= yesterdayKey() && order.orderDate <= todayKey();
 
 const nextStatusesFor = (status: DeliveryLifecycleStatus): DeliveryLifecycleStatus[] => {
-  if (status === 'recorded') return ['assigned', 'cancelled'];
-  if (status === 'assigned') return ['picked_up', 'cancelled'];
-  if (status === 'picked_up') return ['delivered', 'cancelled'];
+  if (status === 'recorded') return ['assigned'];
+  if (status === 'assigned') return ['picked_up'];
+  if (status === 'picked_up') return ['delivered'];
   return [];
 };
 
@@ -328,7 +328,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     const counts = new Map<DispatchStatus, number>();
     STATUS_ORDER.forEach(status => counts.set(status, 0));
     orders
-      .filter(order => isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order))
+      .filter(order => (isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order))
+        && (order.deliveryStatus !== 'cancelled' || order.cancelledReason?.startsWith('Customer return:')))
       .forEach(order => {
         const status = dispatchDisplayStatus(order);
         counts.set(status, (counts.get(status) || 0) + 1);
@@ -341,7 +342,8 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     [orders, paymentTypes]
   );
   const dispatchBoardOrders = useMemo(
-    () => orders.filter(order => isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order)),
+    () => orders.filter(order => (isDriverDispatchOrder(order, paymentTypes) || isManualRecordedOnlyOrder(order))
+      && (order.deliveryStatus !== 'cancelled' || order.cancelledReason?.startsWith('Customer return:'))),
     [orders, paymentTypes]
   );
   const actualDispatchOrders = useMemo(
@@ -358,7 +360,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     { id: 'recorded' as const, label: 'To assign', count: statusCounts.get('recorded') || 0 },
     { id: 'assigned' as const, label: 'Awaiting pickup', count: statusCounts.get('assigned') || 0 },
     { id: 'picked_up' as const, label: 'On the road', count: statusCounts.get('picked_up') || 0 },
-    { id: 'closed' as const, label: 'Complete / Cancelled', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) },
+    { id: 'closed' as const, label: 'Complete', count: statusCounts.get('delivered') || 0 },
     { id: 'returned' as const, label: 'Returned', count: statusCounts.get('returned') || 0 }
   ], [dispatchBoardOrders.length, statusCounts]);
   const visibleDispatchOrders = useMemo(() => {
@@ -366,7 +368,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     return dispatchBoardOrders.filter(order => {
       const matchesView = dispatchView === 'all'
         || (dispatchView === 'closed'
-          ? dispatchDisplayStatus(order) === 'delivered' || dispatchDisplayStatus(order) === 'cancelled'
+          ? dispatchDisplayStatus(order) === 'delivered'
           : dispatchDisplayStatus(order) === dispatchView);
       if (!matchesView) return false;
       if (!query) return true;
@@ -597,52 +599,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     return result.isConfirmed ? String(result.value) : null;
   };
 
-  const handleCustomerCancel = async (order: DeliveryOrder) => {
-    if (lifecycleUnavailable) {
-      await Swal.fire('Migration required', 'Apply the Phase 1 lifecycle migration before changing delivery lifecycle status.', 'warning');
-      return;
-    }
-
-    const isRecordedOnly = isManualRecordedOnlyOrder(order);
-    const result = await Swal.fire({
-      title: isRecordedOnly ? 'Customer cancelled this Recorded only order?' : 'Customer cancelled this order?',
-      html: isRecordedOnly
-        ? `This will mark <b>${deliveryOrderNumber(order)}</b> as Cancelled in Dispatch and keep its audit history.`
-        : `This will remove <b>${deliveryOrderNumber(order)}</b> from Dispatch, Recording, and driver history.`,
-      input: 'text',
-      inputLabel: 'Reason or note',
-      inputPlaceholder: 'Example: customer cancelled before delivery',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: isRecordedOnly ? 'Mark customer cancelled' : 'Cancel and remove',
-      confirmButtonColor: '#B91c1c'
-    });
-    if (!result.isConfirmed) return;
-
-    const notes = result.value ? String(result.value).trim() : null;
-    setSavingOrderId(order.id);
-    try {
-      if (isRecordedOnly) {
-        await deliveryService.lifecycle.cancelRecordedOnlyOrder({ orderId: order.id, notes });
-      } else {
-        await deliveryService.lifecycle.cancelCustomerOrder({ orderId: order.id, notes });
-      }
-      await load();
-      await Swal.fire(
-        isRecordedOnly ? 'Customer cancellation recorded' : 'Customer order cancelled',
-        isRecordedOnly
-          ? `${deliveryOrderNumber(order)} is marked Cancelled and remains in the audited history.`
-          : `${deliveryOrderNumber(order)} was removed from delivery records.`,
-        'success'
-      );
-    } catch (cancelError: any) {
-      console.error('Customer delivery cancellation failed', cancelError);
-      await Swal.fire('Cancel failed', cancelError?.message || 'Could not cancel and remove this delivery order.', 'error');
-    } finally {
-      setSavingOrderId(null);
-    }
-  };
-
   const handleReturnOrder = async (order: DeliveryOrder) => {
     if (lifecycleUnavailable) {
       await Swal.fire('Migration required', 'Apply the return-order migration before reopening closed delivery orders.', 'warning');
@@ -679,11 +635,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
   const handleTransition = async (order: DeliveryOrder, nextStatus: DeliveryLifecycleStatus) => {
     if (lifecycleUnavailable) {
       await Swal.fire('Migration required', 'Apply the Phase 1 lifecycle migration before changing delivery lifecycle status.', 'warning');
-      return;
-    }
-
-    if (nextStatus === 'cancelled') {
-      await handleCustomerCancel(order);
       return;
     }
 
@@ -865,11 +816,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                   && canTransition
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
-                const canCancelRecordedOnly = isRecordedOnly
-                  && order.deliveryStatus === 'recorded'
-                  && canTransition
-                  && !lifecycleUnavailable
-                  && (canManageAll || isInsideBranchTransitionWindow(order));
                 const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
                 const canReturnOrder = canActOnOrder && order.deliveryStatus === 'delivered';
                 const nextStatuses = isRecordedOnly ? [] : nextStatusesFor(order.deliveryStatus);
@@ -1011,16 +957,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                     {canTransition && (
                       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-3.5 py-2.5 md:px-4">
                         {nextStatuses.length === 0 ? (
-                          canCancelRecordedOnly ? (
-                            <button
-                              type="button"
-                              disabled={savingOrderId === order.id}
-                              onClick={() => void handleCustomerCancel(order)}
-                              className="min-h-9 rounded-lg border border-red-200 bg-white px-3 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              {savingOrderId === order.id ? 'Saving' : 'Customer cancel'}
-                            </button>
-                            ) : canReturnOrder ? (
+                          canReturnOrder ? (
                             <button
                               type="button"
                               disabled={savingOrderId === order.id}
