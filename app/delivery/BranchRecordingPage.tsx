@@ -134,12 +134,7 @@ const driverCashReconciliationBadge = (order: DeliveryOrder) => {
     };
   }
 
-  if (order.cashHandedToDriverBhd <= 0) return null;
-  return {
-    label: `Driver change ${formatBhd(order.cashHandedToDriverBhd)}`,
-    className: 'border-slate-200 bg-slate-50 text-slate-600',
-    title: `Expected driver return: ${formatBhd(expectedDriverReturnBhd(order))}`
-  };
+  return null;
 };
 
 const deliveryBlockAreaLabel = (order: DeliveryOrder, paymentTypes?: DeliveryPaymentTypeConfig[]) => {
@@ -330,6 +325,9 @@ const PaymentSummary: React.FC<{
   const cashDueSubtitle = isPaymentCollectionPending(order) && !isBenefitPayOrder(order)
     ? collectionDueLabel(order)
     : null;
+  const driverChangeSubtitle = order.cashHandedToDriverBhd > 0 && !isBenefitPayOrder(order)
+    ? `Driver change ${formatBhd(order.cashHandedToDriverBhd)}`
+    : null;
   const detailItems: Array<{ label: string; className: string; title?: string }> = [];
 
   if (collectionBadge) {
@@ -382,6 +380,11 @@ const PaymentSummary: React.FC<{
       {cashDueSubtitle && (
         <p className="mt-0.5 text-left text-[10px] font-semibold leading-4 text-slate-500">
           {cashDueSubtitle}
+        </p>
+      )}
+      {driverChangeSubtitle && (
+        <p className="text-left text-[10px] font-semibold leading-4 text-slate-500">
+          {driverChangeSubtitle}
         </p>
       )}
       {benefitPayTime && (
@@ -1983,6 +1986,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         placeholder="0.000"
                         value={cashHandedToDriver}
                         onChange={e => setCashHandedToDriver(e.target.value)}
+                        onWheel={e => e.currentTarget.blur()}
                         className="h-8 w-full rounded-lg border border-red-100 bg-white px-2 text-sm font-black text-red-900 outline-none focus:border-red-300"
                       />
                     </div>
