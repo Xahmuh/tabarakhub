@@ -347,7 +347,7 @@ const PaymentSummary: React.FC<{
         <span
           className={
             isTalabatPayment
-              ? 'mr-1 inline-flex min-h-[22px] max-w-full items-center truncate rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-black uppercase leading-4 text-orange-700'
+              ? 'mr-1 inline-flex max-w-full items-center truncate'
               : 'mr-1 min-w-0 truncate text-[11px] font-black leading-5 text-slate-900'
           }
           title={deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
