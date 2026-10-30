@@ -234,8 +234,8 @@ const canDeleteRecordedOrder = (order: DeliveryOrder) => {
 };
 const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
-const reconcileActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2.5 text-[9px] font-black uppercase tracking-widest text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50';
-const confirmBpActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2.5 text-[9px] font-black uppercase tracking-widest text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50';
+const reconcileActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-700 bg-red-700 px-2.5 text-[9px] font-black uppercase tracking-widest text-white shadow-sm transition hover:border-red-800 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50';
+const confirmBpActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-700 bg-red-700 px-2.5 text-[9px] font-black uppercase tracking-widest text-white shadow-sm transition hover:border-red-800 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50';
 const reconciliationStatusClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border px-2.5 text-[9px] font-black uppercase tracking-widest shadow-sm';
 const benefitPayTraceIconClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const collectionPanelBaseClass = 'rounded-lg border p-2';
@@ -324,6 +324,10 @@ const PaymentSummary: React.FC<{
   const benefitPayTime = benefitPayTimeLabel(order);
   const showCashDueSubtitle = isPaymentCollectionPending(order) && !isBenefitPayOrder(order);
   const showDriverChangeSubtitle = order.cashHandedToDriverBhd > 0 && !isBenefitPayOrder(order);
+  const showBenefitPayDueSubtitle = isPaymentCollectionPending(order) && isBenefitPayOrder(order);
+  const settledBadge = order.driverReconciledAt && order.driverReconciliationVarianceBhd === 0
+    ? driverCashReconciliationBadge(order)
+    : null;
   const detailItems: Array<{ label: string; className: string; title?: string }> = [];
 
   if (collectionBadge) {
@@ -337,13 +341,6 @@ const PaymentSummary: React.FC<{
     detailItems.push({
       label: 'Pending',
       className: 'border-amber-200 bg-amber-50 text-amber-700'
-    });
-  }
-
-  if (isPaymentCollectionPending(order) && isBenefitPayOrder(order)) {
-    detailItems.push({
-      label: collectionDueLabel(order),
-      className: collectionValueBadgeClass(order)
     });
   }
 
@@ -381,6 +378,16 @@ const PaymentSummary: React.FC<{
       {showCashDueSubtitle && (
         <p className={`${showDriverChangeSubtitle ? '' : 'mt-0.5'} text-left text-[10px] font-normal leading-4 text-slate-500`}>
           Cash due <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.amountToCollectBhd)}</span>
+        </p>
+      )}
+      {showBenefitPayDueSubtitle && (
+        <p className="mt-0.5 text-left text-[10px] font-normal leading-4 text-slate-500">
+          BP Due <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.amountToCollectBhd)}</span>
+        </p>
+      )}
+      {settledBadge && (
+        <p className="mt-0.5 text-left text-[10px] font-normal leading-4 text-slate-500" title={settledBadge.title}>
+          Settled <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.driverReconciliationReturnedBhd)}</span>
         </p>
       )}
       {benefitPayTime && (
@@ -2501,7 +2508,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                                 Reassign
                               </button>
                             )}
-                            {reconciliationBadge && (
+                            {reconciliationBadge && !reconciliationBadge.label.startsWith('Settled ') && (
                               <span className={`${reconciliationStatusClass} ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
                                 {order.driverReconciledAt && <CheckCircle2 className="h-4 w-4" />}
                                 {reconciliationBadge.label}
@@ -2648,7 +2655,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           Reassign
                         </button>
                       )}
-                      {reconciliationBadge && (
+                      {reconciliationBadge && !reconciliationBadge.label.startsWith('Settled ') && (
                         <span className={`${reconciliationStatusClass} ${reconciliationBadge.className}`} title={reconciliationBadge.title}>
                           {order.driverReconciledAt && <CheckCircle2 className="h-4 w-4" />}
                           {reconciliationBadge.label}
