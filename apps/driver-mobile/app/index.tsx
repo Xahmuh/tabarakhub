@@ -1923,6 +1923,15 @@ const OrderCard = ({
   const headerIconSource = isTransfer ? internalTransferIcon : deliveryOrderIcon;
   const orderByName = order.pharmacistName || copy.common.notRecorded;
   const [selectedDetailCell, setSelectedDetailCell] = useState<string | null>(null);
+  const [destinationDetailsOpen, setDestinationDetailsOpen] = useState(false);
+  const hasDestinationDetails = Boolean(order.customerAddress || order.locationUrl || order.customerPhone);
+  const destinationLabels = language === 'ar'
+    ? { title: 'تفاصيل التوصيل', gps: 'موقع GPS', address: 'العنوان التفصيلي', phone: 'رقم التواصل', open: 'اتصال' }
+    : language === 'ur'
+      ? { title: 'ڈیلیوری کی تفصیلات', gps: 'GPS مقام', address: 'مکمل پتہ', phone: 'رابطہ نمبر', open: 'کال' }
+      : language === 'bn'
+        ? { title: 'ডেলিভারির বিবরণ', gps: 'GPS অবস্থান', address: 'বিস্তারিত ঠিকানা', phone: 'যোগাযোগ নম্বর', open: 'কল' }
+        : { title: 'Delivery details', gps: 'GPS Location', address: 'Detailed Address', phone: 'Contact no.', open: 'Call' };
 
   return (
     <View style={[styles.orderCard, isTransfer && styles.transferOrderCard, compact && styles.orderCardCompact]}>
@@ -2019,27 +2028,40 @@ const OrderCard = ({
         </View>
       </View>
 
-      {!isTransfer && (order.customerAddress || order.locationUrl) ? (
-        <View style={{ marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 12, gap: 8 }}>
-          {order.customerAddress ? (
-            <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>
-              {(language === 'ar' ? 'العنوان التفصيلي' : language === 'ur' ? 'مکمل پتہ' : language === 'bn' ? 'বিস্তারিত ঠিকানা' : 'Detailed address')}: {order.customerAddress}
-            </Text>
-          ) : null}
-          {order.locationUrl ? (
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => Linking.openURL(order.locationUrl!).catch(() => Alert.alert(
-                language === 'ar' ? 'تعذر فتح الموقع' : language === 'ur' ? 'مقام نہیں کھل سکا' : language === 'bn' ? 'অবস্থান খোলা যায়নি' : 'Could not open map'
-              ))}
-              style={{ alignSelf: isRtl ? 'flex-end' : 'flex-start', borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 12, paddingVertical: 9 }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800' }}>
-                {language === 'ar' ? 'افتح موقع التوصيل' : language === 'ur' ? 'ڈیلیوری کا مقام کھولیں' : language === 'bn' ? 'ডেলিভারির অবস্থান খুলুন' : 'Open delivery location'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+      {!isTransfer && hasDestinationDetails ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={destinationLabels.title}
+            onPress={() => setDestinationDetailsOpen(true)}
+            style={{ marginTop: 10, alignSelf: isRtl ? 'flex-end' : 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, backgroundColor: '#ffff99', paddingHorizontal: 14, paddingVertical: 10 }}
+          >
+            <Text style={{ color: '#292900', fontWeight: '900' }}>{destinationLabels.title}</Text>
+            <Text style={{ color: '#292900', fontSize: 18, fontWeight: '900' }}>⌄</Text>
+          </Pressable>
+          <Modal visible={destinationDetailsOpen} transparent animationType="fade" onRequestClose={() => setDestinationDetailsOpen(false)}>
+            <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.48)' }}>
+              <View style={{ borderRadius: 18, backgroundColor: colors.surface, padding: 18, gap: 12 }}>
+                <View style={{ flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ color: colors.ink, fontSize: 18, fontWeight: '900' }}>{destinationLabels.title}</Text>
+                  <Pressable accessibilityRole="button" onPress={() => setDestinationDetailsOpen(false)} hitSlop={10}><Text style={{ color: colors.ink, fontSize: 24 }}>×</Text></Pressable>
+                </View>
+                <View style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 }}>
+                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '900' }}>{destinationLabels.gps}</Text>
+                  {order.locationUrl ? <Pressable accessibilityRole="link" onPress={() => Linking.openURL(order.locationUrl!).catch(() => Alert.alert(destinationLabels.gps))} style={{ alignSelf: isRtl ? 'flex-end' : 'flex-start', borderRadius: 9, backgroundColor: colors.brand, paddingHorizontal: 12, paddingVertical: 9 }}><Text style={{ color: '#fff', fontWeight: '800' }}>{destinationLabels.gps} ↗</Text></Pressable> : <Text style={{ color: colors.ink }}>—</Text>}
+                </View>
+                <View style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 }}>
+                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '900' }}>{destinationLabels.address}</Text>
+                  <Text style={[styles.orderNotes, isRtl && styles.rtlText]}>{order.customerAddress || '—'}</Text>
+                </View>
+                <View style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 8 }}>
+                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '900' }}>{destinationLabels.phone}</Text>
+                  {order.customerPhone ? <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`tel:${order.customerPhone!.replace(/[^+\d]/g, '')}`).catch(() => Alert.alert(destinationLabels.phone))} style={{ alignSelf: isRtl ? 'flex-end' : 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8 }}><Text style={{ fontSize: 18 }}>☎</Text><Text style={{ color: colors.brand, fontWeight: '900' }}>{order.customerPhone}</Text><Text style={{ color: colors.brand, fontWeight: '900' }}>{destinationLabels.open}</Text></Pressable> : <Text style={{ color: colors.ink }}>—</Text>}
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </>
       ) : null}
 
       <PaymentCollectionPanel

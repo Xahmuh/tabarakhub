@@ -257,6 +257,7 @@ export interface DeliveryOrderInput {
   dispatchMode?: 'system' | 'log_only';
   locationUrl?: string | null;
   customerAddress?: string | null;
+  customerPhone?: string | null;
   idempotencyKey?: string;
   branchId: string;
   orderDate: string;

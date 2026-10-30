@@ -28,7 +28,9 @@ export function toRecordingPayload(input: DeliveryOrderInput) {
       cash_handed_to_driver_bhd: input.cashHandedToDriverBhd ?? 0,
       driver_payment_note: input.driverPaymentNote || null,
       benefit_pay_received_time: input.benefitPayReceivedTime || null,
-      location_url: input.locationUrl || null, customer_address: input.customerAddress || null,
+      location_url: input.locationUrl || null,
+      customer_address: input.customerAddress || null,
+      customer_phone: input.customerPhone || null,
       notes: input.notes || null,
     }),
   };

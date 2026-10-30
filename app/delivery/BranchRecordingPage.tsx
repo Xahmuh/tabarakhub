@@ -459,6 +459,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [dispatchMode, setDispatchMode] = useState<'system' | 'log_only'>('system');
   const [locationUrl, setLocationUrl] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [pendingRecording, setPendingRecording] = useState<DeliveryOrderInput | null>(null);
   useEffect(() => {
     const { data } = supabaseClient.auth.onAuthStateChange((_event, session) => setOperatorId(session?.user?.id || ''));
@@ -599,7 +600,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     ? `Not required for ${selectedPaymentType?.label || paymentType}`
     : selectedBlock
       ? `${selectedBlock.areaName} | ${selectedBlock.governorate}`
-      : 'Search by customer area name, then choose the block';
+      : 'Syncs automatically';
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager || editingOrder ? undefined : yesterdayKey();
   const maxDate = isManager || editingOrder ? undefined : todayKey();
@@ -872,7 +873,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   };
 
   const resetForm = (preserveBatchContext = true) => {
-    setLocationUrl(''); setCustomerAddress('');
+    setLocationUrl(''); setCustomerAddress(''); setCustomerPhone('');
     // Keep locked people only; unlocked selectors reset after each order.
     setValue('');
     setBlockInput('');
@@ -934,6 +935,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     setPaymentType(order.paymentType);
     setLocationUrl(order.locationUrl || '');
     setCustomerAddress(order.customerAddress || '');
+    setCustomerPhone('');
     setPaymentCollectionStatus(nextPaymentCollectionStatus);
     setAmountReceived(nextPaymentCollectionStatus === 'partial' ? formatBhdAmount(order.amountReceivedBhd) : '');
     setCashHandedToDriver(order.cashHandedToDriverBhd > 0 ? formatBhdAmount(order.cashHandedToDriverBhd) : '');
@@ -1122,7 +1124,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       if (!proceed.isConfirmed) return;
     }
     const input: DeliveryOrderInput = {
-      ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, idempotencyKey: generateUUID() } : {}),
+      ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, customerPhone, idempotencyKey: generateUUID() } : {}),
       branchId: branch.id,
       orderDate,
       valueBhd: value,
@@ -2078,16 +2080,18 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer Location</h4>
               </div>
               <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
-                <div className="grid gap-4">
-                  <label className="block space-y-1">
-                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                    <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                    <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                  </label>
-                </div>
+                <label className="block space-y-1">
+                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                  <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Contact no. <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                  <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Customer phone number" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                </label>
+                <label className="block space-y-1 md:col-span-2">
+                  <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
+                  <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                </label>
                 <div className="grid gap-4">
                   <div className="space-y-1">
                     <label className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Block / Area {requiresBlock && <RequiredMark />} {!requiresBlock ? `(not required for ${selectedPaymentType?.label || paymentType})` : ''}</label>
