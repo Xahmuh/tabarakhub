@@ -353,7 +353,7 @@ const PaymentSummary: React.FC<{
           title={deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         >
           {isTalabatPayment ? (
-            <img src="/talabat-wordmark.png" alt="Talabat" className="h-5 max-w-[76px] object-contain" />
+            <img src="/talabat-wordmark.png" alt="Talabat" className="h-4 max-w-[64px] object-contain" />
           ) : deliveryPaymentOrderLabel(paymentLabel, order.externalSource, order.paymentType)}
         </span>
         {primaryDetailItem && (
