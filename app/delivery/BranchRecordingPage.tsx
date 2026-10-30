@@ -438,14 +438,11 @@ const PaymentStatusCircleBadge: React.FC<{ order: DeliveryOrder }> = ({ order })
 
   return (
     <span
-      className={`mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-center text-[6px] font-black uppercase leading-[7px] tracking-tight shadow-sm ${
-        isPaid
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : 'border-red-200 bg-red-50 text-red-700'
-      }`}
+      className={`mt-1 inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-red-500'}`}
       title={isPaid ? paymentCollectionMeta.paid.label : 'Not paid'}
+      aria-label={isPaid ? 'Paid' : 'Not paid'}
     >
-      {isPaid ? 'Paid' : 'Not paid'}
+      <span className="h-1 w-1 rounded-full bg-white/90" />
     </span>
   );
 };
