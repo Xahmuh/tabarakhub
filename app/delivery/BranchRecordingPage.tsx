@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Hourglass, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
 import { deliveryService, DeliveryDriverDutyStatus } from '../../services/deliveryService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { pharmacistService } from '../../services/pharmacistService';
@@ -337,13 +337,6 @@ const PaymentSummary: React.FC<{
     });
   }
 
-  if (isBenefitPayPending(order)) {
-    detailItems.push({
-      label: 'Pending',
-      className: 'border-amber-200 bg-amber-50 text-amber-700'
-    });
-  }
-
   const [primaryDetailItem, ...secondaryDetailItems] = detailItems;
   const paymentLabel = getDeliveryPaymentLabel(order.paymentType, paymentTypes);
   const isTalabatPayment = isTalabatDeliveryPayment(order.paymentType);
@@ -383,6 +376,7 @@ const PaymentSummary: React.FC<{
       {showBenefitPayDueSubtitle && (
         <p className="mt-0.5 text-left text-[10px] font-normal leading-4 text-slate-500">
           BP Due <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.amountToCollectBhd)}</span>
+          {isBenefitPayPending(order) && <Hourglass aria-label="Pending Benefit Pay" className="ml-1 inline h-3 w-3 animate-spin text-amber-600" />}
         </p>
       )}
       {settledBadge && (
