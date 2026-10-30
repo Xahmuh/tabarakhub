@@ -442,7 +442,6 @@ const PaymentStatusCircleBadge: React.FC<{ order: DeliveryOrder }> = ({ order })
       title={isPaid ? paymentCollectionMeta.paid.label : 'Not paid'}
       aria-label={isPaid ? 'Paid' : 'Not paid'}
     >
-      <span className="h-1 w-1 rounded-full bg-white/90" />
     </span>
   );
 };
