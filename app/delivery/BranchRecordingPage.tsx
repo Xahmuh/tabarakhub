@@ -2426,11 +2426,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                               type="button"
                               onClick={event => void handleOpenDestinationDetails(order, event)}
                               disabled={destinationDetailsLoadingId === order.id}
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center bg-transparent p-0 text-black disabled:opacity-50"
+                              aria-expanded={destinationDetails?.order.id === order.id}
+                              aria-haspopup="dialog"
+                              className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:opacity-50 ${destinationDetails?.order.id === order.id ? 'bg-red-600 text-white' : 'bg-transparent text-black hover:bg-red-600 hover:text-white'}`}
                               title="Open customer location and contact details"
                               aria-label="Open customer location and contact details"
                             >
-                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-black"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
                             </button>
                           ) : null}
                         </div>
@@ -2583,11 +2585,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           type="button"
                           onClick={event => void handleOpenDestinationDetails(order, event)}
                           disabled={destinationDetailsLoadingId === order.id}
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center bg-transparent p-0 text-black disabled:opacity-50"
+                          aria-expanded={destinationDetails?.order.id === order.id}
+                          aria-haspopup="dialog"
+                          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:opacity-50 ${destinationDetails?.order.id === order.id ? 'bg-red-600 text-white' : 'bg-transparent text-black hover:bg-red-600 hover:text-white'}`}
                           title="Open customer location and contact details"
                           aria-label="Open customer location and contact details"
                         >
-                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-black"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
