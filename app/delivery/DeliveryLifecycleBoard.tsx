@@ -35,7 +35,7 @@ const STATUS_META: Record<DeliveryLifecycleStatus, { label: string; className: s
     icon: Route
   },
   delivered: {
-    label: 'Delivered',
+    label: 'Complete',
     className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     icon: CheckCircle2
   },
@@ -350,7 +350,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
     { id: 'recorded' as const, label: 'To assign', count: statusCounts.get('recorded') || 0 },
     { id: 'assigned' as const, label: 'Awaiting pickup', count: statusCounts.get('assigned') || 0 },
     { id: 'picked_up' as const, label: 'On the road', count: statusCounts.get('picked_up') || 0 },
-    { id: 'closed' as const, label: 'Closed', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) }
+    { id: 'closed' as const, label: 'Complete / Cancelled', count: (statusCounts.get('delivered') || 0) + (statusCounts.get('cancelled') || 0) }
   ], [dispatchBoardOrders.length, statusCounts]);
   const visibleDispatchOrders = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -863,7 +863,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
                 const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
-                const canReturnOrder = canActOnOrder && isClosedOrder(order);
+                const canReturnOrder = canActOnOrder && order.deliveryStatus === 'delivered';
                 const nextStatuses = isRecordedOnly ? [] : nextStatusesFor(order.deliveryStatus);
                 const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
                 const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
@@ -1012,17 +1012,17 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                             >
                               {savingOrderId === order.id ? 'Saving' : 'Customer cancel'}
                             </button>
-                          ) : canReturnOrder ? (
+                            ) : canReturnOrder ? (
                             <button
                               type="button"
                               disabled={savingOrderId === order.id}
                               onClick={() => handleReturnOrder(order)}
                               className="min-h-9 rounded-lg border border-brand/20 bg-brand/5 px-3 text-xs font-bold text-brand transition hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              {savingOrderId === order.id ? 'Saving' : 'Return'}
+                              {savingOrderId === order.id ? 'Saving' : 'Customer return'}
                             </button>
                           ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Closed</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">{order.deliveryStatus === 'cancelled' ? 'Cancelled' : 'Complete'}</span>
                           )
                         ) : (
                           nextStatuses.map(nextStatus => (
