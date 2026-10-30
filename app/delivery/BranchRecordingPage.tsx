@@ -236,9 +236,6 @@ const canDeleteRecordedOrder = (order: DeliveryOrder) => {
 
   return isRecordingDelete || isTodayCancelledDelete;
 };
-const sameBlockNumber = (left?: string | null, right?: string | null) =>
-  Boolean(left && right && left.trim().toLowerCase() === right.trim().toLowerCase());
-
 const editActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100';
 const dangerActionClass = 'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100';
 const reconcileActionClass = 'inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 px-2.5 text-[9px] font-black uppercase tracking-widest text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50';
@@ -605,7 +602,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     : selectedBlock
       ? `${selectedBlock.areaName} | ${selectedBlock.governorate}`
       : 'Search by customer area name, then choose the block';
-  const selectedBlockIsBranchOrigin = requiresBlock && sameBlockNumber(selectedBlock?.blockNumber, branchOriginBlockNumber);
   // Branch users may record today or yesterday (late-evening catch-up). Managers: any date.
   const minDate = isManager || editingOrder ? undefined : yesterdayKey();
   const maxDate = isManager || editingOrder ? undefined : todayKey();
@@ -1127,19 +1123,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       });
       if (!proceed.isConfirmed) return;
     }
-    if (selectedBlockIsBranchOrigin) {
-      const proceed = await Swal.fire({
-        title: 'Same as branch origin block',
-        text: `Block ${selectedBlock?.blockNumber} is configured as this pharmacy branch origin block. Save only if the customer delivery address is actually in this same block.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, delivery is there',
-        cancelButtonText: 'Choose block',
-        confirmButtonColor: '#B91c1c'
-      });
-      if (!proceed.isConfirmed) return;
-    }
-
     const input: DeliveryOrderInput = {
       ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, idempotencyKey: generateUUID() } : {}),
       branchId: branch.id,
@@ -2059,11 +2042,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   <span>· {resolvedBlock.governorate}</span>
                 </p>
               )}
-              {selectedBlockIsBranchOrigin && (
-                <p className="mt-1 flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-bold text-amber-700">
-                  <AlertTriangle className="h-3 w-3" /> This is the branch origin block. Confirm the customer delivery address is in the same block.
-                </p>
-              )}
               {requiresBlock && blockNotFound && blockInput.trim() && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-600">
                   <AlertTriangle className="h-3 w-3" /> Block not found in directory
@@ -2123,7 +2101,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       {requiresBlock && selectedBlock ? <span className="min-w-0 truncate"><span className="font-black text-slate-950">{selectedBlock.areaName}</span><span className="font-extrabold text-emerald-700"> · {selectedBlock.governorate}</span></span> : areaPreview}
                     </div>
                     {requiresBlock && isBlockSearching && <p className="mt-1 text-[11px] font-bold text-slate-400">Searching block directory...</p>}
-                    {selectedBlockIsBranchOrigin && <p className="mt-1 flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-bold text-amber-700"><AlertTriangle className="h-3 w-3" /> This is the branch origin block. Confirm the customer delivery address is in the same block.</p>}
                     {requiresBlock && blockNotFound && blockInput.trim() && <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-amber-600"><AlertTriangle className="h-3 w-3" /> Block not found in directory</p>}
                   </div>
                 </div>
