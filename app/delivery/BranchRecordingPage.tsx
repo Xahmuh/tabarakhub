@@ -322,12 +322,8 @@ const PaymentSummary: React.FC<{
     ? paymentCollectionMeta[order.paymentCollectionStatus]
     : null;
   const benefitPayTime = benefitPayTimeLabel(order);
-  const cashDueSubtitle = isPaymentCollectionPending(order) && !isBenefitPayOrder(order)
-    ? collectionDueLabel(order)
-    : null;
-  const driverChangeSubtitle = order.cashHandedToDriverBhd > 0 && !isBenefitPayOrder(order)
-    ? `Driver change ${formatBhd(order.cashHandedToDriverBhd)}`
-    : null;
+  const showCashDueSubtitle = isPaymentCollectionPending(order) && !isBenefitPayOrder(order);
+  const showDriverChangeSubtitle = order.cashHandedToDriverBhd > 0 && !isBenefitPayOrder(order);
   const detailItems: Array<{ label: string; className: string; title?: string }> = [];
 
   if (collectionBadge) {
@@ -377,14 +373,14 @@ const PaymentSummary: React.FC<{
           </span>
         )}
       </div>
-      {cashDueSubtitle && (
-        <p className="mt-0.5 text-left text-[10px] font-semibold leading-4 text-slate-500">
-          {cashDueSubtitle}
+      {showDriverChangeSubtitle && (
+        <p className="mt-0.5 text-left text-[10px] font-normal leading-4 text-slate-500">
+          Driver change <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.cashHandedToDriverBhd)}</span>
         </p>
       )}
-      {driverChangeSubtitle && (
-        <p className="text-left text-[10px] font-semibold leading-4 text-slate-500">
-          {driverChangeSubtitle}
+      {showCashDueSubtitle && (
+        <p className={`${showDriverChangeSubtitle ? '' : 'mt-0.5'} text-left text-[10px] font-normal leading-4 text-slate-500`}>
+          Cash due <span className="font-bold tabular-nums text-slate-700">{formatBhd(order.amountToCollectBhd)}</span>
         </p>
       )}
       {benefitPayTime && (
