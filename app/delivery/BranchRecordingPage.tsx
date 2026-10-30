@@ -327,6 +327,9 @@ const PaymentSummary: React.FC<{
     ? paymentCollectionMeta[order.paymentCollectionStatus]
     : null;
   const benefitPayTime = benefitPayTimeLabel(order);
+  const cashDueSubtitle = isPaymentCollectionPending(order) && !isBenefitPayOrder(order)
+    ? collectionDueLabel(order)
+    : null;
   const detailItems: Array<{ label: string; className: string; title?: string }> = [];
 
   if (collectionBadge) {
@@ -343,7 +346,7 @@ const PaymentSummary: React.FC<{
     });
   }
 
-  if (isPaymentCollectionPending(order)) {
+  if (isPaymentCollectionPending(order) && isBenefitPayOrder(order)) {
     detailItems.push({
       label: collectionDueLabel(order),
       className: collectionValueBadgeClass(order)
@@ -376,6 +379,11 @@ const PaymentSummary: React.FC<{
           </span>
         )}
       </div>
+      {cashDueSubtitle && (
+        <p className="mt-0.5 text-left text-[10px] font-semibold leading-4 text-slate-500">
+          {cashDueSubtitle}
+        </p>
+      )}
       {benefitPayTime && (
         <p className="mt-0.5 text-[9px] font-bold leading-3 text-blue-700">Received {benefitPayTime}</p>
       )}
