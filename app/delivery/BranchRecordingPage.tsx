@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
 import { deliveryService, DeliveryDriverDutyStatus } from '../../services/deliveryService';
@@ -1299,9 +1300,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const handleOpenDestinationDetails = async (order: DeliveryOrder, event: React.MouseEvent<HTMLButtonElement>) => {
     const iconRect = event.currentTarget.getBoundingClientRect();
     const popupWidth = Math.min(352, window.innerWidth - 24);
-    const top = Math.min(iconRect.bottom + 4, window.innerHeight - 100);
+    const top = iconRect.bottom + 4;
     const left = Math.max(12, Math.min(iconRect.left + iconRect.width / 2 - popupWidth / 2, window.innerWidth - popupWidth - 12));
-    const popupMaxHeight = Math.max(88, Math.min(544, window.innerHeight - top - 12));
+    const popupMaxHeight = Math.max(48, Math.min(544, window.innerHeight - top - 12));
     const position = { top, left, width: popupWidth, maxHeight: popupMaxHeight };
     setDestinationDetailsLoadingId(order.id);
     try {
@@ -2429,7 +2430,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                               title="Open customer location and contact details"
                               aria-label="Open customer location and contact details"
                             >
-                              <span aria-hidden="true" className="text-[13px] leading-none text-black">▼</span>
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-black"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
                             </button>
                           ) : null}
                         </div>
@@ -2586,7 +2587,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           title="Open customer location and contact details"
                           aria-label="Open customer location and contact details"
                         >
-                          <span aria-hidden="true" className="text-[13px] leading-none text-black">▼</span>
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-black"><circle cx="12" cy="12" r="10" /><path d="m6.5 9.5 5.5 5.5 5.5-5.5" /></svg>
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
@@ -2663,7 +2664,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
         )}
       </section>
 
-      {destinationDetails && (
+      {destinationDetails && createPortal((
         <div
           ref={destinationPopupRef}
           className="fixed z-[3100] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
@@ -2700,7 +2701,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               </section>
             </div>
         </div>
-      )}
+      ), document.body)}
 
       {reassigningOrder && (
         <div
