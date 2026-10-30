@@ -489,6 +489,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [reassigningOrder, setReassigningOrder] = useState<DeliveryOrder | null>(null);
   const [destinationDetails, setDestinationDetails] = useState<{ order: DeliveryOrder; locationUrl: string | null; customerAddress: string | null; customerPhone: string | null } | null>(null);
   const [destinationDetailsLoadingId, setDestinationDetailsLoadingId] = useState<string | null>(null);
+  const [destinationDetailsAvailable, setDestinationDetailsAvailable] = useState<Set<string>>(() => new Set());
+  const destinationFlagsRequest = useRef(0);
   const [reassignDriverId, setReassignDriverId] = useState<string | null>(null);
   const [isReassigning, setIsReassigning] = useState(false);
   const [historyView, setHistoryView] = useState<HistoryViewMode>('all');
@@ -654,6 +656,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     const start = (currentHistoryPage - 1) * DELIVERY_HISTORY_PAGE_SIZE;
     return visibleHistoryOrders.slice(start, start + DELIVERY_HISTORY_PAGE_SIZE);
   }, [currentHistoryPage, visibleHistoryOrders]);
+  const paginatedHistoryOrderIds = useMemo(
+    () => paginatedHistoryOrders.map(order => order.id).join(','),
+    [paginatedHistoryOrders]
+  );
   const selectedHistoryOrders = useMemo(
     () => visibleHistoryOrders.filter(order => selectedHistoryIds.has(order.id)),
     [selectedHistoryIds, visibleHistoryOrders]
@@ -705,6 +711,30 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
   useEffect(() => { loadReference(); }, [branch.id]);
   useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
+  useEffect(() => {
+    const requestId = ++destinationFlagsRequest.current;
+    const orderIds = paginatedHistoryOrderIds ? paginatedHistoryOrderIds.split(',') : [];
+    if (orderIds.length === 0) {
+      setDestinationDetailsAvailable(new Set());
+      return;
+    }
+
+    void (async () => {
+      try {
+        const { data, error } = await supabaseClient.rpc('app_delivery_get_order_destination_flags', { p_order_ids: orderIds });
+        if (requestId !== destinationFlagsRequest.current) return;
+        if (error) throw error;
+        setDestinationDetailsAvailable(new Set((data || []).filter((row: any) => row.has_details).map((row: any) => row.order_id)));
+      } catch (error) {
+        if (requestId === destinationFlagsRequest.current) {
+          setDestinationDetailsAvailable(new Set());
+          console.warn('Delivery destination flags unavailable', error);
+        }
+      }
+    })();
+
+    return () => { destinationFlagsRequest.current += 1; };
+  }, [paginatedHistoryOrderIds]);
   useEffect(() => {
     if (!focusOrderId) return;
     setHighlightedOrderId(focusOrderId);
@@ -2372,12 +2402,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         )}
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top text-xs font-bold text-slate-500">
-                        {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) ? (
-                          <span className="block break-words leading-5">-</span>
-                        ) : order.blockNumber ? (
-                          <span className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>
-                            <span>{order.blockNumber}</span>
-                            <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
+                        <div className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
+                          <span className="min-w-0 break-words text-center leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                          {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && destinationDetailsAvailable.has(order.id) ? (
                             <button
                               type="button"
                               onClick={() => void handleOpenDestinationDetails(order)}
@@ -2388,10 +2415,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                             >
                               <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
                             </button>
-                          </span>
-                        ) : (
-                          <span className="block break-words leading-5">-</span>
-                        )}
+                          ) : null}
+                        </div>
                         {order.isOutsideGovernorate && (
                           <span className="ml-2 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">OUTSIDE</span>
                         )}
@@ -2526,10 +2551,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     {(order.driverName || order.recordedDriverName) && <span title={order.dispatchMode === 'log_only' ? order.recordedDriverName || order.driverName || '' : order.driverName || ''}>🛵 {driverDisplayName(order, paymentTypes)}</span>}
                     {!order.driverName && !order.recordedDriverName && isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <TalabatChannelBadge />}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
-                      <span className="inline-flex items-center gap-1">
-                        <span>{order.blockNumber}</span>
-                        <span>/ {order.areaName?.trim() || 'Unknown area'}</span>
-                        <button
+                      <span className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
+                        <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                        {destinationDetailsAvailable.has(order.id) ? <button
                           type="button"
                           onClick={() => void handleOpenDestinationDetails(order)}
                           disabled={destinationDetailsLoadingId === order.id}
@@ -2538,7 +2562,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           aria-label="Open customer location and contact details"
                         >
                           <span className="relative flex items-center"><MapPin className="h-3.5 w-3.5" /><span className="absolute -bottom-1 -right-1 text-[8px] font-black leading-none">⌄</span></span>
-                        </button>
+                        </button> : <span aria-hidden="true" />}
                       </span>
                     )}
                     {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
