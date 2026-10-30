@@ -384,7 +384,9 @@ const PaymentSummary: React.FC<{
         </p>
       )}
       {benefitPayTime && (
-        <p className="mt-0.5 text-[9px] font-bold leading-3 text-blue-700">Received {benefitPayTime}</p>
+        <p className="mt-0.5 text-left text-[10px] font-normal leading-4 text-slate-500">
+          Received <span className="font-bold tabular-nums text-slate-700">{benefitPayTime}</span>
+        </p>
       )}
       {secondaryDetailItems.length > 0 && (
         <div className="mt-1 space-y-1">
