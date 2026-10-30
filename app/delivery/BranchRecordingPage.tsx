@@ -2077,7 +2077,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
             <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
               <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
                 <img src="/assets/customer-location-route.png" alt="" className="h-12 w-12 object-contain" />
-                <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer Location</h4>
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer location &amp; Contact</h4>
               </div>
               <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
                 <label className="block space-y-1">
