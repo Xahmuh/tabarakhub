@@ -30,6 +30,7 @@ import { formatTimeInput24, PaginationControls, TIME_24H_PATTERN, TimeInput24 } 
 import { supabaseClient } from '../../lib/supabaseClient';
 import { deliveryLockKey, deliveryPaymentOrderLabel, deliverySourceLabel } from '../../lib/deliveryRecording';
 import { generateUUID } from '../../utils/uuid';
+import { BlockGeometryDataset, calculateDistanceKm, getBlockCentroid, loadBahrainBlockGeometry } from './bahrainBlockGeometry';
 
 const paymentBadge = (type: string, paymentTypes?: DeliveryPaymentTypeConfig[]) =>
   isTalabatDeliveryPayment(type)
@@ -563,6 +564,23 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [blockNotFound, setBlockNotFound] = useState(false);
   const [isBlockSearching, setIsBlockSearching] = useState(false);
   const [branchOriginBlockNumber, setBranchOriginBlockNumber] = useState<string | null>(null);
+  const [blockGeometry, setBlockGeometry] = useState<BlockGeometryDataset | null>(null);
+  const outsideDistanceByBlock = useMemo(() => {
+    const distances = new Map<string, number>();
+    if (!blockGeometry?.available || !branchOriginBlockNumber) return distances;
+    const origin = getBlockCentroid(blockGeometry, branchOriginBlockNumber);
+    for (const order of historyOrders) {
+      const block = order.blockNumber?.trim();
+      if (!order.isOutsideGovernorate || !block || distances.has(block)) continue;
+      const distance = calculateDistanceKm(origin, getBlockCentroid(blockGeometry, block));
+      if (distance !== null) distances.set(block, Math.round(distance));
+    }
+    return distances;
+  }, [blockGeometry, branchOriginBlockNumber, historyOrders]);
+  const outsideSubtitle = (order: DeliveryOrder) => {
+    const distance = outsideDistanceByBlock.get(order.blockNumber?.trim() || '');
+    return distance === undefined ? 'Outside' : `Outside (${distance} km)`;
+  };
 
   const selectedBlock = useMemo(
     () => blocks.find(block => block.blockNumber === blockInput.trim()) || (resolvedBlock?.blockNumber === blockInput.trim() ? resolvedBlock : null),
@@ -721,6 +739,14 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
 
   useEffect(() => { loadReference(); }, [branch.id]);
   useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
+  useEffect(() => {
+    if (!branchOriginBlockNumber || !historyOrders.some(order => order.isOutsideGovernorate)) return;
+    let active = true;
+    void loadBahrainBlockGeometry().then(geometry => {
+      if (active) setBlockGeometry(geometry);
+    });
+    return () => { active = false; };
+  }, [branchOriginBlockNumber, historyOrders]);
   useEffect(() => {
     const requestId = ++destinationFlagsRequest.current;
     const orderIds = paginatedHistoryOrderIds ? paginatedHistoryOrderIds.split(',') : [];
@@ -2450,7 +2476,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                           ) : null}
                         </div>
                         {order.isOutsideGovernorate && (
-                          <span className="ml-2 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">OUTSIDE</span>
+                          <p className="mt-0.5 text-center text-[10px] font-normal leading-4 text-slate-500" title="Approximate straight-line distance between block centers">
+                            {outsideSubtitle(order)}
+                          </p>
                         )}
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-2 pr-3 text-center align-top">
@@ -2608,7 +2636,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
-                    {order.isOutsideGovernorate && <span className="text-amber-600">Outside governorate</span>}
+                    {order.isOutsideGovernorate && <span className="w-full text-[10px] font-normal leading-4 text-slate-500" title="Approximate straight-line distance between block centers">{outsideSubtitle(order)}</span>}
                   </div>
                   {canEdit && (
                     <div className="mt-3 flex flex-nowrap items-center justify-end gap-2">
