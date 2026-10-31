@@ -107,13 +107,10 @@ const isManualRecordedOnlyOrder = (order: DeliveryOrder) =>
   && order.orderKind !== 'internal_transfer'
   && !isTalabatDeliveryPayment(order.paymentType);
 
-const isRecordedOnlyCompletion = (order: DeliveryOrder) =>
-  isManualRecordedOnlyOrder(order) && order.deliveryStatus !== 'cancelled';
-
 const dispatchDisplayStatus = (order: DeliveryOrder): DispatchStatus =>
   order.deliveryStatus === 'cancelled' && order.cancelledReason?.startsWith('Customer return:')
     ? 'returned'
-    : isRecordedOnlyCompletion(order) ? 'delivered' : order.deliveryStatus;
+    : order.deliveryStatus;
 
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
   order.dispatchMode !== 'log_only' && (order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes));
@@ -807,7 +804,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
             <div className="space-y-2">
               {visibleDispatchOrders.map(order => {
                 const isRecordedOnly = isManualRecordedOnlyOrder(order);
-                const isInstantRecordedCompletion = isRecordedOnlyCompletion(order);
                 const displayStatus = dispatchDisplayStatus(order);
                 const displayDriverName = isRecordedOnly
                   ? order.recordedDriverName || order.recordedDriverCode || order.driverName
@@ -817,7 +813,11 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
                 const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
-                const canReturnOrder = canActOnOrder && order.deliveryStatus === 'delivered';
+                const canReturnOrder = !isRecordedOnly
+                  && canTransition
+                  && !lifecycleUnavailable
+                  && order.deliveryStatus === 'delivered'
+                  && Boolean(order.pickedUpAt && order.deliveredAt);
                 const nextStatuses = isRecordedOnly ? [] : nextStatusesFor(order.deliveryStatus);
                 const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
                 const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
@@ -860,7 +860,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                           }`}>
                             {order.orderKind === 'internal_transfer' ? 'Transfer' : 'Delivery'}
                           </span>
-                          {isInstantRecordedCompletion && <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700">Picked up</span>}
                           <StatusBadge status={displayStatus} />
                           {isPendingCollectionOrder(order) && (
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${collectionValueBadgeClass(order)}`}>
@@ -967,7 +966,7 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                               {savingOrderId === order.id ? 'Saving' : 'Customer return'}
                             </button>
                           ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">{order.deliveryStatus === 'cancelled' ? 'Cancelled' : 'Complete'}</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">{isRecordedOnly ? 'Recorded only' : order.deliveryStatus === 'cancelled' ? 'Returned' : 'Complete'}</span>
                           )
                         ) : (
                           nextStatuses.map(nextStatus => (
