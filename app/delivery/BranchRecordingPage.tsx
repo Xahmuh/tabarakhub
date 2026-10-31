@@ -565,21 +565,22 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [isBlockSearching, setIsBlockSearching] = useState(false);
   const [branchOriginBlockNumber, setBranchOriginBlockNumber] = useState<string | null>(null);
   const [blockGeometry, setBlockGeometry] = useState<BlockGeometryDataset | null>(null);
-  const outsideDistanceByBlock = useMemo(() => {
+  const distanceByBlock = useMemo(() => {
     const distances = new Map<string, number>();
     if (!blockGeometry?.available || !branchOriginBlockNumber) return distances;
     const origin = getBlockCentroid(blockGeometry, branchOriginBlockNumber);
     for (const order of historyOrders) {
       const block = order.blockNumber?.trim();
-      if (!order.isOutsideGovernorate || !block || distances.has(block)) continue;
+      if (!block || distances.has(block)) continue;
       const distance = calculateDistanceKm(origin, getBlockCentroid(blockGeometry, block));
       if (distance !== null) distances.set(block, Math.round(distance));
     }
     return distances;
   }, [blockGeometry, branchOriginBlockNumber, historyOrders]);
-  const outsideSubtitle = (order: DeliveryOrder) => {
-    const distance = outsideDistanceByBlock.get(order.blockNumber?.trim() || '');
-    return distance === undefined ? 'Outside' : `Outside ≃ ${distance} km`;
+  const distanceSubtitle = (order: DeliveryOrder) => {
+    const label = order.isOutsideGovernorate ? 'Outside' : 'Inside';
+    const distance = distanceByBlock.get(order.blockNumber?.trim() || '');
+    return distance === undefined ? label : `${label} ≃ ${distance} km`;
   };
 
   const selectedBlock = useMemo(
@@ -740,7 +741,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   useEffect(() => { loadReference(); }, [branch.id]);
   useEffect(() => { loadHistory(); }, [branch.id, historyRange.from, historyRange.to]);
   useEffect(() => {
-    if (!branchOriginBlockNumber || !historyOrders.some(order => order.isOutsideGovernorate)) return;
+    if (!branchOriginBlockNumber || !historyOrders.some(order => order.blockNumber)) return;
     let active = true;
     void loadBahrainBlockGeometry().then(geometry => {
       if (active) setBlockGeometry(geometry);
@@ -2459,7 +2460,12 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                       </td>
                       <td className="border-l border-slate-50 px-4 py-3 text-center align-top text-xs font-bold text-slate-500">
                         <div className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
-                          <span className="min-w-0 break-words text-center leading-5" title={deliveryBlockAreaLabel(order, paymentTypes)}>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                          <span className="min-w-0 text-center" title={deliveryBlockAreaLabel(order, paymentTypes)}>
+                            <span className="block break-words leading-5">{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                            {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
+                              <span className={`block text-[10px] font-normal leading-4 ${order.isOutsideGovernorate ? 'text-red-600' : 'text-black'}`} title="Approximate straight-line distance between block centers">{distanceSubtitle(order)}</span>
+                            )}
+                          </span>
                           {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && destinationDetailsAvailable.has(order.id) ? (
                             <button
                               type="button"
@@ -2475,11 +2481,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                             </button>
                           ) : null}
                         </div>
-                        {order.isOutsideGovernorate && (
-                          <p className="mt-0.5 text-center text-[10px] font-normal leading-4 text-slate-500" title="Approximate straight-line distance between block centers">
-                            {outsideSubtitle(order)}
-                          </p>
-                        )}
                       </td>
                       <td className="border-l border-slate-50 py-3 pl-2 pr-3 text-center align-top">
                         <span className="font-black text-slate-900 tabular-nums">{formatBhdAmount(order.valueBhd)}</span>
@@ -2621,7 +2622,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     {isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && <span>-</span>}
                     {!isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes) && order.blockNumber && (
                       <span className="grid w-full grid-cols-[minmax(0,1fr)_24px] items-center gap-1">
-                        <span>{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                        <span className="min-w-0 text-center">
+                          <span className="block">{deliveryBlockAreaLabel(order, paymentTypes)}</span>
+                          <span className={`block text-[10px] font-normal leading-4 ${order.isOutsideGovernorate ? 'text-red-600' : 'text-black'}`} title="Approximate straight-line distance between block centers">{distanceSubtitle(order)}</span>
+                        </span>
                         {destinationDetailsAvailable.has(order.id) ? <button
                           type="button"
                           onClick={event => void handleOpenDestinationDetails(order, event)}
@@ -2636,7 +2640,6 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                         </button> : <span aria-hidden="true" />}
                       </span>
                     )}
-                    {order.isOutsideGovernorate && <span className="w-full text-[10px] font-normal leading-4 text-slate-500" title="Approximate straight-line distance between block centers">{outsideSubtitle(order)}</span>}
                   </div>
                   {canEdit && (
                     <div className="mt-3 flex flex-nowrap items-center justify-end gap-2">
