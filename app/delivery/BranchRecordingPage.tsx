@@ -579,7 +579,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   }, [blockGeometry, branchOriginBlockNumber, historyOrders]);
   const outsideSubtitle = (order: DeliveryOrder) => {
     const distance = outsideDistanceByBlock.get(order.blockNumber?.trim() || '');
-    return distance === undefined ? 'Outside' : `Outside (${distance} km)`;
+    return distance === undefined ? 'Outside' : `Outside ≃ ${distance} km`;
   };
 
   const selectedBlock = useMemo(
