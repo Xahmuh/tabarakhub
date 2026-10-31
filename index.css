@@ -719,6 +719,20 @@
    Keeps every module closer to the same practical UI language.
    ============================================ */
 
+/* Standard rectangular buttons share a gentle curve; circular controls keep their shape. */
+button.rounded-lg,
+button.rounded-xl,
+button.rounded-2xl,
+button.rounded-3xl,
+button.btn-primary,
+button.btn-secondary,
+button.btn-neutral,
+button.btn-danger,
+button.btn-outline,
+button.btn-ghost {
+  border-radius: 0.375rem !important;
+}
+
 .rounded-2xl,
 .rounded-3xl,
 .rounded-\[1\.4rem\],
