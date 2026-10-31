@@ -700,23 +700,6 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-2 border-t border-white/10 bg-white/5 sm:grid-cols-3 lg:grid-cols-5" aria-label="Dispatch stages">
-          {dispatchViews.map((view, index) => (
-            <button
-              key={view.id}
-              type="button"
-              onClick={() => setDispatchView(view.id)}
-              aria-pressed={dispatchView === view.id}
-              className={`min-w-0 border-r border-b border-white/10 px-4 py-3 text-left transition last:border-r-0 hover:bg-white/10 focus-visible:outline-white ${dispatchView === view.id ? 'bg-white/15 shadow-[inset_0_3px_0_#ef4444]' : ''}`}
-            >
-              <span className="font-mono text-[10px] text-slate-400">0{index + 1}</span>
-              <span className="mt-1 flex items-end justify-between gap-2">
-                <span className="text-xs font-bold leading-4 text-slate-200">{view.label}</span>
-                <span className="font-mono text-xl font-bold tabular-nums text-white">{view.count}</span>
-              </span>
-            </button>
-          ))}
-        </div>
       </header>
 
       {eventErrorMessage && (
@@ -737,23 +720,25 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-4">
-        {dispatchKpis.slice(0, 4).map((kpi, index) => (
-          <div key={kpi.label} className={`min-w-0 border-b border-r border-slate-100 px-4 py-3 lg:border-b-0 ${index === 0 ? 'bg-brand/5' : ''}`}>
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500">{kpi.label}</p>
-            <div className="mt-1 flex items-center gap-2">
-              <span className={`font-mono text-2xl font-bold tabular-nums ${index === 0 ? 'text-brand' : 'text-slate-950'}`}>{kpi.value}</span>
-              <span className="text-slate-400" aria-hidden="true">{kpi.icon}</span>
-            </div>
-            {kpi.sub && <p className="mt-0.5 truncate text-[11px] text-slate-500" title={kpi.sub}>{kpi.sub}</p>}
-          </div>
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white sm:grid-cols-3 lg:grid-cols-6" aria-label="Dispatch stage filters">
+        {dispatchViews.map(view => (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => setDispatchView(view.id)}
+            aria-pressed={dispatchView === view.id}
+            className={`min-w-0 border-b border-r border-slate-100 px-4 py-3 text-left transition hover:bg-brand/5 focus-visible:outline-brand ${dispatchView === view.id ? 'bg-brand/10 shadow-[inset_0_3px_0_#ef4444]' : ''}`}
+          >
+            <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500">{view.label}</span>
+            <span className={`mt-1 block font-mono text-2xl font-bold tabular-nums ${dispatchView === view.id ? 'text-brand' : 'text-slate-950'}`}>{view.count}</span>
+          </button>
         ))}
       </div>
-      {dispatchKpis.length > 4 && (
+      {dispatchKpis.some(kpi => !['Dispatch total', 'Assigned', 'Picked up', 'Delivered', 'Returned orders'].includes(kpi.label)) && (
         <details className="rounded-xl border border-slate-200 bg-white px-4 py-3">
           <summary className="cursor-pointer text-xs font-bold text-slate-600 focus-visible:outline-brand">More operating metrics</summary>
           <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 lg:grid-cols-3">
-            {dispatchKpis.slice(4).map(kpi => <KpiCard key={kpi.label} {...kpi} />)}
+            {dispatchKpis.filter(kpi => !['Dispatch total', 'Assigned', 'Picked up', 'Delivered', 'Returned orders'].includes(kpi.label)).map(kpi => <KpiCard key={kpi.label} {...kpi} />)}
           </div>
         </details>
       )}
