@@ -110,7 +110,9 @@ const isManualRecordedOnlyOrder = (order: DeliveryOrder) =>
 const dispatchDisplayStatus = (order: DeliveryOrder): DispatchStatus =>
   order.deliveryStatus === 'cancelled' && order.cancelledReason?.startsWith('Customer return:')
     ? 'returned'
-    : order.deliveryStatus;
+    : isManualRecordedOnlyOrder(order) && order.deliveryStatus === 'recorded'
+      ? 'delivered'
+      : order.deliveryStatus;
 
 const isDriverDispatchOrder = (order: DeliveryOrder, paymentTypes: DeliveryPaymentTypeConfig[]) =>
   order.dispatchMode !== 'log_only' && (order.orderKind === 'internal_transfer' || !isDeliveryPaymentBlockExempt(order.paymentType, paymentTypes));
@@ -813,11 +815,10 @@ export const DeliveryLifecycleBoard: React.FC<DeliveryLifecycleBoardProps> = ({
                   && !lifecycleUnavailable
                   && (canManageAll || isInsideBranchTransitionWindow(order));
                 const canAdvanceOrder = canActOnOrder && !isClosedOrder(order);
-                const canReturnOrder = !isRecordedOnly
-                  && canTransition
+                const canReturnOrder = canTransition
                   && !lifecycleUnavailable
-                  && order.deliveryStatus === 'delivered'
-                  && Boolean(order.pickedUpAt && order.deliveredAt);
+                  && (isRecordedOnly && order.deliveryStatus === 'recorded'
+                    || !isRecordedOnly && order.deliveryStatus === 'delivered' && Boolean(order.pickedUpAt && order.deliveredAt));
                 const nextStatuses = isRecordedOnly ? [] : nextStatusesFor(order.deliveryStatus);
                 const pickupWait = minutesBetween(order.assignedAt || order.createdAt, order.pickedUpAt);
                 const driverDelivery = minutesBetween(order.pickedUpAt, order.deliveredAt);
