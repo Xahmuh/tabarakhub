@@ -719,10 +719,6 @@
    Keeps every module closer to the same practical UI language.
    ============================================ */
 
-button {
-  border-radius: 0.375rem !important;
-}
-
 .rounded-2xl,
 .rounded-3xl,
 .rounded-\[1\.4rem\],
