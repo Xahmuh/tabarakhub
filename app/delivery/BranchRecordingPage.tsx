@@ -1085,6 +1085,21 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     if (submittingRef.current) return;
     submittingRef.current = true;
     try {
+      const orderValue = Number(value);
+      if (!editingOrder && Number.isFinite(orderValue) && orderValue > 100) {
+        const confirmation = await Swal.fire({
+          title: 'Confirm order value',
+          text: `The order value is ${formatBhd(orderValue)}. Do you want to continue with this amount?`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Confirm amount',
+          cancelButtonText: 'Edit amount',
+          confirmButtonColor: '#b91c1c',
+          reverseButtons: true
+        });
+        if (!confirmation.isConfirmed) return;
+      }
+
       if (recordingV1 && !editingOrder && !isTalabatDeliveryPayment(paymentType)) {
         let selectedMode: 'system' | 'log_only' | null = null;
         await Swal.fire({
