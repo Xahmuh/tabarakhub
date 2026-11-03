@@ -1895,8 +1895,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   <button
                     key={type.code}
                     type="button"
+                    disabled={editingOrder?.externalSource === 'talabat'}
                     onClick={() => setPaymentType(type.code)}
-                    className={`rounded-md py-2 text-[11px] font-black transition-all ${
+                    title={editingOrder?.externalSource === 'talabat' ? 'Talabat orders must keep Talabat as their payment type.' : undefined}
+                    className={`rounded-md py-2 text-[11px] font-black transition-all disabled:cursor-not-allowed ${
                       paymentType === type.code ? 'bg-white text-brand shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
@@ -1904,6 +1906,9 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                   </button>
                 ))}
               </div>
+              {editingOrder?.externalSource === 'talabat' && (
+                <p className="mt-1 text-[10px] font-bold text-orange-600">Talabat orders must keep Talabat as their payment type.</p>
+              )}
               {selectedPaymentType && !selectedPaymentType.requiresBlock && (
                 <p className="mt-1 text-[10px] font-bold text-orange-600">
                   {selectedPaymentType.label} orders do not require block/area mapping.
