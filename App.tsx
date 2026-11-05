@@ -10,6 +10,7 @@ import {
   MaintenanceSettings
 } from './types';
 import { supabase } from './lib/supabase';
+import { AUTH_SESSION_EXPIRED_EVENT } from './lib/authSessionEvents';
 import { buildPermissionChecker, isManagerRole } from './lib/access';
 import { clientConfig, isModuleEnabled } from './config/clientConfig';
 import { spinWinService } from './services/spinWin';
@@ -357,6 +358,14 @@ const App: React.FC = () => {
     setLoginNotice(message);
     setIsMaintenanceAdminLoginOpen(false);
   }, []);
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      void signOutToLoginWithNotice('Your login session expired. Please sign in again.');
+    };
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleExpiredSession);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleExpiredSession);
+  }, [signOutToLoginWithNotice]);
 
   const enterAuthenticatedApp = useCallback(async (baseState: AuthState) => {
     const user = baseState.user;

@@ -4,6 +4,7 @@ import { isUUID, generateUUID } from '../utils/uuid';
 import { isDemoMode } from '../config/clientConfig';
 import { BAHRAIN_VAT_RATE } from '../utils/vat';
 import { truncateBhd } from '../utils/money';
+import { AUTH_SESSION_EXPIRED_EVENT } from '../lib/authSessionEvents';
 
 const SALES_KEY = 'tabarak_offline_sales';
 const PRODUCTS_KEY = 'tabarak_offline_products';
@@ -56,6 +57,7 @@ const assertAuthenticatedSession = async (action: string) => {
   if (isDemoMode) return;
   const { data, error } = await supabaseClient.auth.getSession();
   if (error || !data.session?.user) {
+    window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
     throw new Error(`Your secure login session expired. Please sign out and sign in again before you ${action}.`);
   }
 };
@@ -267,6 +269,7 @@ const fetchBranchScopedRows = async (
   options?: BranchScopedListOptions
 ) => {
   if (role === 'branch' && !isUUID(branchId)) return [];
+  await assertAuthenticatedSession('view branch reports');
 
   const shouldSplitScope = shouldSplitExplicitBranchScope(branchId, role, options);
   const branchIds = shouldSplitScope
@@ -293,7 +296,10 @@ const fetchBranchScopedRows = async (
         .order('timestamp', { ascending: false })
         .order('id', { ascending: false })
         .limit(currentPageSize);
-      if (error) throw error;
+      if (error) {
+        if (error.code === '42501') await assertAuthenticatedSession('view branch reports');
+        throw error;
+      }
       const pageRows = (data || []) as any[];
       if (pageRows.length === 0) {
         hasMore = false;
