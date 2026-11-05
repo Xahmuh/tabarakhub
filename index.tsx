@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { AppUpdateNotice } from './components/AppUpdateNotice';
 
 const staleChunkRecoveryKey = 'tabarak:stale-chunk-recovery-count';
 window.setTimeout(() => {
@@ -32,18 +33,24 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   import.meta.env.DEV ? (
-    <React.StrictMode>
+    <>
+      <AppUpdateNotice />
+      <React.StrictMode>
+        <AppErrorBoundary>
+          <React.Suspense fallback={null}>
+            <App />
+          </React.Suspense>
+        </AppErrorBoundary>
+      </React.StrictMode>
+    </>
+  ) : (
+    <>
+      <AppUpdateNotice />
       <AppErrorBoundary>
         <React.Suspense fallback={null}>
           <App />
         </React.Suspense>
       </AppErrorBoundary>
-    </React.StrictMode>
-  ) : (
-    <AppErrorBoundary>
-      <React.Suspense fallback={null}>
-        <App />
-      </React.Suspense>
-    </AppErrorBoundary>
+    </>
   )
 );
