@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, Truck, Wallet } from 'lucide-react';
+import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, RotateCcw, Truck, Wallet } from 'lucide-react';
 import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
@@ -8,11 +8,12 @@ import { AdminDeliveryAnalytics } from './AdminDeliveryAnalytics';
 import { DeliveryCoverage } from './DeliveryCoverage';
 import { DeliveryLifecycleBoard } from './DeliveryLifecycleBoard';
 import { DeliveryProfitability } from './DeliveryProfitability';
+import { AdminRecordCorrections } from './AdminRecordCorrections';
 import { DriverDutyReport } from './DriverDutyReport';
 import { DriverPayrollHub } from './DriverPayrollHub';
 import { BackToModulesButton } from '../shared';
 
-type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'driver-payroll' | 'coverage' | 'profitability';
+type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'driver-payroll' | 'coverage' | 'profitability' | 'corrections';
 
 interface DeliveryHubProps {
   user: Branch;
@@ -53,7 +54,8 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
     { id: 'driver-duty', label: 'Driver Attendance', icon: CalendarClock, visible: canReadDriverDuty },
     { id: 'driver-payroll', label: 'Driver Payroll', icon: Wallet, visible: canReadDriverPayroll },
     { id: 'coverage', label: 'Block Coverage', icon: MapPinned, visible: canReadDeliveryCoverage },
-    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) }
+    { id: 'profitability', label: 'Profitability', icon: Coins, visible: canReadDelivery && (canManageDelivery || isOwner) },
+    { id: 'corrections', label: 'Corrections', icon: RotateCcw, visible: role === 'admin' }
   ];
 
   const visibleTabs = tabs.filter(t => t.visible);
@@ -144,6 +146,7 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
       {activeTab === 'profitability' && canReadDelivery && (canManageDelivery || isOwner) && (
         <DeliveryProfitability canEdit={canManageDelivery} />
       )}
+      {activeTab === 'corrections' && role === 'admin' && <AdminRecordCorrections />}
     </div>
   );
 };
