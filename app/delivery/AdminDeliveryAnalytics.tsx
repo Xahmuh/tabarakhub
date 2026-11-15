@@ -7,7 +7,6 @@ import {
   Branch, DeliveryDriver, DeliveryOrder, DeliveryPaymentTypeConfig, Governorate, Pharmacist
 } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
-import { SearchableSelect } from './components/SearchableSelect';
 import { SearchableMultiSelect } from './components/SearchableMultiSelect';
 import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
 import { exportBreakdownToExcel, printReport } from './exports';
@@ -129,13 +128,13 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
 
-  const [branchFilter, setBranchFilter] = useState<string | null>(null);
-  const [governorateFilter, setGovernorateFilter] = useState<string | null>(null);
+  const [branchFilter, setBranchFilter] = useState<string[]>([]);
+  const [governorateFilter, setGovernorateFilter] = useState<string[]>([]);
   const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
-  const [driverFilter, setDriverFilter] = useState<string | null>(null);
-  const [recordedDriverFilter, setRecordedDriverFilter] = useState<string | null>(null);
-  const [pharmacistFilter, setPharmacistFilter] = useState<string | null>(null);
+  const [driverFilter, setDriverFilter] = useState<string[]>([]);
+  const [recordedDriverFilter, setRecordedDriverFilter] = useState<string[]>([]);
+  const [pharmacistFilter, setPharmacistFilter] = useState<string[]>([]);
 
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -151,14 +150,14 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
   const filters = useMemo(() => ({
-    branchId: branchFilter || undefined,
+    branchIds: branchFilter.length ? branchFilter : undefined,
     dateFrom: range.from,
     dateTo: range.to,
     paymentTypes: paymentFilter.length ? paymentFilter : undefined,
-    driverId: driverFilter || undefined,
-    recordedDriverId: recordedDriverFilter || undefined,
-    pharmacistId: pharmacistFilter || undefined,
-    governorate: governorateFilter || undefined
+    driverIds: driverFilter.length ? driverFilter : undefined,
+    recordedDriverIds: recordedDriverFilter.length ? recordedDriverFilter : undefined,
+    pharmacistIds: pharmacistFilter.length ? pharmacistFilter : undefined,
+    governorates: governorateFilter.length ? governorateFilter : undefined
   }), [range.from, range.to, branchFilter, paymentFilter, driverFilter, recordedDriverFilter, pharmacistFilter, governorateFilter]);
 
   useEffect(() => {
@@ -454,25 +453,29 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <SearchableSelect options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))} value={branchFilter} onChange={setBranchFilter} placeholder="All branches" />
-          <SearchableSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" />
-          <SearchableMultiSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} selectedValues={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" searchPlaceholder="Search payment types..." noMatchesLabel="No matching payment types" />
-          <SearchableMultiSelect options={(['Talabat', 'WhatsApp', 'Online'] as const).map(source => ({ value: source, label: source }))} selectedValues={sourceFilter} onChange={setSourceFilter} placeholder="All order sources" searchPlaceholder="Search order sources..." noMatchesLabel="No matching order sources" />
-          <SearchableSelect
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <SearchableMultiSelect options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))} selectedValues={branchFilter} onChange={setBranchFilter} placeholder="All branches" searchPlaceholder="Search branches..." noMatchesLabel="No matching branches" selectedNoun="branches" />
+          <SearchableMultiSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} selectedValues={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" searchPlaceholder="Search governorates..." noMatchesLabel="No matching governorates" selectedNoun="governorates" />
+          <SearchableMultiSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} selectedValues={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" searchPlaceholder="Search payment types..." noMatchesLabel="No matching payment types" selectedNoun="payments" />
+          <SearchableMultiSelect options={(['Talabat', 'WhatsApp', 'Online'] as const).map(source => ({ value: source, label: source }))} selectedValues={sourceFilter} onChange={setSourceFilter} placeholder="All order sources" searchPlaceholder="Search order sources..." noMatchesLabel="No matching order sources" selectedNoun="sources" />
+          <SearchableMultiSelect
             options={drivers.map(d => ({
               value: d.id,
               label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name,
               hint: d.driverCode
             }))}
-            value={driverFilter}
+            selectedValues={driverFilter}
             onChange={setDriverFilter}
             placeholder="All drivers"
+            searchPlaceholder="Search drivers..."
+            noMatchesLabel="No matching drivers"
+            selectedNoun="drivers"
           />
-          {SHOW_RECORDED_EXTERNAL_DRIVER && <SearchableSelect
+          {SHOW_RECORDED_EXTERNAL_DRIVER && <SearchableMultiSelect
             options={drivers.map(d => ({ value: d.id, label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name }))}
-            value={recordedDriverFilter} onChange={setRecordedDriverFilter} placeholder="All recorded drivers" />}
-          <SearchableSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} value={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" />
+            selectedValues={recordedDriverFilter} onChange={setRecordedDriverFilter} placeholder="All recorded drivers"
+            searchPlaceholder="Search recorded drivers..." noMatchesLabel="No matching recorded drivers" selectedNoun="drivers" />}
+          <SearchableMultiSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} selectedValues={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" searchPlaceholder="Search pharmacists..." noMatchesLabel="No matching pharmacists" selectedNoun="pharmacists" />
         </div>
         {exportErrorMessage && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">

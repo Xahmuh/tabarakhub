@@ -13,6 +13,10 @@ export interface DeliveryCleanExportFilters {
   dateTo?: string | null;
   paymentType?: string | null;
   paymentTypes?: string[];
+  driverIds?: string[];
+  recordedDriverIds?: string[];
+  pharmacistIds?: string[];
+  governorates?: string[];
   driverId?: string | null;
   recordedDriverId?: string | null;
   pharmacistId?: string | null;
@@ -217,10 +221,14 @@ const buildQuery = (filters: DeliveryCleanExportFilters = {}) => {
   if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
   if (filters.paymentTypes && filters.paymentTypes.length > 0) query = query.in('payment_type', filters.paymentTypes);
   else if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
-  if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
-  if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
-  if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
-  if (filters.governorate && filters.governorate !== 'all') query = query.eq('governorate', filters.governorate);
+  if (filters.driverIds && filters.driverIds.length > 0) query = query.in('driver_id', filters.driverIds);
+  else if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
+  if (filters.recordedDriverIds && filters.recordedDriverIds.length > 0) query = query.in('recorded_driver_id', filters.recordedDriverIds);
+  else if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
+  if (filters.pharmacistIds && filters.pharmacistIds.length > 0) query = query.in('pharmacist_id', filters.pharmacistIds);
+  else if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
+  if (filters.governorates && filters.governorates.length > 0) query = query.in('governorate', filters.governorates);
+  else if (filters.governorate && filters.governorate !== 'all') query = query.eq('governorate', filters.governorate);
   return query;
 };
 

@@ -16,6 +16,7 @@ interface SearchableMultiSelectProps {
   dir?: 'ltr' | 'rtl';
   searchPlaceholder?: string;
   noMatchesLabel?: string;
+  selectedNoun?: string;
 }
 
 export const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
@@ -26,7 +27,8 @@ export const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
   disabled = false,
   dir = 'ltr',
   searchPlaceholder = 'Search branches...',
-  noMatchesLabel = 'No matching branches'
+  noMatchesLabel = 'No matching branches',
+  selectedNoun = 'branches'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -144,7 +146,7 @@ export const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
           ) : (
             <span className="inline-flex items-center gap-1.5 text-slate-900 font-bold">
               <span className="rounded bg-brand px-2 py-0.5 text-xs font-black text-white">
-                {selectedValues.length} branches
+                {selectedValues.length} {selectedNoun}
               </span>
               <span className="truncate text-xs font-semibold text-slate-500">
                 {selectedOptions.slice(0, 3).map(o => o.hint || o.label).join(', ')}...
