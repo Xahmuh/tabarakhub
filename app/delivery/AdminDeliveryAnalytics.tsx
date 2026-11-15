@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { PeriodFilter } from './components/PeriodFilter';
 import { SearchableSelect } from './components/SearchableSelect';
+import { SearchableMultiSelect } from './components/SearchableMultiSelect';
 import { PeriodPreset, formatBhd, getPresetRange, isDirectOrder, periodLabel, sumValue, todayKey } from './utils';
 import { exportBreakdownToExcel, printReport } from './exports';
 import { isModuleEnabled } from '../../config/clientConfig';
@@ -20,7 +21,7 @@ import {
 } from '../../services/deliveryCleanExportService';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { truncateBhd } from '../../utils/money';
-import { groupDeliveryReportOrders, registeredSourceSummary, summarizeDeliveryReportOrders } from '../../lib/deliveryRecording';
+import { deliverySourceLabel, groupDeliveryReportOrders, registeredSourceSummary, summarizeDeliveryReportOrders } from '../../lib/deliveryRecording';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -130,7 +131,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
 
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [governorateFilter, setGovernorateFilter] = useState<string | null>(null);
-  const [paymentFilter, setPaymentFilter] = useState<string | null>(null);
+  const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [driverFilter, setDriverFilter] = useState<string | null>(null);
   const [recordedDriverFilter, setRecordedDriverFilter] = useState<string | null>(null);
   const [pharmacistFilter, setPharmacistFilter] = useState<string | null>(null);
@@ -152,7 +154,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     branchId: branchFilter || undefined,
     dateFrom: range.from,
     dateTo: range.to,
-    paymentType: paymentFilter || undefined,
+    paymentTypes: paymentFilter.length ? paymentFilter : undefined,
     driverId: driverFilter || undefined,
     recordedDriverId: recordedDriverFilter || undefined,
     pharmacistId: pharmacistFilter || undefined,
@@ -191,8 +193,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     return orders.map(order => ({
       ...order,
       branchName: order.branchName || branchNames.get(order.branchId) || 'Unknown branch'
-    }));
-  }, [orders, branches]);
+    })).filter(order => sourceFilter.length === 0 || sourceFilter.includes(deliverySourceLabel(order.externalSource, order.paymentType)));
+  }, [orders, branches, sourceFilter]);
 
   const direct = useMemo(() => filteredOrders.filter(order => isDirectOrder(order, paymentTypes)), [filteredOrders, paymentTypes]);
   const external = useMemo(
@@ -327,7 +329,9 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     setExportErrorMessage(null);
     setIsExportingCleanOrders(true);
     try {
-      const cleanRows = await deliveryCleanExportService.orders.list(filters);
+      const allCleanRows = await deliveryCleanExportService.orders.list(filters);
+      const exportOrderIds = new Set(filteredOrders.map(order => order.id));
+      const cleanRows = allCleanRows.filter(order => exportOrderIds.has(order.id));
       const parity = buildDeliveryOrderCleanExportParity(filteredOrders, cleanRows);
       if (!parity.matches) {
         throw new Error(`Clean export parity failed: ${parity.differences.join('; ')}`);
@@ -338,7 +342,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           name: label,
           headers: ['KPI', 'Count', 'Value (BHD)', 'Details'],
           rows: kpiCards[id].map(metric => [
-            metric.label,
+            metric.label === 'Talabat Delivery' ? 'Talabat' : metric.label,
             metric.currency ? '' : metric.value,
             metric.currency ? truncateBhd(metric.value) : metric.detailValueBhd == null ? '' : truncateBhd(metric.detailValueBhd),
             metric.detail || ''
@@ -361,7 +365,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
         leaderExportSection('Geography', 'Direct payments by area', 'Area', areaBoard),
         leaderExportSection('Geography', 'Direct payments by block', 'Block', blockBoard),
         {
-          tab: 'Drivers',
+          tab: 'Driver Workload',
           name: 'Driver workload by weekday',
           headers: ['Driver', ...WEEKDAYS, 'Total'],
           rows: heatmap.rows.map(row => [row.name, ...row.days, row.total])
@@ -377,7 +381,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       await runAfterNextPaint(() => exportDeliveryOrderCleanRowsToExcel(
         cleanRows,
         label,
-        `Delivery_Clean_All_${range.from}_${range.to}`,
+        `Delivery_Recording_and_Traceability_${range.from}_${range.to}`,
         parity,
         dashboardSections
       ));
@@ -453,7 +457,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <SearchableSelect options={branches.map(b => ({ value: b.id, label: b.name, hint: b.code }))} value={branchFilter} onChange={setBranchFilter} placeholder="All branches" />
           <SearchableSelect options={GOVERNORATES.map(g => ({ value: g, label: g }))} value={governorateFilter} onChange={setGovernorateFilter} placeholder="All governorates" />
-          <SearchableSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} value={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" />
+          <SearchableMultiSelect options={paymentTypes.map(type => ({ value: type.code, label: type.label }))} selectedValues={paymentFilter} onChange={setPaymentFilter} placeholder="All payments" searchPlaceholder="Search payment types..." noMatchesLabel="No matching payment types" />
+          <SearchableMultiSelect options={(['Talabat', 'WhatsApp', 'Online'] as const).map(source => ({ value: source, label: source }))} selectedValues={sourceFilter} onChange={setSourceFilter} placeholder="All order sources" searchPlaceholder="Search order sources..." noMatchesLabel="No matching order sources" />
           <SearchableSelect
             options={drivers.map(d => ({
               value: d.id,
@@ -528,11 +533,15 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           </section>
 
           {/* Branch + people leaderboards */}
-          <div className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${SHOW_RECORDED_EXTERNAL_DRIVER ? 'xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Leaderboard title="Orders per branch" rows={branchBoard} emptyLabel="No branch activity." />
             <Leaderboard title="Pharmacist performance" rows={pharmacistBoard} emptyLabel="No pharmacist-linked orders." />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Leaderboard title="Driver performance" rows={driverBoard} emptyLabel="No driver-linked orders." />
-            {SHOW_RECORDED_EXTERNAL_DRIVER && <Leaderboard title="Recorded external driver value (no dispatch)" rows={recordedDriverBoard} emptyLabel="No externally assigned driver records." />}
+            {SHOW_RECORDED_EXTERNAL_DRIVER
+              ? <Leaderboard title="Recorded external driver value (no dispatch)" rows={recordedDriverBoard} emptyLabel="No externally assigned driver records." />
+              : <section className="operational-panel p-4 md:p-5"><h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Recorded external driver value</h3><p className="py-6 text-center text-xs font-bold text-slate-400">Not enabled for this environment.</p></section>}
           </div>
 
           <section className="operational-panel p-4 md:p-5">

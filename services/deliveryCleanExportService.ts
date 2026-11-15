@@ -12,6 +12,7 @@ export interface DeliveryCleanExportFilters {
   dateFrom?: string | null;
   dateTo?: string | null;
   paymentType?: string | null;
+  paymentTypes?: string[];
   driverId?: string | null;
   recordedDriverId?: string | null;
   pharmacistId?: string | null;
@@ -93,7 +94,7 @@ interface DeliveryOrderCleanExportDbRow {
 const DELIVERY_GROUPS = [
   { group: 'total', name: 'Total Delivery Orders' },
   { group: 'tabarak', name: 'Tabarak Delivery' },
-  { group: 'talabat', name: 'Talabat Delivery' }
+  { group: 'talabat', name: 'Talabat' }
 ] as const;
 
 type DeliveryReportTotals = ReturnType<typeof summarizeDeliveryReportOrders>;
@@ -214,7 +215,8 @@ const buildQuery = (filters: DeliveryCleanExportFilters = {}) => {
   if (filters.branchIds && filters.branchIds.length > 0) query = query.in('branch_id', filters.branchIds);
   if (filters.dateFrom) query = query.gte('order_date', filters.dateFrom);
   if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
-  if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
+  if (filters.paymentTypes && filters.paymentTypes.length > 0) query = query.in('payment_type', filters.paymentTypes);
+  else if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
   if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
   if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
   if (filters.pharmacistId && filters.pharmacistId !== 'all') query = query.eq('pharmacist_id', filters.pharmacistId);
@@ -366,64 +368,44 @@ const writeDeliveryReportOrders = (sheet: Worksheet, rows: DeliveryOrderCleanExp
   writeObjectRows(
     sheet,
     rows.map(row => ({
-      id: row.id,
       orderDate: row.orderDate,
       orderKind: row.orderKind === 'internal_transfer' ? 'Internal Transfer'
-        : deliveryReportGroup(row) === 'talabat' ? 'Talabat Delivery' : 'Tabarak Delivery',
+        : deliveryReportGroup(row) === 'talabat' ? 'Talabat' : 'Tabarak Delivery',
+      orderSource: deliverySourceLabel(row.externalSource, row.paymentType),
       deliveryStatus: row.deliveryStatus,
       branchCode: row.branchCode,
       branchName: row.branchName,
       valueBhd: row.valueBhd === null ? null : normalizeBhd(row.valueBhd),
       paymentType: row.paymentType,
-      source: deliverySourceLabel(row.externalSource, row.paymentType),
-      externalOrderId: row.externalOrderId || '',
-      dispatchMode: row.dispatchMode || '',
-      recordedDriverId: row.recordedDriverId || '',
       recordedDriverCode: row.recordedDriverCode || '',
       recordedDriverName: row.recordedDriverName || '',
       benefitPayReceivedTime: row.benefitPayReceivedTime ? row.benefitPayReceivedTime.slice(0, 5) : '',
       blockNumber: row.blockNumber,
       areaName: row.areaName,
       governorate: row.governorate,
-      driverCode: row.driverCode,
-      driverName: row.driverName,
-      assignedAt: row.assignedAt,
-      pickedUpAt: row.pickedUpAt,
-      deliveredAt: row.deliveredAt,
-      cancelledAt: row.cancelledAt,
-      cancelledReason: row.cancelledReason
+      deliveredAt: row.deliveredAt
     })),
     [
-      { key: 'id', label: 'Order ID', width: 38 },
       { key: 'orderDate', label: 'Date', width: 14 },
       { key: 'orderKind', label: 'Type', width: 22 },
+      { key: 'orderSource', label: 'Order source', width: 18 },
       { key: 'deliveryStatus', label: 'Status', width: 16 },
       { key: 'branchCode', label: 'Branch Code', width: 14 },
       { key: 'branchName', label: 'Branch', width: 24 },
       { key: 'valueBhd', label: 'Value (BHD)', numFmt: '0.000', width: 14 },
       { key: 'paymentType', label: 'Payment', width: 18 },
-      { key: 'source', label: 'Order source', width: 22 },
-      { key: 'externalOrderId', label: 'External order ID', width: 22 },
-      { key: 'dispatchMode', label: 'Dispatch mode', width: 18 },
-      { key: 'recordedDriverId', label: 'Recorded driver ID', width: 38 },
       { key: 'recordedDriverCode', label: 'Recorded driver code', width: 22 },
       { key: 'recordedDriverName', label: 'Recorded driver (no dispatch)', width: 30 },
-      { key: 'benefitPayReceivedTime', label: 'BP received time', width: 18 },
+      { key: 'benefitPayReceivedTime', label: 'Benefit Pay received time', width: 24 },
       { key: 'blockNumber', label: 'Block', width: 12 },
       { key: 'areaName', label: 'Area', width: 24 },
       { key: 'governorate', label: 'Governorate', width: 16 },
-      { key: 'driverCode', label: 'Driver Code', width: 14 },
-      { key: 'driverName', label: 'Driver', width: 24 },
-      { key: 'assignedAt', label: 'Assigned At', width: 22 },
-      { key: 'pickedUpAt', label: 'Picked Up At', width: 22 },
-      { key: 'deliveredAt', label: 'Delivered At', width: 22 },
-      { key: 'cancelledAt', label: 'Cancelled At', width: 22 },
-      { key: 'cancelledReason', label: 'Cancel Reason', width: 28 }
+      { key: 'deliveredAt', label: 'Delivered At', width: 22 }
     ]
   );
   sheet.autoFilter = {
     from: { row: headerRow, column: 1 },
-    to: { row: headerRow + rows.length, column: 25 }
+    to: { row: headerRow + rows.length, column: 15 }
   };
 
   const totals = summarizeDeliveryReportOrders(rows);
@@ -440,7 +422,7 @@ const writeDeliveryReportOrders = (sheet: Worksheet, rows: DeliveryOrderCleanExp
 };
 
 export interface DeliveryDashboardExportSection {
-  tab: 'Dashboard' | 'Operations' | 'Branches' | 'Pharmacists' | 'Drivers' | 'Geography';
+  tab: 'Dashboard' | 'Operations' | 'Branches' | 'Pharmacists' | 'Drivers' | 'Driver Workload' | 'Geography';
   name: string;
   headers: string[];
   rows: (string | number)[][];
@@ -503,13 +485,13 @@ export const buildDeliveryCleanExportWorkbook = async (
     properties: { tabColor: { argb: 'FF1D4ED8' } }
   });
   workbook.views = [{ firstSheet: 0, activeTab: 0, visibility: 'visible', x: 0, y: 0, width: 12000, height: 18000 }];
-  const tabOrder = ['Branches', 'Pharmacists', 'Drivers', 'Geography', 'Operations'] as const;
+  const tabOrder = ['Branches', 'Pharmacists', 'Drivers', 'Driver Workload', 'Geography', 'Operations'] as const;
   const detailTabs = tabOrder.filter(tab => dashboardSections.some(section => section.tab === tab));
-  const navTabs = [...detailTabs, 'Order Details', 'QA'];
+  const navTabs = [...detailTabs, 'Order Details'];
 
   for (let column = 1; column <= 8; column++) dashboard.getColumn(column).width = column === 1 ? 24 : 13;
   const banner = { background: 'FF0F172A', color: 'FFFFFFFF', size: 21, bold: true };
-  writeDashboardBand(dashboard, 'A1:H1', 'A1', 'Delivery Analytics', banner);
+  writeDashboardBand(dashboard, 'A1:H1', 'A1', 'Delivery Recording and Traceability', banner);
   writeDashboardBand(dashboard, 'A2:H2', 'A2', title, { ...banner, color: 'FFC7D2FE', size: 11, bold: false });
   dashboard.getRow(1).height = 35;
   dashboard.getRow(2).height = 22;
@@ -575,35 +557,9 @@ export const buildDeliveryCleanExportWorkbook = async (
     for (const section of dashboardSections.filter(section => section.tab === tab)) writeDashboardSection(sheet, section);
   }
   const ordersSheet = reportTab('Order Details');
-  ordersSheet.addRow(['Source: public.delivery_orders_clean. Use the Type filter for Tabarak, Talabat, or Internal Transfer.']);
   writeDeliveryReportOrders(ordersSheet, rows);
   ordersSheet.views = [{ state: 'frozen', ySplit: 5, showGridLines: false }];
-  const sheet = reportTab('QA');
-  sheet.getColumn(2).width = 45;
-  sheet.getColumn(3).width = 45;
-  if (parity) {
-    styleHeader(sheet.addRow(['Check', 'Dashboard', 'Clean View', 'Matches']));
-    const checks = [
-        { check: 'Row count', operational: parity.rowCount.operational, clean: parity.rowCount.clean, matches: parity.rowCount.matches ? 'YES' : 'NO' },
-        { check: 'Latest 20 order IDs', operational: parity.latest20Ids.operational.join(', '), clean: parity.latest20Ids.clean.join(', '), matches: parity.latest20Ids.matches ? 'YES' : 'NO' },
-        { check: 'Payment totals', operational: JSON.stringify(parity.paymentTotals.operational), clean: JSON.stringify(parity.paymentTotals.clean), matches: parity.paymentTotals.matches ? 'YES' : 'NO' },
-        { check: 'Order kind counts', operational: JSON.stringify(parity.orderKindCounts.operational), clean: JSON.stringify(parity.orderKindCounts.clean), matches: parity.orderKindCounts.matches ? 'YES' : 'NO' },
-        { check: 'Status counts', operational: JSON.stringify(parity.statusCounts.operational), clean: JSON.stringify(parity.statusCounts.clean), matches: parity.statusCounts.matches ? 'YES' : 'NO' },
-        { check: 'Driver display availability', operational: parity.driverDisplay.operational, clean: parity.driverDisplay.clean, matches: parity.driverDisplay.matches ? 'YES' : 'NO' },
-        ...parity.deliveryGroups.map(group => ({
-          check: group.name,
-          operational: `${group.operational.count} orders | ${group.operational.valueBhd.toFixed(3)} BHD`,
-          clean: `${group.clean.count} orders | ${group.clean.valueBhd.toFixed(3)} BHD`,
-          matches: group.matches ? 'YES' : 'NO'
-        }))
-    ];
-    for (const check of checks) {
-      const row = sheet.addRow([check.check, check.operational, check.clean, check.matches]);
-      row.getCell(4).font = { bold: true, color: { argb: check.matches === 'YES' ? 'FF166534' : 'FFB91C1C' } };
-    }
-  } else {
-    sheet.addRow(['Parity comparison was not supplied.']);
-  }
+  void parity;
   return workbook;
 };
 

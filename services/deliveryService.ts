@@ -436,6 +436,7 @@ export interface DeliveryOrderFilters {
   dateFrom?: string;
   dateTo?: string;
   paymentType?: string;
+  paymentTypes?: string[];
   orderKind?: string;
   driverId?: string;
   recordedDriverId?: string;
@@ -471,7 +472,8 @@ export const deliveryService = {
         }
         if (filters.dateFrom) query = query.gte('order_date', filters.dateFrom);
         if (filters.dateTo) query = query.lte('order_date', filters.dateTo);
-        if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
+        if (filters.paymentTypes && filters.paymentTypes.length > 0) query = query.in('payment_type', filters.paymentTypes);
+        else if (filters.paymentType && filters.paymentType !== 'all') query = query.eq('payment_type', filters.paymentType);
         if (filters.orderKind && filters.orderKind !== 'all') query = query.eq('order_kind', filters.orderKind);
         if (filters.driverId && filters.driverId !== 'all') query = query.eq('driver_id', filters.driverId);
         if (filters.recordedDriverId && filters.recordedDriverId !== 'all') query = query.eq('recorded_driver_id', filters.recordedDriverId);
