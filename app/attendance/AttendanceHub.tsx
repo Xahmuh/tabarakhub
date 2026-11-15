@@ -35,8 +35,7 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { escapeHtml } from '../../utils/html';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import type ExcelJS from 'exceljs';
 import {
   AttendancePunch,
   AttendanceDailyRecord,
@@ -823,6 +822,10 @@ export const AttendanceHub: React.FC<Props> = ({
         return;
       }
 
+      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+        import('exceljs'),
+        import('file-saver')
+      ]);
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Tabarak Hub Attendance & Geofencing Engine';
       workbook.created = new Date();

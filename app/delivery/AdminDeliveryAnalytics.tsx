@@ -24,6 +24,7 @@ import { groupDeliveryReportOrders, registeredSourceSummary, summarizeDeliveryRe
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const SHOW_RECORDED_EXTERNAL_DRIVER = (import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1';
 const KPI_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'sources', label: 'Order Sources' },
@@ -347,7 +348,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
         leaderExportSection('Branches', 'Orders per branch', 'Branch', branchBoard),
         leaderExportSection('Pharmacists', 'Pharmacist performance', 'Pharmacist', pharmacistBoard),
         leaderExportSection('Drivers', 'Driver performance', 'Driver', driverBoard),
-        ...((import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' ? [
+        ...(SHOW_RECORDED_EXTERNAL_DRIVER ? [
           leaderExportSection('Drivers', 'Recorded external driver value', 'Recorded driver', recordedDriverBoard)
         ] : []),
         {
@@ -463,7 +464,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             onChange={setDriverFilter}
             placeholder="All drivers"
           />
-          {(import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && <SearchableSelect
+          {SHOW_RECORDED_EXTERNAL_DRIVER && <SearchableSelect
             options={drivers.map(d => ({ value: d.id, label: d.driverCode ? `${d.driverCode} - ${d.name}` : d.name }))}
             value={recordedDriverFilter} onChange={setRecordedDriverFilter} placeholder="All recorded drivers" />}
           <SearchableSelect options={pharmacists.map(p => ({ value: p.id, label: p.name }))} value={pharmacistFilter} onChange={setPharmacistFilter} placeholder="All pharmacists" />
@@ -527,11 +528,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
           </section>
 
           {/* Branch + people leaderboards */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${SHOW_RECORDED_EXTERNAL_DRIVER ? 'xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
             <Leaderboard title="Orders per branch" rows={branchBoard} emptyLabel="No branch activity." />
             <Leaderboard title="Pharmacist performance" rows={pharmacistBoard} emptyLabel="No pharmacist-linked orders." />
             <Leaderboard title="Driver performance" rows={driverBoard} emptyLabel="No driver-linked orders." />
-            {(import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && <Leaderboard title="Recorded external driver value (no dispatch)" rows={recordedDriverBoard} emptyLabel="No externally assigned driver records." />}
+            {SHOW_RECORDED_EXTERNAL_DRIVER && <Leaderboard title="Recorded external driver value (no dispatch)" rows={recordedDriverBoard} emptyLabel="No externally assigned driver records." />}
           </div>
 
           <section className="operational-panel p-4 md:p-5">

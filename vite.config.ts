@@ -31,7 +31,9 @@ export default defineConfig(() => {
         }
       },
       build: {
-        chunkSizeWarningLimit: 600,
+        // The largest browser-only export chunk (React PDF) is intentionally
+        // lazy-loaded; keep a warning for future growth above its current size.
+        chunkSizeWarningLimit: 1300,
         rollupOptions: {
           output: {
             manualChunks: (id) => {
