@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { ArrowRightLeft, ChevronRight, FileDown, Globe2, Package, Printer, Store, Wallet } from 'lucide-react';
 import { deliveryService } from '../../services/deliveryService';
 import { branchService } from '../../services/branchService';
@@ -22,6 +22,12 @@ import { registeredSourceSummary } from '../../lib/deliveryRecording';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const KPI_TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'sources', label: 'Order Sources' },
+  { id: 'operations', label: 'Operations' }
+] as const;
+type KpiTab = (typeof KPI_TABS)[number]['id'];
 
 interface LeaderRow { key: string; name: string; orders: number; value: number }
 interface TransferRouteRow { key: string; from: string; to: string; orders: number }
@@ -79,6 +85,8 @@ const KpiCard: React.FC<{ label: string; value: string; sub?: string }> = ({ lab
 );
 
 export const AdminDeliveryAnalytics: React.FC = () => {
+  const kpiId = useId();
+  const [activeKpiTab, setActiveKpiTab] = useState<KpiTab>('overview');
   const [preset, setPreset] = useState<PeriodPreset>('today');
   const [customFrom, setCustomFrom] = useState(todayKey());
   const [customTo, setCustomTo] = useState(todayKey());
@@ -312,6 +320,42 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     runAfterNextPaint(printReport).catch(error => console.error(error));
   };
 
+  const kpiCards: Record<KpiTab, React.ReactNode> = {
+    overview: <>
+      <KpiCard label="Registered orders" value={String(filteredOrders.length)} sub={label} />
+      <KpiCard label="Registered value" value={formatBhd(totalValue)} />
+      <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
+      <KpiCard label="Active branches" value={String(branchBoard.length)} sub="with orders in period" />
+    </>,
+    sources: <>
+      <KpiCard label="WhatsApp Orders" value={String(sourceGroup('WhatsApp').count)} sub={formatBhd(sourceGroup('WhatsApp').fils / 1000)} />
+      <KpiCard label="Online Orders" value={String(sourceGroup('Online').count)} sub={formatBhd(sourceGroup('Online').fils / 1000)} />
+      <KpiCard label="Talabat Orders" value={String(sourceGroup('Talabat').count)} sub={formatBhd(sourceGroup('Talabat').fils / 1000)} />
+    </>,
+    operations: <>
+      <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
+      <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
+      <KpiCard label="Direct payment types" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
+      <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
+    </>
+  };
+
+  const handleKpiTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = KPI_TABS.length - 1;
+    let next: number;
+    switch (event.key) {
+      case 'ArrowLeft': next = index === 0 ? last : index - 1; break;
+      case 'ArrowRight': next = index === last ? 0 : index + 1; break;
+      case 'Home': next = 0; break;
+      case 'End': next = last; break;
+      default: return;
+    }
+    event.preventDefault();
+    const nextTab = KPI_TABS[next].id;
+    setActiveKpiTab(nextTab);
+    document.getElementById(`${kpiId}-tab-${nextTab}`)?.focus();
+  };
+
   return (
     <div className="space-y-5">
       {/* Filters */}
@@ -369,20 +413,44 @@ export const AdminDeliveryAnalytics: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* KPI row */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-11">
-            <KpiCard label="Registered orders" value={String(filteredOrders.length)} sub={label} />
-            <KpiCard label="Registered value" value={formatBhd(totalValue)} />
-            <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
-            <KpiCard label="WhatsApp Orders" value={String(sourceGroup('WhatsApp').count)} sub={formatBhd(sourceGroup('WhatsApp').fils / 1000)} />
-            <KpiCard label="Online Orders" value={String(sourceGroup('Online').count)} sub={formatBhd(sourceGroup('Online').fils / 1000)} />
-            <KpiCard label="Talabat Orders" value={String(sourceGroup('Talabat').count)} sub={formatBhd(sourceGroup('Talabat').fils / 1000)} />
-            <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
-            <KpiCard label="Direct payment types" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
-            <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
-            <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
-            <KpiCard label="Active branches" value={String(branchBoard.length)} sub="with orders in period" />
-          </div>
+          <section aria-label="Delivery KPIs" className="space-y-3">
+            <div role="tablist" aria-label="Delivery KPI groups" className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 print:hidden">
+              {KPI_TABS.map(({ id, label }, index) => {
+                const selected = activeKpiTab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    id={`${kpiId}-tab-${id}`}
+                    aria-controls={`${kpiId}-panel-${id}`}
+                    aria-selected={selected}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => setActiveKpiTab(id)}
+                    onKeyDown={event => handleKpiTabKeyDown(event, index)}
+                    className={`rounded-md px-3 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${selected ? 'bg-white text-brand shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {KPI_TABS.map(({ id, label }) => (
+              <div
+                key={id}
+                role="tabpanel"
+                id={`${kpiId}-panel-${id}`}
+                aria-labelledby={`${kpiId}-tab-${id}`}
+                tabIndex={activeKpiTab === id ? 0 : -1}
+                className={activeKpiTab === id ? undefined : 'hidden print:block'}
+              >
+                <h2 className="mb-2 hidden text-sm font-bold print:block">{label}</h2>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:grid-cols-4">
+                  {kpiCards[id]}
+                </div>
+              </div>
+            ))}
+          </section>
 
           {/* Branch + people leaderboards */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
