@@ -18,7 +18,7 @@ import {
 } from '../../services/deliveryCleanExportService';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { truncateBhd } from '../../utils/money';
-import { registeredSourceSummary } from '../../lib/deliveryRecording';
+import { deliverySourceLabel, registeredSourceSummary } from '../../lib/deliveryRecording';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -167,6 +167,12 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer'),
     [filteredOrders]
   );
+  const talabatDeliveries = useMemo(
+    () => actualDeliveries.filter(order => deliverySourceLabel(order.externalSource, order.paymentType) === 'Talabat'),
+    [actualDeliveries]
+  );
+  const deliveryValue = sumValue(actualDeliveries);
+  const talabatDeliveryValue = sumValue(talabatDeliveries);
   const totalValue = sumValue(filteredOrders);
   const avgValue = filteredOrders.length ? totalValue / filteredOrders.length : 0;
   const sourceGroups = useMemo(() => registeredSourceSummary(filteredOrders), [filteredOrders]);
@@ -333,7 +339,9 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       <KpiCard label="Talabat Orders" value={String(sourceGroup('Talabat').count)} sub={formatBhd(sourceGroup('Talabat').fils / 1000)} />
     </>,
     operations: <>
-      <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length)} sub={formatBhd(sumValue(actualDeliveries))} />
+      <KpiCard label="Total Delivery Orders" value={String(actualDeliveries.length)} sub={formatBhd(deliveryValue)} />
+      <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length - talabatDeliveries.length)} sub={formatBhd(deliveryValue - talabatDeliveryValue)} />
+      <KpiCard label="Talabat Delivery" value={String(talabatDeliveries.length)} sub={formatBhd(talabatDeliveryValue)} />
       <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
       <KpiCard label="Direct payment types" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
       <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
