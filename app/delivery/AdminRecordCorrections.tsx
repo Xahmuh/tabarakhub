@@ -12,6 +12,7 @@ type FoundRecord = {
   source?: string;
   linkedOrderId?: string | null;
   archived?: boolean;
+  removed?: boolean;
   amount?: string;
 };
 
@@ -54,7 +55,8 @@ export const AdminRecordCorrections: React.FC = () => {
         if (data) {
           found = true;
           setRecord({ id: data.id, label: data.order_number, branchId: data.branch_id,
-            status: data.deleted_at ? 'deleted' : data.delivery_status });
+            status: data.deleted_at ? 'removed from recordings' : data.delivery_status,
+            removed: Boolean(data.deleted_at) });
         }
       } else {
         const { data, error } = await supabaseClient.from('benefit_pay_transfers')
@@ -91,13 +93,15 @@ export const AdminRecordCorrections: React.FC = () => {
     }
   };
 
-  const correct = async (action: 'move' | 'restore') => {
+  const correct = async (action: 'move' | 'restore' | 'remove' | 'restore_removed') => {
     if (!record || reason.trim().length < 5) return;
     if (action === 'move' && (!targetBranchId || targetBranchId === record.branchId)) return;
     const target = branches.find(branch => branch.id === targetBranchId);
     const description = action === 'move'
       ? `Move ${record.label} to ${target?.code || 'selected branch'}?`
-      : `Restore ${record.label}?`;
+      : action === 'restore' || action === 'restore_removed'
+        ? `Restore ${record.label} to the recordings?`
+        : `Remove ${record.label} from active recordings? Its audit history will be kept.`;
     if (!window.confirm(`${description}\nReason: ${reason.trim()}`)) return;
     setBusy(true);
     setMessage('');
@@ -105,9 +109,13 @@ export const AdminRecordCorrections: React.FC = () => {
       let rpc = '';
       let args: Record<string, string> = { p_reason: reason.trim() };
       if (kind === 'delivery') {
-        rpc = action === 'move' ? 'app_admin_move_delivery_order' : 'app_admin_restore_delivery_order';
+        rpc = action === 'move' ? 'app_admin_move_delivery_order'
+          : action === 'restore' ? 'app_admin_restore_delivery_order'
+            : action === 'remove' ? 'app_admin_remove_delivery_order'
+              : 'app_admin_restore_removed_delivery_order';
         args = { ...args, p_order_id: record.id };
       } else {
+        if (action === 'remove' || action === 'restore_removed') return;
         rpc = action === 'move' ? 'app_admin_move_manual_benefit_pay' : 'app_admin_restore_manual_benefit_pay';
         args = { ...args, p_transfer_id: record.id };
       }
@@ -135,12 +143,14 @@ export const AdminRecordCorrections: React.FC = () => {
   const canRestore = record && (kind === 'delivery'
     ? record.status === 'cancelled'
     : record.archived && record.source === 'manual');
+  const canRemove = record && kind === 'delivery' && !record.removed
+    && ['recorded', 'assigned'].includes(record.status);
 
   return (
     <section className="operational-panel space-y-5 p-5">
       <div>
         <h3 className="text-xl font-bold text-slate-950">Admin record corrections</h3>
-        <p className="text-sm text-slate-500">Move a record to its correct branch or restore a mistakenly voided record. Each correction is logged.</p>
+        <p className="text-sm text-slate-500">Move, restore, or remove an eligible delivery recording. Removals keep an audit snapshot and reason.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => { setKind('delivery'); setRecord(null); setMessage(''); }}
@@ -175,6 +185,11 @@ export const AdminRecordCorrections: React.FC = () => {
             onClick={() => void correct('move')}>Move to branch</button>}
           {canRestore && <button type="button" className="btn-secondary" disabled={busy || reason.trim().length < 5}
             onClick={() => void correct('restore')}>Restore record</button>}
+          {canRemove && <button type="button" className="rounded-md bg-red-700 px-4 py-2 font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+            disabled={busy || reason.trim().length < 5}
+            onClick={() => void correct('remove')}>Remove from recordings</button>}
+          {record.removed && kind === 'delivery' && <button type="button" className="btn-secondary" disabled={busy || reason.trim().length < 5}
+            onClick={() => void correct('restore_removed')}>Restore removed record</button>}
         </div>
       </div>}
       {message && <p role="status" className="text-sm font-semibold text-slate-700">{message}</p>}
