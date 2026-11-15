@@ -1,4 +1,5 @@
 import { supabaseClient } from '../lib/supabaseClient';
+import { excludeVoidedDeliveryOrders } from './deliveryOrderVisibility';
 import {
   BranchClassification,
   DeliveryArea,
@@ -487,6 +488,7 @@ export const deliveryService = {
         const { data, error } = await buildQuery()
           .order('order_date', { ascending: false })
           .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
           .range(from, from + pageSize - 1);
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -494,22 +496,7 @@ export const deliveryService = {
         if (data.length < pageSize || all.length >= 50000) break;
         from += pageSize;
       }
-      const voidedOrderIds = new Set<string>();
-      const orderIds = all.map(row => row.id).filter(Boolean);
-      for (let offset = 0; offset < orderIds.length; offset += 500) {
-        const { data: voids, error: voidError } = await supabaseClient
-          .from('delivery_recording_voids' as any)
-          .select('order_id')
-          .in('order_id', orderIds.slice(offset, offset + 500));
-        if (voidError) throw voidError;
-        (voids || []).forEach((item: any) => item.order_id && voidedOrderIds.add(item.order_id));
-      }
-
-      // Audited voids remain in the financial history but stay out of active
-      // operational lists, including Dispatch and Reassign.
-      return all
-        .map(toOrder)
-        .filter(order => !order.cancelledReason?.startsWith('Recorded only void:') && !voidedOrderIds.has(order.id));
+      return excludeVoidedDeliveryOrders(all.map(toOrder));
     },
 
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {

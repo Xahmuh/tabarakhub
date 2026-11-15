@@ -43,7 +43,7 @@ export type ClientConfig = {
   environmentLabel?: string;
 };
 
-const env = import.meta.env;
+const env: Partial<ImportMetaEnv> = import.meta.env ?? {};
 
 const readBoolean = (key: string, fallback = true): boolean => {
   const value = env[key];

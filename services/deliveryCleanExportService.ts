@@ -4,6 +4,7 @@ import { supabaseClient } from '../lib/supabaseClient';
 import { DeliveryOrder, Governorate } from '../types';
 import { truncateBhd } from '../utils/money';
 import { deliverySourceLabel } from '../lib/deliveryRecording';
+import { excludeVoidedDeliveryOrders } from './deliveryOrderVisibility';
 
 export interface DeliveryCleanExportFilters {
   branchId?: string | null;
@@ -223,6 +224,7 @@ export const listDeliveryOrderCleanExportRows = async (
     const { data, error } = await buildQuery(filters)
       .order('order_date', { ascending: false })
       .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
@@ -231,9 +233,7 @@ export const listDeliveryOrderCleanExportRows = async (
     from += PAGE_SIZE;
   }
 
-  return rows
-    .map(toCleanExportRow)
-    .filter(order => !order.cancelledReason?.startsWith('Recorded only void:'));
+  return excludeVoidedDeliveryOrders(rows.map(toCleanExportRow));
 };
 
 export async function fetchAllShortagesForExport(
