@@ -59,6 +59,7 @@ interface BlockCoverageMapProps {
   };
   compact?: boolean;
   compactMapHeightClass?: string;
+  serviceRingsInitiallyEnabled?: boolean;
   noOrderAnalysis?: Map<string, NoOrderBlockAnalysis>;
   showNoOrdersClassification?: boolean;
   onToggleNoOrdersClassification?: () => void;
@@ -78,7 +79,7 @@ interface BlockCoverageMapUnavailableProps {
 const VIEW_W = 760;
 const VIEW_H = 760;
 const PAD = 18;
-const MAP_BASE_COLOR = '#f9eee9';
+const MAP_BASE_COLOR = '#f8fafc';
 const MAP_BOUNDARY_COLOR = '#4b5563';
 const MAP_ACTIVE_BOUNDARY_COLOR = '#374151';
 const MAP_SELECTED_COLOR = '#111827';
@@ -605,7 +606,7 @@ const zoneTone = (zone?: DeliveryBlockZoneAnalysis['zone']) => {
   if (zone === 'extended') return { label: 'Extended', fill: '#fef3c7', hoverFill: '#fde68a', stroke: '#b45309' };
   if (zone === 'outside_range') return { label: 'Outside range', fill: '#fee2e2', hoverFill: '#fecaca', stroke: '#b91c1c' };
   if (zone === 'unavailable') return { label: 'Unavailable', fill: '#e2e8f0', hoverFill: '#cbd5e1', stroke: '#64748b' };
-  return { label: 'No orders', fill: MAP_BASE_COLOR, hoverFill: '#ead7ce', stroke: MAP_BOUNDARY_COLOR };
+  return { label: 'No orders', fill: MAP_BASE_COLOR, hoverFill: '#e2e8f0', stroke: MAP_BOUNDARY_COLOR };
 };
 
 const StatChip: React.FC<{ label: string; value: string; tone?: 'good' | 'warn' | 'neutral' }> = ({ label, value, tone = 'neutral' }) => {
@@ -628,6 +629,7 @@ const MapToggle: React.FC<{ label: string; checked: boolean; disabled?: boolean;
     type="button"
     onClick={onToggle}
     disabled={disabled}
+    aria-pressed={checked}
     className={`rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-widest transition disabled:cursor-not-allowed disabled:opacity-40 ${
       checked
         ? 'border-brand/20 bg-brand text-white'
@@ -703,6 +705,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
   geometryStats,
   compact = false,
   compactMapHeightClass = 'h-[220px] sm:h-[260px]',
+  serviceRingsInitiallyEnabled = false,
   noOrderAnalysis,
   showNoOrdersClassification,
   onToggleNoOrdersClassification,
@@ -712,6 +715,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapSvgRef = useRef<SVGSVGElement>(null);
   const panStartRef = useRef<{ pointerId: number; clientX: number; clientY: number; viewport: MapViewport } | null>(null);
   const suppressClickRef = useRef(false);
   const [hovered, setHovered] = useState<HoverInfo | null>(null);
@@ -719,7 +723,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showBranchMarkers, setShowBranchMarkers] = useState(true);
-  const [showServiceRings, setShowServiceRings] = useState(true);
+  const [showServiceRings, setShowServiceRings] = useState(serviceRingsInitiallyEnabled);
   const [showServedBlocks, setShowServedBlocks] = useState(true);
   const [colorMode, setColorMode] = useState<MapColorMode>('orders');
   const [viewport, setViewport] = useState<MapViewport>(INITIAL_VIEWPORT);
@@ -923,24 +927,38 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     }));
   };
 
-  const handleWheelZoom = (event: React.WheelEvent<SVGSVGElement>) => {
-    if (!mapRef.current) return;
-    event.preventDefault();
-    const rect = mapRef.current.getBoundingClientRect();
-    const pointerX = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * viewport.width + viewport.x;
-    const pointerY = ((event.clientY - rect.top) / Math.max(rect.height, 1)) * viewport.height + viewport.y;
-    const factor = event.deltaY > 0 ? 1.14 : 0.86;
-    const nextWidth = viewport.width * factor;
-    const nextHeight = viewport.height * factor;
-    const xRatio = (pointerX - viewport.x) / viewport.width;
-    const yRatio = (pointerY - viewport.y) / viewport.height;
-    setViewport(clampViewport({
-      x: pointerX - nextWidth * xRatio,
-      y: pointerY - nextHeight * yRatio,
-      width: nextWidth,
-      height: nextHeight
-    }));
-  };
+  const hasMapGeometry = Boolean(bounds && paths.length);
+  useEffect(() => {
+    const svg = mapSvgRef.current;
+    if (!svg) return;
+
+    const zoomAtPointer = (event: WheelEvent) => {
+      if (event.deltaY === 0) return;
+      event.preventDefault();
+      const transform = svg.getScreenCTM();
+      if (!transform) return;
+      const pointer = new DOMPoint(event.clientX, event.clientY).matrixTransform(transform.inverse());
+      const view = svg.viewBox.baseVal;
+      const xRatio = (pointer.x - view.x) / view.width;
+      const yRatio = (pointer.y - view.y) / view.height;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? svg.clientHeight : 1;
+      const factor = Math.exp(Math.max(-120, Math.min(120, event.deltaY * unit)) * 0.0015);
+      setViewport(current => {
+        const size = Math.min(MAX_VIEW_SIZE, Math.max(MIN_VIEW_SIZE, current.width * factor));
+        if (size === current.width) return current;
+        return clampViewport({
+          x: current.x + (current.width - size) * xRatio,
+          y: current.y + (current.height - size) * yRatio,
+          width: size,
+          height: size
+        });
+      });
+    };
+
+    // React's wheel listener is passive, so it cannot prevent page scrolling.
+    svg.addEventListener('wheel', zoomAtPointer, { passive: false });
+    return () => svg.removeEventListener('wheel', zoomAtPointer);
+  }, [hasMapGeometry]);
 
   const handlePanStart = (event: React.PointerEvent<SVGSVGElement>) => {
     if (event.button !== 0) return;
@@ -959,9 +977,10 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
 
   const handlePanMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const start = panStartRef.current;
-    if (!start || !mapRef.current || start.pointerId !== event.pointerId) return;
+    if (!start || start.pointerId !== event.pointerId) return;
     event.preventDefault();
-    const rect = mapRef.current.getBoundingClientRect();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const mapSize = Math.max(1, Math.min(rect.width, rect.height));
     const dx = event.clientX - start.clientX;
     const dy = event.clientY - start.clientY;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
@@ -969,8 +988,8 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     }
     setViewport(clampViewport({
       ...start.viewport,
-      x: start.viewport.x - (dx / Math.max(rect.width, 1)) * start.viewport.width,
-      y: start.viewport.y - (dy / Math.max(rect.height, 1)) * start.viewport.height
+      x: start.viewport.x - (dx / mapSize) * start.viewport.width,
+      y: start.viewport.y - (dy / mapSize) * start.viewport.height
     }));
   };
 
@@ -1230,7 +1249,7 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
     });
   };
 
-  if (!bounds || paths.length === 0) {
+  if (!hasMapGeometry) {
     return (
       <div className="p-4 md:p-5">
         <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center">
@@ -1367,14 +1386,14 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
 
       <div className="space-y-4">
         <div className="w-full">
-          <div ref={mapRef} className="relative overflow-hidden rounded-lg border border-slate-200 bg-[#f9eee9] shadow-inner">
+          <div ref={mapRef} className="relative overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 via-sky-50 to-sky-100 shadow-sm">
             {!compact && <div className="absolute left-3 top-3 z-10 hidden rounded-lg border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur md:block">
               <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <MousePointer2 className="h-3.5 w-3.5" />
                 Hover, click, wheel to zoom
               </p>
             </div>}
-            {!compact && <div className="absolute right-3 top-3 z-10 hidden max-w-[380px] flex-wrap gap-1 rounded-lg border border-white/80 bg-white/90 p-1 shadow-sm backdrop-blur print:hidden md:flex">
+            {!compact && <div className="relative z-10 mx-2 mt-2 flex flex-wrap gap-1 rounded-lg border border-white/80 bg-white/90 p-1 shadow-sm backdrop-blur print:hidden md:absolute md:right-3 md:top-3 md:m-0 md:max-w-[380px]">
               <MapToggle label="Branch Markers" checked={showBranchMarkers} onToggle={() => setShowBranchMarkers(v => !v)} />
               <MapToggle label="Service Rings" checked={showServiceRings && branchMarkers.length > 0} disabled={branchMarkers.length === 0} onToggle={() => setShowServiceRings(v => !v)} />
               <MapToggle label="Served Blocks" checked={showServedBlocks} onToggle={() => setShowServedBlocks(v => !v)} />
@@ -1405,12 +1424,12 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
             </div>}
 
             <svg
+              ref={mapSvgRef}
               viewBox={`${viewport.x.toFixed(2)} ${viewport.y.toFixed(2)} ${viewport.width.toFixed(2)} ${viewport.height.toFixed(2)}`}
               className={mapSvgClassName}
               style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
               role="img"
               aria-label="Bahrain block delivery coverage map"
-              onWheel={handleWheelZoom}
               onPointerDown={handlePanStart}
               onPointerMove={handlePanMove}
               onPointerUp={handlePanEnd}
@@ -1462,7 +1481,6 @@ export const BlockCoverageMap: React.FC<BlockCoverageMapProps> = ({
                   <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#0f172a" floodOpacity="0.28" />
                 </filter>
               </defs>
-              <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill={MAP_BASE_COLOR} />
               {paths.map(row => {
                 const block = row.block;
                 const cleanBlockNum = row.blockNumber.trim();

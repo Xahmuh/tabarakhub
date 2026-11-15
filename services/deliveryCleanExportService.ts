@@ -1,9 +1,9 @@
-import type { Row, Worksheet } from 'exceljs';
+import type { Cell, Row, Worksheet } from 'exceljs';
 import { isModuleEnabled } from '../config/clientConfig';
 import { supabaseClient } from '../lib/supabaseClient';
 import { DeliveryOrder, Governorate } from '../types';
 import { truncateBhd } from '../utils/money';
-import { deliverySourceLabel } from '../lib/deliveryRecording';
+import { deliveryReportGroup, deliverySourceLabel, groupDeliveryReportOrders, summarizeDeliveryReportOrders } from '../lib/deliveryRecording';
 import { excludeVoidedDeliveryOrders } from './deliveryOrderVisibility';
 
 export interface DeliveryCleanExportFilters {
@@ -90,6 +90,14 @@ interface DeliveryOrderCleanExportDbRow {
   cancelled_reason: string | null;
 }
 
+const DELIVERY_GROUPS = [
+  { group: 'total', name: 'Total Delivery Orders' },
+  { group: 'tabarak', name: 'Tabarak Delivery' },
+  { group: 'talabat', name: 'Talabat Delivery' }
+] as const;
+
+type DeliveryReportTotals = ReturnType<typeof summarizeDeliveryReportOrders>;
+
 export interface DeliveryCleanExportParityResult {
   matches: boolean;
   rowCount: { operational: number; clean: number; matches: boolean };
@@ -98,6 +106,7 @@ export interface DeliveryCleanExportParityResult {
   orderKindCounts: { operational: Record<string, number>; clean: Record<string, number>; matches: boolean };
   statusCounts: { operational: Record<string, number>; clean: Record<string, number>; matches: boolean };
   driverDisplay: { operational: number; clean: number; matches: boolean };
+  deliveryGroups: { name: string; operational: DeliveryReportTotals; clean: DeliveryReportTotals; matches: boolean }[];
   differences: string[];
 }
 
@@ -298,6 +307,13 @@ export const buildDeliveryOrderCleanExportParity = (
   const operationalDriverDisplay = operationalRows.filter(order => order.driverCode || order.driverName).length;
   const cleanDriverDisplay = cleanRows.filter(order => order.driverCode || order.driverName).length;
   const driverDisplayMatches = operationalDriverDisplay === cleanDriverDisplay;
+  const operationalGroups = groupDeliveryReportOrders(operationalRows);
+  const cleanGroups = groupDeliveryReportOrders(cleanRows);
+  const deliveryGroups = DELIVERY_GROUPS.map(({ group, name }) => {
+    const operational = summarizeDeliveryReportOrders(operationalGroups[group]);
+    const clean = summarizeDeliveryReportOrders(cleanGroups[group]);
+    return { name, operational, clean, matches: operational.count === clean.count && operational.valueBhd === clean.valueBhd };
+  });
 
   const differences: string[] = [];
   if (!rowCountMatches) differences.push(`row count operational=${operationalRows.length} clean=${cleanRows.length}`);
@@ -306,6 +322,9 @@ export const buildDeliveryOrderCleanExportParity = (
   if (!orderKindCountsMatch) differences.push('order kind counts differ');
   if (!statusCountsMatch) differences.push('delivery status counts differ');
   if (!driverDisplayMatches) differences.push(`driver display availability operational=${operationalDriverDisplay} clean=${cleanDriverDisplay}`);
+  for (const group of deliveryGroups) {
+    if (!group.matches) differences.push(`${group.name} count or value differs`);
+  }
 
   return {
     matches: differences.length === 0,
@@ -315,6 +334,7 @@ export const buildDeliveryOrderCleanExportParity = (
     orderKindCounts: { operational: operationalKindCounts, clean: cleanKindCounts, matches: orderKindCountsMatch },
     statusCounts: { operational: operationalStatusCounts, clean: cleanStatusCounts, matches: statusCountsMatch },
     driverDisplay: { operational: operationalDriverDisplay, clean: cleanDriverDisplay, matches: driverDisplayMatches },
+    deliveryGroups,
     differences
   };
 };
@@ -335,39 +355,21 @@ const writeObjectRows = (
   styleHeader(sheet.addRow(columns.map(column => column.label)));
   rows.forEach(row => sheet.addRow(columns.map(column => row[column.key] ?? '')));
   sheet.columns.forEach((column, index) => {
+    if (!columns[index]) return;
     column.width = columns[index]?.width || 18;
     if (columns[index]?.numFmt) column.numFmt = columns[index].numFmt;
   });
 };
 
-export const exportDeliveryOrderCleanRowsToExcel = async (
-  rows: DeliveryOrderCleanExportRow[],
-  title: string,
-  fileName: string,
-  parity?: DeliveryCleanExportParityResult
-) => {
-  assertExcelEnabled();
-  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
-    import('exceljs'),
-    import('file-saver'),
-  ]);
-
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Tabarak Hub';
-  workbook.created = new Date();
-
-  const sheet = workbook.addWorksheet('Clean Delivery Orders');
-  sheet.addRow([title]);
-  sheet.getRow(1).font = { bold: true, size: 14 };
-  sheet.addRow(['Source: public.delivery_orders_clean']);
-  sheet.addRow([]);
-
+const writeDeliveryReportOrders = (sheet: Worksheet, rows: DeliveryOrderCleanExportRow[]) => {
+  const headerRow = sheet.rowCount + 1;
   writeObjectRows(
     sheet,
     rows.map(row => ({
       id: row.id,
       orderDate: row.orderDate,
-      orderKind: String(row.paymentType || '').trim().toUpperCase() === 'TALABAT' ? 'Talabat Delivery' : 'Tabarak Delivery',
+      orderKind: row.orderKind === 'internal_transfer' ? 'Internal Transfer'
+        : deliveryReportGroup(row) === 'talabat' ? 'Talabat Delivery' : 'Tabarak Delivery',
       deliveryStatus: row.deliveryStatus,
       branchCode: row.branchCode,
       branchName: row.branchName,
@@ -419,44 +421,204 @@ export const exportDeliveryOrderCleanRowsToExcel = async (
       { key: 'cancelledReason', label: 'Cancel Reason', width: 28 }
     ]
   );
+  sheet.autoFilter = {
+    from: { row: headerRow, column: 1 },
+    to: { row: headerRow + rows.length, column: 25 }
+  };
 
+  const totals = summarizeDeliveryReportOrders(rows);
   const totalRow = sheet.addRow([
     'TOTAL',
     '',
     '',
     '',
     '',
-    `${rows.length} orders`,
-    normalizeBhd(rows.reduce((total, row) => total + (row.valueBhd || 0), 0))
+    `${totals.count} orders`,
+    totals.valueBhd
   ]);
   totalRow.font = { bold: true };
+};
 
-  const qaSheet = workbook.addWorksheet('Clean Export QA');
-  qaSheet.addRow(['Clean Export QA']);
-  qaSheet.getRow(1).font = { bold: true, size: 14 };
-  qaSheet.addRow([]);
+export interface DeliveryDashboardExportSection {
+  tab: 'Dashboard' | 'Operations' | 'Branches' | 'Pharmacists' | 'Drivers' | 'Geography';
+  name: string;
+  headers: string[];
+  rows: (string | number)[][];
+  formats?: Record<number, string>;
+}
+
+const valueFormat = '#,##0.000';
+const countFormat = '#,##0';
+
+const writeDashboardBand = (sheet: Worksheet, range: string, address: string, value: string | number, options: {
+  background: string; color: string; size: number; bold?: boolean; center?: boolean; format?: string;
+}) => {
+  sheet.mergeCells(range);
+  const cell = sheet.getCell(address);
+  cell.value = value;
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: options.background } };
+  cell.font = { name: 'Calibri', color: { argb: options.color }, size: options.size, bold: options.bold };
+  cell.alignment = { vertical: 'middle', horizontal: options.center ? 'center' : 'left', indent: options.center ? 0 : 1 };
+  if (options.format) cell.numFmt = options.format;
+  return cell;
+};
+
+const addDashboardLink = (cell: Cell, text: string, target: string) => {
+  cell.value = { text, hyperlink: `#'${target}'!A1` };
+  cell.font = { name: 'Calibri', bold: true, size: 11, color: { argb: 'FF1D4ED8' }, underline: true };
+};
+
+const writeDashboardSection = (sheet: Worksheet, section: DeliveryDashboardExportSection) => {
+  sheet.addRow([]);
+  const heading = sheet.addRow([section.name]);
+  heading.height = 24;
+  heading.getCell(1).font = { bold: true, color: { argb: 'FF0F172A' }, size: 13 };
+  styleHeader(sheet.addRow(section.headers));
+  section.rows.forEach((values, index) => {
+    const row = sheet.addRow(values);
+    row.height = 17;
+    row.eachCell(cell => {
+      if (index % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+    });
+    for (const [column, format] of Object.entries(section.formats ?? {})) {
+      row.getCell(Number(column)).numFmt = format;
+    }
+  });
+  if (section.rows.length === 0) sheet.addRow(['No results for the selected period and filters.']);
+};
+
+export const buildDeliveryCleanExportWorkbook = async (
+  rows: DeliveryOrderCleanExportRow[],
+  title: string,
+  parity?: DeliveryCleanExportParityResult,
+  dashboardSections: DeliveryDashboardExportSection[] = []
+) => {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Tabarak Hub';
+  workbook.created = new Date();
+
+  const dashboard = workbook.addWorksheet('Dashboard', {
+    views: [{ showGridLines: false }],
+    properties: { tabColor: { argb: 'FF1D4ED8' } }
+  });
+  workbook.views = [{ firstSheet: 0, activeTab: 0, visibility: 'visible', x: 0, y: 0, width: 12000, height: 18000 }];
+  const tabOrder = ['Branches', 'Pharmacists', 'Drivers', 'Geography', 'Operations'] as const;
+  const detailTabs = tabOrder.filter(tab => dashboardSections.some(section => section.tab === tab));
+  const navTabs = [...detailTabs, 'Order Details', 'QA'];
+
+  for (let column = 1; column <= 8; column++) dashboard.getColumn(column).width = column === 1 ? 24 : 13;
+  const banner = { background: 'FF0F172A', color: 'FFFFFFFF', size: 21, bold: true };
+  writeDashboardBand(dashboard, 'A1:H1', 'A1', 'Delivery Analytics', banner);
+  writeDashboardBand(dashboard, 'A2:H2', 'A2', title, { ...banner, color: 'FFC7D2FE', size: 11, bold: false });
+  dashboard.getRow(1).height = 35;
+  dashboard.getRow(2).height = 22;
+
+  const registered = summarizeDeliveryReportOrders(rows);
+  const branchCount = dashboardSections.find(section => section.tab === 'Branches')?.rows.length
+    ?? new Set(rows.map(row => row.branchCode || row.branchName).filter(Boolean)).size;
+  const cards = [
+    { label: 'Registered orders', value: registered.count, format: countFormat, left: 'A', right: 'B' },
+    { label: 'Registered value (BHD)', value: registered.valueBhd, format: valueFormat, left: 'C', right: 'D' },
+    { label: 'Avg. order value (BHD)', value: registered.count ? registered.valueBhd / registered.count : 0, format: valueFormat, left: 'E', right: 'F' },
+    { label: 'Active branches', value: branchCount, format: countFormat, left: 'G', right: 'H' }
+  ];
+  for (const card of cards) {
+    const style = { background: 'FFEFF6FF', color: 'FF1E3A8A', size: 10, bold: true, center: true };
+    writeDashboardBand(dashboard, `${card.left}4:${card.right}4`, `${card.left}4`, card.label, style);
+    writeDashboardBand(dashboard, `${card.left}5:${card.right}5`, `${card.left}5`, card.value, { ...style, size: 17, format: card.format });
+  }
+  dashboard.getRow(4).height = 22;
+  dashboard.getRow(5).height = 32;
+
+  const groups = groupDeliveryReportOrders(rows);
+  const summaries = [...DELIVERY_GROUPS, { group: 'transfers' as const, name: 'Internal Transfers' }];
+  writeDashboardBand(dashboard, 'A7:H7', 'A7', 'Delivery breakdown', { ...banner, size: 12 });
+  const breakdownRow = (row: number, name: string, count: string | number, value: string | number, background: string) => {
+    const style = { background, color: 'FF0F172A', size: 11, bold: row < 10 };
+    writeDashboardBand(dashboard, `A${row}:D${row}`, `A${row}`, name, style);
+    writeDashboardBand(dashboard, `E${row}:F${row}`, `E${row}`, count, { ...style, center: true, format: countFormat });
+    writeDashboardBand(dashboard, `G${row}:H${row}`, `G${row}`, value, { ...style, center: true, format: valueFormat });
+    dashboard.getRow(row).height = 20;
+  };
+  breakdownRow(8, 'Delivery type', 'Orders', 'Value (BHD)', 'FFE2E8F0');
+  summaries.forEach(({ group, name }, index) => {
+    const totals = summarizeDeliveryReportOrders(groups[group]);
+    breakdownRow(index + 9, name, totals.count, totals.valueBhd, index % 2 === 0 ? 'FFF8FAFC' : 'FFFFFFFF');
+  });
+  writeDashboardBand(dashboard, 'A14:H14', 'A14', 'Open a report', { ...banner, size: 12 });
+  navTabs.forEach((tab, index) => {
+    const row = 15 + Math.floor(index / 4);
+    const left = 'ACEG'[index % 4];
+    const right = 'BDFH'[index % 4];
+    const cell = writeDashboardBand(dashboard, `${left}${row}:${right}${row}`, `${left}${row}`, tab, {
+      background: 'FFEFF6FF', color: 'FF1D4ED8', size: 11, center: true
+    });
+    addDashboardLink(cell, tab, tab);
+    dashboard.getRow(row).height = 23;
+  });
+  for (const section of dashboardSections.filter(section => section.tab === 'Dashboard')) {
+    writeDashboardSection(dashboard, section);
+  }
+
+  const reportTab = (name: string) => {
+    const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 3, showGridLines: false }] });
+    sheet.addRow([name]).font = { size: 17, bold: true, color: { argb: 'FF0F172A' } };
+    sheet.addRow([title]);
+    addDashboardLink(sheet.addRow(['Back to Dashboard']).getCell(1), 'Back to Dashboard', 'Dashboard');
+    sheet.getColumn(1).width = 48;
+    for (let column = 2; column <= 9; column++) sheet.getColumn(column).width = 20;
+    return sheet;
+  };
+  for (const tab of detailTabs) {
+    const sheet = reportTab(tab);
+    for (const section of dashboardSections.filter(section => section.tab === tab)) writeDashboardSection(sheet, section);
+  }
+  const ordersSheet = reportTab('Order Details');
+  ordersSheet.addRow(['Source: public.delivery_orders_clean. Use the Type filter for Tabarak, Talabat, or Internal Transfer.']);
+  writeDeliveryReportOrders(ordersSheet, rows);
+  ordersSheet.views = [{ state: 'frozen', ySplit: 5, showGridLines: false }];
+  const sheet = reportTab('QA');
+  sheet.getColumn(2).width = 45;
+  sheet.getColumn(3).width = 45;
   if (parity) {
-    writeObjectRows(
-      qaSheet,
-      [
+    styleHeader(sheet.addRow(['Check', 'Dashboard', 'Clean View', 'Matches']));
+    const checks = [
         { check: 'Row count', operational: parity.rowCount.operational, clean: parity.rowCount.clean, matches: parity.rowCount.matches ? 'YES' : 'NO' },
         { check: 'Latest 20 order IDs', operational: parity.latest20Ids.operational.join(', '), clean: parity.latest20Ids.clean.join(', '), matches: parity.latest20Ids.matches ? 'YES' : 'NO' },
         { check: 'Payment totals', operational: JSON.stringify(parity.paymentTotals.operational), clean: JSON.stringify(parity.paymentTotals.clean), matches: parity.paymentTotals.matches ? 'YES' : 'NO' },
         { check: 'Order kind counts', operational: JSON.stringify(parity.orderKindCounts.operational), clean: JSON.stringify(parity.orderKindCounts.clean), matches: parity.orderKindCounts.matches ? 'YES' : 'NO' },
         { check: 'Status counts', operational: JSON.stringify(parity.statusCounts.operational), clean: JSON.stringify(parity.statusCounts.clean), matches: parity.statusCounts.matches ? 'YES' : 'NO' },
-        { check: 'Driver display availability', operational: parity.driverDisplay.operational, clean: parity.driverDisplay.clean, matches: parity.driverDisplay.matches ? 'YES' : 'NO' }
-      ],
-      [
-        { key: 'check', label: 'Check', width: 28 },
-        { key: 'operational', label: 'Operational Source', width: 44 },
-        { key: 'clean', label: 'Clean View', width: 44 },
-        { key: 'matches', label: 'Matches', width: 12 }
-      ]
-    );
+        { check: 'Driver display availability', operational: parity.driverDisplay.operational, clean: parity.driverDisplay.clean, matches: parity.driverDisplay.matches ? 'YES' : 'NO' },
+        ...parity.deliveryGroups.map(group => ({
+          check: group.name,
+          operational: `${group.operational.count} orders | ${group.operational.valueBhd.toFixed(3)} BHD`,
+          clean: `${group.clean.count} orders | ${group.clean.valueBhd.toFixed(3)} BHD`,
+          matches: group.matches ? 'YES' : 'NO'
+        }))
+    ];
+    for (const check of checks) {
+      const row = sheet.addRow([check.check, check.operational, check.clean, check.matches]);
+      row.getCell(4).font = { bold: true, color: { argb: check.matches === 'YES' ? 'FF166534' : 'FFB91C1C' } };
+    }
   } else {
-    qaSheet.addRow(['Parity comparison was not supplied.']);
+    sheet.addRow(['Parity comparison was not supplied.']);
   }
+  return workbook;
+};
 
+export const exportDeliveryOrderCleanRowsToExcel = async (
+  rows: DeliveryOrderCleanExportRow[],
+  title: string,
+  fileName: string,
+  parity?: DeliveryCleanExportParityResult,
+  dashboardSections: DeliveryDashboardExportSection[] = []
+) => {
+  assertExcelEnabled();
+  const [workbook, { saveAs }] = await Promise.all([
+    buildDeliveryCleanExportWorkbook(rows, title, parity, dashboardSections),
+    import('file-saver')
+  ]);
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),

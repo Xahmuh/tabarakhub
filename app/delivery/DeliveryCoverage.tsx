@@ -712,6 +712,7 @@ export const DeliveryCoverage: React.FC<DeliveryCoverageProps> = ({ lockedBranch
                 dataset={geometry}
                 blocks={mappableBlocks}
                 branchProfiles={activeBranchProfiles}
+                serviceRingsInitiallyEnabled={branchView}
                 blockZoneAnalysis={zoneAnalysis.byBlock}
                 zoneMetrics={zoneAnalysis.metrics}
                 summary={summary}

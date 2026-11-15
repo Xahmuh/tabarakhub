@@ -14,11 +14,13 @@ import { isModuleEnabled } from '../../config/clientConfig';
 import {
   buildDeliveryOrderCleanExportParity,
   deliveryCleanExportService,
-  exportDeliveryOrderCleanRowsToExcel
+  exportDeliveryOrderCleanRowsToExcel,
+  type DeliveryCleanExportFilters,
+  type DeliveryDashboardExportSection
 } from '../../services/deliveryCleanExportService';
 import { runAfterNextPaint } from '../../utils/uiPerformance';
 import { truncateBhd } from '../../utils/money';
-import { deliverySourceLabel, registeredSourceSummary } from '../../lib/deliveryRecording';
+import { groupDeliveryReportOrders, registeredSourceSummary, summarizeDeliveryReportOrders } from '../../lib/deliveryRecording';
 
 const GOVERNORATES: Governorate[] = ['Capital', 'Muharraq', 'Northern', 'Southern'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -31,6 +33,40 @@ type KpiTab = (typeof KPI_TABS)[number]['id'];
 
 interface LeaderRow { key: string; name: string; orders: number; value: number }
 interface TransferRouteRow { key: string; from: string; to: string; orders: number }
+interface KpiMetric { label: string; value: number; currency?: boolean; detail?: string; detailValueBhd?: number }
+
+const leaderExportSection = (tab: DeliveryDashboardExportSection['tab'], name: string, heading: string, rows: LeaderRow[]): DeliveryDashboardExportSection => ({
+  tab, name,
+  headers: [heading, 'Orders', 'Value (BHD)'],
+  rows: rows.map(row => [row.name, row.orders, truncateBhd(row.value)]),
+  formats: { 3: '0.000' }
+});
+const PAGE_SIZE = 10;
+
+function PagedRows<T>({ rows, label, children }: {
+  rows: T[];
+  label: string;
+  children: (page: T[], offset: number) => React.ReactNode;
+}) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.ceil(rows.length / PAGE_SIZE);
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1));
+  const offset = currentPage * PAGE_SIZE;
+  return <>
+    {children(rows.slice(offset, offset + PAGE_SIZE), offset)}
+    {pageCount > 1 && (
+      <nav aria-label={`${label} pagination`} className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs print:hidden">
+        <span aria-live="polite" className="font-semibold text-slate-600">
+          {offset + 1}–{Math.min(offset + PAGE_SIZE, rows.length)} of {rows.length}
+        </span>
+        <div className="flex gap-1">
+          <button type="button" aria-label={`Previous page of ${label}`} onClick={() => setPage(currentPage - 1)} disabled={currentPage === 0} className="btn-neutral min-h-9 px-2 disabled:opacity-40">Previous</button>
+          <button type="button" aria-label={`Next page of ${label}`} onClick={() => setPage(currentPage + 1)} disabled={currentPage === pageCount - 1} className="btn-neutral min-h-9 px-2 disabled:opacity-40">Next</button>
+        </div>
+      </nav>
+    )}
+  </>;
+}
 
 const buildLeaderboard = (orders: DeliveryOrder[], keyFn: (o: DeliveryOrder) => string | null, nameFn: (o: DeliveryOrder) => string): LeaderRow[] => {
   const map = new Map<string, LeaderRow>();
@@ -53,14 +89,14 @@ const Leaderboard: React.FC<{ title: string; rows: LeaderRow[]; emptyLabel: stri
       {rows.length === 0 ? (
         <p className="py-6 text-center text-xs font-bold text-slate-400">{emptyLabel}</p>
       ) : (
-        <div className="space-y-2">
-          {rows.slice(0, 12).map((row, index) => (
+        <PagedRows<LeaderRow> rows={rows} label={title}>{(page, offset) => <div className="space-y-2">
+          {page.map((row, index) => (
             <div key={row.key} className="flex items-center gap-3">
-              <span className="w-5 shrink-0 text-right text-[11px] font-black text-slate-400">{index + 1}</span>
+              <span className="w-6 shrink-0 text-right text-[11px] font-black text-slate-400">{offset + index + 1}</span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-xs font-bold text-slate-700">{row.name}</span>
-                  <span className="shrink-0 text-[11px] font-black text-slate-900 tabular-nums">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                  <span className="min-w-0 break-words text-xs font-bold text-slate-700">{row.name}</span>
+                  <span className="text-[11px] font-black text-slate-900 tabular-nums">
                     {row.orders} · {formatBhd(row.value)}
                   </span>
                 </div>
@@ -70,7 +106,7 @@ const Leaderboard: React.FC<{ title: string; rows: LeaderRow[]; emptyLabel: stri
               </div>
             </div>
           ))}
-        </div>
+        </div>}</PagedRows>
       )}
     </section>
   );
@@ -104,12 +140,23 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const [paymentTypes, setPaymentTypes] = useState<DeliveryPaymentTypeConfig[]>([]);
   const [pharmacists, setPharmacists] = useState<Pharmacist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedFilters, setLoadedFilters] = useState<DeliveryCleanExportFilters | null>(null);
   const [isExportingCleanOrders, setIsExportingCleanOrders] = useState(false);
   const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
   const [drilldownGov, setDrilldownGov] = useState<Governorate | null>(null);
 
   const range = getPresetRange(preset, customFrom, customTo);
   const label = periodLabel(preset, range.from, range.to);
+  const filters = useMemo(() => ({
+    branchId: branchFilter || undefined,
+    dateFrom: range.from,
+    dateTo: range.to,
+    paymentType: paymentFilter || undefined,
+    driverId: driverFilter || undefined,
+    recordedDriverId: recordedDriverFilter || undefined,
+    pharmacistId: pharmacistFilter || undefined,
+    governorate: governorateFilter || undefined
+  }), [range.from, range.to, branchFilter, paymentFilter, driverFilter, recordedDriverFilter, pharmacistFilter, governorateFilter]);
 
   useEffect(() => {
     Promise.all([
@@ -128,23 +175,15 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    deliveryService.orders.list({
-      branchId: branchFilter || undefined,
-      dateFrom: range.from,
-      dateTo: range.to,
-      paymentType: paymentFilter || undefined,
-      driverId: driverFilter || undefined,
-      recordedDriverId: recordedDriverFilter || undefined,
-      pharmacistId: pharmacistFilter || undefined,
-      governorate: governorateFilter || undefined
-    }).then(data => {
+    deliveryService.orders.list(filters).then(data => {
       if (cancelled) return;
       setOrders(data);
+      setLoadedFilters(filters);
     })
       .catch(e => { console.error('Analytics load failed', e); if (!cancelled) setOrders([]); })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [range.from, range.to, branchFilter, paymentFilter, driverFilter, recordedDriverFilter, pharmacistFilter, governorateFilter]);
+  }, [filters]);
 
   const filteredOrders = useMemo(() => {
     const branchNames = new Map(branches.map(branch => [branch.id, branch.name]));
@@ -159,20 +198,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer' && !isDirectOrder(order, paymentTypes)),
     [filteredOrders, paymentTypes]
   );
-  const internalTransfers = useMemo(
-    () => filteredOrders.filter(order => order.orderKind === 'internal_transfer'),
-    [filteredOrders]
-  );
-  const actualDeliveries = useMemo(
-    () => filteredOrders.filter(order => order.orderKind !== 'internal_transfer'),
-    [filteredOrders]
-  );
-  const talabatDeliveries = useMemo(
-    () => actualDeliveries.filter(order => deliverySourceLabel(order.externalSource, order.paymentType) === 'Talabat'),
-    [actualDeliveries]
-  );
-  const deliveryValue = sumValue(actualDeliveries);
-  const talabatDeliveryValue = sumValue(talabatDeliveries);
+  const { total: actualDeliveries, tabarak: tabarakDeliveries, talabat: talabatDeliveries, transfers: internalTransfers } =
+    useMemo(() => groupDeliveryReportOrders(filteredOrders), [filteredOrders]);
+  const totalDelivery = summarizeDeliveryReportOrders(actualDeliveries);
+  const tabarakDelivery = summarizeDeliveryReportOrders(tabarakDeliveries);
+  const talabatDelivery = summarizeDeliveryReportOrders(talabatDeliveries);
   const totalValue = sumValue(filteredOrders);
   const avgValue = filteredOrders.length ? totalValue / filteredOrders.length : 0;
   const sourceGroups = useMemo(() => registeredSourceSummary(filteredOrders), [filteredOrders]);
@@ -216,7 +246,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     [direct]
   );
   const areaBoard = useMemo(
-    () => buildLeaderboard(direct, o => (o.areaName ? `${o.governorate}|${o.areaName}` : null), o => o.areaName || 'Unknown'),
+    () => buildLeaderboard(direct, o => (o.areaName ? `${o.governorate}|${o.areaName}` : null), o => [o.areaName, o.governorate].filter(Boolean).join(' · ')),
     [direct]
   );
   const blockBoard = useMemo(
@@ -237,19 +267,20 @@ export const AdminDeliveryAnalytics: React.FC = () => {
 
   // Driver workload heatmap: driver × weekday order counts.
   const heatmap = useMemo(() => {
-    const counts = new Map<string, number[]>();
+    const counts = new Map<string, { name: string; days: number[] }>();
     for (const order of filteredOrders) {
       if (!order.driverId) continue;
       const name = order.driverCode && order.driverName ? `${order.driverCode} - ${order.driverName}` : order.driverName || 'Unknown';
       const weekday = new Date(`${order.orderDate}T00:00:00`).getDay();
-      const row = counts.get(name) || [0, 0, 0, 0, 0, 0, 0];
-      row[weekday] += 1;
-      counts.set(name, row);
+      if (!Number.isInteger(weekday)) continue;
+      const row = counts.get(order.driverId) || { name, days: [0, 0, 0, 0, 0, 0, 0] };
+      row.days[weekday] += 1;
+      counts.set(order.driverId, row);
     }
-    const rows = [...counts.entries()].map(([name, days]) => ({ name, days, total: days.reduce((a, b) => a + b, 0) }));
+    const rows = [...counts.entries()].map(([id, { name, days }]) => ({ id, name, days, total: days.reduce((a, b) => a + b, 0) }));
     rows.sort((a, b) => b.total - a.total);
-    const max = Math.max(1, ...rows.flatMap(r => r.days));
-    return { rows: rows.slice(0, 12), max };
+    const max = rows.reduce((largest, row) => Math.max(largest, ...row.days), 1);
+    return { rows, max };
   }, [filteredOrders]);
 
   // Outside-governorate analysis by branch.
@@ -261,8 +292,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
       if (order.isOutsideGovernorate) row.outside += 1;
       map.set(order.branchId, row);
     }
-    return [...map.values()]
-      .map(r => ({ ...r, pct: r.total ? (r.outside / r.total) * 100 : 0 }))
+    return [...map.entries()]
+      .map(([id, r]) => ({ id, ...r, pct: r.total ? (r.outside / r.total) * 100 : 0 }))
       .sort((a, b) => b.pct - a.pct);
   }, [direct]);
 
@@ -291,28 +322,63 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   };
 
   const downloadOrders = async () => {
+    if (loadedFilters !== filters) return;
     setExportErrorMessage(null);
     setIsExportingCleanOrders(true);
     try {
-      const cleanRows = await deliveryCleanExportService.orders.list({
-        branchId: branchFilter || undefined,
-        dateFrom: range.from,
-        dateTo: range.to,
-        paymentType: paymentFilter || undefined,
-        driverId: driverFilter || undefined,
-        recordedDriverId: recordedDriverFilter || undefined,
-        pharmacistId: pharmacistFilter || undefined,
-        governorate: governorateFilter || undefined
-      });
+      const cleanRows = await deliveryCleanExportService.orders.list(filters);
       const parity = buildDeliveryOrderCleanExportParity(filteredOrders, cleanRows);
       if (!parity.matches) {
         throw new Error(`Clean export parity failed: ${parity.differences.join('; ')}`);
       }
+      const dashboardSections: DeliveryDashboardExportSection[] = [
+        ...KPI_TABS.map<DeliveryDashboardExportSection>(({ id, label }) => ({
+          tab: id === 'operations' ? 'Operations' : 'Dashboard',
+          name: label,
+          headers: ['KPI', 'Count', 'Value (BHD)', 'Details'],
+          rows: kpiCards[id].map(metric => [
+            metric.label,
+            metric.currency ? '' : metric.value,
+            metric.currency ? truncateBhd(metric.value) : metric.detailValueBhd == null ? '' : truncateBhd(metric.detailValueBhd),
+            metric.detail || ''
+          ]),
+          formats: { 3: '0.000' }
+        })),
+        leaderExportSection('Branches', 'Orders per branch', 'Branch', branchBoard),
+        leaderExportSection('Pharmacists', 'Pharmacist performance', 'Pharmacist', pharmacistBoard),
+        leaderExportSection('Drivers', 'Driver performance', 'Driver', driverBoard),
+        ...((import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' ? [
+          leaderExportSection('Drivers', 'Recorded external driver value', 'Recorded driver', recordedDriverBoard)
+        ] : []),
+        {
+          tab: 'Operations',
+          name: 'Internal transfer routes',
+          headers: ['From branch', 'To branch', 'Orders'],
+          rows: transferRoutes.map(row => [row.from, row.to, row.orders])
+        },
+        leaderExportSection('Geography', 'Direct payments by governorate', 'Governorate', govBoard),
+        leaderExportSection('Geography', 'Direct payments by area', 'Area', areaBoard),
+        leaderExportSection('Geography', 'Direct payments by block', 'Block', blockBoard),
+        {
+          tab: 'Drivers',
+          name: 'Driver workload by weekday',
+          headers: ['Driver', ...WEEKDAYS, 'Total'],
+          rows: heatmap.rows.map(row => [row.name, ...row.days, row.total])
+        },
+        {
+          tab: 'Geography',
+          name: 'Outside-governorate share',
+          headers: ['Branch', 'Outside orders', 'Direct orders', 'Outside share'],
+          rows: outsideByBranch.map(row => [row.name, row.outside, row.total, row.pct / 100]),
+          formats: { 4: '0%' }
+        }
+      ];
       await runAfterNextPaint(() => exportDeliveryOrderCleanRowsToExcel(
         cleanRows,
-        `Delivery Orders - Clean Export - ${label}`,
+        label,
         `Delivery_Clean_All_${range.from}_${range.to}`,
-        parity
+        parity,
+        dashboardSections
       ));
     } catch (error: any) {
       console.error('Clean delivery order export failed', error);
@@ -326,26 +392,24 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     runAfterNextPaint(printReport).catch(error => console.error(error));
   };
 
-  const kpiCards: Record<KpiTab, React.ReactNode> = {
-    overview: <>
-      <KpiCard label="Registered orders" value={String(filteredOrders.length)} sub={label} />
-      <KpiCard label="Registered value" value={formatBhd(totalValue)} />
-      <KpiCard label="Avg order value" value={formatBhd(avgValue)} />
-      <KpiCard label="Active branches" value={String(branchBoard.length)} sub="with orders in period" />
-    </>,
-    sources: <>
-      <KpiCard label="WhatsApp Orders" value={String(sourceGroup('WhatsApp').count)} sub={formatBhd(sourceGroup('WhatsApp').fils / 1000)} />
-      <KpiCard label="Online Orders" value={String(sourceGroup('Online').count)} sub={formatBhd(sourceGroup('Online').fils / 1000)} />
-      <KpiCard label="Talabat Orders" value={String(sourceGroup('Talabat').count)} sub={formatBhd(sourceGroup('Talabat').fils / 1000)} />
-    </>,
-    operations: <>
-      <KpiCard label="Total Delivery Orders" value={String(actualDeliveries.length)} sub={formatBhd(deliveryValue)} />
-      <KpiCard label="Tabarak Delivery" value={String(actualDeliveries.length - talabatDeliveries.length)} sub={formatBhd(deliveryValue - talabatDeliveryValue)} />
-      <KpiCard label="Talabat Delivery" value={String(talabatDeliveries.length)} sub={formatBhd(talabatDeliveryValue)} />
-      <KpiCard label="Internal transfer" value={String(internalTransfers.length)} sub={`${transferRoutes.length} routes`} />
-      <KpiCard label="Direct payment types" value={String(direct.length)} sub={formatBhd(sumValue(direct))} />
-      <KpiCard label="External / no-block" value={String(external.length)} sub={formatBhd(sumValue(external))} />
-    </>
+  const kpiCards: Record<KpiTab, KpiMetric[]> = {
+    overview: [
+      { label: 'Registered orders', value: filteredOrders.length, detail: label },
+      { label: 'Registered value', value: totalValue, currency: true },
+      { label: 'Avg order value', value: avgValue, currency: true },
+      { label: 'Active branches', value: branchBoard.length, detail: 'with orders in period' }
+    ],
+    sources: (['WhatsApp', 'Online', 'Talabat'] as const).map(source => ({
+      label: `${source} Orders`, value: sourceGroup(source).count, detailValueBhd: sourceGroup(source).fils / 1000
+    })),
+    operations: [
+      { label: 'Total Delivery Orders', value: totalDelivery.count, detailValueBhd: totalDelivery.valueBhd },
+      { label: 'Tabarak Delivery', value: tabarakDelivery.count, detailValueBhd: tabarakDelivery.valueBhd },
+      { label: 'Talabat Delivery', value: talabatDelivery.count, detailValueBhd: talabatDelivery.valueBhd },
+      { label: 'Internal transfer', value: internalTransfers.length, detail: `${transferRoutes.length} routes` },
+      { label: 'Direct payment types', value: direct.length, detailValueBhd: sumValue(direct) },
+      { label: 'External / no-block', value: external.length, detailValueBhd: sumValue(external) }
+    ]
   };
 
   const handleKpiTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -374,7 +438,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             {isModuleEnabled('excelExport') && (
               <button
                 onClick={downloadOrders}
-                disabled={isLoading || isExportingCleanOrders}
+                disabled={isLoading || loadedFilters !== filters || isExportingCleanOrders}
                 className="btn-secondary text-[10px] uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FileDown className="h-3.5 w-3.5" /> {isExportingCleanOrders ? 'Exporting' : 'Excel'}
@@ -454,7 +518,9 @@ export const AdminDeliveryAnalytics: React.FC = () => {
               >
                 <h2 className="mb-2 hidden text-sm font-bold print:block">{label}</h2>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 print:grid-cols-4">
-                  {kpiCards[id]}
+                  {kpiCards[id].map(metric => (
+                    <KpiCard key={metric.label} label={metric.label} value={metric.currency ? formatBhd(metric.value) : String(metric.value)} sub={metric.detailValueBhd == null ? metric.detail : formatBhd(metric.detailValueBhd)} />
+                  ))}
                 </div>
               </div>
             ))}
@@ -476,20 +542,20 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             {transferRoutes.length === 0 ? (
               <p className="py-6 text-center text-xs font-bold text-slate-400">No internal transfer orders in this period.</p>
             ) : (
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {transferRoutes.slice(0, 12).map(route => (
+              <PagedRows<TransferRouteRow> rows={transferRoutes} label="Internal transfer routes">{page => <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {page.map(route => (
                   <div key={route.key} className="rounded-lg border border-slate-200 bg-white p-3">
                     <p className="text-xs font-black text-slate-900">{route.from}</p>
                     <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">to</p>
                     <div className="mt-1 flex items-center justify-between gap-3">
-                      <p className="truncate text-xs font-bold text-slate-700">{route.to}</p>
+                      <p className="min-w-0 break-words text-xs font-bold text-slate-700">{route.to}</p>
                       <span className="rounded-full bg-brand/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand">
                         {route.orders} orders
                       </span>
                     </div>
                   </div>
                 ))}
-              </div>
+              </div>}</PagedRows>
             )}
           </section>
 
@@ -535,57 +601,17 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Top areas</p>
-                  <div className="space-y-1.5">
-                    {areaBoard.slice(0, 8).map(a => (
-                      <div key={a.key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold">
-                        <span className="truncate text-slate-700">{a.name}</span>
-                        <span className="shrink-0 text-slate-500 tabular-nums">{a.orders} · {formatBhd(a.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Top blocks</p>
-                  <div className="space-y-1.5">
-                    {blockBoard.slice(0, 8).map(b => (
-                      <div key={b.key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold">
-                        <span className="truncate text-slate-700">{b.name}</span>
-                        <span className="shrink-0 text-slate-500 tabular-nums">{b.orders} · {formatBhd(b.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <Leaderboard title="Areas" rows={areaBoard} emptyLabel="No area data." />
+                <Leaderboard title="Blocks" rows={blockBoard} emptyLabel="No block data." />
               </div>
             ) : drilldown && (
               <div>
                 <p className="mb-3 text-sm font-bold text-slate-600">
                   <span className="font-black text-slate-900">{drilldownGov}</span> — {drilldown.total} direct orders · {formatBhd(drilldown.value)}
                 </p>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div>
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Areas (highest first)</p>
-                    <div className="space-y-1.5">
-                      {drilldown.areas.map(a => (
-                        <div key={a.key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold">
-                          <span className="truncate text-slate-700">{a.name}</span>
-                          <span className="shrink-0 text-slate-500 tabular-nums">{a.orders} · {formatBhd(a.value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Blocks (highest first)</p>
-                    <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
-                      {drilldown.blocks.map(b => (
-                        <div key={b.key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold">
-                          <span className="truncate text-slate-700">{b.name}</span>
-                          <span className="shrink-0 text-slate-500 tabular-nums">{b.orders} · {formatBhd(b.value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <div key={drilldownGov} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <Leaderboard title="Areas" rows={drilldown.areas} emptyLabel="No area data." />
+                  <Leaderboard title="Blocks" rows={drilldown.blocks} emptyLabel="No block data." />
                 </div>
               </div>
             )}
@@ -598,7 +624,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
               {heatmap.rows.length === 0 ? (
                 <p className="py-6 text-center text-xs font-bold text-slate-400">No driver-linked orders.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <PagedRows<(typeof heatmap.rows)[number]> rows={heatmap.rows} label="Driver workload">{page => <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -607,8 +633,8 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {heatmap.rows.map(row => (
-                        <tr key={row.name}>
+                      {page.map(row => (
+                        <tr key={row.id}>
                           <td className="py-1 pr-2 font-bold text-slate-700">{row.name}</td>
                           {row.days.map((count, i) => (
                             <td key={i} className="p-0.5">
@@ -627,7 +653,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </div>}</PagedRows>
               )}
             </section>
 
@@ -642,22 +668,22 @@ export const AdminDeliveryAnalytics: React.FC = () => {
               {outsideByBranch.length === 0 ? (
                 <p className="py-6 text-center text-xs font-bold text-slate-400">No direct orders with geography.</p>
               ) : (
-                <div className="space-y-1.5">
-                  {outsideByBranch.map(row => (
-                    <div key={row.name} className="flex items-center gap-3">
-                      <span className="w-36 shrink-0 truncate text-xs font-bold text-slate-700">{row.name}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <PagedRows<(typeof outsideByBranch)[number]> rows={outsideByBranch} label="Outside-governorate share">{page => <div className="space-y-2">
+                  {page.map(row => (
+                    <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg border border-slate-100 p-2">
+                      <span className="break-words text-xs font-bold text-slate-700">{row.name}</span>
+                      <span className="text-right text-[11px] font-black tabular-nums text-slate-600">
+                        {row.pct.toFixed(0)}% ({row.outside}/{row.total})
+                      </span>
+                      <div className="col-span-2 h-2 overflow-hidden rounded-full bg-slate-100">
                         <div
                           className={`h-full rounded-full ${row.pct > 40 ? 'bg-red-400' : row.pct > 20 ? 'bg-amber-400' : 'bg-emerald-400'}`}
                           style={{ width: `${Math.min(100, row.pct)}%` }}
                         />
                       </div>
-                      <span className="w-24 shrink-0 text-right text-[11px] font-black tabular-nums text-slate-600">
-                        {row.pct.toFixed(0)}% ({row.outside}/{row.total})
-                      </span>
                     </div>
                   ))}
-                </div>
+                </div>}</PagedRows>
               )}
             </section>
           </div>

@@ -7,6 +7,33 @@ export const deliverySourceLabel = (source?: string | null, paymentType?: string
   if (normalizedSource === 'talabat') return 'Talabat';
   return 'WhatsApp';
 };
+
+type DeliveryReportOrder = {
+  orderKind?: string | null;
+  externalSource?: string | null;
+  paymentType?: string | null;
+  valueBhd: number | null;
+};
+
+export const deliveryReportGroup = (order: DeliveryReportOrder) => {
+  if (order.orderKind === 'internal_transfer') return 'transfers';
+  return deliverySourceLabel(order.externalSource, order.paymentType) === 'Talabat' ? 'talabat' : 'tabarak';
+};
+
+export const groupDeliveryReportOrders = <T extends DeliveryReportOrder>(orders: T[]) => {
+  const groups = { total: [] as T[], tabarak: [] as T[], talabat: [] as T[], transfers: [] as T[] };
+  for (const order of orders) {
+    const group = deliveryReportGroup(order);
+    groups[group].push(order);
+    if (group !== 'transfers') groups.total.push(order);
+  }
+  return groups;
+};
+
+export const summarizeDeliveryReportOrders = (orders: DeliveryReportOrder[]) => ({
+  count: orders.length,
+  valueBhd: orders.reduce((fils, order) => fils + Math.round((order.valueBhd ?? 0) * 1000), 0) / 1000
+});
 export const deliveryPaymentOrderLabel = (paymentLabel: string, source?: string | null, paymentType?: string | null) => {
   const orderSource = deliverySourceLabel(source, paymentType);
   if (orderSource === 'Talabat') return 'Talabat';

@@ -160,6 +160,7 @@ export const BranchCoverageMapWidget: React.FC<BranchCoverageMapWidgetProps> = (
             dataset={geometry}
             blocks={mappableBlocks}
             branchProfiles={profiles}
+            serviceRingsInitiallyEnabled={user.role === 'branch'}
             summary={summary}
             selectedBlock={selectedBlock}
             geometryStats={geometryStats}
