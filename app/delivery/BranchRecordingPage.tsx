@@ -2421,10 +2421,10 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               onNew={resetCustomerLocation} />
           )}
 
-          <div className={`mt-4 flex flex-wrap items-center gap-3 ${canRecordCustomerContact ? 'justify-between' : 'justify-end'}`}>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
             {canRecordCustomerContact && (
               <button type="button" onClick={resetCustomerLocation}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand">
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-amber-800 shadow-sm transition-colors hover:border-amber-400 hover:bg-amber-100 active:scale-[0.99]">
                 Reset Location
               </button>
             )}
