@@ -61,28 +61,29 @@ export const useSystemMaintenance = () => {
     let isMounted = true;
 
     const loadMaintenanceSettings = async () => {
-      let timeoutId: number | undefined;
+      let requestSettled = false;
+      const timeoutId = window.setTimeout(() => {
+        if (!isMounted || requestSettled) return;
+        setMaintenanceSettings(null);
+        setMaintenanceSettingsError('System settings are taking longer than expected. Still trying to connect.');
+        setIsMaintenanceLoading(false);
+      }, 8000);
+
       try {
-        const settings = await Promise.race([
-          supabase.systemSettings.getMaintenanceSettings(),
-          new Promise<never>((_, reject) => {
-            timeoutId = window.setTimeout(
-              () => reject(new Error('System settings request timed out.')),
-              8000
-            );
-          })
-        ]);
+        const settings = await supabase.systemSettings.getMaintenanceSettings();
+        requestSettled = true;
         if (isMounted) {
           setMaintenanceSettings(settings);
           setMaintenanceSettingsError(null);
         }
       } catch (error) {
+        requestSettled = true;
         if (isMounted) {
           setMaintenanceSettings(null);
           setMaintenanceSettingsError(getSystemSettingsErrorMessage(error));
         }
       } finally {
-        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
         if (isMounted) setIsMaintenanceLoading(false);
       }
     };

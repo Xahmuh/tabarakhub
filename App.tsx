@@ -510,6 +510,7 @@ const App: React.FC = () => {
       return;
     }
 
+    let initializationTimedOut = false;
     const init = async () => {
       if (isMaintenanceLoading) return;
 
@@ -589,9 +590,11 @@ const App: React.FC = () => {
       } finally {
         window.clearTimeout(initializationTimeoutId);
         setIsInitializing(false);
+        if (initializationTimedOut) setLoginNotice(null);
       }
     };
     const initializationTimeoutId = window.setTimeout(() => {
+      initializationTimedOut = true;
       console.warn('Session restoration timed out; showing the sign-in page.');
       setLoginNotice('Connection is taking longer than expected. You can try signing in, or refresh the page.');
       setIsInitializing(false);
