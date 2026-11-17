@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, RotateCcw, Truck, Wallet } from 'lucide-react';
+import { BarChart3, CalendarClock, ClipboardList, Coins, LayoutDashboard, MapPinned, RotateCcw, Truck, Users, Wallet } from 'lucide-react';
 import { Branch, DeliveryOrder, Role } from '../../types';
 import { isManagerRole } from '../../lib/access';
 import { BranchRecordingPage } from './BranchRecordingPage';
@@ -11,9 +11,10 @@ import { DeliveryProfitability } from './DeliveryProfitability';
 import { AdminRecordCorrections } from './AdminRecordCorrections';
 import { DriverDutyReport } from './DriverDutyReport';
 import { DriverPayrollHub } from './DriverPayrollHub';
+import { CustomersLog } from './CustomersLog';
 import { BackToModulesButton } from '../shared';
 
-type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'driver-payroll' | 'coverage' | 'profitability' | 'corrections';
+type HubTab = 'record' | 'dashboard' | 'dispatch' | 'analytics' | 'driver-duty' | 'driver-payroll' | 'coverage' | 'profitability' | 'corrections' | 'customers';
 
 interface DeliveryHubProps {
   user: Branch;
@@ -44,12 +45,14 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
   const canReadDriverDuty = canReadDelivery && (canReadDeliveryAnalytics || isDriver);
   const canReadDriverPayroll = canReadDelivery && (canManageDelivery || isOwner || role === 'supervisor' || isDriver);
   const canRecord = isBranch && checkPermission('delivery', 'edit');
+  const canReadCustomerLog = canReadDelivery && (isManager || (isBranch && checkPermission('delivery:customers_log', 'read')));
   const canTransitionLifecycle = canManageDelivery || canRecord;
 
   const tabs: Array<{ id: HubTab; label: string; icon: React.ElementType; visible: boolean }> = [
     { id: 'record', label: 'Record', icon: ClipboardList, visible: canRecord },
     { id: 'dashboard', label: 'Branch Dashboard', icon: LayoutDashboard, visible: isBranch && canReadDelivery },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, visible: canReadDeliveryAnalytics },
+    { id: 'customers', label: 'Customers Log', icon: Users, visible: canReadCustomerLog },
     { id: 'dispatch', label: 'Dispatch', icon: Truck, visible: canReadDelivery && !isDriver },
     { id: 'driver-duty', label: 'Driver Attendance', icon: CalendarClock, visible: canReadDriverDuty },
     { id: 'driver-payroll', label: 'Driver Payroll', icon: Wallet, visible: canReadDriverPayroll },
@@ -133,6 +136,9 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
       )}
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />
+      )}
+      {activeTab === 'customers' && canReadCustomerLog && (
+        <CustomersLog lockedBranchId={isBranch ? user.id : null} canChooseBranch={isManager} />
       )}
       {activeTab === 'driver-duty' && canReadDriverDuty && (
         <DriverDutyReport selfOnly={isDriver} />

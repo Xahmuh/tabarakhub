@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import Swal from 'sweetalert2';
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock, FileDown, Hourglass, Lock, MapPin, Pencil, Plus, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
 import { deliveryService, DeliveryDriverDutyStatus } from '../../services/deliveryService';
+import { deliveryCustomerService, type CustomerAddress } from '../../services/deliveryCustomerService';
 import { branchDeliveryProfileService } from '../../services/branchDeliveryProfileService';
 import { pharmacistService } from '../../services/pharmacistService';
 import {
   Branch, DeliveryBlock, DeliveryDriver, DeliveryOrder, DeliveryOrderInput, DeliveryPaymentCollectionStatus, DeliveryPaymentType, DeliveryPaymentTypeConfig, Pharmacist
 } from '../../types';
 import { SearchableSelect, SelectOption } from './components/SearchableSelect';
+import { CustomerAddressPicker } from './components/CustomerAddressPicker';
 import { formatBhd, todayKey, yesterdayKey } from './utils';
 import {
   DEFAULT_DELIVERY_PAYMENT_TYPES,
@@ -29,6 +31,7 @@ import { formatBhdAmount, truncateBhd } from '../../utils/money';
 import { formatTimeInput24, PaginationControls, TIME_24H_PATTERN, TimeInput24 } from '../shared';
 import { supabaseClient } from '../../lib/supabaseClient';
 import { deliveryLockKey, deliveryPaymentOrderLabel, deliverySourceLabel } from '../../lib/deliveryRecording';
+import { asciiPhoneDigits, BAHRAIN_CALLING_CODE, customerPhoneLimit, formatCustomerPhone, parseCustomerPhoneInput } from '../../lib/deliveryCustomerPhone';
 import { generateUUID } from '../../utils/uuid';
 import { BlockGeometryDataset, calculateDistanceKm, getBlockCentroid, loadBahrainBlockGeometry } from './bahrainBlockGeometry';
 
@@ -466,6 +469,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const [locationUrl, setLocationUrl] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerCallingCode, setCustomerCallingCode] = useState(BAHRAIN_CALLING_CODE);
+  const [customerPhoneInputError, setCustomerPhoneInputError] = useState(false);
+  const [customerLookup, setCustomerLookup] = useState<{ phone: string; addresses: CustomerAddress[]; failed?: boolean } | null>(null);
+  const [customerSuggestions, setCustomerSuggestions] = useState<{ prefix: string; digits: string[] } | null>(null);
+  const [showSavedAddresses, setShowSavedAddresses] = useState(false);
+  const [addressDecision, setAddressDecision] = useState<string | null>(null);
+  const filledCustomerAddress = useRef<CustomerAddress | null>(null);
   const [pendingRecording, setPendingRecording] = useState<DeliveryOrderInput | null>(null);
   useEffect(() => {
     const { data } = supabaseClient.auth.onAuthStateChange((_event, session) => setOperatorId(session?.user?.id || ''));
@@ -656,6 +666,15 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   const hasValidLocationUrl = !recordingV1
     || !locationUrl.trim()
     || /^https:\/\/[^\s]+$/i.test(locationUrl.trim());
+  const canRecordCustomerContact = recordingV1 && !editingOrder && !isTalabatDeliveryPayment(paymentType);
+  const customerPrefix = canRecordCustomerContact && !customerPhoneInputError
+    && customerCallingCode === BAHRAIN_CALLING_CODE && /^\d{7}$/.test(customerPhone) ? customerPhone : null;
+  const suggestedPhoneDigits = customerSuggestions?.prefix === customerPrefix ? customerSuggestions.digits : [];
+  const normalizedCustomerPhone = canRecordCustomerContact ? formatCustomerPhone(customerCallingCode, customerPhone) : null;
+  const hasValidCustomerPhone = !canRecordCustomerContact || (!customerPhoneInputError && (!customerPhone || Boolean(normalizedCustomerPhone)));
+  const currentCustomerLookup = normalizedCustomerPhone && customerLookup?.phone === normalizedCustomerPhone ? customerLookup : null;
+  const customerLookupPending = Boolean(normalizedCustomerPhone && !currentCustomerLookup);
+  const needsAddressChoice = (currentCustomerLookup?.addresses.length ?? 0) > 1 && addressDecision !== normalizedCustomerPhone;
   const isRecordingFormComplete = Boolean(selectedPaymentType)
     && hasValidRecordingDate
     && hasValidRecordingValue
@@ -665,7 +684,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     && hasRequiredBenefitPayTime
     && hasValidPartialCollection
     && hasValidDriverChange
-    && hasValidLocationUrl;
+    && hasValidLocationUrl
+    && hasValidCustomerPhone;
   const lockStorageKey = deliveryLockKey(`${window.location.origin}|${(import.meta as any).env?.VITE_SUPABASE_URL || ''}`, operatorId, branch.id);
   const historyRange = useMemo(() => (
     historyFrom <= historyTo
@@ -957,8 +977,104 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
     setIsBlockSearching(false);
   };
 
+  const applyCustomerAddress = useCallback((address: CustomerAddress) => {
+    filledCustomerAddress.current = address;
+    if (requiresBlock) {
+      setBlockInput(address.block_number || '');
+      setResolvedBlock(null);
+      setBlockMatches([]);
+      setBlockNotFound(false);
+    }
+    setLocationUrl(address.location_url || '');
+    setCustomerAddress(address.customer_address || '');
+  }, [requiresBlock]);
+
+  useEffect(() => {
+    if (!normalizedCustomerPhone) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      deliveryCustomerService.lookup(branch.id, normalizedCustomerPhone).then(addresses => {
+        if (cancelled) return;
+        setCustomerLookup({ phone: normalizedCustomerPhone, addresses });
+      }).catch(() => {
+        if (!cancelled) setCustomerLookup({ phone: normalizedCustomerPhone, addresses: [], failed: true });
+      });
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [branch.id, normalizedCustomerPhone]);
+
+  useEffect(() => {
+    if (!currentCustomerLookup || addressDecision === normalizedCustomerPhone) return;
+    if (currentCustomerLookup.addresses.length === 1) {
+      applyCustomerAddress(currentCustomerLookup.addresses[0]);
+      setAddressDecision(normalizedCustomerPhone);
+    } else if (currentCustomerLookup.addresses.length > 1) {
+      setShowSavedAddresses(true);
+    }
+  }, [currentCustomerLookup, normalizedCustomerPhone, addressDecision, applyCustomerAddress]);
+
+  useEffect(() => {
+    if (!customerPrefix) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      deliveryCustomerService.suggest(branch.id, customerPrefix).then(rows => {
+        if (!cancelled) setCustomerSuggestions({ prefix: customerPrefix, digits: rows.map(row => row.last_digit) });
+      }).catch(() => {
+        if (!cancelled) setCustomerSuggestions(null);
+      });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [branch.id, customerPrefix]);
+
+  const resetCustomerLocation = () => {
+    handleBlockChange(null);
+    setLocationUrl('');
+    setCustomerAddress('');
+    filledCustomerAddress.current = null;
+    setAddressDecision(normalizedCustomerPhone);
+    setShowSavedAddresses(false);
+  };
+
+  const changeCustomerPhone = (code: string, number: string) => {
+    setCustomerPhoneInputError(false);
+    if (code === customerCallingCode && number === customerPhone) return;
+    const previous = filledCustomerAddress.current;
+    if (previous) {
+      if (blockInput === previous.block_number) handleBlockChange(null);
+      setLocationUrl(value => value === (previous.location_url || '') ? '' : value);
+      setCustomerAddress(value => value === (previous.customer_address || '') ? '' : value);
+      filledCustomerAddress.current = null;
+    }
+    setCustomerLookup(null);
+    setCustomerSuggestions(null);
+    setShowSavedAddresses(false);
+    setAddressDecision(null);
+    setCustomerCallingCode(code);
+    setCustomerPhone(number);
+  };
+
+  const enterCustomerPhone = (text: string) => {
+    const parsed = parseCustomerPhoneInput(text, customerCallingCode);
+    if (!parsed) {
+      changeCustomerPhone(customerCallingCode, '');
+      setCustomerPhoneInputError(true);
+      return;
+    }
+    changeCustomerPhone(parsed.code, parsed.number);
+  };
+
+  const enterCustomerCallingCode = (text: string) => {
+    const code = asciiPhoneDigits(text).replace(/^\+/, '').replace(/\D/g, '').slice(0, 3);
+    changeCustomerPhone(code, customerPhone.length <= customerPhoneLimit(code) ? customerPhone : '');
+  };
+
   const resetForm = (preserveBatchContext = true) => {
     setLocationUrl(''); setCustomerAddress(''); setCustomerPhone('');
+    setCustomerCallingCode(BAHRAIN_CALLING_CODE);
+    setCustomerPhoneInputError(false);
+    setCustomerLookup(null); setShowSavedAddresses(false); setAddressDecision(null);
+    setCustomerSuggestions(null);
+    filledCustomerAddress.current = null;
     // Keep locked people only; unlocked selectors reset after each order.
     setValue('');
     setBlockInput('');
@@ -1082,7 +1198,11 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || customerLookupPending || !hasValidCustomerPhone) return;
+    if (needsAddressChoice) {
+      setShowSavedAddresses(true);
+      return;
+    }
     submittingRef.current = true;
     try {
       const orderValue = Number(value);
@@ -1113,7 +1233,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               </button>
               <button type="button" data-dispatch-mode="system" aria-describedby="send-to-driver-description" style="display:block;width:100%;border:1px solid #fecaca;border-radius:12px;background:#fff7f7;padding:14px 16px;text-align:left;cursor:pointer">
                 <span style="display:block;color:#b91c1c;font-size:14px;font-weight:800">Send to Driver App</span>
-                <span id="send-to-driver-description" style="display:block;margin-top:4px;color:#64748b;font-size:11px;font-weight:600;line-height:1.45">Record this order and send it to the selected driver through the delivery system.</span>
+                <span id="send-to-driver-description" style="display:block;margin-top:4px;color:#64748b;font-size:11px;font-weight:600;line-height:1.45">Assign this order in the Driver App. The driver can see the assignment when they reconnect.</span>
               </button>
             </div>
           `,
@@ -1196,9 +1316,16 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       Swal.fire('Pharmacist required', 'Select the pharmacist before saving this delivery order.', 'warning');
       return;
     }
-  if (!isBlockExemptPayment && (!driverId || (recordingV1 && selectedDispatchMode === 'system' && !drivers.some(driver => driver.id === driverId && driver.authUserId)))) {
-      Swal.fire('Driver required', 'Select the driver before saving this delivery order.', 'warning');
-      return;
+    if (!isBlockExemptPayment) {
+      const selectedDriver = drivers.find(driver => driver.id === driverId && driver.isActive);
+      if (!selectedDriver) {
+        Swal.fire('Driver required', 'Select an active driver before saving this delivery order.', 'warning');
+        return;
+      }
+      if (recordingV1 && selectedDispatchMode === 'system' && !selectedDriver.authUserId) {
+        Swal.fire('Driver app account required', 'Select a driver linked to the Driver App. Offline drivers can still receive assignments.', 'warning');
+        return;
+      }
     }
     if (requiresBlock && !blockInput.trim()) {
       Swal.fire('Block required', `Block is required for ${selectedPaymentType?.label || paymentType} delivery orders.`, 'warning');
@@ -1224,7 +1351,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
       if (!proceed.isConfirmed) return;
     }
     const input: DeliveryOrderInput = {
-      ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, customerPhone, idempotencyKey: generateUUID() } : {}),
+      ...(recordingV1 && !editingOrder ? { dispatchMode: selectedDispatchMode, locationUrl, customerAddress, customerPhone: normalizedCustomerPhone, idempotencyKey: generateUUID() } : {}),
       branchId: branch.id,
       orderDate,
       valueBhd: value,
@@ -1882,7 +2009,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                 value={value}
                 required
                 onChange={e => setValue(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black outline-none focus:border-brand/40"
+                onWheel={e => e.currentTarget.blur()}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-black outline-none focus:border-brand/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </div>
 
@@ -2213,18 +2341,58 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               </div>
               <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
                 <div className="grid min-w-0 gap-4">
-                  <label className="block space-y-1">
-                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Contact no. <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                    <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Customer phone number" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                  </label>
+                  {canRecordCustomerContact && <div className="space-y-1">
+                    <label htmlFor="delivery-customer-phone" className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Contact no. <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <label className="flex w-24 shrink-0 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold focus-within:border-brand/40">
+                        <span aria-hidden="true">+</span>
+                        <input aria-label="Country calling code" type="tel" inputMode="numeric" maxLength={3}
+                          autoComplete="tel-country-code" value={customerCallingCode}
+                          onChange={event => enterCustomerCallingCode(event.target.value)}
+                          onPaste={event => { event.preventDefault(); enterCustomerCallingCode(event.clipboardData.getData('text')); }}
+                          className="min-w-0 flex-1 bg-transparent px-1 outline-none" />
+                      </label>
+                      <input id="delivery-customer-phone" type="tel" inputMode="numeric" autoComplete="tel-national"
+                        maxLength={customerPhoneLimit(customerCallingCode)} value={customerPhone}
+                        aria-invalid={!hasValidCustomerPhone} aria-describedby="delivery-customer-phone-status"
+                        onChange={event => enterCustomerPhone(event.target.value)}
+                        onPaste={event => { event.preventDefault(); enterCustomerPhone(event.clipboardData.getData('text')); }}
+                        placeholder={customerCallingCode === BAHRAIN_CALLING_CODE ? '8-digit Bahrain number' : 'Phone number without country code'}
+                        className="h-12 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                    </div>
+                    {suggestedPhoneDigits.length > 0 && <ul aria-label="Saved phone suggestions" className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      {suggestedPhoneDigits.map(digit => <li key={digit}>
+                        <button type="button" className="block w-full px-3 py-2 text-left text-sm font-bold tabular-nums text-slate-800 hover:bg-slate-50 focus-visible:outline-brand"
+                          onClick={() => changeCustomerPhone(BAHRAIN_CALLING_CODE, customerPrefix + digit)}>
+                          +973 {customerPrefix + digit}
+                        </button>
+                      </li>)}
+                    </ul>}
+                    <p id="delivery-customer-phone-status" aria-live="polite" className="text-xs text-slate-600">
+                      {!hasValidCustomerPhone ? customerCallingCode === BAHRAIN_CALLING_CODE ? 'Enter an 8-digit Bahrain number, with or without +973.' : 'Enter a valid country code and phone number.'
+                        : customerLookupPending ? 'Checking saved addresses…'
+                        : currentCustomerLookup?.failed ? 'Saved addresses are unavailable. You can enter the address manually.' : null}
+                    </p>
+                    {!!currentCustomerLookup?.addresses.length && (
+                      <button type="button" className="btn-neutral" onClick={() => setShowSavedAddresses(true)}>
+                        Choose saved address ({currentCustomerLookup.addresses.length})
+                      </button>
+                    )}
+                  </div>}
                   <label className="block space-y-1">
                     <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">GPS Location URL <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
                     <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
                   </label>
-                  <label className="block space-y-1">
-                    <span className="flex min-h-8 items-end pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="ml-1 font-bold normal-case tracking-normal">(optional)</span></span>
-                    <input type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
-                  </label>
+                  <div className="space-y-1">
+                    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1">
+                      <label htmlFor="delivery-detailed-address" className="text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="font-bold normal-case tracking-normal">(optional)</span></label>
+                      {canRecordCustomerContact && <button type="button" onClick={resetCustomerLocation}
+                        className="rounded px-2 py-1 text-xs font-bold text-brand hover:bg-brand/5">Reset Location</button>}
+                    </div>
+                    <input id="delivery-detailed-address" type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
+                  </div>
                 </div>
                 <div className="grid min-w-0 gap-4">
                   <div className="space-y-1">
@@ -2244,10 +2412,21 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
             </section>
           )}
 
+          {showSavedAddresses && !!currentCustomerLookup?.addresses.length && (
+            <CustomerAddressPicker addresses={currentCustomerLookup.addresses}
+              onClose={() => setShowSavedAddresses(false)}
+              onChoose={address => {
+                applyCustomerAddress(address);
+                setAddressDecision(normalizedCustomerPhone);
+                setShowSavedAddresses(false);
+              }}
+              onNew={resetCustomerLocation} />
+          )}
+
           <div className="mt-4 flex justify-end">
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || !isRecordingFormComplete}
+              disabled={isSubmitting || customerLookupPending || !isRecordingFormComplete}
               title={!isRecordingFormComplete ? 'Complete all required fields to record this order.' : undefined}
               className="btn-primary text-[11px] uppercase tracking-widest disabled:opacity-50"
             >

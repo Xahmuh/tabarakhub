@@ -512,8 +512,11 @@ export const deliveryService = {
     insert: async (input: DeliveryOrderInput): Promise<DeliveryOrder> => {
       if ((import.meta as any).env?.VITE_DELIVERY_RECORDING_V1 === '1' && input.orderKind !== 'internal_transfer') {
         if (!input.idempotencyKey) throw new Error('Save a stable recording request key before submission.');
-        const { data, error } = await supabaseClient.rpc('app_record_delivery' as any, {
-          p_payload: toRecordingPayload(input), p_request_key: input.idempotencyKey,
+        const payload = toRecordingPayload(input);
+        const rpcName = 'customer_phone' in payload && payload.customer_phone
+          ? 'app_delivery_record_customer_order' : 'app_record_delivery';
+        const { data, error } = await supabaseClient.rpc(rpcName, {
+          p_payload: payload, p_request_key: input.idempotencyKey,
         });
         if (error) throw error;
         return toOrder((data as any).order);
