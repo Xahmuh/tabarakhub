@@ -2334,7 +2334,7 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
           </div>
 
           {recordingV1 && !isTalabatDeliveryPayment(paymentType) && (
-            <section className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+            <section className="-mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
               <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
                 <img src="/assets/customer-location-route.png" alt="" className="h-12 w-12 object-contain" />
                 <h4 className="text-xs font-black uppercase tracking-widest text-slate-700">Customer location &amp; Contact</h4>
@@ -2386,10 +2386,8 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
                     <input type="url" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
                   </label>
                   <div className="space-y-1">
-                    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1">
+                    <div className="flex min-h-8 flex-wrap items-center gap-1">
                       <label htmlFor="delivery-detailed-address" className="text-[10px] font-black uppercase tracking-widest text-slate-400">Detailed Address <span className="font-bold normal-case tracking-normal">(optional)</span></label>
-                      {canRecordCustomerContact && <button type="button" onClick={resetCustomerLocation}
-                        className="rounded px-2 py-1 text-xs font-bold text-brand hover:bg-brand/5">Reset Location</button>}
                     </div>
                     <input id="delivery-detailed-address" type="text" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} placeholder="Building, road, flat, or delivery instructions" className="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-brand/40" />
                   </div>
@@ -2423,7 +2421,13 @@ export const BranchRecordingPage: React.FC<BranchRecordingPageProps> = ({
               onNew={resetCustomerLocation} />
           )}
 
-          <div className="mt-4 flex justify-end">
+          <div className={`mt-4 flex flex-wrap items-center gap-3 ${canRecordCustomerContact ? 'justify-between' : 'justify-end'}`}>
+            {canRecordCustomerContact && (
+              <button type="button" onClick={resetCustomerLocation}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:border-brand/30 hover:text-brand">
+                Reset Location
+              </button>
+            )}
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || customerLookupPending || !isRecordingFormComplete}
