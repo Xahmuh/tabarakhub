@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, MapPin, Search } from 'lucide-react';
+import { ChevronDown, Download, MapPin, Search } from 'lucide-react';
 import type { Branch } from '../../types';
 import { branchService } from '../../services/branchService';
 import { deliveryCustomerService, type CustomerAddress, type CustomerDeliveryOrder, type DeliveryCustomer } from '../../services/deliveryCustomerService';
@@ -110,6 +110,8 @@ export function CustomersLog({ lockedBranchId, canChooseBranch }: { lockedBranch
   const [expandedPhone, setExpandedPhone] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   useEffect(() => {
     if (!canChooseBranch) return;
@@ -135,29 +137,91 @@ export function CustomersLog({ lockedBranchId, canChooseBranch }: { lockedBranch
     return () => { active = false; };
   }, [branchId, page, search]);
 
+  const exportCustomerPhones = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const allCustomers = await deliveryCustomerService.listAll(branchId, search);
+      if (allCustomers.length === 0) {
+        setExportError('No customer phone numbers match the current filters.');
+        return;
+      }
+
+      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+        import('exceljs'),
+        import('file-saver')
+      ]);
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Tabarak Hub';
+      workbook.subject = 'Customers Log phone numbers';
+      workbook.created = new Date();
+      const worksheet = workbook.addWorksheet('Customer Phones');
+      worksheet.columns = [{ header: 'Phone Number', key: 'phone', width: 24 }];
+      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+      worksheet.autoFilter = `A1:A${allCustomers.length + 1}`;
+      worksheet.getColumn(1).numFmt = '@';
+      worksheet.getColumn(1).alignment = { vertical: 'middle' };
+      const header = worksheet.getRow(1);
+      header.height = 26;
+      header.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      });
+      worksheet.addRows(allCustomers.map(customer => [customer.phone]));
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.height = 22;
+          row.getCell(1).border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } };
+          if (rowNumber % 2 === 0) {
+            row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+          }
+        }
+      });
+      const buffer = await workbook.xlsx.writeBuffer();
+      const branchName = canChooseBranch
+        ? branches.find(branch => branch.id === branchId)?.name || 'All_Branches'
+        : 'Branch';
+      const fileBranch = branchName.trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
+      const fileDate = new Date().toISOString().slice(0, 10);
+      saveAs(new Blob([buffer]), `Customers_Log_${fileBranch}_${fileDate}.xlsx`);
+    } catch {
+      setExportError('Could not export customer phone numbers.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return <section className="operational-panel space-y-4 p-4 sm:p-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <h3 className="text-xl font-black text-slate-950">Customers Log</h3>
-      <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
-        event.preventDefault(); setPage(0); setSearch(searchText.trim());
-      }}>
-        {canChooseBranch && <label className="space-y-1 text-xs font-bold text-slate-700">
-          <span className="block">Branch</span>
-          <select className="h-10 rounded-lg border border-slate-200 bg-white px-3" value={selectedBranch || ''}
-            onChange={event => { setPage(0); setSelectedBranch(event.target.value || null); }}>
-            <option value="">All branches</option>
-            {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-          </select>
-        </label>}
-        <label className="space-y-1 text-xs font-bold text-slate-700">
-          <span className="block">Customer phone</span>
-          <input type="tel" value={searchText} onChange={event => setSearchText(event.target.value)}
-            placeholder="Local or international number" className="h-10 rounded-lg border border-slate-200 px-3" />
-        </label>
-        <button type="submit" className="btn-primary"><Search className="h-4 w-4" aria-hidden="true" /> Search</button>
-        {search && <button type="button" className="btn-neutral" onClick={() => { setSearchText(''); setSearch(''); setPage(0); }}>Clear</button>}
-      </form>
+      <div className="flex flex-wrap items-end gap-2">
+        <button type="button" className="btn-neutral" disabled={busy || exporting || !!error || customers.length === 0}
+          onClick={exportCustomerPhones} title="Export all matching customer phone numbers to Excel">
+          <Download className="h-4 w-4" aria-hidden="true" /> {exporting ? 'Exporting…' : 'Export Excel'}
+        </button>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+          event.preventDefault(); setPage(0); setSearch(searchText.trim());
+        }}>
+          {canChooseBranch && <label className="space-y-1 text-xs font-bold text-slate-700">
+            <span className="block">Branch</span>
+            <select className="h-10 rounded-lg border border-slate-200 bg-white px-3" value={selectedBranch || ''}
+              onChange={event => { setPage(0); setSelectedBranch(event.target.value || null); }}>
+              <option value="">All branches</option>
+              {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+            </select>
+          </label>}
+          <label className="space-y-1 text-xs font-bold text-slate-700">
+            <span className="block">Customer phone</span>
+            <input type="tel" value={searchText} onChange={event => setSearchText(event.target.value)}
+              placeholder="Local or international number" className="h-10 rounded-lg border border-slate-200 px-3" />
+          </label>
+          <button type="submit" className="btn-primary"><Search className="h-4 w-4" aria-hidden="true" /> Search</button>
+          {search && <button type="button" className="btn-neutral" onClick={() => { setSearchText(''); setSearch(''); setPage(0); }}>Clear</button>}
+        </form>
+      </div>
     </div>
+    {exportError && <p role="alert" className="text-sm text-red-700">{exportError}</p>}
     {busy ? <p role="status" className="py-3 text-sm text-slate-500">Loading customers…</p>
       : error ? <p role="alert" className="py-3 text-sm text-red-700">{error}</p>
       : customers.length === 0 ? <p className="py-3 text-sm text-slate-500">No matching customers.</p>
