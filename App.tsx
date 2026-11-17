@@ -587,10 +587,17 @@ const App: React.FC = () => {
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
+        window.clearTimeout(initializationTimeoutId);
         setIsInitializing(false);
       }
     };
+    const initializationTimeoutId = window.setTimeout(() => {
+      console.warn('Session restoration timed out; showing the sign-in page.');
+      setLoginNotice('Connection is taking longer than expected. You can try signing in, or refresh the page.');
+      setIsInitializing(false);
+    }, 10000);
     init();
+    return () => window.clearTimeout(initializationTimeoutId);
   }, [enterAuthenticatedApp, isBhAnalyzerPage, isBranchLoginApprovalRequired, isMaintenanceLoading, signOutToLoginWithNotice]);
 
   const handleLogin = async (identifier: string, password: string) => {
