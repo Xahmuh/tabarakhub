@@ -482,6 +482,10 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
     initialEmployee?.salary_matrix?.longShiftIncentive ??
     0
   );
+  const [gosiDeduction, setGosiDeduction] = useState<number>(initialEmployee?.salary_matrix?.gosi1Pct ?? 0);
+  const [ewaDeduction, setEwaDeduction] = useState<number>(initialEmployee?.salary_matrix?.ewaFees ?? 0);
+  const [otherDeduction, setOtherDeduction] = useState<number>(initialEmployee?.salary_matrix?.othersDeduction ?? 0);
+  const [loanDeduction, setLoanDeduction] = useState<number>(initialEmployee?.salary_matrix?.payrollDedLoan ?? 0);
   const [isManualTotal, setIsManualTotal] = useState<boolean>(false);
   const [manualTotalSalary, setManualTotalSalary] = useState<number>(0);
 
@@ -490,6 +494,14 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   }, [basicSalary, housingAllowance, transportationAllowance, incentiveBonus]);
 
   const effectiveTotalSalary = isManualTotal ? manualTotalSalary : calculatedTotalSalary;
+  const totalSalaryDeductions = Number((gosiDeduction + ewaDeduction + otherDeduction + loanDeduction).toFixed(3));
+  const netSalaryAfterDeductions = Number((effectiveTotalSalary - totalSalaryDeductions).toFixed(3));
+  const activeSalaryDeductions = [
+    { label: isAr ? 'التأمينات الاجتماعية' : 'GOSI / SIO', amount: gosiDeduction },
+    { label: isAr ? 'رسوم الكهرباء والماء' : 'EWA Fees', amount: ewaDeduction },
+    { label: isAr ? 'استقطاعات أخرى' : 'Other Deductions', amount: otherDeduction },
+    { label: isAr ? 'خصم القرض' : 'Loan Deduction', amount: loanDeduction }
+  ].filter(item => item.amount > 0);
 
   // Contextual Destination & Bank Fields
   const [bankName, setBankName] = useState<string>('National Bank of Bahrain (NBB) / بنك البحرين الوطني');
@@ -870,6 +882,15 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
       if (sm.jobResponsibilityBonus !== undefined || sm.longShiftIncentive !== undefined) {
         setIncentiveBonus((sm.jobResponsibilityBonus || 0) + (sm.longShiftIncentive || 0));
       }
+      setGosiDeduction(Number(sm.gosi1Pct || 0));
+      setEwaDeduction(Number(sm.ewaFees || 0));
+      setOtherDeduction(Number(sm.othersDeduction || 0));
+      setLoanDeduction(Number(sm.payrollDedLoan || 0));
+    } else {
+      setGosiDeduction(0);
+      setEwaDeduction(0);
+      setOtherDeduction(0);
+      setLoanDeduction(0);
     }
 
     // Reference number
@@ -1013,9 +1034,10 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         : (isFemale ? 'We confirm that approved leave has been granted for her travel, and she will resume her official employment upon return.' : 'We confirm that approved leave has been granted for his travel, and he will resume his official employment upon return.');
     }
     if (letterType === 'bank_salary_iban') {
+      const bankReference = resolvedBank.trim();
       return isAr
-        ? (isFemale ? `ويتم تحويل صافي راتبها الشهري بانتظام إلى حسابها المصرفي لديكم رقم الآيبان: ${iban || '[رقم الآيبان]'}.` : `ويتم تحويل صافي راتبه الشهري بانتظام إلى حسابه المصرفي لديكم رقم الآيبان: ${iban || '[رقم الآيبان]'}.`)
-        : (isFemale ? `Her net monthly salary is regularly transferred directly to her account with your bank under IBAN: ${iban || '[IBAN Number]'}.` : `His net monthly salary is regularly transferred directly to his account with your bank under IBAN: ${iban || '[IBAN Number]'}.`);
+        ? (isFemale ? `ويتم تحويل صافي راتبها الشهري بانتظام إلى حسابها${bankReference ? ` لدى ${bankReference}` : ''} برقم الآيبان: ${iban || '[رقم الآيبان]'}.` : `ويتم تحويل صافي راتبه الشهري بانتظام إلى حسابه${bankReference ? ` لدى ${bankReference}` : ''} برقم الآيبان: ${iban || '[رقم الآيبان]'}.`)
+        : (isFemale ? `Her net monthly salary is regularly transferred directly to her account${bankReference ? ` at ${bankReference}` : ''} under IBAN: ${iban || '[IBAN Number]'}.` : `His net monthly salary is regularly transferred directly to his account${bankReference ? ` at ${bankReference}` : ''} under IBAN: ${iban || '[IBAN Number]'}.`);
     }
     if (letterType === 'bank_salary_undertaking') {
       return isAr
@@ -1023,7 +1045,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         : (isFemale ? `${selectedCr.cr_name} irrevocably undertakes to transfer her monthly salary directly to her account with your bank (IBAN: ${iban || '[IBAN Number]'}). We further undertake not to divert or cease her salary transfer, nor release end-of-service gratuity, without receiving an official written clearance letter from your bank.` : `${selectedCr.cr_name} irrevocably undertakes to transfer his monthly salary directly to his account with your bank (IBAN: ${iban || '[IBAN Number]'}). We further undertake not to divert or cease his salary transfer, nor release end-of-service gratuity, without receiving an official written clearance letter from your bank.`);
     }
     return '';
-  }, [letterType, isAr, isFemale, selectedCr, iban]);
+  }, [letterType, isAr, isFemale, selectedCr, iban, resolvedBank]);
 
   // Print Document Trigger
   const handlePrint = () => {
@@ -1167,15 +1189,16 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
           .doc-ref {
             font-family: monospace !important;
             font-weight: bold !important;
-            color: #0284c7 !important;
-            background: #f0f9ff !important;
+            color: #334155 !important;
+            background: #f8fafc !important;
             padding: 2px 8px !important;
-            border-radius: 4px !important;
-            border: 1px solid #bae6fd !important;
+            border-radius: 2px !important;
+            border: 1px solid #cbd5e1 !important;
           }
           .footer-section {
             margin-top: 35px !important;
             padding-top: 20px !important;
+            padding-bottom: 5mm !important;
             border-top: 1px solid #e2e8f0 !important;
             display: flex !important;
             justify-content: space-between !important;
@@ -1281,6 +1304,10 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         transportationAllowance,
         incentiveBonus,
         totalSalary: effectiveTotalSalary,
+        gosiDeduction,
+        ewaDeduction,
+        otherDeduction,
+        loanDeduction,
         bankName: resolvedBank,
         iban,
         destinationName: resolvedDestination,
@@ -1324,7 +1351,13 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
       lines.push(`Housing: ${housingAllowance.toFixed(3)} BHD`);
       lines.push(`Transportation: ${transportationAllowance.toFixed(3)} BHD`);
       lines.push(`Incentive Bonus: ${incentiveBonus.toFixed(3)} BHD`);
-      lines.push(`TOTAL MONTHLY: ${effectiveTotalSalary.toFixed(3)} BHD\n`);
+      lines.push(`GOSI / SIO: ${gosiDeduction.toFixed(3)} BHD`);
+      lines.push(`EWA Fees: ${ewaDeduction.toFixed(3)} BHD`);
+      lines.push(`Other Deductions: ${otherDeduction.toFixed(3)} BHD`);
+      lines.push(`Loan Deduction: ${loanDeduction.toFixed(3)} BHD`);
+      lines.push(`Total Deductions: ${totalSalaryDeductions.toFixed(3)} BHD`);
+      lines.push(`Gross Monthly Salary: ${effectiveTotalSalary.toFixed(3)} BHD`);
+      lines.push(`Net Monthly Salary: ${netSalaryAfterDeductions.toFixed(3)} BHD\n`);
       if (postTableClause) lines.push(postTableClause);
     }
     if (customNotes.trim()) {
@@ -2188,10 +2221,33 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                 </div>
               </div>
 
-              {/* Net Monthly Total Bar */}
+              <div className="rounded-xl border border-slate-200 p-3 space-y-2.5">
+                <div>
+                  <p className="text-xs font-bold text-slate-900">Deductions · BHD</p>
+                  <p className="text-[10px] text-slate-500">Loaded from the employee profile. You can adjust these amounts for this letter.</p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {([
+                    ['GOSI / SIO', gosiDeduction, setGosiDeduction],
+                    ['EWA Fees', ewaDeduction, setEwaDeduction],
+                    ['Other Deductions', otherDeduction, setOtherDeduction],
+                    ['Loan Deduction', loanDeduction, setLoanDeduction]
+                  ] as const).map(([label, value, setter]) => (
+                    <label key={label} className="space-y-1.5 text-[11px] font-semibold text-slate-600">
+                      <span className="block">{label}</span>
+                      <div className="relative">
+                        <input type="number" min="0" step="0.001" value={value} onChange={event => setter(parseFloat(event.target.value) || 0)} className="w-full pl-9 pr-2.5 py-2 bg-white text-slate-900 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-right outline-none focus:border-slate-400" />
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-mono">BHD</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monthly totals */}
               <div className="px-4 py-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-slate-900">Total Monthly Net Salary</p>
+                  <p className="text-xs font-bold text-slate-900">Gross Monthly Salary</p>
                   <label className="text-[11px] text-slate-500 flex items-center gap-1.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -2224,6 +2280,10 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                     </div>
                   )}
                 </div>
+              </div>
+              <div className="flex items-center justify-between px-4 text-xs">
+                <span className="text-slate-600">Total deductions: <strong className="font-mono">{totalSalaryDeductions.toFixed(3)} BHD</strong></span>
+                <span className="font-bold text-slate-900">Net monthly salary: <strong className="font-mono">{netSalaryAfterDeductions.toFixed(3)} BHD</strong></span>
               </div>
             </div>
 
@@ -2512,7 +2572,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                       <div style={{ fontSize: '12.5px', color: '#334155' }}>
                         {isAr ? 'المرجع:' : 'Ref:'}{' '}
                         <span
-                          className="doc-ref font-mono font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded border border-sky-200"
+                          className="doc-ref font-mono font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 border border-slate-300"
                           style={{
                             fontFamily: 'monospace',
                             fontWeight: 'bold',
@@ -2533,7 +2593,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                       <h1 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-wider">
                         {letterTitles[letterType][lang]}
                       </h1>
-                      <p className="text-xs font-bold text-brand">
+                      <p className="text-xs font-bold text-slate-700">
                         {isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn}
                       </p>
                     </div>
@@ -2622,12 +2682,20 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                               </tr>
                             </tbody>
                             <tfoot>
-                              <tr className="border-t-2 border-slate-900 bg-emerald-50/70 font-black text-emerald-900 text-[13px]">
+                              <tr className="border-t border-slate-300 bg-slate-50 font-bold text-slate-800 text-xs">
+                                <td className="py-2 px-3">{isAr ? 'إجمالي الراتب قبل الاستقطاعات:' : 'GROSS MONTHLY SALARY:'}</td>
+                                <td className={`py-2 px-3 font-mono ${isAr ? 'text-left' : 'text-right'}`}>{effectiveTotalSalary.toFixed(3)} BHD</td>
+                              </tr>
+                              {activeSalaryDeductions.length > 0 && <tr className="border-t border-slate-300 bg-slate-50 font-bold text-slate-800 text-xs">
+                                <td className="py-2 px-3">{isAr ? 'إجمالي الاستقطاعات' : 'TOTAL DEDUCTIONS'} <span className="ms-1 text-[9px] font-normal text-slate-600">({activeSalaryDeductions.map(item => item.label).join(isAr ? '، ' : ', ')})</span></td>
+                                <td className={`py-2 px-3 font-mono ${isAr ? 'text-left' : 'text-right'}`}>− {totalSalaryDeductions.toFixed(3)} BHD</td>
+                              </tr>}
+                              <tr className="border-t border-slate-500 bg-slate-100/70 font-bold text-slate-900 text-[13px]">
                                 <td className="py-2.5 px-3">
-                                  {isAr ? 'إجمالي صافي الراتب الشهري:' : 'TOTAL MONTHLY SALARY:'}
+                                  {isAr ? 'صافي الراتب الشهري:' : 'NET MONTHLY SALARY:'}
                                 </td>
                                 <td className={`py-2.5 px-3 font-mono text-sm ${isAr ? 'text-left' : 'text-right'}`}>
-                                  {effectiveTotalSalary.toFixed(3)} BHD
+                                  {netSalaryAfterDeductions.toFixed(3)} BHD
                                 </td>
                               </tr>
                             </tfoot>
@@ -2666,6 +2734,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                       marginTop: '40px',
                       paddingTop: '20px',
                       borderTop: '1px solid #e2e8f0',
+                      paddingBottom: '12px',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-end',

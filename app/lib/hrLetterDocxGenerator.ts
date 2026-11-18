@@ -31,6 +31,10 @@ export interface HrLetterData {
   transportationAllowance: number;
   incentiveBonus: number;
   totalSalary: number;
+  gosiDeduction?: number;
+  ewaDeduction?: number;
+  otherDeduction?: number;
+  loanDeduction?: number;
   bankName?: string;
   iban?: string;
   destinationName?: string;
@@ -172,6 +176,14 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
   const isFemale = gender === 'female';
   const crName = isAr ? data.cr.cr_name_ar : data.cr.cr_name;
   const isSalaryMatrixRequired = ['embassy_salary', 'bank_salary_iban', 'bank_salary_undertaking'].includes(data.letterType);
+  const totalDeductions = Number(((data.gosiDeduction || 0) + (data.ewaDeduction || 0) + (data.otherDeduction || 0) + (data.loanDeduction || 0)).toFixed(3));
+  const netSalary = Number((data.totalSalary - totalDeductions).toFixed(3));
+  const activeDeductions = [
+    [isAr ? 'التأمينات الاجتماعية' : 'GOSI / SIO', data.gosiDeduction || 0],
+    [isAr ? 'رسوم الكهرباء والماء' : 'EWA Fees', data.ewaDeduction || 0],
+    [isAr ? 'استقطاعات أخرى' : 'Other Deductions', data.otherDeduction || 0],
+    [isAr ? 'خصم القرض' : 'Loan Deduction', data.loanDeduction || 0]
+  ].filter(([, amount]) => Number(amount) > 0);
 
   const resolvedNationality = resolveNationality(data.nationality, data.lang, gender);
   const resolvedJobTitle = resolveJobTitle(data.jobTitle, data.lang, undefined, gender);
@@ -389,8 +401,23 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
       }),
       new TableRow({
         children: [
-          new TableCell({ children: [new Paragraph({ text: isAr ? 'إجمالي الراتب الشهري الصافي' : 'TOTAL MONTHLY SALARY', run: { bold: true } })] }),
+          new TableCell({ children: [new Paragraph({ text: isAr ? 'إجمالي الراتب قبل الاستقطاعات' : 'GROSS MONTHLY SALARY', run: { bold: true } })] }),
           new TableCell({ children: [new Paragraph({ text: `${data.totalSalary.toFixed(3)} BHD`, run: { bold: true }, alignment: AlignmentType.RIGHT })] })
+        ]
+      }),
+      ...(activeDeductions.length ? [new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ children: [
+            new TextRun({ text: isAr ? 'إجمالي الاستقطاعات' : 'TOTAL DEDUCTIONS', bold: true }),
+            new TextRun({ text: ` (${activeDeductions.map(([label]) => String(label)).join(isAr ? '، ' : ', ')})`, size: 18 })
+          ] })] }),
+          new TableCell({ children: [new Paragraph({ text: `− ${totalDeductions.toFixed(3)} BHD`, run: { bold: true }, alignment: AlignmentType.RIGHT })] })
+        ]
+      })] : []),
+      new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ text: isAr ? 'صافي الراتب الشهري' : 'NET MONTHLY SALARY', run: { bold: true } })] }),
+          new TableCell({ children: [new Paragraph({ text: `${netSalary.toFixed(3)} BHD`, run: { bold: true }, alignment: AlignmentType.RIGHT })] })
         ]
       })
     ];
@@ -410,9 +437,10 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
         ? (isFemale ? 'كما نؤكد أن الشركة وافقت على منحها إجازة رسمية للسفر، وستعود لمباشرة عملها فور انتهاء الإجازة.' : 'كما نؤكد أن الشركة وافقت على منحه إجازة رسمية للسفر، وسيعود لمباشرة عمله فور انتهاء الإجازة.')
         : (isFemale ? 'We confirm that approved leave has been granted for her travel, and she will resume her official employment upon return.' : 'We confirm that approved leave has been granted for his travel, and he will resume his official employment upon return.');
     } else if (data.letterType === 'bank_salary_iban') {
+      const bankReference = data.bankName?.trim();
       postTableText = isAr
-        ? (isFemale ? `ويتم تحويل صافي راتبها الشهري بانتظام إلى حسابها المصرفي لديكم رقم الآيبان: ${data.iban || '[رقم الآيبان]'}.` : `ويتم تحويل صافي راتبه الشهري بانتظام إلى حسابه المصرفي لديكم رقم الآيبان: ${data.iban || '[رقم الآيبان]'}.`)
-        : (isFemale ? `Her net monthly salary is regularly transferred directly to her account with your bank under IBAN: ${data.iban || '[IBAN Number]'}.` : `His net monthly salary is regularly transferred directly to his account with your bank under IBAN: ${data.iban || '[IBAN Number]'}.`);
+        ? (isFemale ? `ويتم تحويل صافي راتبها الشهري بانتظام إلى حسابها${bankReference ? ` لدى ${bankReference}` : ''} برقم الآيبان: ${data.iban || '[رقم الآيبان]'}.` : `ويتم تحويل صافي راتبه الشهري بانتظام إلى حسابه${bankReference ? ` لدى ${bankReference}` : ''} برقم الآيبان: ${data.iban || '[رقم الآيبان]'}.`)
+        : (isFemale ? `Her net monthly salary is regularly transferred directly to her account${bankReference ? ` at ${bankReference}` : ''} under IBAN: ${data.iban || '[IBAN Number]'}.` : `His net monthly salary is regularly transferred directly to his account${bankReference ? ` at ${bankReference}` : ''} under IBAN: ${data.iban || '[IBAN Number]'}.`);
     } else if (data.letterType === 'bank_salary_undertaking') {
       postTableText = isAr
         ? (isFemale ? `ونتعهد نحن شركة ${data.cr.cr_name_ar} بتحويل راتبها الشهري إلى حسابها لديكم رقم الآيبان (${data.iban || '[رقم الآيبان]'}). كما نتعهد بعدم إيقاف أو تحويل الراتب لبنك آخر، أو صرف مستحقات مكافأة نهاية الخدمة إلا بعد استلام خطاب براءة ذمة رسمي ونهائي من مصرفكم الموقر.` : `ونتعهد نحن شركة ${data.cr.cr_name_ar} بتحويل راتبه الشهري إلى حسابه لديكم رقم الآيبان (${data.iban || '[رقم الآيبان]'}). كما نتعهد بعدم إيقاف أو تحويل الراتب لبنك آخر، أو صرف مستحقات مكافأة نهاية الخدمة إلا بعد استلام خطاب براءة ذمة رسمي ونهائي من مصرفكم الموقر.`)
