@@ -1095,7 +1095,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
             height: 297mm;
             min-height: 297mm;
             max-height: 297mm;
-            padding: 18mm 18mm;
+            padding: 18mm 18mm 0;
             margin: 0 auto;
             box-sizing: border-box;
             background: #fff;
@@ -1198,7 +1198,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
           .footer-section {
             margin-top: 35px !important;
             padding-top: 20px !important;
-            padding-bottom: 5mm !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 18mm !important;
             border-top: 1px solid #e2e8f0 !important;
             display: flex !important;
             justify-content: space-between !important;
@@ -2445,7 +2446,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                 <div
                   id="printable-official-hr-sheet"
                   dir={isAr ? 'rtl' : 'ltr'}
-                  className="w-[780px] min-h-[1080px] bg-white text-slate-900 rounded-sm shadow-xl ring-1 ring-slate-900/5 p-10 sm:p-12 relative select-text flex flex-col justify-between font-sans"
+                  className="w-[780px] min-h-[1080px] bg-white text-slate-900 rounded-sm shadow-xl ring-1 ring-slate-900/5 px-10 pt-10 pb-0 sm:px-12 sm:pt-12 sm:pb-0 relative select-text flex flex-col justify-between font-sans"
                   style={{
                     fontFamily: isAr ? "'Cairo', 'Segoe UI', Tahoma, sans-serif" : "'Inter', Arial, sans-serif"
                   }}
@@ -2732,6 +2733,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                     dir="ltr"
                     style={{
                       marginTop: '40px',
+                      marginBottom: '48px',
                       paddingTop: '20px',
                       borderTop: '1px solid #e2e8f0',
                       paddingBottom: '12px',
