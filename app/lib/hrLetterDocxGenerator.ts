@@ -233,22 +233,22 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
   let titleText = '';
   switch (data.letterType) {
     case 'noc_transfer':
-      titleText = isAr ? 'شهادة عدم ممانعة لنقل الكفالة والتحاق بالعمل' : 'NO OBJECTION CERTIFICATE FOR TRANSFER (NOC)';
+      titleText = isAr ? 'شهادة عدم ممانعة (NOC)' : 'NO OBJECTION CERTIFICATE (NOC)';
       break;
     case 'experience_certificate':
-      titleText = isAr ? 'شهادة خبرة وظيفية رسمية' : 'OFFICIAL EXPERIENCE CERTIFICATE';
+      titleText = isAr ? 'شهادة خبرة' : 'EXPERIENCE CERTIFICATE';
       break;
     case 'active_employment':
-      titleText = isAr ? 'شهادة إثبات عمل' : 'CERTIFICATE OF ACTIVE EMPLOYMENT';
+      titleText = isAr ? 'شهادة إثبات عمل' : 'EMPLOYMENT CERTIFICATE';
       break;
     case 'embassy_salary':
-      titleText = isAr ? 'شهادة عمل وبيان راتب موجهة للسفارة' : 'EMPLOYMENT & SALARY CERTIFICATE (VISA PURPOSE)';
+      titleText = isAr ? 'خطاب السفارة' : 'EMBASSY LETTER';
       break;
     case 'bank_salary_iban':
-      titleText = isAr ? 'شهادة تفاصيل الراتب واعتماد الآيبان البنكي' : 'SALARY DETAILS & IBAN CONFIRMATION LETTER';
+      titleText = isAr ? 'شهادة راتب' : 'SALARY CERTIFICATE';
       break;
     case 'bank_salary_undertaking':
-      titleText = isAr ? 'خطاب تعهد وتثبيت تحويل راتب لقرض بنكي' : 'IRREVOCABLE SALARY TRANSFER UNDERTAKING';
+      titleText = isAr ? 'خطاب بنكي' : 'BANK LETTER';
       break;
   }
 

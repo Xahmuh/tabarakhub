@@ -908,46 +908,46 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   // Letter Titles & Subjects Mapping
   const letterTitles = {
     salary_slip: {
-      ar: 'قسيمة راتب شهرية',
+      ar: 'قسيمة راتب',
       en: 'SALARY SLIP',
-      subAr: 'قسيمة راتب ومفردات شهرية',
-      subEn: 'Monthly Salary Slip'
+      subAr: '',
+      subEn: ''
     },
     noc_transfer: {
-      ar: 'شهادة عدم ممانعة لنقل الكفالة والخدمات (NOC)',
-      en: 'NO OBJECTION CERTIFICATE FOR SPONSORSHIP TRANSFER (NOC)',
-      subAr: 'خطاب رسمي لعدم ممانعة الانتقال والالتحاق بشركة أخرى',
-      subEn: 'Official Transfer & Sponsorship Clearance Certificate'
+      ar: 'شهادة عدم ممانعة (NOC)',
+      en: 'NO OBJECTION CERTIFICATE (NOC)',
+      subAr: '',
+      subEn: ''
     },
     experience_certificate: {
-      ar: 'شهادة خبرة وخدمة وظيفية رسمية',
-      en: 'OFFICIAL CERTIFICATE OF SERVICE & EXPERIENCE',
-      subAr: 'بيان الخبرة والكفاءة والسيرة المهنية للموظف',
-      subEn: 'Professional Service Record & Performance Certificate'
+      ar: 'شهادة خبرة',
+      en: 'EXPERIENCE CERTIFICATE',
+      subAr: '',
+      subEn: ''
     },
     active_employment: {
       ar: 'شهادة إثبات عمل',
-      en: 'CERTIFICATE OF ACTIVE EMPLOYMENT',
-      subAr: 'إفادة رسمية بالاستمرار على رأس العمل لمن يهمه الأمر',
-      subEn: 'Official Confirmation of Current Active Employment'
+      en: 'EMPLOYMENT CERTIFICATE',
+      subAr: '',
+      subEn: ''
     },
     embassy_salary: {
-      ar: 'شهادة تعريف عمل وراتب موجهة للسفارات',
-      en: 'EMPLOYMENT & SALARY CERTIFICATE FOR EMBASSY',
-      subAr: 'مستند رسمي لطلبات التأشيرات والشنغن والسفارات',
-      subEn: 'Official Verification Letter for Visa & Embassy Purposes'
+      ar: 'خطاب السفارة',
+      en: 'EMBASSY LETTER',
+      subAr: '',
+      subEn: ''
     },
     bank_salary_iban: {
-      ar: 'شهادة تفاصيل الراتب واعتماد الحساب البنكي',
-      en: 'SALARY DETAILS & BANK ACCOUNT CONFIRMATION',
-      subAr: 'بيان مفردات الراتب الشهري المعتمد ورقم الآيبان',
-      subEn: 'Monthly Salary Breakdown & IBAN Verification Letter'
+      ar: 'شهادة راتب',
+      en: 'SALARY CERTIFICATE',
+      subAr: '',
+      subEn: ''
     },
     bank_salary_undertaking: {
-      ar: 'خطاب تعهد وتثبيت تحويل راتب لقرض بنكي',
-      en: 'IRREVOCABLE SALARY TRANSFER UNDERTAKING TO BANK',
-      subAr: 'تعهد والتزام مصرفي غير قابل للإلغاء لمنح التمويل والقروض',
-      subEn: 'Official Irrevocable Undertaking for Bank Loan & Facilities'
+      ar: 'خطاب بنكي',
+      en: 'BANK LETTER',
+      subAr: '',
+      subEn: ''
     }
   };
 
@@ -2595,9 +2595,11 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                       <h1 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-wider">
                         {letterTitles[letterType][lang]}
                       </h1>
-                      <p className="text-xs font-bold text-slate-700">
-                        {isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn}
-                      </p>
+                      {(isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn) && (
+                        <p className="text-xs font-bold text-slate-700">
+                          {isAr ? letterTitles[letterType].subAr : letterTitles[letterType].subEn}
+                        </p>
+                      )}
                     </div>
 
                     {/* 3. ADDRESSEE / DESTINATION */}
