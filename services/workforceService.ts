@@ -33,6 +33,7 @@ export interface EmployeeSalaryMatrix {
   nhraExpiryDate?: string;
 
   // FINANCIAL DATA
+  bankName?: string;
   iban?: string;
   totalSalary?: number;
 
@@ -126,7 +127,6 @@ const getInitialDemoEmployees = (): Employee[] => [
       ppExpiryDate: '2028-06-30',
       wpExpiryDate: '2026-12-31',
       visaExpiryDate: '2026-12-31',
-      nhraLicenseNo: 'NHRA/PH/2021/3941',
       company: 'Tabarak Pharmacy CO W.L.L',
       cr: '127506-01'
     }

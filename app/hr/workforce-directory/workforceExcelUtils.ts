@@ -101,6 +101,7 @@ export const DEFAULT_FLEET_VEHICLES: DefaultVehicleOption[] = [
         sm.visaType || emp.visa_type || 'Internal',
         sm.wpExpiryDate || sm.visaExpiryDate || emp.wp_expiry_date || '',
         sm.nationality || emp.nationality || '',
+        sm.bankName || '',
         sm.iban || '',
         sm.basicSalary !== undefined ? sm.basicSalary : '',
         sm.housing !== undefined ? sm.housing : '',
@@ -168,6 +169,7 @@ export const DEFAULT_FLEET_VEHICLES: DefaultVehicleOption[] = [
         { header: 'Visa Type', key: 'visa_type', width: 14 },
         { header: 'WP Expiry Date', key: 'wp_expiry', width: 16 },
         { header: 'Nationality', key: 'nationality', width: 18 },
+        { header: 'Bank Name', key: 'bank_name', width: 24 },
         { header: 'IBAN', key: 'iban', width: 26 },
         { header: 'Basic Salary', key: 'basic_salary', width: 14 },
         { header: 'Housing', key: 'housing', width: 12 },
@@ -576,6 +578,7 @@ export const DEFAULT_FLEET_VEHICLES: DefaultVehicleOption[] = [
       const visaTypeIdx = findHeaderIdx(['visatype', 'visa', 'نوعالتأشيرة', 'نوعالاقامة', 'نوعالإقامة', 'الإقامة', 'الكفالة']);
       const wpExpiryIdx = findHeaderIdx(['wpexpiry', 'wpexpirydate', 'visaexpiry', 'visaexpirydate', 'انتهاءالاقامة', 'انتهاءالإقامة', 'تاريخانتهاءالإقامة', 'انتهاءتصريحالعمل']);
       const nationalityIdx = findHeaderIdx(['nationality', 'الجنسية', 'جنسية']);
+      const bankNameIdx = findHeaderIdx(['bankname', 'bank_name', 'البنك', 'اسمالبنك']);
       const ibanIdx = findHeaderIdx(['iban', 'ibanaccount', 'الحسابالبنكي', 'الايبان', 'الآيبان']);
 
       const basicSalaryIdx = findHeaderIdx(['basicsalary', 'basic', 'الراتبالأساسي', 'الراتبالاساسي', 'اساسي']);
@@ -622,6 +625,7 @@ export const DEFAULT_FLEET_VEHICLES: DefaultVehicleOption[] = [
         const rawVisa = visaTypeIdx !== -1 ? (row[visaTypeIdx] || '').trim() : '';
         const rawWpExpiry = wpExpiryIdx !== -1 ? (row[wpExpiryIdx] || '').trim() : '';
         const rawNationality = nationalityIdx !== -1 ? (row[nationalityIdx] || '').trim() : '';
+        const rawBankName = bankNameIdx !== -1 ? (row[bankNameIdx] || '').trim() : '';
         const rawIban = ibanIdx !== -1 ? (row[ibanIdx] || '').trim() : '';
 
         const rawPhone = phoneIdx !== -1 ? (row[phoneIdx] || '').trim() : '';
@@ -747,6 +751,7 @@ export const DEFAULT_FLEET_VEHICLES: DefaultVehicleOption[] = [
           gender: gender !== undefined ? gender : (currentSm.gender || existingEmp?.gender),
           visaType: visaType !== undefined ? visaType : (currentSm.visaType || existingEmp?.visa_type),
           nationality: nationality || currentSm.nationality || existingEmp?.nationality,
+          bankName: rawBankName || currentSm.bankName,
           iban: rawIban || currentSm.iban,
           totalSalary: newTotalSalary,
           basicSalary: newBasic,

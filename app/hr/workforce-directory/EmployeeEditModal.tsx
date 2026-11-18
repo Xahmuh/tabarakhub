@@ -152,6 +152,7 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
   const [formExpatPp, setFormExpatPp] = useState<string>('');
   const [formExpatPpExpiry, setFormExpatPpExpiry] = useState<string>('');
   const [formWpExpiry, setFormWpExpiry] = useState<string>('');
+  const [formBankName, setFormBankName] = useState<string>('');
   const [formIban, setFormIban] = useState<string>('');
 
   const handleVisaTypeChange = (newVisa: 'Internal' | 'Flexi') => {
@@ -299,9 +300,12 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
       setFormExpatPp(sm.expatPp || emp.passport_number || '');
       setFormExpatPpExpiry(sm.expatPpExpiryDate || sm.ppExpiryDate || emp.passport_expiry_date || '');
       setFormWpExpiry(sm.wpExpiryDate || sm.visaExpiryDate || emp.wp_expiry_date || '');
+      setFormBankName(sm.bankName || '');
       setFormIban(sm.iban || '');
-      setFormNhraLicenseNo(sm.nhraLicenseNo || (cat === 'Pharmacist' ? `NHRA-PH-${emp.code}` : ''));
-      setFormNhraExpiryDate(sm.nhraExpiryDate || (cat === 'Pharmacist' ? '2026-12-31' : ''));
+      const storedNhraLicense = (sm.nhraLicenseNo || '').trim();
+      const generatedNhraFallback = `NHRA-PH-${emp.code || ''}`.toUpperCase();
+      setFormNhraLicenseNo(storedNhraLicense.toUpperCase() === generatedNhraFallback ? '' : storedNhraLicense);
+      setFormNhraExpiryDate(sm.nhraExpiryDate || '');
       setFormBasicSalary(sm.basicSalary !== undefined ? String(sm.basicSalary) : '0');
       setFormHousing(sm.housing !== undefined ? String(sm.housing) : '0');
       setFormTransportation(sm.transportation !== undefined ? String(sm.transportation) : '0');
@@ -342,6 +346,7 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
       setFormExpatPp('');
       setFormExpatPpExpiry('');
       setFormWpExpiry('');
+      setFormBankName('');
       setFormIban('');
       setFormNhraLicenseNo('');
       setFormNhraExpiryDate('');
@@ -446,6 +451,7 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
             gender: formGender,
             visaType: formVisaType,
             nationality: formNationality.trim() || undefined,
+            bankName: formBankName.trim() || undefined,
             iban: formIban.trim() || undefined,
             nhraLicenseNo: formNhraLicenseNo.trim() || undefined,
             nhraExpiryDate: formNhraExpiryDate.trim() || undefined,
@@ -961,7 +967,6 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
                             type="text"
                             value={formNhraLicenseNo}
                             onChange={e => setFormNhraLicenseNo(e.target.value)}
-                            placeholder="NHRA-PH-00123"
                             className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1 text-xs text-purple-950 font-mono font-bold outline-none focus:border-purple-500"
                           />
                         </div>
@@ -994,17 +999,15 @@ export const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
                     </div>
                   )}
 
-                  <div className="sm:col-span-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">{isRtl ? 'اسم البنك' : 'Bank Name'}</label>
+                    <input type="text" value={formBankName} onChange={e => setFormBankName(e.target.value)} placeholder={isRtl ? 'اسم البنك المسجل للموظف' : 'Employee bank name'} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-semibold outline-none focus:border-brand/50 focus:bg-white" />
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-bold text-slate-700 mb-1">
-                      {isRtl ? 'رقم الحساب البنكي (IBAN)' : 'Financial Data: IBAN'}
+                      {isRtl ? 'رقم الحساب البنكي (IBAN)' : 'IBAN'}
                     </label>
-                    <input
-                      type="text"
-                      value={formIban}
-                      onChange={e => setFormIban(e.target.value)}
-                      placeholder="BH29 NBB0 0000 0000 1234 56"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono font-bold tracking-wider outline-none focus:border-brand/50 focus:bg-white"
-                    />
+                    <input type="text" value={formIban} onChange={e => setFormIban(e.target.value)} placeholder={isRtl ? 'يُترك فارغًا إذا لم يكن مسجلًا' : 'Leave blank if not on file'} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono font-bold tracking-wider outline-none focus:border-brand/50 focus:bg-white" />
                   </div>
                 </div>
               </div>

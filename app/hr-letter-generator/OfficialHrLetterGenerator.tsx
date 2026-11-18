@@ -45,6 +45,13 @@ import {
 import { workforceService, Employee } from '../../services/workforceService';
 import { SalarySlipGenerator } from './SalarySlipGenerator';
 
+const getRecordedNhraLicense = (employee?: Employee): string => {
+  const license = employee?.salary_matrix?.nhraLicenseNo?.trim() || '';
+  if (!license) return '';
+  const generatedFallback = employee?.code ? `NHRA-PH-${employee.code}`.toUpperCase() : '';
+  return generatedFallback && license.toUpperCase() === generatedFallback ? '' : license;
+};
+
 const FALLBACK_EMPLOYEES: Employee[] = [
   {
     id: 'emp-ph-1',
@@ -67,7 +74,6 @@ const FALLBACK_EMPLOYEES: Employee[] = [
       expatPp: 'A29381726',
       expatCpr: '910284712',
       nationality: 'Egyptian / مصري',
-      nhraLicenseNo: 'NHRA/PH/2021/3941',
       gender: 'Male'
     }
   },
@@ -92,7 +98,6 @@ const FALLBACK_EMPLOYEES: Employee[] = [
       expatPp: 'A98213456',
       expatCpr: '890412354',
       nationality: 'Egyptian / مصري',
-      nhraLicenseNo: '32000185',
       gender: 'Male'
     }
   },
@@ -117,7 +122,6 @@ const FALLBACK_EMPLOYEES: Employee[] = [
       expatPp: 'B10293847',
       expatCpr: '950819283',
       nationality: 'Bahraini / بحريني',
-      nhraLicenseNo: 'NHRA/AP/2023/1029',
       gender: 'Female'
     }
   },
@@ -142,7 +146,6 @@ const FALLBACK_EMPLOYEES: Employee[] = [
       expatPp: 'A38472910',
       expatCpr: '920318491',
       nationality: 'Egyptian / مصري',
-      nhraLicenseNo: 'NHRA/PH/2022/4102',
       gender: 'Male'
     }
   },
@@ -448,7 +451,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
     const initGen = (initialEmployee?.gender || initialEmployee?.salary_matrix?.gender) && String(initialEmployee?.gender || initialEmployee?.salary_matrix?.gender).toLowerCase().includes('female') ? 'female' : 'male';
     return resolveJobTitle(derivedTitle, initL, prefix, initGen);
   });
-  const [nhraLicense, setNhraLicense] = useState<string>(initialEmployee?.salary_matrix?.nhraLicenseNo || '');
+  const [nhraLicense, setNhraLicense] = useState<string>(getRecordedNhraLicense(initialEmployee));
 
   // Letter Document Output Language Switcher (Affects generated A4 letter only)
   const handleLetterLanguageSwitch = (newLang: 'ar' | 'en') => {
@@ -504,8 +507,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   ].filter(item => item.amount > 0);
 
   // Contextual Destination & Bank Fields
-  const [bankName, setBankName] = useState<string>('National Bank of Bahrain (NBB) / بنك البحرين الوطني');
-  const [iban, setIban] = useState<string>('BH29NBOB00000012345678');
+  const [bankName, setBankName] = useState<string>(initialEmployee?.salary_matrix?.bankName || '');
+  const [iban, setIban] = useState<string>(initialEmployee?.salary_matrix?.iban || '');
   const [destinationName, setDestinationName] = useState<string>('Embassy of France in Bahrain / سفارة فرنسا');
   const [newCompanyName, setNewCompanyName] = useState<string>('Gulf Health Solutions W.L.L / شركة حلول الخليج الصحية');
   const [customNotes, setCustomNotes] = useState<string>('');
@@ -833,11 +836,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         setJobTitle(isAr ? (detectedGen === 'female' ? 'صيدلانية' : 'صيدلي') : 'Licensed Pharmacist');
       }
 
-      if (emp.salary_matrix?.nhraLicenseNo) {
-        setNhraLicense(emp.salary_matrix.nhraLicenseNo);
-      } else {
-        setNhraLicense('');
-      }
+      setNhraLicense(getRecordedNhraLicense(emp));
     } else if (isDriver) {
       setJobTitle(isAr ? (detectedGen === 'female' ? 'سائقة خدمات وتوصيل أدوية' : 'سائق خدمات وتوصيل أدوية') : 'Logistics & Pharmacy Delivery Driver');
       setNhraLicense('');
@@ -874,6 +873,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
     }
 
     // Salary matrix autofill
+    setBankName(emp.salary_matrix?.bankName || '');
+    setIban(emp.salary_matrix?.iban || '');
     if (emp.salary_matrix) {
       const sm = emp.salary_matrix;
       if (sm.basicSalary !== undefined) setBasicSalary(sm.basicSalary);
@@ -2118,7 +2119,6 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                         type="text"
                         value={bankName}
                         onChange={(e) => setBankName(e.target.value)}
-                        placeholder="e.g. National Bank of Bahrain (NBB)"
                         className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-semibold outline-none focus:border-slate-400 transition-all"
                       />
                     </div>
@@ -2129,7 +2129,6 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                         type="text"
                         value={iban}
                         onChange={(e) => setIban(e.target.value.toUpperCase())}
-                        placeholder="BH29NBOB00000012345678"
                         className="w-full px-3.5 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white text-slate-900 border border-slate-200/90 rounded-xl text-xs font-mono font-semibold outline-none focus:border-slate-400 tracking-wide transition-all"
                       />
                     </div>
