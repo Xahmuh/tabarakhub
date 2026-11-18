@@ -1107,7 +1107,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
           }
           .a4-page > div {
             width: 100% !important;
-            height: calc(100% - 18mm) !important;
+            height: calc(100% - 6mm) !important;
             min-height: 0 !important;
             padding: 0 !important;
             margin: 0 !important;
@@ -1201,6 +1201,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
             padding-top: 20px !important;
             padding-bottom: 0 !important;
             margin-bottom: 0 !important;
+            transform: translateY(-12mm) !important;
             border-top: 1px solid #e2e8f0 !important;
             display: flex !important;
             justify-content: space-between !important;
