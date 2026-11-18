@@ -7,7 +7,8 @@ export type HrLetterType =
   | 'active_employment'
   | 'embassy_salary'
   | 'bank_salary_iban'
-  | 'bank_salary_undertaking';
+  | 'bank_salary_undertaking'
+  | 'salary_slip';
 
 export interface HrLetterData {
   letterType: HrLetterType;

@@ -43,6 +43,7 @@ import {
   cleanBilingualString
 } from '../lib/hrLetterDocxGenerator';
 import { workforceService, Employee } from '../../services/workforceService';
+import { SalarySlipGenerator } from './SalarySlipGenerator';
 
 const FALLBACK_EMPLOYEES: Employee[] = [
   {
@@ -282,6 +283,18 @@ export const DOCUMENT_TYPE_OPTIONS: DocumentTypeOption[] = [
     subEn: 'Salary Details & Bank Confirmation',
     subAr: 'بيان مفردات الراتب الشهري المعتمد ورقم الآيبان',
     icon: Banknote,
+    tone: 'red',
+    tagColor: 'bg-red-50 text-red-600 border border-red-200'
+  },
+  {
+    id: 'salary_slip',
+    labelEn: 'Salary Slip',
+    labelAr: 'قسيمة راتب',
+    hintEn: 'Payroll',
+    hintAr: 'الرواتب',
+    subEn: 'Monthly Salary Slip',
+    subAr: 'قسيمة راتب شهرية بمفردات الراتب والاستقطاعات',
+    icon: CreditCard,
     tone: 'red',
     tagColor: 'bg-red-50 text-red-600 border border-red-200'
   },
@@ -590,6 +603,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         const dt = initialEmployee.docTypes.join(' ').toLowerCase();
         if (dt.includes('experience')) setLetterType('experience_certificate');
         else if (dt.includes('employment')) setLetterType('active_employment');
+        else if (dt.includes('salary slip')) setLetterType('salary_slip');
         else if (dt.includes('salary')) setLetterType('bank_salary_iban');
         else if (dt.includes('noc')) setLetterType('noc_transfer');
         else if (dt.includes('bank')) setLetterType('bank_salary_undertaking');
@@ -649,7 +663,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
 
   // Check if salary breakdown is mandatory for current type
   const isSalaryRequired = useMemo(() => {
-    return ['embassy_salary', 'bank_salary_iban', 'bank_salary_undertaking'].includes(letterType);
+    return ['embassy_salary', 'bank_salary_iban', 'bank_salary_undertaking', 'salary_slip'].includes(letterType);
   }, [letterType]);
 
   // Workforce Database State & Quick Employee Selection
@@ -871,6 +885,12 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
 
   // Letter Titles & Subjects Mapping
   const letterTitles = {
+    salary_slip: {
+      ar: 'قسيمة راتب شهرية',
+      en: 'SALARY SLIP',
+      subAr: 'قسيمة راتب ومفردات شهرية',
+      subEn: 'Monthly Salary Slip'
+    },
     noc_transfer: {
       ar: 'شهادة عدم ممانعة لنقل الكفالة والخدمات (NOC)',
       en: 'NO OBJECTION CERTIFICATE FOR SPONSORSHIP TRANSFER (NOC)',
@@ -951,6 +971,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   // Generated Body Clauses
   const letterBodyContent = useMemo(() => {
     switch (letterType) {
+      case 'salary_slip':
+        return '';
       case 'noc_transfer':
         return isAr
           ? `${arPreamble}... وتفيد الشركة بأنه لا مانع لدينا من نقل ${isFemale ? 'كفالتها/إقامتها والتحاقها' : 'كفالته/إقامته والتحاقه'} بالعمل لدى شركة ${resolvedNewCompany || '[اسم الشركة الجديدة]'}، دون أي التزام أو مسؤولية قانونية أو مالية تترتب على شركتنا تجاه الغير، وتم إصدار هذه الشهادة بناءً على ${isFemale ? 'طلبها' : 'طلبه'}.`
@@ -1048,7 +1070,9 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
           }
           .a4-page {
             width: 210mm;
+            height: 297mm;
             min-height: 297mm;
+            max-height: 297mm;
             padding: 18mm 18mm;
             margin: 0 auto;
             box-sizing: border-box;
@@ -1056,6 +1080,26 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            overflow: hidden;
+          }
+          .a4-page > div {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            box-shadow: none !important;
+            ring: none !important;
+          }
+          .footer-section, .sig-box, .seal-box {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .footer-section {
+            margin-top: auto !important;
           }
           .header-table {
             width: 100%;
@@ -1190,13 +1234,20 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
       </head>
       <body>
         <div class="a4-page">
-          ${content}
+          <div class="letter-content">${content}</div>
         </div>
         <script>
           window.onload = function() {
+            const page = document.querySelector('.a4-page');
+            const content = page && page.firstElementChild;
+            if (page && content && content.scrollHeight > page.clientHeight) {
+              const fit = Math.max(0.72, page.clientHeight / content.scrollHeight);
+              content.style.zoom = String(fit);
+              content.style.width = (100 / fit) + '%';
+            }
             setTimeout(function() {
               window.print();
-            }, 350);
+            }, 500);
           };
         </script>
       </body>
@@ -1285,6 +1336,25 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
+
+  if (letterType === 'salary_slip') {
+    const salarySlipEmployee = selectedEmployee || initialEmployee || employeesList[0];
+    if (salarySlipEmployee) {
+      return <SalarySlipGenerator
+        employee={salarySlipEmployee}
+        employees={employeesList}
+        cr={selectedCr}
+        language={letterLang}
+        gender={letterGender}
+        signatoryName={signatoryName}
+        signatoryRole={isAr ? signatoryRoleAr : signatoryRoleEn}
+        onBack={() => setLetterType('experience_certificate')}
+        onSelectEmployee={handleSelectEmployee}
+        onLanguageChange={handleLetterLanguageSwitch}
+        onGenderChange={handleGenderSwitch}
+      />;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-brand/10 direction-ltr">
