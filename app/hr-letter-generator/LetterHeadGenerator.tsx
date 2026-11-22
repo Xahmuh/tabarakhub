@@ -1,13 +1,85 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { saveAs } from 'file-saver';
 import { Download, Eye } from 'lucide-react';
 import { CR_UPDATED_EVENT, LOCAL_STORAGE_CR_KEY, crService } from '../../services/crService';
 import { getAdminRegisteredCrs } from '../lib/crEntities';
 import { BackToModulesButton } from '../shared/BackToModulesButton';
-import type { MarkPlacement, renderLetterHeadPages } from './letterHeadPdf';
+import {
+  clampMarkPosition, createLetterHeadPdf, defaultMarkPositions, letterPageSize,
+  markShowsOnPage, markSizes, renderLetterHeadPages
+} from './letterHeadPdf';
+import type { MarkKind, MarkPlacement, MarkPosition } from './letterHeadPdf';
 
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const maxLength = 100_000;
+const arrowMovement: Record<string, MarkPosition> = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 }
+};
+
+function DraggableMark({ kind, src, position, disabled, onMove }: {
+  kind: MarkKind;
+  src: string;
+  position: MarkPosition;
+  disabled: boolean;
+  onMove: (position: MarkPosition) => void;
+}) {
+  const drag = useRef<{
+    id: number;
+    clientX: number;
+    clientY: number;
+    scaleX: number;
+    scaleY: number;
+    position: MarkPosition;
+  } | null>(null);
+  const { width, height } = letterPageSize;
+  const size = markSizes[kind];
+  const label = kind === 'signature' ? 'signature' : 'company seal';
+
+  return (
+    <button type="button" aria-label={`Move ${label}`} aria-describedby="letter-mark-instructions"
+      disabled={disabled}
+      className="absolute touch-none select-none cursor-grab rounded-sm hover:outline hover:outline-2 hover:outline-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 active:cursor-grabbing"
+      style={{
+        left: `${position.x / width * 100}%`,
+        top: `${position.y / height * 100}%`,
+        width: `${size.width / width * 100}%`,
+        height: `${size.height / height * 100}%`
+      }}
+      onPointerDown={event => {
+        if (event.button !== 0 || drag.current) return;
+        const page = event.currentTarget.parentElement?.getBoundingClientRect();
+        if (!page?.width || !page.height) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = {
+          id: event.pointerId, clientX: event.clientX, clientY: event.clientY,
+          scaleX: width / page.width, scaleY: height / page.height, position
+        };
+      }}
+      onPointerMove={event => {
+        const start = drag.current;
+        if (!start || start.id !== event.pointerId) return;
+        onMove({
+          x: start.position.x + (event.clientX - start.clientX) * start.scaleX,
+          y: start.position.y + (event.clientY - start.clientY) * start.scaleY
+        });
+      }}
+      onLostPointerCapture={event => {
+        if (drag.current?.id === event.pointerId) drag.current = null;
+      }}
+      onKeyDown={event => {
+        const direction = arrowMovement[event.key];
+        if (!direction) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 2;
+        onMove({ x: position.x + direction.x * step, y: position.y + direction.y * step });
+      }}>
+      <img src={src} alt="" draggable={false} className="pointer-events-none block h-full w-full" />
+    </button>
+  );
+}
 
 function PlacementField({ label, value, onChange }: {
   label: string;
@@ -30,6 +102,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [letter, setLetter] = useState('');
   const [signature, setSignature] = useState<MarkPlacement>('off');
   const [stamp, setStamp] = useState<MarkPlacement>('off');
+  const [markPositions, setMarkPositions] = useState(defaultMarkPositions);
   const [fitToOnePage, setFitToOnePage] = useState(false);
   const [busy, setBusy] = useState<'import' | 'preview' | 'download' | null>(null);
   const [error, setError] = useState('');
@@ -89,14 +162,13 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     setError('');
     setDownloadNotice('');
     try {
-      const { renderLetterHeadPages, createLetterHeadPdf } = await import('./letterHeadPdf');
       const options = { company, text: letter, signature, stamp, fitToOnePage };
       const result = currentPreview ?? await renderLetterHeadPages(options);
       if (action === 'preview') {
         setPreview({ options, result });
         return;
       }
-      const blob = await createLetterHeadPdf(company.cr_name, result.pageImages);
+      const blob = await createLetterHeadPdf(company.cr_name, result, markPositions);
       const safeName = company.cr_name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().slice(0, 90);
       saveAs(blob, `Letter Head - ${safeName || 'Company'}.pdf`);
       if (fitToOnePage && result.pageImages.length > 1) {
@@ -196,10 +268,34 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           {fitToOnePage && currentPreview.pageImages.length > 1 && (
             <p className="text-sm text-slate-700">This letter needs more than one page at the minimum text size.</p>
           )}
+          {currentPreview.marks.some(mark => mark.src) && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p id="letter-mark-instructions" className="text-sm text-slate-700">
+                Drag the signature or seal, or focus it and use the arrow keys.
+                {currentPreview.pageImages.length > 1 && currentPreview.marks.some(mark => mark.placement === 'all') &&
+                  ' Marks set to Every page move together across all pages.'}
+              </p>
+              <button type="button" disabled={busy !== null} className="btn-secondary min-h-11 px-4"
+                onClick={() => setMarkPositions(defaultMarkPositions)}>
+                Reset positions
+              </button>
+            </div>
+          )}
           <div className="mx-auto max-w-[800px] space-y-4">
             {currentPreview.pageImages.map((src, index) => (
-              <img key={index} src={src} alt={`Letter preview, page ${index + 1}`} loading="lazy"
-                width={1786} height={2526} className="h-auto w-full border border-slate-300 bg-white shadow-sm" />
+              <div key={index} className="relative bg-white shadow-sm ring-1 ring-slate-300"
+                style={{ aspectRatio: `${letterPageSize.width} / ${letterPageSize.height}` }}>
+                <img src={src} alt={`Letter preview, page ${index + 1}`} loading="lazy"
+                  width={1786} height={2526} className="block h-full w-full" />
+                {currentPreview.marks.map(mark => mark.src &&
+                  markShowsOnPage(mark.placement, index, currentPreview.pageImages.length) && (
+                    <DraggableMark key={mark.kind} kind={mark.kind} src={mark.src} disabled={busy !== null}
+                      position={markPositions[mark.kind]}
+                      onMove={position => setMarkPositions(previous => ({
+                        ...previous, [mark.kind]: clampMarkPosition(mark.kind, position)
+                      }))} />
+                  ))}
+              </div>
             ))}
           </div>
         </section>

@@ -1,6 +1,9 @@
 import type { RegisteredCr } from '../lib/crEntities';
 
 export type MarkPlacement = 'off' | 'all' | 'last';
+export type MarkKind = 'signature' | 'stamp';
+export type MarkPosition = { x: number; y: number };
+export type MarkPositions = Record<MarkKind, MarkPosition>;
 type LetterOptions = {
   company: RegisteredCr;
   text: string;
@@ -10,8 +13,8 @@ type LetterOptions = {
 };
 
 // Work in A4 points and render at roughly 216 DPI for crisp browser-shaped Arabic text.
-const width = 595.28;
-const height = 841.89;
+export const letterPageSize = { width: 595.28, height: 841.89 };
+const { width, height } = letterPageSize;
 const margin = 45;
 const bodyTop = 132;
 const bodyWidth = width - 2 * margin;
@@ -19,6 +22,26 @@ const footerHeight = 81;
 const defaultFontSize = 12;
 const minimumFontSize = 9;
 const bodyFont = (size: number) => `${size}px Arial, sans-serif`;
+export const markSizes = {
+  signature: { width: 130, height: 65 },
+  stamp: { width: 145, height: 65 }
+};
+export const defaultMarkPositions: MarkPositions = {
+  signature: { x: margin, y: height - margin - markSizes.signature.height },
+  stamp: { x: width - margin - markSizes.stamp.width, y: height - margin - markSizes.stamp.height }
+};
+
+export function clampMarkPosition(kind: MarkKind, { x, y }: MarkPosition): MarkPosition {
+  const size = markSizes[kind];
+  return {
+    x: Math.max(0, Math.min(width - size.width, x)),
+    y: Math.max(0, Math.min(height - size.height, y))
+  };
+}
+
+export function markShowsOnPage(placement: MarkPlacement, index: number, pageCount: number) {
+  return placement === 'all' || (placement === 'last' && index === pageCount - 1);
+}
 
 function directionOf(text: string): CanvasDirection {
   const firstLetter = text.match(/\p{L}/u)?.[0];
@@ -64,6 +87,19 @@ function drawImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   const dw = image.naturalWidth * scale;
   const dh = image.naturalHeight * scale;
   ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
+  if (!image) return null;
+  const size = markSizes[kind];
+  const canvas = document.createElement('canvas');
+  canvas.width = size.width * 3;
+  canvas.height = size.height * 3;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('PDF generation is unavailable in this browser.');
+  ctx.scale(3, 3);
+  drawImage(ctx, image, 0, 0, size.width, size.height);
+  return canvas.toDataURL('image/png');
 }
 
 export async function renderLetterHeadPages({ company, text, signature, stamp, fitToOnePage }: LetterOptions) {
@@ -114,7 +150,7 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
   pages.push(lines.slice(cursor));
   if (pages.length > 100) throw new Error('The letter exceeds 100 pages. Shorten it before downloading.');
 
-  const pageImages = pages.map((page, index) => {
+  const pageImages = pages.map(page => {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#000';
@@ -144,24 +180,35 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
       ctx.fillText(value, direction === 'rtl' ? width - margin : margin, bodyTop + line * lineHeight);
     });
 
-    const last = index === pages.length - 1;
-    const show = (placement: MarkPlacement) => placement === 'all' || (placement === 'last' && last);
-    const footerY = height - margin - 65;
-    if (signatureImage && show(signature)) drawImage(ctx, signatureImage, margin, footerY, 130, 65);
-    if (stampImage && show(stamp)) drawImage(ctx, stampImage, width - margin - 145, footerY, 145, 65);
-
     return canvas.toDataURL('image/png');
   });
-  return { pageImages, fontSize };
+  return {
+    pageImages,
+    fontSize,
+    marks: [
+      { kind: 'signature' as const, placement: signature, src: renderMark('signature', signatureImage) },
+      { kind: 'stamp' as const, placement: stamp, src: renderMark('stamp', stampImage) }
+    ]
+  };
 }
 
-export async function createLetterHeadPdf(companyName: string, pageImages: string[]) {
+export async function createLetterHeadPdf(
+  companyName: string,
+  { pageImages, marks }: Awaited<ReturnType<typeof renderLetterHeadPages>>,
+  positions: MarkPositions
+) {
   const { Document, Page, Image, pdf } = await import('@react-pdf/renderer');
   return pdf(
     <Document title={`Letter Head - ${companyName}`}>
       {pageImages.map((src, index) => (
         <Page key={index} size={[width, height]} wrap={false}>
           <Image src={src} style={{ width, height }} />
+          {marks.map(mark => {
+            if (!mark.src || !markShowsOnPage(mark.placement, index, pageImages.length)) return null;
+            const { x, y } = positions[mark.kind];
+            return <Image key={mark.kind} src={mark.src}
+              style={{ position: 'absolute', left: x, top: y, ...markSizes[mark.kind] }} />;
+          })}
         </Page>
       ))}
     </Document>
