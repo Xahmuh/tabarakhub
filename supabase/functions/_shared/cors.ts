@@ -5,6 +5,10 @@ const configuredOrigins = [
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const productionOrigins = new Set([
+  'https://hub.tabarakpharmacy.com',
+]);
+
 const localDevelopmentOrigins = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -12,10 +16,11 @@ const localDevelopmentOrigins = new Set([
 
 const isAllowedOrigin = (origin: string | null) => {
   if (!origin) return true;
-  if (configuredOrigins.includes(origin)) return true;
+  if (configuredOrigins.includes(origin) || productionOrigins.has(origin)) return true;
 
-  // Local fallback is intentionally limited to development when no production
-  // origin has been configured. Production must set ALLOWED_ORIGIN or CLIENT_APP_URL.
+  // Local fallback is intentionally limited to development when no additional
+  // production origin has been configured. The primary production origin above
+  // is pinned so a missing secret cannot block the main app.
   return configuredOrigins.length === 0 && localDevelopmentOrigins.has(origin);
 };
 
