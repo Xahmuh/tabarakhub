@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { saveAs } from 'file-saver';
-import { Download } from 'lucide-react';
+import { Download, Eye } from 'lucide-react';
 import { CR_UPDATED_EVENT, LOCAL_STORAGE_CR_KEY, crService } from '../../services/crService';
 import { getAdminRegisteredCrs } from '../lib/crEntities';
 import { BackToModulesButton } from '../shared/BackToModulesButton';
-import type { MarkPlacement } from './letterHeadPdf';
+import type { MarkPlacement, renderLetterHeadPages } from './letterHeadPdf';
 
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const maxLength = 100_000;
@@ -30,10 +30,24 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [letter, setLetter] = useState('');
   const [signature, setSignature] = useState<MarkPlacement>('off');
   const [stamp, setStamp] = useState<MarkPlacement>('off');
-  const [busy, setBusy] = useState<'import' | 'download' | null>(null);
+  const [fitToOnePage, setFitToOnePage] = useState(false);
+  const [busy, setBusy] = useState<'import' | 'preview' | 'download' | null>(null);
   const [error, setError] = useState('');
   const [importedFile, setImportedFile] = useState('');
+  const [preview, setPreview] = useState<{
+    options: Parameters<typeof renderLetterHeadPages>[0];
+    result: Awaited<ReturnType<typeof renderLetterHeadPages>>;
+  } | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState('');
   const company = companies.find(item => item.id === companyId) ?? companies[0];
+  const currentPreview = preview && preview.options.company === company &&
+    preview.options.text === letter && preview.options.signature === signature &&
+    preview.options.stamp === stamp && preview.options.fitToOnePage === fitToOnePage ? preview.result : null;
+
+  useEffect(() => {
+    setPreview(null);
+    setDownloadNotice('');
+  }, [company, letter, signature, stamp, fitToOnePage]);
 
   useEffect(() => {
     let mounted = true;
@@ -69,17 +83,27 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function download() {
+  async function generate(action: 'preview' | 'download') {
     if (!company || !letter.trim()) return;
-    setBusy('download');
+    setBusy(action);
     setError('');
+    setDownloadNotice('');
     try {
-      const { createLetterHeadPdf } = await import('./letterHeadPdf');
-      const blob = await createLetterHeadPdf({ company, text: letter, signature, stamp });
+      const { renderLetterHeadPages, createLetterHeadPdf } = await import('./letterHeadPdf');
+      const options = { company, text: letter, signature, stamp, fitToOnePage };
+      const result = currentPreview ?? await renderLetterHeadPages(options);
+      if (action === 'preview') {
+        setPreview({ options, result });
+        return;
+      }
+      const blob = await createLetterHeadPdf(company.cr_name, result.pageImages);
       const safeName = company.cr_name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim().slice(0, 90);
       saveAs(blob, `Letter Head - ${safeName || 'Company'}.pdf`);
+      if (fitToOnePage && result.pageImages.length > 1) {
+        setDownloadNotice(`The letter needed ${result.pageImages.length} pages at the minimum text size.`);
+      }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not generate the PDF.');
+      setError(failure instanceof Error ? failure.message : 'Could not prepare the letter.');
     } finally {
       setBusy(null);
     }
@@ -102,6 +126,14 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           <PlacementField label="Signature" value={signature} onChange={setSignature} />
           <PlacementField label="Company seal" value={stamp} onChange={setStamp} />
         </div>
+        <label className="flex min-h-11 items-start gap-3 rounded-lg bg-slate-50 p-3">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-slate-900"
+            checked={fitToOnePage} onChange={event => setFitToOnePage(event.target.checked)} />
+          <span>
+            <span className="block text-sm font-semibold">Fit to one page</span>
+            <span className="block text-sm text-slate-600">Shrink the letter text as needed, down to 9 pt. Longer letters can still use multiple pages.</span>
+          </span>
+        </label>
 
         <div className="space-y-2 border-t border-slate-200 pt-4">
           <label htmlFor="letter-head-file" className="block text-sm font-semibold">Import Word or PDF</label>
@@ -125,16 +157,53 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
             onChange={event => setLetter(event.target.value)} />
         </label>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-600">A4 PDF with automatic page breaks</p>
+        {downloadNotice && <p role="status" className="text-sm text-slate-700">{downloadNotice}</p>}
+        <div className="flex flex-wrap items-center gap-3">
           <button type="button" disabled={!company || !letter.trim() || busy !== null}
-            onClick={() => void download()}
+            onClick={() => void generate('preview')}
+            className="btn-secondary inline-flex min-h-11 items-center gap-2 px-4 disabled:opacity-50">
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            {busy === 'preview' ? 'Preparing preview…' : 'Preview PDF'}
+          </button>
+          <button type="button" disabled={!company || !letter.trim() || busy !== null}
+            onClick={() => void generate('download')}
             className="btn-primary inline-flex min-h-11 items-center gap-2 px-4 disabled:opacity-50">
             <Download className="h-4 w-4" aria-hidden="true" />
             {busy === 'download' ? 'Generating PDF…' : 'Download PDF'}
           </button>
         </div>
       </fieldset>
+      {currentPreview && (
+        <section aria-labelledby="letter-head-preview" className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="letter-head-preview" className="text-lg font-bold">PDF preview</h2>
+              <p role="status" className="text-sm text-slate-600">
+                {currentPreview.pageImages.length} {currentPreview.pageImages.length === 1 ? 'page' : 'pages'} · A4 · {currentPreview.fontSize} pt
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy !== null} onClick={() => void generate('download')}
+                className="btn-primary inline-flex min-h-11 items-center gap-2 px-4 disabled:opacity-50">
+                <Download className="h-4 w-4" aria-hidden="true" />
+                {busy === 'download' ? 'Generating PDF…' : 'Download PDF'}
+              </button>
+              <button type="button" className="btn-secondary min-h-11 px-4" onClick={() => setPreview(null)}>
+                Close preview
+              </button>
+            </div>
+          </div>
+          {fitToOnePage && currentPreview.pageImages.length > 1 && (
+            <p className="text-sm text-slate-700">This letter needs more than one page at the minimum text size.</p>
+          )}
+          <div className="mx-auto max-w-[800px] space-y-4">
+            {currentPreview.pageImages.map((src, index) => (
+              <img key={index} src={src} alt={`Letter preview, page ${index + 1}`} loading="lazy"
+                width={1786} height={2526} className="h-auto w-full border border-slate-300 bg-white shadow-sm" />
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }
