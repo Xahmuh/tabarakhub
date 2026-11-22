@@ -23,6 +23,7 @@ const HRPortalPage = lazy(() => import('./app/hr').then(m => ({ default: m.HRPor
 const WorkforceDirectory = lazy(() => import('./app/hr').then(m => ({ default: m.WorkforceDirectory })));
 const WorkforcePage = lazy(() => import('./app/workforce').then(m => ({ default: m.WorkforcePage })));
 const OfficialHrLetterGenerator = lazy(() => import('./app/hr-letter-generator/OfficialHrLetterGenerator').then(m => ({ default: m.OfficialHrLetterGenerator })));
+const LetterHeadGenerator = lazy(() => import('./app/hr-letter-generator/LetterHeadGenerator').then(m => ({ default: m.LetterHeadGenerator })));
 const CashFlowPlanner = lazy(() => import('./app/cash-flow').then(m => ({ default: m.CashFlowPlanner })));
 const BranchCashTrackerPage = lazy(() => import('./app/cash-flow').then(m => ({ default: m.BranchCashTrackerPage })));
 const CorporateCodex = lazy(() => import('./app/corporate-codex').then(m => ({ default: m.CorporateCodex })));
@@ -53,6 +54,7 @@ export type AppTab =
   | 'hr-manager'
   | 'hr-directory'
   | 'hr-letter'
+  | 'letter-head'
   | 'workforce'
   | 'cash-flow'
   | 'cash-tracker'
@@ -174,6 +176,8 @@ export const AppRouter: React.FC<AppRouterProps> = ({
           }}
           standalone={true}
         />
+      ) : activeTab === 'letter-head' && (authState.user?.role === 'admin' || authState.user?.role === 'owner') ? (
+        <LetterHeadGenerator onBack={() => onTabChange('selector')} />
       ) : activeTab === 'workforce' ? (
         <WorkforcePage onBack={() => onTabChange('selector')} />
       ) : activeTab === 'cash-flow' ? (

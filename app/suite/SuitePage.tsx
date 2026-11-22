@@ -321,6 +321,16 @@ export const SuitePage: React.FC<SuitePageProps> = ({
       tone: 'feature'
     },
     {
+      key: 'letter-head',
+      visible: canUseHr && (role === 'admin' || isOwner),
+      title: 'Letter Head Generation',
+      description: 'Create corporate letters from typed text, Word, or PDF, and choose where to apply the signature and seal.',
+      icon: <ClipboardList className="h-5 w-5" />,
+      onClick: () => handleTabChange('letter-head'),
+      isPending,
+      tone: 'feature'
+    },
+    {
       key: 'payroll',
       visible: role !== 'branch' && canUseHr && (isManager || isOwner || checkPermission('workforce') || checkPermission('delivery') || checkPermission('hr_requests')),
       title: 'Payroll & Incentive Engine',
