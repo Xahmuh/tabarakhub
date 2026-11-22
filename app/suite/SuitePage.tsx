@@ -218,7 +218,7 @@ export const SuitePage: React.FC<SuitePageProps> = ({
   const canOpenDashboard = isModuleEnabled('reports') && (
     isWarehouse
       ? isModuleEnabled('adminDashboard')
-      : (isManager || role === 'supervisor')
+      : (isManager || isOwner || role === 'supervisor')
         ? isModuleEnabled('managerDashboard')
         : isModuleEnabled('branchDashboard')
   );
@@ -267,9 +267,11 @@ export const SuitePage: React.FC<SuitePageProps> = ({
     },
     {
       key: 'dashboard-manager',
-      visible: isManager && canOpenDashboard,
-      title: 'Performance Dashboard',
-      description: 'Review lost sales, shortage trends, and branch performance with manager-level branch selection.',
+      visible: (isManager || isOwner) && canOpenDashboard,
+      title: isOwner ? 'Lost Sales & Shortage Dashboard' : 'Performance Dashboard',
+      description: isOwner
+        ? 'Review lost sales, shortage trends, and performance across branches. Owner access is read-only.'
+        : 'Review lost sales, shortage trends, and branch performance with manager-level branch selection.',
       icon: <BarChart3 className="h-5 w-5" />,
       onClick: () => openDashboard('standard'),
       isPending,
