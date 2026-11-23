@@ -5,10 +5,10 @@ import { CR_UPDATED_EVENT, LOCAL_STORAGE_CR_KEY, crService } from '../../service
 import { getAdminRegisteredCrs } from '../lib/crEntities';
 import { BackToModulesButton } from '../shared/BackToModulesButton';
 import {
-  clampMarkPosition, createLetterHeadPdf, defaultMarkPositions, letterPageSize,
-  markShowsOnPage, markSizes, renderLetterHeadPages
+  clampMarkPosition, createLetterHeadPdf, defaultParagraphStyle, getMarkPosition, letterPageSize,
+  markShowsOnPage, markSizes, maximumFontSize, minimumFontSize, renderLetterHeadPages, splitLetterParagraphs
 } from './letterHeadPdf';
-import type { MarkKind, MarkPlacement, MarkPosition } from './letterHeadPdf';
+import type { MarkKind, MarkPlacement, MarkPosition, PageMarkPositions, ParagraphStyle, ParagraphStyles } from './letterHeadPdf';
 
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const maxLength = 100_000;
@@ -19,8 +19,9 @@ const arrowMovement: Record<string, MarkPosition> = {
   ArrowRight: { x: 1, y: 0 }
 };
 
-function DraggableMark({ kind, src, position, disabled, onMove }: {
+function DraggableMark({ kind, pageNumber, src, position, disabled, onMove }: {
   kind: MarkKind;
+  pageNumber: number;
   src: string;
   position: MarkPosition;
   disabled: boolean;
@@ -39,7 +40,7 @@ function DraggableMark({ kind, src, position, disabled, onMove }: {
   const label = kind === 'signature' ? 'signature' : 'company seal';
 
   return (
-    <button type="button" aria-label={`Move ${label}`} aria-describedby="letter-mark-instructions"
+    <button type="button" aria-label={`Move ${label} on page ${pageNumber}`} aria-describedby="letter-mark-instructions"
       disabled={disabled}
       className="absolute touch-none select-none cursor-grab rounded-sm hover:outline hover:outline-2 hover:outline-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 active:cursor-grabbing"
       style={{
@@ -96,13 +97,84 @@ function PlacementField({ label, value, onChange }: {
   </label>;
 }
 
+function PreviewTextEditor({ letter, styles, busy, onApply }: {
+  letter: string;
+  styles: ParagraphStyles;
+  busy: boolean;
+  onApply: (index: number, text: string, style: ParagraphStyle) => void;
+}) {
+  const paragraphs = splitLetterParagraphs(letter);
+  const [index, setIndex] = useState(() => Math.max(0, paragraphs.findIndex(text => text.trim())));
+  const original = styles[index] ?? defaultParagraphStyle;
+  const [text, setText] = useState(paragraphs[index] ?? '');
+  const [style, setStyle] = useState(original);
+  const hasChanges = text !== paragraphs[index] || style.bold !== original.bold ||
+    style.alignment !== original.alignment || style.size !== original.size;
+
+  function selectParagraph(next: number) {
+    setIndex(next);
+    setText(paragraphs[next]);
+    setStyle(styles[next] ?? defaultParagraphStyle);
+  }
+
+  return (
+    <details className="rounded-lg border border-slate-200 bg-white px-4">
+      <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">Edit letter text and formatting</summary>
+      <fieldset disabled={busy} className="space-y-3 pb-4">
+        <label className="block space-y-2 text-sm font-semibold">
+          <span>Paragraph to edit</span>
+          <select value={index} onChange={event => selectParagraph(Number(event.target.value))} className={fieldClass}>
+            {paragraphs.map((paragraph, i) => (
+              <option key={i} value={i}>{i + 1}. {paragraph.trim().slice(0, 75) || 'Blank line'}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-2 text-sm font-semibold">
+          <span>Paragraph text</span>
+          <textarea dir="auto" rows={3} value={text} maxLength={maxLength - letter.length + paragraphs[index].length}
+            onChange={event => setText(event.target.value.replace(/\r\n?|\n/g, ' '))} className={fieldClass} />
+        </label>
+        <div className="grid items-end gap-3 sm:grid-cols-3">
+          <label className="block space-y-2 text-sm font-semibold">
+            <span>Alignment</span>
+            <select value={style.alignment} className={fieldClass}
+              onChange={event => setStyle({ ...style, alignment: event.target.value as ParagraphStyle['alignment'] })}>
+              <option value="auto">Automatic</option>
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <label className="block space-y-2 text-sm font-semibold">
+            <span>Font size (pt)</span>
+            <select value={style.size} className={fieldClass}
+              onChange={event => setStyle({ ...style, size: Number(event.target.value) })}>
+              {Array.from({ length: maximumFontSize - minimumFontSize + 1 }, (_, i) => i + minimumFontSize)
+                .map(size => <option value={size} key={size}>{size}</option>)}
+            </select>
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
+            <input type="checkbox" checked={style.bold} onChange={event => setStyle({ ...style, bold: event.target.checked })} />
+            Bold
+          </label>
+        </div>
+        <button type="button" disabled={!hasChanges || busy}
+          className="btn-secondary min-h-11 px-4 disabled:opacity-50" onClick={() => onApply(index, text, style)}>
+          Apply to preview
+        </button>
+      </fieldset>
+    </details>
+  );
+}
+
 export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [companies, setCompanies] = useState(getAdminRegisteredCrs);
   const [companyId, setCompanyId] = useState('');
   const [letter, setLetter] = useState('');
+  const [paragraphStyles, setParagraphStyles] = useState<ParagraphStyles>({});
   const [signature, setSignature] = useState<MarkPlacement>('off');
   const [stamp, setStamp] = useState<MarkPlacement>('off');
-  const [markPositions, setMarkPositions] = useState(defaultMarkPositions);
+  const [markPositions, setMarkPositions] = useState<PageMarkPositions>({});
   const [fitToOnePage, setFitToOnePage] = useState(false);
   const [busy, setBusy] = useState<'import' | 'preview' | 'download' | null>(null);
   const [error, setError] = useState('');
@@ -114,11 +186,10 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [downloadNotice, setDownloadNotice] = useState('');
   const company = companies.find(item => item.id === companyId) ?? companies[0];
   const currentPreview = preview && preview.options.company === company &&
-    preview.options.text === letter && preview.options.signature === signature &&
+    preview.options.text === letter && preview.options.paragraphStyles === paragraphStyles && preview.options.signature === signature &&
     preview.options.stamp === stamp && preview.options.fitToOnePage === fitToOnePage ? preview.result : null;
 
   useEffect(() => {
-    setPreview(null);
     setDownloadNotice('');
   }, [company, letter, signature, stamp, fitToOnePage]);
 
@@ -148,6 +219,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
       const content = await importLetterText(file);
       if (content.length > maxLength) throw new Error('The imported letter exceeds 100,000 characters.');
       setLetter(content);
+      setParagraphStyles({});
       setImportedFile(file.name);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'The file could not be imported.');
@@ -156,15 +228,27 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function generate(action: 'preview' | 'download') {
+  async function generate(action: 'preview' | 'download', edit?: { index: number; text: string; style: ParagraphStyle }) {
     if (!company || !letter.trim()) return;
+    const paragraphs = splitLetterParagraphs(letter);
+    if (edit) paragraphs[edit.index] = edit.text;
+    const text = edit ? paragraphs.join('\n') : letter;
+    if (!text.trim()) {
+      setError('Enter some letter text before updating the preview.');
+      return;
+    }
     setBusy(action);
     setError('');
     setDownloadNotice('');
     try {
-      const options = { company, text: letter, signature, stamp, fitToOnePage };
-      const result = currentPreview ?? await renderLetterHeadPages(options);
+      const styles = edit ? { ...paragraphStyles, [edit.index]: edit.style } : paragraphStyles;
+      const options = { company, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
+      const result = (!edit && currentPreview) || await renderLetterHeadPages(options);
       if (action === 'preview') {
+        if (edit) {
+          setLetter(text);
+          setParagraphStyles(styles);
+        }
         setPreview({ options, result });
         return;
       }
@@ -226,7 +310,31 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           <span>Letter text</span>
           <textarea className={`${fieldClass} min-h-64 resize-y text-base font-normal leading-relaxed`}
             dir="auto" rows={12} maxLength={maxLength} value={letter}
-            onChange={event => setLetter(event.target.value)} />
+            onChange={event => {
+              const next = event.target.value;
+              const before = splitLetterParagraphs(letter);
+              const after = splitLetterParagraphs(next);
+              if (before.length !== after.length) {
+                let start = 0;
+                let oldEnd = before.length;
+                let newEnd = after.length;
+                while (start < oldEnd && start < newEnd && before[start] === after[start]) start++;
+                while (oldEnd > start && newEnd > start && before[oldEnd - 1] === after[newEnd - 1]) {
+                  oldEnd--;
+                  newEnd--;
+                }
+                setParagraphStyles(previous => {
+                  const updated: ParagraphStyles = {};
+                  for (const [key, style] of Object.entries(previous)) {
+                    const index = Number(key);
+                    if (index < oldEnd && index < newEnd) updated[index] = style;
+                    if (index >= oldEnd) updated[index + newEnd - oldEnd] = style;
+                  }
+                  return updated;
+                });
+              }
+              setLetter(next);
+            }} />
         </label>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         {downloadNotice && <p role="status" className="text-sm text-slate-700">{downloadNotice}</p>}
@@ -251,7 +359,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
             <div>
               <h2 id="letter-head-preview" className="text-lg font-bold">PDF preview</h2>
               <p role="status" className="text-sm text-slate-600">
-                {currentPreview.pageImages.length} {currentPreview.pageImages.length === 1 ? 'page' : 'pages'} · A4 · {currentPreview.fontSize} pt
+                {currentPreview.pageImages.length} {currentPreview.pageImages.length === 1 ? 'page' : 'pages'} · A4 · {currentPreview.fontSizeLabel} pt
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -265,6 +373,8 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
               </button>
             </div>
           </div>
+          <PreviewTextEditor letter={letter} styles={paragraphStyles} busy={busy !== null}
+            onApply={(index, text, style) => void generate('preview', { index, text, style })} />
           {fitToOnePage && currentPreview.pageImages.length > 1 && (
             <p className="text-sm text-slate-700">This letter needs more than one page at the minimum text size.</p>
           )}
@@ -272,12 +382,11 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p id="letter-mark-instructions" className="text-sm text-slate-700">
                 Drag the signature or seal, or focus it and use the arrow keys.
-                {currentPreview.pageImages.length > 1 && currentPreview.marks.some(mark => mark.placement === 'all') &&
-                  ' Marks set to Every page move together across all pages.'}
+                {currentPreview.pageImages.length > 1 && ' Each page has its own positions.'}
               </p>
               <button type="button" disabled={busy !== null} className="btn-secondary min-h-11 px-4"
-                onClick={() => setMarkPositions(defaultMarkPositions)}>
-                Reset positions
+                onClick={() => setMarkPositions({})}>
+                Reset all positions
               </button>
             </div>
           )}
@@ -289,10 +398,12 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
                   width={1786} height={2526} className="block h-full w-full" />
                 {currentPreview.marks.map(mark => mark.src &&
                   markShowsOnPage(mark.placement, index, currentPreview.pageImages.length) && (
-                    <DraggableMark key={mark.kind} kind={mark.kind} src={mark.src} disabled={busy !== null}
-                      position={markPositions[mark.kind]}
+                    <DraggableMark key={mark.kind} kind={mark.kind} pageNumber={index + 1}
+                      src={mark.src} disabled={busy !== null}
+                      position={getMarkPosition(markPositions, index, mark.kind)}
                       onMove={position => setMarkPositions(previous => ({
-                        ...previous, [mark.kind]: clampMarkPosition(mark.kind, position)
+                        ...previous,
+                        [index]: { ...previous[index], [mark.kind]: clampMarkPosition(mark.kind, position) }
                       }))} />
                   ))}
               </div>

@@ -3,13 +3,16 @@ import type { RegisteredCr } from '../lib/crEntities';
 export type MarkPlacement = 'off' | 'all' | 'last';
 export type MarkKind = 'signature' | 'stamp';
 export type MarkPosition = { x: number; y: number };
-export type MarkPositions = Record<MarkKind, MarkPosition>;
+export type PageMarkPositions = Partial<Record<number, Partial<Record<MarkKind, MarkPosition>>>>;
+export type ParagraphStyle = { bold: boolean; alignment: 'auto' | 'left' | 'center' | 'right'; size: number };
+export type ParagraphStyles = Partial<Record<number, ParagraphStyle>>;
 type LetterOptions = {
   company: RegisteredCr;
   text: string;
   signature: MarkPlacement;
   stamp: MarkPlacement;
   fitToOnePage: boolean;
+  paragraphStyles: ParagraphStyles;
 };
 
 // Work in A4 points and render at roughly 216 DPI for crisp browser-shaped Arabic text.
@@ -19,17 +22,23 @@ const margin = 45;
 const bodyTop = 132;
 const bodyWidth = width - 2 * margin;
 const footerHeight = 81;
-const defaultFontSize = 12;
-const minimumFontSize = 9;
-const bodyFont = (size: number) => `${size}px Arial, sans-serif`;
+export const minimumFontSize = 9;
+export const maximumFontSize = 32;
+export const defaultParagraphStyle: ParagraphStyle = { bold: false, alignment: 'auto', size: 12 };
+export const splitLetterParagraphs = (text: string) => text.split(/\r\n?|\n/);
+const bodyFont = (size: number, bold: boolean) => `${bold ? 'bold ' : ''}${size}px Arial, sans-serif`;
 export const markSizes = {
   signature: { width: 130, height: 65 },
   stamp: { width: 145, height: 65 }
 };
-export const defaultMarkPositions: MarkPositions = {
+export const defaultMarkPositions: Record<MarkKind, MarkPosition> = {
   signature: { x: margin, y: height - margin - markSizes.signature.height },
   stamp: { x: width - margin - markSizes.stamp.width, y: height - margin - markSizes.stamp.height }
 };
+
+export function getMarkPosition(positions: PageMarkPositions, pageIndex: number, kind: MarkKind) {
+  return positions[pageIndex]?.[kind] ?? defaultMarkPositions[kind];
+}
 
 export function clampMarkPosition(kind: MarkKind, { x, y }: MarkPosition): MarkPosition {
   const size = markSizes[kind];
@@ -102,7 +111,7 @@ function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
   return canvas.toDataURL('image/png');
 }
 
-export async function renderLetterHeadPages({ company, text, signature, stamp, fitToOnePage }: LetterOptions) {
+export async function renderLetterHeadPages({ company, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
   const [logo, signatureImage, stampImage] = await Promise.all([
     company.logo_url ? loadImage(company.logo_url, 'logo') : null,
     signature !== 'off' ? loadImage(company.signature_url, 'signature') : null,
@@ -117,38 +126,54 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
   ctx.textBaseline = 'top';
   const hasEveryPageMark = signature === 'all' || stamp === 'all';
   const hasLastPageMark = signature === 'last' || stamp === 'last';
-  const paragraphs = text.trim().split(/\r\n?|\n/);
-  const measure = (fontSize: number) => {
-    const lineHeight = fontSize * 1.5;
-    const capacity = (withFooter: boolean) =>
-      Math.floor((height - margin - bodyTop - (withFooter ? footerHeight : 0)) / lineHeight);
-    ctx.font = bodyFont(fontSize);
-    const lines = paragraphs.flatMap(paragraph => {
+  const paragraphs = splitLetterParagraphs(text);
+  const first = paragraphs.findIndex(paragraph => paragraph.trim());
+  if (first < 0) throw new Error('Enter some letter text before generating a PDF.');
+  let end = paragraphs.length;
+  while (end > first && !paragraphs[end - 1].trim()) end--;
+  const normalLimit = height - margin - bodyTop - (hasEveryPageMark ? footerHeight : 0);
+  const lastLimit = height - margin - bodyTop - (hasEveryPageMark || hasLastPageMark ? footerHeight : 0);
+  const measure = (scale: number) => {
+    let totalHeight = 0;
+    const lines = paragraphs.slice(first, end).flatMap((paragraph, index) => {
+      const style = paragraphStyles[index + first] ?? defaultParagraphStyle;
+      const size = Math.max(minimumFontSize, Math.round(style.size * scale * 2) / 2);
+      const lineHeight = size * 1.5;
+      const font = bodyFont(size, style.bold);
       const direction = directionOf(paragraph);
+      const alignment = style.alignment === 'auto' ? (direction === 'rtl' ? 'right' : 'left') : style.alignment;
+      ctx.font = font;
       ctx.direction = direction;
-      return wrap(ctx, paragraph, bodyWidth).map(value => ({ value, direction }));
+      return wrap(ctx, paragraph, bodyWidth).map(value => {
+        totalHeight += lineHeight;
+        return { value, direction, alignment, font, lineHeight, size };
+      });
     });
-    return {
-      lines, fontSize, lineHeight,
-      normalLimit: capacity(hasEveryPageMark),
-      lastLimit: capacity(hasEveryPageMark || hasLastPageMark)
-    };
+    return { lines, totalHeight };
   };
-  let layout = measure(defaultFontSize);
-  while (fitToOnePage && layout.lines.length > layout.lastLimit && layout.fontSize > minimumFontSize) {
-    layout = measure(layout.fontSize - 0.5);
+  let layout = measure(1);
+  for (let step = 23; fitToOnePage && layout.totalHeight > lastLimit && step >= 6; step--) {
+    layout = measure(step / 24);
+    if (layout.lines.every(line => line.size === minimumFontSize)) break;
   }
-  const { lines, fontSize, lineHeight, normalLimit, lastLimit } = layout;
+  const { lines } = layout;
   const pages: (typeof lines)[] = [];
   let cursor = 0;
-  while (lines.length - cursor > lastLimit) {
-    const remaining = lines.length - cursor;
-    const count = remaining <= normalLimit ? Math.ceil(remaining / 2) : Math.min(normalLimit, remaining - 1);
-    pages.push(lines.slice(cursor, cursor + count));
-    cursor += count;
+  let remainingHeight = layout.totalHeight;
+  while (remainingHeight > lastLimit) {
+    const limit = remainingHeight <= normalLimit ? remainingHeight / 2 : normalLimit;
+    let endOfPage = cursor;
+    let used = 0;
+    while (endOfPage < lines.length - 1 && used + lines[endOfPage].lineHeight <= limit) {
+      used += lines[endOfPage].lineHeight;
+      endOfPage++;
+    }
+    pages.push(lines.slice(cursor, endOfPage));
+    if (pages.length >= 100) throw new Error('The letter exceeds 100 pages. Shorten it before downloading.');
+    cursor = endOfPage;
+    remainingHeight -= used;
   }
   pages.push(lines.slice(cursor));
-  if (pages.length > 100) throw new Error('The letter exceeds 100 pages. Shorten it before downloading.');
 
   const pageImages = pages.map(page => {
     ctx.fillStyle = '#fff';
@@ -173,18 +198,24 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
     ctx.lineTo(width - margin, 111);
     ctx.stroke();
 
-    ctx.font = bodyFont(fontSize);
-    page.forEach(({ value, direction }, line) => {
+    let y = bodyTop;
+    page.forEach(({ value, direction, alignment, font, lineHeight }) => {
+      ctx.font = font;
       ctx.direction = direction;
-      ctx.textAlign = direction === 'rtl' ? 'right' : 'left';
-      ctx.fillText(value, direction === 'rtl' ? width - margin : margin, bodyTop + line * lineHeight);
+      ctx.textAlign = alignment;
+      const x = alignment === 'center' ? width / 2 : alignment === 'right' ? width - margin : margin;
+      ctx.fillText(value, x, y);
+      y += lineHeight;
     });
 
     return canvas.toDataURL('image/png');
   });
+  const sizes = lines.map(line => line.size);
+  const smallest = sizes.reduce((min, value) => Math.min(min, value), maximumFontSize);
+  const largest = sizes.reduce((max, value) => Math.max(max, value), minimumFontSize);
   return {
     pageImages,
-    fontSize,
+    fontSizeLabel: smallest === largest ? String(largest) : `${smallest}–${largest}`,
     marks: [
       { kind: 'signature' as const, placement: signature, src: renderMark('signature', signatureImage) },
       { kind: 'stamp' as const, placement: stamp, src: renderMark('stamp', stampImage) }
@@ -195,7 +226,7 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
 export async function createLetterHeadPdf(
   companyName: string,
   { pageImages, marks }: Awaited<ReturnType<typeof renderLetterHeadPages>>,
-  positions: MarkPositions
+  positions: PageMarkPositions
 ) {
   const { Document, Page, Image, pdf } = await import('@react-pdf/renderer');
   return pdf(
@@ -205,7 +236,7 @@ export async function createLetterHeadPdf(
           <Image src={src} style={{ width, height }} />
           {marks.map(mark => {
             if (!mark.src || !markShowsOnPage(mark.placement, index, pageImages.length)) return null;
-            const { x, y } = positions[mark.kind];
+            const { x, y } = getMarkPosition(positions, index, mark.kind);
             return <Image key={mark.kind} src={mark.src}
               style={{ position: 'absolute', left: x, top: y, ...markSizes[mark.kind] }} />;
           })}
