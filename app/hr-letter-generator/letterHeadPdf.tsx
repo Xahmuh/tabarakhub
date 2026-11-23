@@ -1,6 +1,7 @@
 import type { RegisteredCr } from '../lib/crEntities';
 
 export type MarkPlacement = 'off' | 'all' | 'last';
+export type HeaderStyle = 'company' | 'none';
 export type MarkKind = 'signature' | 'stamp';
 export type MarkPosition = { x: number; y: number };
 export type PageMarkPositions = Partial<Record<number, Partial<Record<MarkKind, MarkPosition>>>>;
@@ -8,6 +9,7 @@ export type ParagraphStyle = { bold: boolean; alignment: 'auto' | 'left' | 'cent
 export type ParagraphStyles = Partial<Record<number, ParagraphStyle>>;
 type LetterOptions = {
   company: RegisteredCr;
+  header: HeaderStyle;
   text: string;
   signature: MarkPlacement;
   stamp: MarkPlacement;
@@ -19,7 +21,6 @@ type LetterOptions = {
 export const letterPageSize = { width: 595.28, height: 841.89 };
 const { width, height } = letterPageSize;
 const margin = 45;
-const bodyTop = 132;
 const bodyWidth = width - 2 * margin;
 const footerHeight = 81;
 export const minimumFontSize = 9;
@@ -111,9 +112,11 @@ function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
   return canvas.toDataURL('image/png');
 }
 
-export async function renderLetterHeadPages({ company, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
+export async function renderLetterHeadPages({ company, header, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
+  const showHeader = header === 'company';
+  const bodyTop = showHeader ? 132 : margin;
   const [logo, signatureImage, stampImage] = await Promise.all([
-    company.logo_url ? loadImage(company.logo_url, 'logo') : null,
+    showHeader && company.logo_url ? loadImage(company.logo_url, 'logo') : null,
     signature !== 'off' ? loadImage(company.signature_url, 'signature') : null,
     stamp !== 'off' ? loadImage(company.stamp_url, 'seal') : null
   ]);
@@ -179,24 +182,26 @@ export async function renderLetterHeadPages({ company, text, signature, stamp, f
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#000';
-    if (logo) drawImage(ctx, logo, margin, margin, 68, 49);
-    const headingX = logo ? margin + 80 : margin;
-    const headingWidth = width - margin - headingX;
-    ctx.direction = 'ltr';
-    ctx.textAlign = 'left';
-    ctx.font = 'bold 14px Arial, sans-serif';
-    ctx.fillText(company.cr_name, headingX, margin, headingWidth);
-    ctx.direction = 'rtl';
-    ctx.font = 'bold 12px Arial, sans-serif';
-    ctx.fillText(company.cr_name_ar || '', headingX, margin + 23, headingWidth);
-    ctx.direction = 'ltr';
-    ctx.font = '8px Arial, sans-serif';
-    const details = [company.cr_number && `CR ${company.cr_number}`, company.phone, company.email].filter(Boolean);
-    ctx.fillText(details.join('  ·  '), headingX, margin + 46, headingWidth);
-    ctx.beginPath();
-    ctx.moveTo(margin, 111);
-    ctx.lineTo(width - margin, 111);
-    ctx.stroke();
+    if (showHeader) {
+      if (logo) drawImage(ctx, logo, margin, margin, 68, 49);
+      const headingX = logo ? margin + 80 : margin;
+      const headingWidth = width - margin - headingX;
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 14px Arial, sans-serif';
+      ctx.fillText(company.cr_name, headingX, margin, headingWidth);
+      ctx.direction = 'rtl';
+      ctx.font = 'bold 12px Arial, sans-serif';
+      ctx.fillText(company.cr_name_ar || '', headingX, margin + 23, headingWidth);
+      ctx.direction = 'ltr';
+      ctx.font = '8px Arial, sans-serif';
+      const details = [company.cr_number && `CR ${company.cr_number}`, company.phone, company.email].filter(Boolean);
+      ctx.fillText(details.join('  ·  '), headingX, margin + 46, headingWidth);
+      ctx.beginPath();
+      ctx.moveTo(margin, 111);
+      ctx.lineTo(width - margin, 111);
+      ctx.stroke();
+    }
 
     let y = bodyTop;
     page.forEach(({ value, direction, alignment, font, lineHeight }) => {

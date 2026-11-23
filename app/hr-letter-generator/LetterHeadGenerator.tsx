@@ -8,7 +8,7 @@ import {
   clampMarkPosition, createLetterHeadPdf, defaultParagraphStyle, getMarkPosition, letterPageSize,
   markShowsOnPage, markSizes, maximumFontSize, minimumFontSize, renderLetterHeadPages, splitLetterParagraphs
 } from './letterHeadPdf';
-import type { MarkKind, MarkPlacement, MarkPosition, PageMarkPositions, ParagraphStyle, ParagraphStyles } from './letterHeadPdf';
+import type { HeaderStyle, MarkKind, MarkPlacement, MarkPosition, PageMarkPositions, ParagraphStyle, ParagraphStyles } from './letterHeadPdf';
 
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const maxLength = 100_000;
@@ -170,6 +170,7 @@ function PreviewTextEditor({ letter, styles, busy, onApply }: {
 export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [companies, setCompanies] = useState(getAdminRegisteredCrs);
   const [companyId, setCompanyId] = useState('');
+  const [header, setHeader] = useState<HeaderStyle>('company');
   const [letter, setLetter] = useState('');
   const [paragraphStyles, setParagraphStyles] = useState<ParagraphStyles>({});
   const [signature, setSignature] = useState<MarkPlacement>('off');
@@ -185,13 +186,13 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   } | null>(null);
   const [downloadNotice, setDownloadNotice] = useState('');
   const company = companies.find(item => item.id === companyId) ?? companies[0];
-  const currentPreview = preview && preview.options.company === company &&
+  const currentPreview = preview && preview.options.company === company && preview.options.header === header &&
     preview.options.text === letter && preview.options.paragraphStyles === paragraphStyles && preview.options.signature === signature &&
     preview.options.stamp === stamp && preview.options.fitToOnePage === fitToOnePage ? preview.result : null;
 
   useEffect(() => {
     setDownloadNotice('');
-  }, [company, letter, signature, stamp, fitToOnePage]);
+  }, [company, header, letter, signature, stamp, fitToOnePage]);
 
   useEffect(() => {
     let mounted = true;
@@ -242,7 +243,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     setDownloadNotice('');
     try {
       const styles = edit ? { ...paragraphStyles, [edit.index]: edit.style } : paragraphStyles;
-      const options = { company, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
+      const options = { company, header, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
       const result = (!edit && currentPreview) || await renderLetterHeadPages(options);
       if (action === 'preview') {
         if (edit) {
@@ -273,10 +274,17 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
       </header>
       <fieldset disabled={busy !== null} className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block space-y-2 text-sm font-semibold sm:col-span-2">
+          <label className="block space-y-2 text-sm font-semibold">
             <span>Company</span>
             <select className={fieldClass} value={company?.id ?? ''} onChange={event => setCompanyId(event.target.value)}>
               {companies.map(item => <option value={item.id} key={item.id}>{item.cr_name} · CR {item.cr_number}</option>)}
+            </select>
+          </label>
+          <label className="block space-y-2 text-sm font-semibold">
+            <span>Letterhead</span>
+            <select className={fieldClass} value={header} onChange={event => setHeader(event.target.value as HeaderStyle)}>
+              <option value="company">Company letterhead</option>
+              <option value="none">None</option>
             </select>
           </label>
           <PlacementField label="Signature" value={signature} onChange={setSignature} />
