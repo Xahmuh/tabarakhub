@@ -30,6 +30,37 @@ const defaultRange = (): DateRange => {
 const percentage = (count: number, total: number) =>
   new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(count / total);
 
+const hasLimitedTracking = ({ orders, tracked, branch }: Pick<Candidate, 'orders' | 'tracked' | 'branch'>) =>
+  tracked < 20 || branch.tracked < 20 || tracked * 2 < orders || branch.tracked * 2 < branch.orders;
+
+function suggestAd({ blockNumber, areaName, orders, tracked, branch, trend }: Candidate) {
+  const area = areaName ? `${areaName} (Block ${blockNumber})` : `Block ${blockNumber}`;
+  if (hasLimitedTracking({ orders, tracked, branch })) {
+    return {
+      type: 'Local awareness · short video',
+      platform: 'Instagram Reels and Facebook Reels',
+      idea: `Show how to check whether ${branch.name} delivers to ${area}, then show the branch’s approved ordering channel.`,
+      reason: `The branch recorded ${branch.orders} of ${orders} orders here. With ${tracked}/${orders} tracked in the block and ${branch.tracked}/${branch.orders} at that branch, start by testing awareness without making delivery time promises.`
+    };
+  }
+  if (trend && trend.secondRate >= trend.firstRate * 1.15) {
+    return {
+      type: 'Search ad · delivery information',
+      platform: 'Google Search',
+      idea: `Use a headline about delivery from ${branch.name} and link to a page where people can check coverage and how to order for ${area}.`,
+      reason: `Daily orders rose from ${trend.firstRate.toFixed(2)} to ${trend.secondRate.toFixed(2)}. This makes it worth testing whether people searching for local delivery use the branch’s ordering channel.`
+    };
+  }
+  return {
+    type: 'Local awareness · how-to carousel',
+    platform: 'Instagram and Facebook',
+    idea: `Create three cards for ${area}: check coverage, reach ${branch.name}, and follow the branch’s ordering steps.`,
+    reason: trend
+      ? `Daily orders moved from ${trend.firstRate.toFixed(2)} to ${trend.secondRate.toFixed(2)}, with no rise of at least 15%. Test whether clearer ordering instructions help generate more orders.`
+      : `There were ${orders} eligible orders, with ${branch.orders} recorded by this branch. There is not enough data to establish a trend, so start with a simple test of ordering instructions.`
+  };
+}
+
 export function MarketingDecisions({ canEdit }: { canEdit: boolean }) {
   const [range, setRange] = useState(defaultRange);
   const [draft, setDraft] = useState(range);
@@ -155,7 +186,10 @@ export function MarketingDecisions({ canEdit }: { canEdit: boolean }) {
           <>
             {results.candidates.length ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {results.candidates.map(({ blockNumber, areaName, orders, tracked, branch, trend, comparison }) => (
+                {results.candidates.map(candidate => {
+                  const { blockNumber, areaName, orders, tracked, branch, trend, comparison } = candidate;
+                  const ad = suggestAd(candidate);
+                  return (
                   <article key={blockNumber} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                     <h4 className="font-bold text-slate-950">Block {blockNumber}{areaName && ` · ${areaName}`}</h4>
                     <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -175,15 +209,25 @@ export function MarketingDecisions({ canEdit }: { canEdit: boolean }) {
                       </dd></div>
                     </dl>
                     <p className="text-sm font-semibold text-amber-800">
-                      {tracked < 20 || branch.tracked < 20 || tracked * 2 < orders || branch.tracked * 2 < branch.orders
+                      {hasLimitedTracking(candidate)
                         ? 'Limited tracking evidence. Check branch readiness before testing.'
                         : 'Ready for review. Confirm branch capacity before testing.'}
                     </p>
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <h5 className="text-sm font-bold text-slate-950">Ad idea to review</h5>
+                      <dl className="space-y-2 text-sm">
+                        <div><dt className="text-slate-600">Ad type</dt><dd className="font-semibold">{ad.type}</dd></div>
+                        <div><dt className="text-slate-600">Platform</dt><dd className="font-semibold">{ad.platform}</dd></div>
+                        <div><dt className="text-slate-600">Content idea</dt><dd>{ad.idea}</dd></div>
+                        <div><dt className="text-slate-600">Why this block</dt><dd>{ad.reason}</dd></div>
+                      </dl>
+                    </div>
                     {canEdit && <button type="button" className="btn-secondary min-h-10 px-4" onClick={() => setSuggestion({
                       block_number: blockNumber, branch_id: branch.id, comparison_block_number: comparison?.blockNumber ?? ''
                     })}>Plan experiment</button>}
                   </article>
-                ))}
+                  );
+                })}
               </div>
             ) : <p className="text-sm text-slate-700">No blocks meet the sample and competitor criteria for these dates.</p>}
             <p className="text-sm text-slate-600">
@@ -207,6 +251,10 @@ export function MarketingDecisions({ canEdit }: { canEdit: boolean }) {
           The trend compares average orders per day in the first and second halves of the selected range, with at least seven days and
           ten orders per half. Comparison blocks come from the same governorate and have the closest eligible order volume.
           Confirm the comparison block will stay outside the campaign.
+        </p>
+        <p className="mt-2">
+          Ad ideas use aggregate delivery activity as a starting point. Check the platform’s location settings before planning a test,
+          especially if its audience area could also reach the comparison block.
         </p>
       </details>
     </section>
