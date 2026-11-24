@@ -140,7 +140,7 @@ export const DeliveryHub: React.FC<DeliveryHubProps> = ({
       {activeTab === 'analytics' && canReadDeliveryAnalytics && (
         <AdminDeliveryAnalytics />
       )}
-      {activeTab === 'marketing' && canReadMarketingDecisions && <MarketingDecisions />}
+      {activeTab === 'marketing' && canReadMarketingDecisions && <MarketingDecisions canEdit={checkPermission('delivery', 'edit')} />}
       {activeTab === 'customers' && canReadCustomerLog && (
         <CustomersLog lockedBranchId={isBranch ? user.id : null} canChooseBranch={isManager} />
       )}

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { deliveryService } from '../../services/deliveryService';
+import { branchService } from '../../services/branchService';
+import type { Branch, DeliveryBlock } from '../../types';
 import {
   listMarketingBlockActivity, MARKETING_MIN_BLOCK_ORDERS,
   type MarketingBlock, type MarketingBranch
@@ -7,9 +9,15 @@ import {
 import { LEGACY_BLOCK_PHARMACY_MAP } from '../block-analyzer/legacyCoverageData';
 import { getCompetitorsForBlock } from './utils/noOrdersClassification';
 import { rangeDayCount, toDateKey } from './utils';
+import { MarketingExperiments, type ExperimentSuggestion } from './MarketingExperiments';
 
 type DateRange = { from: string; to: string };
-type Candidate = MarketingBlock & { areaName: string; branch: MarketingBranch };
+type Candidate = MarketingBlock & {
+  areaName: string;
+  branch: MarketingBranch;
+  trend: { firstRate: number; secondRate: number } | null;
+  comparison: { blockNumber: string; orders: number } | null;
+};
 type Results = { candidates: Candidate[]; smallSamples: number; readyWithoutCompetitorEvidence: number };
 
 const defaultRange = (): DateRange => {
@@ -22,12 +30,23 @@ const defaultRange = (): DateRange => {
 const percentage = (count: number, total: number) =>
   new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(count / total);
 
-export function MarketingDecisions() {
+export function MarketingDecisions({ canEdit }: { canEdit: boolean }) {
   const [range, setRange] = useState(defaultRange);
   const [draft, setDraft] = useState(range);
   const [results, setResults] = useState<Results | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [blocks, setBlocks] = useState<DeliveryBlock[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [suggestion, setSuggestion] = useState<ExperimentSuggestion | null>(null);
   const invalidRange = !draft.from || !draft.to || draft.from > draft.to || rangeDayCount(draft.from, draft.to) > 90;
+
+  useEffect(() => {
+    let active = true;
+    branchService.list().then(list => {
+      if (active) setBranches(list.filter(branch => branch.role === 'branch' && branch.code !== 'TEST-01'));
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -35,17 +54,29 @@ export function MarketingDecisions() {
       setResults(null);
       setLoadError(false);
       try {
-        const [activity, directory] = await Promise.all([
+        const days = rangeDayCount(range.from, range.to);
+        const firstDays = Math.floor(days / 2);
+        const midpoint = new Date(`${range.from}T12:00:00Z`);
+        midpoint.setUTCDate(midpoint.getUTCDate() + firstDays - 1);
+        const [activity, directory, earlyActivity] = await Promise.all([
           listMarketingBlockActivity(range.from, range.to, controller.signal),
-          deliveryService.blocks.list()
+          deliveryService.blocks.list(),
+          firstDays >= 7
+            ? listMarketingBlockActivity(range.from, midpoint.toISOString().slice(0, 10), controller.signal)
+            : null
         ]);
         if (controller.signal.aborted) return;
-        const areas = new Map(directory.map(block => [block.blockNumber.trim(), block.areaName]));
+        setBlocks(directory);
+        const areas = new Map(directory.map(block => [block.blockNumber.trim(), block]));
+        const comparisonPool = [...activity.values()].filter(block =>
+          block.orders >= MARKETING_MIN_BLOCK_ORDERS && areas.has(block.blockNumber)
+        );
         const candidates: Candidate[] = [];
         let smallSamples = 0;
         let readyWithoutCompetitorEvidence = 0;
         for (const block of activity.values()) {
-          if (!areas.has(block.blockNumber)) continue;
+          const area = areas.get(block.blockNumber);
+          if (!area) continue;
           if (block.orders < MARKETING_MIN_BLOCK_ORDERS) {
             smallSamples++;
             continue;
@@ -57,7 +88,24 @@ export function MarketingDecisions() {
           const branch = [...block.branches.values()].sort((a, b) =>
             b.orders - a.orders || b.tracked - a.tracked || a.id.localeCompare(b.id)
           )[0];
-          if (branch) candidates.push({ ...block, areaName: areas.get(block.blockNumber) || '', branch });
+          if (!branch) continue;
+          const firstOrders = earlyActivity?.get(block.blockNumber)?.orders ?? 0;
+          const secondOrders = block.orders - firstOrders;
+          const trend = earlyActivity && firstOrders >= 10 && secondOrders >= 10
+            ? { firstRate: firstOrders / firstDays, secondRate: secondOrders / (days - firstDays) }
+            : null;
+          const comparison = comparisonPool.filter(other =>
+            other.blockNumber !== block.blockNumber &&
+            areas.get(other.blockNumber)?.governorate === area.governorate &&
+            other.orders >= block.orders / 2 && other.orders <= block.orders * 2
+          ).sort((a, b) =>
+            Math.abs(a.orders - block.orders) - Math.abs(b.orders - block.orders) ||
+            a.blockNumber.localeCompare(b.blockNumber, undefined, { numeric: true })
+          )[0];
+          candidates.push({
+            ...block, areaName: area.areaName, branch, trend,
+            comparison: comparison ? { blockNumber: comparison.blockNumber, orders: comparison.orders } : null
+          });
         }
         candidates.sort((a, b) => a.orders - b.orders || b.tracked - a.tracked ||
           a.blockNumber.localeCompare(b.blockNumber, undefined, { numeric: true }));
@@ -74,6 +122,7 @@ export function MarketingDecisions() {
   }, [range]);
 
   return (
+    <div className="space-y-5">
     <section className="operational-panel space-y-5 p-4 md:p-6" aria-labelledby="marketing-decisions-heading">
       <header className="space-y-1">
         <h3 id="marketing-decisions-heading" className="text-xl font-bold text-slate-950">Marketing Decisions</h3>
@@ -106,7 +155,7 @@ export function MarketingDecisions() {
           <>
             {results.candidates.length ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {results.candidates.map(({ blockNumber, areaName, orders, tracked, branch }) => (
+                {results.candidates.map(({ blockNumber, areaName, orders, tracked, branch, trend, comparison }) => (
                   <article key={blockNumber} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                     <h4 className="font-bold text-slate-950">Block {blockNumber}{areaName && ` · ${areaName}`}</h4>
                     <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -115,12 +164,24 @@ export function MarketingDecisions() {
                       <div className="col-span-2">
                         <dt className="text-slate-600">Suggested branch</dt>
                         <dd className="font-bold">{branch.name}{branch.code && branch.code !== branch.name && ` · ${branch.code}`}</dd>
-                        <dd className="text-slate-600">{branch.orders} of {orders} orders · {percentage(branch.tracked, branch.orders)} tracked</dd>
+                        <dd className="text-slate-600">{branch.orders} of {orders} orders ({percentage(branch.orders, orders)} share) · {percentage(branch.tracked, branch.orders)} tracked</dd>
                       </div>
+                      <div className="col-span-2"><dt className="text-slate-600">Order trend</dt><dd className="font-semibold">
+                        {trend ? `${trend.firstRate.toFixed(2)} → ${trend.secondRate.toFixed(2)} orders/day` : 'Insufficient data'}
+                      </dd></div>
+                      <div className="col-span-2"><dt className="text-slate-600">Competitor records</dt><dd>On file · Last verified date unknown</dd></div>
+                      <div className="col-span-2"><dt className="text-slate-600">Suggested comparison</dt><dd className="font-semibold">
+                        {comparison ? `Block ${comparison.blockNumber} · ${comparison.orders} orders` : 'No similar block found for these dates'}
+                      </dd></div>
                     </dl>
-                    {(tracked < 20 || branch.tracked < 20) && (
-                      <p className="text-sm text-amber-800">Fewer than 20 tracked orders for the block or branch. Confirm readiness before testing.</p>
-                    )}
+                    <p className="text-sm font-semibold text-amber-800">
+                      {tracked < 20 || branch.tracked < 20 || tracked * 2 < orders || branch.tracked * 2 < branch.orders
+                        ? 'Limited tracking evidence. Check branch readiness before testing.'
+                        : 'Ready for review. Confirm branch capacity before testing.'}
+                    </p>
+                    {canEdit && <button type="button" className="btn-secondary min-h-10 px-4" onClick={() => setSuggestion({
+                      block_number: blockNumber, branch_id: branch.id, comparison_block_number: comparison?.blockNumber ?? ''
+                    })}>Plan experiment</button>}
                   </article>
                 ))}
               </div>
@@ -142,7 +203,14 @@ export function MarketingDecisions() {
           Tracking counts delivered orders with a valid assignment and delivery timestamp. The sample excludes Talabat, internal transfers,
           cancelled or voided orders, and the test branch.
         </p>
+        <p className="mt-2">
+          The trend compares average orders per day in the first and second halves of the selected range, with at least seven days and
+          ten orders per half. Comparison blocks come from the same governorate and have the closest eligible order volume.
+          Confirm the comparison block will stay outside the campaign.
+        </p>
       </details>
     </section>
+    <MarketingExperiments canEdit={canEdit} blocks={blocks} branches={branches} suggestion={suggestion} />
+    </div>
   );
 }
