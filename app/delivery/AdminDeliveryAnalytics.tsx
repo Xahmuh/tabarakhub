@@ -270,25 +270,35 @@ export const AdminDeliveryAnalytics: React.FC = () => {
   const heatmap = useMemo(() => {
     const counts = new Map<string, { name: string; days: number[] }>();
     const selectedDrivers = new Set(driverFilter);
+    const selectedRecordedDrivers = new Set(recordedDriverFilter);
     for (const driver of drivers) {
       if (selectedDrivers.size > 0 && !selectedDrivers.has(driver.id)) continue;
       const name = driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name;
-      counts.set(driver.id, { name, days: WEEKDAYS.map(() => 0) });
+      counts.set(`assigned:${driver.id}`, { name, days: WEEKDAYS.map(() => 0) });
     }
     for (const order of filteredOrders) {
-      if (!order.driverId || (selectedDrivers.size > 0 && !selectedDrivers.has(order.driverId))) continue;
       const weekday = new Date(`${order.orderDate}T00:00:00`).getDay();
       if (!Number.isInteger(weekday)) continue;
-      const name = [order.driverCode, order.driverName].filter(Boolean).join(' - ') || 'Unknown driver';
-      const row = counts.get(order.driverId) || { name, days: WEEKDAYS.map(() => 0) };
-      row.days[weekday] += 1;
-      counts.set(order.driverId, row);
+      if (order.driverId && (selectedDrivers.size === 0 || selectedDrivers.has(order.driverId))) {
+        const key = `assigned:${order.driverId}`;
+        const name = [order.driverCode, order.driverName].filter(Boolean).join(' - ') || 'Unknown driver';
+        const row = counts.get(key) || { name, days: WEEKDAYS.map(() => 0) };
+        row.days[weekday] += 1;
+        counts.set(key, row);
+      }
+      if (order.recordedDriverId && (selectedRecordedDrivers.size === 0 || selectedRecordedDrivers.has(order.recordedDriverId))) {
+        const key = `recorded:${order.recordedDriverId}`;
+        const name = [order.recordedDriverCode, order.recordedDriverName].filter(Boolean).join(' - ') || 'Unknown recorded driver';
+        const row = counts.get(key) || { name, days: WEEKDAYS.map(() => 0) };
+        row.days[weekday] += 1;
+        counts.set(key, row);
+      }
     }
     const rows = [...counts.entries()].map(([id, { name, days }]) => ({ id, name, days, total: days.reduce((a, b) => a + b, 0) }));
     rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, undefined, { numeric: true }) || a.id.localeCompare(b.id));
     const max = rows.reduce((largest, row) => Math.max(largest, ...row.days), 1);
     return { rows, max };
-  }, [driverFilter, drivers, filteredOrders]);
+  }, [driverFilter, drivers, filteredOrders, recordedDriverFilter]);
 
   // Outside-governorate analysis by branch.
   const outsideByBranch = useMemo(() => {
@@ -643,7 +653,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                 <p className="py-6 text-center text-xs font-bold text-slate-400">No drivers match the current selection.</p>
               ) : (
                 <PagedRows<(typeof heatmap.rows)[number]> rows={heatmap.rows} label="Driver workload">{page => <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full min-w-[510px] text-xs">
                     <thead>
                       <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                         <th className="py-1.5 pr-2 text-left">Driver</th>
