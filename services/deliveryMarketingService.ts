@@ -1,6 +1,4 @@
-import { deliverySourceLabel } from '../lib/deliveryRecording';
 import { supabaseClient } from '../lib/supabaseClient';
-import { excludeVoidedDeliveryOrders } from './deliveryOrderVisibility';
 
 export type MarketingBranch = { id: string; name: string; code: string | null; orders: number; tracked: number };
 export type MarketingBlock = {
@@ -14,62 +12,38 @@ export const MARKETING_MIN_BLOCK_ORDERS = 30;
 
 export async function listMarketingBlockActivity(from: string, to: string, signal: AbortSignal) {
   const blocks = new Map<string, MarketingBlock>();
-  const batchSize = 500;
-  let cursor: string | undefined;
+  const pageSize = 500;
 
-  for (;;) {
+  // Page the summaries, since the API can cap the number of returned rows.
+  for (let offset = 0; ; offset += pageSize) {
     signal.throwIfAborted();
-    let query = supabaseClient.from('delivery_orders_clean')
-      .select('id,branch_id,branch_name,branch_code,block_number,payment_type,external_source,order_kind,delivery_status,assigned_at,delivered_at,cancelled_reason')
-      .gte('order_date', from)
-      .lte('order_date', to)
-      .not('block_number', 'is', null)
-      .order('id')
-      .limit(batchSize);
-    if (cursor) query = query.gt('id', cursor);
-    const { data, error } = await query.abortSignal(signal);
+    const { data, error } = await supabaseClient
+      .rpc('app_delivery_marketing_block_activity', { p_from: from, p_to: to })
+      .order('block_number')
+      .order('branch_id')
+      .range(offset, offset + pageSize - 1)
+      .abortSignal(signal);
     if (error) throw error;
-    if (!data.length) break;
 
-    const eligible = data.filter(row =>
-      row.branch_code !== 'TEST-01' &&
-      row.order_kind !== 'internal_transfer' &&
-      row.delivery_status !== 'cancelled' &&
-      deliverySourceLabel(row.external_source, row.payment_type) !== 'Talabat'
-    );
-    const orders = await excludeVoidedDeliveryOrders(
-      eligible.map(row => ({ ...row, cancelledReason: row.cancelled_reason }))
-    );
-    signal.throwIfAborted();
-
-    for (const order of orders) {
-      const blockNumber = String(order.block_number ?? '').trim();
-      if (!blockNumber || !order.branch_id) continue;
-      let block = blocks.get(blockNumber);
+    for (const row of data) {
+      const branch: MarketingBranch = {
+        id: row.branch_id,
+        name: row.branch_name || row.branch_code || 'Unknown branch',
+        code: row.branch_code,
+        orders: Number(row.orders),
+        tracked: Number(row.tracked)
+      };
+      let block = blocks.get(row.block_number);
       if (!block) {
-        block = { blockNumber, orders: 0, tracked: 0, branches: new Map() };
-        blocks.set(blockNumber, block);
+        block = { blockNumber: row.block_number, orders: 0, tracked: 0, branches: new Map() };
+        blocks.set(row.block_number, block);
       }
-      let branch = block.branches.get(order.branch_id);
-      if (!branch) {
-        branch = {
-          id: order.branch_id, name: order.branch_name || order.branch_code || 'Unknown branch',
-          code: order.branch_code, orders: 0, tracked: 0
-        };
-        block.branches.set(branch.id, branch);
-      }
-      const tracked = order.delivery_status === 'delivered' &&
-        order.assigned_at && order.delivered_at &&
-        Date.parse(order.delivered_at) > Date.parse(order.assigned_at);
-      block.orders++;
-      branch.orders++;
-      if (tracked) {
-        block.tracked++;
-        branch.tracked++;
-      }
+      block.orders += branch.orders;
+      block.tracked += branch.tracked;
+      block.branches.set(branch.id, branch);
     }
-    if (data.length < batchSize) break;
-    cursor = data[data.length - 1].id;
+
+    if (data.length < pageSize) break;
   }
 
   return blocks;
