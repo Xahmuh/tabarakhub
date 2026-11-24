@@ -267,23 +267,28 @@ export const AdminDeliveryAnalytics: React.FC = () => {
     };
   }, [drilldownGov, direct]);
 
-  // Driver workload heatmap: driver × weekday order counts.
   const heatmap = useMemo(() => {
     const counts = new Map<string, { name: string; days: number[] }>();
+    const selectedDrivers = new Set(driverFilter);
+    for (const driver of drivers) {
+      if (selectedDrivers.size > 0 && !selectedDrivers.has(driver.id)) continue;
+      const name = driver.driverCode ? `${driver.driverCode} - ${driver.name}` : driver.name;
+      counts.set(driver.id, { name, days: WEEKDAYS.map(() => 0) });
+    }
     for (const order of filteredOrders) {
-      if (!order.driverId) continue;
-      const name = order.driverCode && order.driverName ? `${order.driverCode} - ${order.driverName}` : order.driverName || 'Unknown';
+      if (!order.driverId || (selectedDrivers.size > 0 && !selectedDrivers.has(order.driverId))) continue;
       const weekday = new Date(`${order.orderDate}T00:00:00`).getDay();
       if (!Number.isInteger(weekday)) continue;
-      const row = counts.get(order.driverId) || { name, days: [0, 0, 0, 0, 0, 0, 0] };
+      const name = [order.driverCode, order.driverName].filter(Boolean).join(' - ') || 'Unknown driver';
+      const row = counts.get(order.driverId) || { name, days: WEEKDAYS.map(() => 0) };
       row.days[weekday] += 1;
       counts.set(order.driverId, row);
     }
     const rows = [...counts.entries()].map(([id, { name, days }]) => ({ id, name, days, total: days.reduce((a, b) => a + b, 0) }));
-    rows.sort((a, b) => b.total - a.total);
+    rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, undefined, { numeric: true }) || a.id.localeCompare(b.id));
     const max = rows.reduce((largest, row) => Math.max(largest, ...row.days), 1);
     return { rows, max };
-  }, [filteredOrders]);
+  }, [driverFilter, drivers, filteredOrders]);
 
   // Outside-governorate analysis by branch.
   const outsideByBranch = useMemo(() => {
@@ -635,7 +640,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
             <section className="operational-panel p-4 md:p-5">
               <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-700">Driver workload by weekday</h3>
               {heatmap.rows.length === 0 ? (
-                <p className="py-6 text-center text-xs font-bold text-slate-400">No driver-linked orders.</p>
+                <p className="py-6 text-center text-xs font-bold text-slate-400">No drivers match the current selection.</p>
               ) : (
                 <PagedRows<(typeof heatmap.rows)[number]> rows={heatmap.rows} label="Driver workload">{page => <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -643,6 +648,7 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                       <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                         <th className="py-1.5 pr-2 text-left">Driver</th>
                         {WEEKDAYS.map(d => <th key={d} className="px-1 py-1.5 text-center">{d}</th>)}
+                        <th scope="col" aria-sort="descending" className="px-2 py-1.5 text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -658,10 +664,11 @@ export const AdminDeliveryAnalytics: React.FC = () => {
                                   color: count / heatmap.max > 0.55 ? 'white' : '#475569'
                                 }}
                               >
-                                {count || ''}
+                                {count}
                               </div>
                             </td>
                           ))}
+                          <td className="px-2 text-right font-black tabular-nums text-slate-900">{row.total}</td>
                         </tr>
                       ))}
                     </tbody>
