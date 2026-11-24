@@ -59,6 +59,7 @@ const APP_TABS: AppTab[] = [
   'hr-directory',
   'hr-letter',
   'letter-head',
+  'lmra-squeeze',
   'workforce',
   'cash-flow',
   'cash-tracker',
@@ -268,6 +269,7 @@ const App: React.FC = () => {
       case 'hr-letter':
         return isModuleEnabled('hr') && (isManagerRole(role) || canUseFeature('hr_requests', 'read', role, permissionState));
       case 'letter-head':
+      case 'lmra-squeeze':
         return isModuleEnabled('hr') && (role === 'admin' || role === 'owner');
       case 'workforce':
         return isModuleEnabled('hr') && isModuleEnabled('workforce') && canUseFeature('workforce', 'read', role, permissionState);

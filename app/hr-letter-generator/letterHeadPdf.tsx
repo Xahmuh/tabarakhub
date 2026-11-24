@@ -112,13 +112,23 @@ function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
   return canvas.toDataURL('image/png');
 }
 
+export async function loadLetterMarks(company: RegisteredCr, signature: MarkPlacement, stamp: MarkPlacement) {
+  const [signatureImage, stampImage] = await Promise.all([
+    signature !== 'off' ? loadImage(company.signature_url, 'signature') : null,
+    stamp !== 'off' ? loadImage(company.stamp_url, 'seal') : null
+  ]);
+  return [
+    { kind: 'signature' as const, placement: signature, src: renderMark('signature', signatureImage) },
+    { kind: 'stamp' as const, placement: stamp, src: renderMark('stamp', stampImage) }
+  ];
+}
+
 export async function renderLetterHeadPages({ company, header, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
   const showHeader = header === 'company';
   const bodyTop = showHeader ? 132 : margin;
-  const [logo, signatureImage, stampImage] = await Promise.all([
+  const [logo, marks] = await Promise.all([
     showHeader && company.logo_url ? loadImage(company.logo_url, 'logo') : null,
-    signature !== 'off' ? loadImage(company.signature_url, 'signature') : null,
-    stamp !== 'off' ? loadImage(company.stamp_url, 'seal') : null
+    loadLetterMarks(company, signature, stamp)
   ]);
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(width * 3);
@@ -221,10 +231,7 @@ export async function renderLetterHeadPages({ company, header, text, signature, 
   return {
     pageImages,
     fontSizeLabel: smallest === largest ? String(largest) : `${smallest}–${largest}`,
-    marks: [
-      { kind: 'signature' as const, placement: signature, src: renderMark('signature', signatureImage) },
-      { kind: 'stamp' as const, placement: stamp, src: renderMark('stamp', stampImage) }
-    ]
+    marks
   };
 }
 

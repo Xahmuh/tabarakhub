@@ -1,102 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { saveAs } from 'file-saver';
 import { Download, Eye } from 'lucide-react';
 import { CR_UPDATED_EVENT, LOCAL_STORAGE_CR_KEY, crService } from '../../services/crService';
 import { getAdminRegisteredCrs } from '../lib/crEntities';
 import { BackToModulesButton } from '../shared/BackToModulesButton';
+import { DraggableMark, PlacementField } from './LetterMarkControls';
+import { OriginalPdfEditor } from './OriginalPdfEditor';
 import {
   clampMarkPosition, createLetterHeadPdf, defaultParagraphStyle, getMarkPosition, letterPageSize,
   markShowsOnPage, markSizes, maximumFontSize, minimumFontSize, renderLetterHeadPages, splitLetterParagraphs
 } from './letterHeadPdf';
-import type { HeaderStyle, MarkKind, MarkPlacement, MarkPosition, PageMarkPositions, ParagraphStyle, ParagraphStyles } from './letterHeadPdf';
+import type { HeaderStyle, MarkPlacement, PageMarkPositions, ParagraphStyle, ParagraphStyles } from './letterHeadPdf';
 
 const fieldClass = 'min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const maxLength = 100_000;
-const arrowMovement: Record<string, MarkPosition> = {
-  ArrowUp: { x: 0, y: -1 },
-  ArrowDown: { x: 0, y: 1 },
-  ArrowLeft: { x: -1, y: 0 },
-  ArrowRight: { x: 1, y: 0 }
-};
-
-function DraggableMark({ kind, pageNumber, src, position, disabled, onMove }: {
-  kind: MarkKind;
-  pageNumber: number;
-  src: string;
-  position: MarkPosition;
-  disabled: boolean;
-  onMove: (position: MarkPosition) => void;
-}) {
-  const drag = useRef<{
-    id: number;
-    clientX: number;
-    clientY: number;
-    scaleX: number;
-    scaleY: number;
-    position: MarkPosition;
-  } | null>(null);
-  const { width, height } = letterPageSize;
-  const size = markSizes[kind];
-  const label = kind === 'signature' ? 'signature' : 'company seal';
-
-  return (
-    <button type="button" aria-label={`Move ${label} on page ${pageNumber}`} aria-describedby="letter-mark-instructions"
-      disabled={disabled}
-      className="absolute touch-none select-none cursor-grab rounded-sm hover:outline hover:outline-2 hover:outline-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 active:cursor-grabbing"
-      style={{
-        left: `${position.x / width * 100}%`,
-        top: `${position.y / height * 100}%`,
-        width: `${size.width / width * 100}%`,
-        height: `${size.height / height * 100}%`
-      }}
-      onPointerDown={event => {
-        if (event.button !== 0 || drag.current) return;
-        const page = event.currentTarget.parentElement?.getBoundingClientRect();
-        if (!page?.width || !page.height) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = {
-          id: event.pointerId, clientX: event.clientX, clientY: event.clientY,
-          scaleX: width / page.width, scaleY: height / page.height, position
-        };
-      }}
-      onPointerMove={event => {
-        const start = drag.current;
-        if (!start || start.id !== event.pointerId) return;
-        onMove({
-          x: start.position.x + (event.clientX - start.clientX) * start.scaleX,
-          y: start.position.y + (event.clientY - start.clientY) * start.scaleY
-        });
-      }}
-      onLostPointerCapture={event => {
-        if (drag.current?.id === event.pointerId) drag.current = null;
-      }}
-      onKeyDown={event => {
-        const direction = arrowMovement[event.key];
-        if (!direction) return;
-        event.preventDefault();
-        const step = event.shiftKey ? 10 : 2;
-        onMove({ x: position.x + direction.x * step, y: position.y + direction.y * step });
-      }}>
-      <img src={src} alt="" draggable={false} className="pointer-events-none block h-full w-full" />
-    </button>
-  );
-}
-
-function PlacementField({ label, value, onChange }: {
-  label: string;
-  value: MarkPlacement;
-  onChange: (value: MarkPlacement) => void;
-}) {
-  return <label className="block space-y-2 text-sm font-semibold">
-    <span>{label}</span>
-    <select className={fieldClass} value={value} onChange={event => onChange(event.target.value as MarkPlacement)}>
-      <option value="off">Do not include</option>
-      <option value="last">Last page only</option>
-      <option value="all">Every page</option>
-    </select>
-  </label>;
-}
-
 function PreviewTextEditor({ letter, styles, busy, onApply }: {
   letter: string;
   styles: ParagraphStyles;
@@ -169,6 +86,7 @@ function PreviewTextEditor({ letter, styles, busy, onApply }: {
 
 export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [companies, setCompanies] = useState(getAdminRegisteredCrs);
+  const [mode, setMode] = useState<'letter' | 'pdf'>('letter');
   const [companyId, setCompanyId] = useState('');
   const [header, setHeader] = useState<HeaderStyle>('company');
   const [letter, setLetter] = useState('');
@@ -272,6 +190,14 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
         <h1 className="text-2xl font-bold sm:text-3xl">Letter Head Generation</h1>
         <BackToModulesButton onClick={onBack} />
       </header>
+      <div role="group" aria-label="Letter Head Generation mode" className="flex flex-wrap gap-2">
+        <button type="button" className="btn-secondary min-h-11 px-3" aria-pressed={mode === 'letter'}
+          onClick={() => setMode('letter')}>Compose letter</button>
+        <button type="button" className="btn-secondary min-h-11 px-3" aria-pressed={mode === 'pdf'}
+          onClick={() => setMode('pdf')}>Stamp existing PDF</button>
+      </div>
+      {mode === 'pdf' && <OriginalPdfEditor company={company} companies={companies} onCompanyChange={setCompanyId} />}
+      <div hidden={mode !== 'letter'} className="space-y-5">
       <fieldset disabled={busy !== null} className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block space-y-2 text-sm font-semibold">
@@ -333,7 +259,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
                 }
                 setParagraphStyles(previous => {
                   const updated: ParagraphStyles = {};
-                  for (const [key, style] of Object.entries(previous)) {
+                  for (const [key, style] of Object.entries(previous as ParagraphStyles)) {
                     const index = Number(key);
                     if (index < oldEnd && index < newEnd) updated[index] = style;
                     if (index >= oldEnd) updated[index + newEnd - oldEnd] = style;
@@ -406,19 +332,20 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
                   width={1786} height={2526} className="block h-full w-full" />
                 {currentPreview.marks.map(mark => mark.src &&
                   markShowsOnPage(mark.placement, index, currentPreview.pageImages.length) && (
-                    <DraggableMark key={mark.kind} kind={mark.kind} pageNumber={index + 1}
+                    <Fragment key={mark.kind}><DraggableMark kind={mark.kind} pageNumber={index + 1}
                       src={mark.src} disabled={busy !== null}
                       position={getMarkPosition(markPositions, index, mark.kind)}
                       onMove={position => setMarkPositions(previous => ({
                         ...previous,
                         [index]: { ...previous[index], [mark.kind]: clampMarkPosition(mark.kind, position) }
-                      }))} />
+                      }))} /></Fragment>
                   ))}
               </div>
             ))}
           </div>
         </section>
       )}
+      </div>
     </section>
   );
 }
