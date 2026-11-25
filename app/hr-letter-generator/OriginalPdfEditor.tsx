@@ -3,7 +3,7 @@ import { saveAs } from 'file-saver';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { RegisteredCr } from '../lib/crEntities';
 import { isPdfFile, openBrowserPdf, renderBrowserPdfPage } from '../lib/browserPdf';
-import { DraggableMark, PlacementField } from './LetterMarkControls';
+import { AddTodayDateField, DraggableMark, PlacementField } from './LetterMarkControls';
 import { letterPageSize, loadLetterMarks, markShowsOnPage, markSizes } from './letterHeadPdf';
 import type { MarkKind, MarkPlacement, PageMarkPositions } from './letterHeadPdf';
 
@@ -15,6 +15,7 @@ function markBox(page: PageSize, kind: MarkKind) {
   const margin = 45 * scale;
   const width = markSizes[kind].width * scale;
   const height = markSizes[kind].height * scale;
+  if (kind === 'date') return { width, height, x: page.width - margin - width, y: margin };
   return { width, height, x: kind === 'signature' ? margin : page.width - margin - width, y: page.height - margin - height };
 }
 
@@ -29,16 +30,18 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
   const [preview, setPreview] = useState<PagePreview>();
   const [signature, setSignature] = useState<MarkPlacement>('off');
   const [stamp, setStamp] = useState<MarkPlacement>('off');
+  const [showDate, setShowDate] = useState(false);
   const [positions, setPositions] = useState<PageMarkPositions>({});
   const [markState, setMarkState] = useState<{
-    company: RegisteredCr; signature: MarkPlacement; stamp: MarkPlacement;
+    company: RegisteredCr; signature: MarkPlacement; stamp: MarkPlacement; showDate: boolean;
     marks: Awaited<ReturnType<typeof loadLetterMarks>>;
   }>();
   const [error, setError] = useState('');
   const [markError, setMarkError] = useState('');
   const [saving, setSaving] = useState(false);
   const current = source?.file === file ? source : undefined;
-  const marks = markState?.company === company && markState?.signature === signature && markState?.stamp === stamp
+  const marks = markState?.company === company && markState?.signature === signature &&
+    markState?.stamp === stamp && markState?.showDate === showDate
     ? markState.marks : undefined;
 
   useEffect(() => {
@@ -76,13 +79,13 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
     if (!company) return;
     let cancelled = false;
     setMarkError('');
-    loadLetterMarks(company, signature, stamp).then(loaded => {
-      if (!cancelled) setMarkState({ company, signature, stamp, marks: loaded });
+    loadLetterMarks(company, signature, stamp, showDate).then(loaded => {
+      if (!cancelled) setMarkState({ company, signature, stamp, showDate, marks: loaded });
     }).catch(() => {
-      if (!cancelled) setMarkError('Could not load the selected signature or seal.');
+      if (!cancelled) setMarkError('Could not prepare the selected date, signature or seal.');
     });
     return () => { cancelled = true; };
-  }, [company, signature, stamp]);
+  }, [company, signature, stamp, showDate]);
 
   async function save() {
     if (!current || !marks?.some(mark => mark.src)) return;
@@ -151,6 +154,7 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
         </label>
         <PlacementField label="Signature" value={signature} onChange={setSignature} />
         <PlacementField label="Company seal" value={stamp} onChange={setStamp} />
+        <AddTodayDateField checked={showDate} onChange={setShowDate} />
       </fieldset>
       {(error || markError) && <p role="alert" className="text-sm text-red-700">{error || markError}</p>}
       {file && !displayed && !error && <p role="status" className="text-sm text-slate-600">Rendering PDF preview…</p>}
@@ -172,7 +176,7 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
       )}
       {displayed && (
         <>
-          <p id="original-pdf-mark-instructions" className="text-sm text-slate-600">Drag the signature or seal on the preview, or use the arrow keys. Each page keeps its own positions.</p>
+          <p id="original-pdf-mark-instructions" className="text-sm text-slate-600">Drag the date, signature or seal on the preview, or use the arrow keys. Each page keeps its own positions.</p>
           <div className="relative mx-auto max-w-[900px] bg-white ring-1 ring-slate-300"
             style={{ aspectRatio: `${displayed.size.width} / ${displayed.size.height}` }}>
             <img src={displayed.src} alt={`Original PDF, page ${index + 1}`} className="block h-full w-full" />

@@ -2,7 +2,8 @@ import type { RegisteredCr } from '../lib/crEntities';
 
 export type MarkPlacement = 'off' | 'all' | 'last';
 export type HeaderStyle = 'company' | 'none';
-export type MarkKind = 'signature' | 'stamp';
+export type MarkKind = 'signature' | 'stamp' | 'date';
+type LetterMark = { kind: MarkKind; placement: MarkPlacement | 'first'; src: string | null };
 export type MarkPosition = { x: number; y: number };
 export type PageMarkPositions = Partial<Record<number, Partial<Record<MarkKind, MarkPosition>>>>;
 export type ParagraphStyle = { bold: boolean; alignment: 'auto' | 'left' | 'center' | 'right'; size: number };
@@ -11,6 +12,7 @@ type LetterOptions = {
   company: RegisteredCr;
   header: HeaderStyle;
   showAddressFooter: boolean;
+  showDate: boolean;
   text: string;
   signature: MarkPlacement;
   stamp: MarkPlacement;
@@ -31,15 +33,18 @@ export const splitLetterParagraphs = (text: string) => text.split(/\r\n?|\n/);
 const bodyFont = (size: number, bold: boolean) => `${bold ? 'bold ' : ''}${size}px Arial, sans-serif`;
 export const markSizes = {
   signature: { width: 130, height: 65 },
-  stamp: { width: 145, height: 65 }
+  stamp: { width: 145, height: 65 },
+  date: { width: 112, height: 22 }
 };
 export const defaultMarkPositions: Record<MarkKind, MarkPosition> = {
   signature: { x: margin, y: height - margin - markSizes.signature.height },
-  stamp: { x: width - margin - markSizes.stamp.width, y: height - margin - markSizes.stamp.height }
+  stamp: { x: width - margin - markSizes.stamp.width, y: height - margin - markSizes.stamp.height },
+  date: { x: width - margin - markSizes.date.width, y: margin }
 };
 
-export function getMarkPosition(positions: PageMarkPositions, pageIndex: number, kind: MarkKind) {
-  return positions[pageIndex]?.[kind] ?? defaultMarkPositions[kind];
+export function getMarkPosition(positions: PageMarkPositions, pageIndex: number, kind: MarkKind, dateTop = margin) {
+  const fallback = defaultMarkPositions[kind];
+  return positions[pageIndex]?.[kind] ?? (kind === 'date' ? { ...fallback, y: dateTop } : fallback);
 }
 
 export function clampMarkPosition(kind: MarkKind, { x, y }: MarkPosition): MarkPosition {
@@ -50,8 +55,9 @@ export function clampMarkPosition(kind: MarkKind, { x, y }: MarkPosition): MarkP
   };
 }
 
-export function markShowsOnPage(placement: MarkPlacement, index: number, pageCount: number) {
-  return placement === 'all' || (placement === 'last' && index === pageCount - 1);
+export function markShowsOnPage(placement: LetterMark['placement'], index: number, pageCount: number) {
+  return placement === 'all' || (placement === 'last' && index === pageCount - 1) ||
+    (placement === 'first' && index === 0);
 }
 
 function directionOf(text: string): CanvasDirection {
@@ -184,23 +190,44 @@ function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
   return canvas.toDataURL('image/png');
 }
 
-export async function loadLetterMarks(company: RegisteredCr, signature: MarkPlacement, stamp: MarkPlacement) {
+function renderTodayDate() {
+  const { width, height } = markSizes.date;
+  const canvas = document.createElement('canvas');
+  canvas.width = width * 3;
+  canvas.height = height * 3;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('PDF generation is unavailable in this browser.');
+  const date = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bahrain', day: '2-digit', month: 'short', year: 'numeric'
+  }).format(new Date());
+  ctx.scale(3, 3);
+  ctx.font = '11px Arial, sans-serif';
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`Date: ${date}`, width - 1, height / 2);
+  return canvas.toDataURL('image/png');
+}
+
+export async function loadLetterMarks(company: RegisteredCr, signature: MarkPlacement, stamp: MarkPlacement, showDate = false): Promise<LetterMark[]> {
   const [signatureImage, stampImage] = await Promise.all([
     signature !== 'off' ? loadImage(company.signature_url, 'signature') : null,
     stamp !== 'off' ? loadImage(company.stamp_url, 'seal') : null
   ]);
-  return [
-    { kind: 'signature' as const, placement: signature, src: renderMark('signature', signatureImage) },
-    { kind: 'stamp' as const, placement: stamp, src: renderMark('stamp', stampImage) }
+  const marks: LetterMark[] = [
+    { kind: 'signature', placement: signature, src: renderMark('signature', signatureImage) },
+    { kind: 'stamp', placement: stamp, src: renderMark('stamp', stampImage) }
   ];
+  if (showDate) marks.push({ kind: 'date', placement: 'first', src: renderTodayDate() });
+  return marks;
 }
 
-export async function renderLetterHeadPages({ company, header, showAddressFooter, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
+export async function renderLetterHeadPages({ company, header, showAddressFooter, showDate, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
   const showHeader = header === 'company';
   const bodyTop = showHeader ? 132 : margin;
   const [logo, marks] = await Promise.all([
     showHeader && company.logo_url ? loadImage(company.logo_url, 'logo') : null,
-    loadLetterMarks(company, signature, stamp)
+    loadLetterMarks(company, signature, stamp, showDate)
   ]);
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(width * 3);
@@ -219,6 +246,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
   while (end > first && !paragraphs[end - 1].trim()) end--;
   const normalLimit = height - margin - bodyTop - (hasEveryPageMark ? footerHeight : 0);
   const lastLimit = height - margin - bodyTop - (hasEveryPageMark || hasLastPageMark ? footerHeight : 0);
+  const dateSpace = showDate ? markSizes.date.height + 4 : 0;
   const measure = (scale: number) => {
     let totalHeight = 0;
     const lines = paragraphs.slice(first, end).flatMap((paragraph, index) => {
@@ -238,7 +266,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
     return { lines, totalHeight };
   };
   let layout = measure(1);
-  for (let step = 23; fitToOnePage && layout.totalHeight > lastLimit && step >= 6; step--) {
+  for (let step = 23; fitToOnePage && layout.totalHeight > lastLimit - dateSpace && step >= 6; step--) {
     layout = measure(step / 24);
     if (layout.lines.every(line => line.size === minimumFontSize)) break;
   }
@@ -246,8 +274,9 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
   const pages: (typeof lines)[] = [];
   let cursor = 0;
   let remainingHeight = layout.totalHeight;
-  while (remainingHeight > lastLimit) {
-    const limit = remainingHeight <= normalLimit ? remainingHeight / 2 : normalLimit;
+  while (remainingHeight > lastLimit - (cursor === 0 ? dateSpace : 0)) {
+    const pageLimit = normalLimit - (cursor === 0 ? dateSpace : 0);
+    const limit = remainingHeight <= pageLimit ? remainingHeight / 2 : pageLimit;
     let endOfPage = cursor;
     let used = 0;
     while (endOfPage < lines.length - 1 && used + lines[endOfPage].lineHeight <= limit) {
@@ -286,7 +315,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
       ctx.stroke();
     }
 
-    let y = bodyTop;
+    let y = bodyTop + (index === 0 ? dateSpace : 0);
     page.forEach(({ value, direction, alignment, font, lineHeight }) => {
       ctx.font = font;
       ctx.direction = direction;
@@ -306,6 +335,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
   const largest = sizes.reduce((max, value) => Math.max(max, value), minimumFontSize);
   return {
     pageImages,
+    dateTop: bodyTop,
     fontSizeLabel: smallest === largest ? String(largest) : `${smallest}–${largest}`,
     marks
   };
@@ -313,7 +343,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
 
 export async function createLetterHeadPdf(
   companyName: string,
-  { pageImages, marks }: Awaited<ReturnType<typeof renderLetterHeadPages>>,
+  { pageImages, marks, dateTop }: Awaited<ReturnType<typeof renderLetterHeadPages>>,
   positions: PageMarkPositions
 ) {
   const { Document, Page, Image, pdf } = await import('@react-pdf/renderer');
@@ -324,7 +354,7 @@ export async function createLetterHeadPdf(
           <Image src={src} style={{ width, height }} />
           {marks.map(mark => {
             if (!mark.src || !markShowsOnPage(mark.placement, index, pageImages.length)) return null;
-            const { x, y } = getMarkPosition(positions, index, mark.kind);
+            const { x, y } = getMarkPosition(positions, index, mark.kind, dateTop);
             return <Image key={mark.kind} src={mark.src}
               style={{ position: 'absolute', left: x, top: y, ...markSizes[mark.kind] }} />;
           })}

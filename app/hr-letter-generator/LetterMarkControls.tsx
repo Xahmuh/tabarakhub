@@ -32,7 +32,7 @@ export function DraggableMark({ kind, pageNumber, src, position, disabled, onMov
   } | null>(null);
   const { width, height } = pageSize;
 
-  const label = kind === 'signature' ? 'signature' : 'company seal';
+  const label = { signature: 'signature', stamp: 'company seal', date: 'date' }[kind];
 
   return (
     <button type="button" aria-label={`Move ${label} on page ${pageNumber}`} aria-describedby={instructionsId}
@@ -90,4 +90,14 @@ export function PlacementField({ label, value, onChange }: {
       <option value="all">Every page</option>
     </select>
   </label>;
+}
+
+export function AddTodayDateField({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
+      <input type="checkbox" className="h-5 w-5 shrink-0 accent-slate-900"
+        checked={checked} onChange={event => onChange(event.target.checked)} />
+      Add today’s date to the first page
+    </label>
+  );
 }

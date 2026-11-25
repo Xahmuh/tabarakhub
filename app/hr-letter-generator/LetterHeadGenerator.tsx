@@ -4,7 +4,7 @@ import { Download, Eye } from 'lucide-react';
 import { CR_UPDATED_EVENT, LOCAL_STORAGE_CR_KEY, crService } from '../../services/crService';
 import { getAdminRegisteredCrs } from '../lib/crEntities';
 import { BackToModulesButton } from '../shared/BackToModulesButton';
-import { DraggableMark, PlacementField } from './LetterMarkControls';
+import { AddTodayDateField, DraggableMark, PlacementField } from './LetterMarkControls';
 import { OriginalPdfEditor } from './OriginalPdfEditor';
 import {
   clampMarkPosition, createLetterHeadPdf, defaultParagraphStyle, getMarkPosition, letterPageSize,
@@ -90,6 +90,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [companyId, setCompanyId] = useState('');
   const [header, setHeader] = useState<HeaderStyle>('company');
   const [showAddressFooter, setShowAddressFooter] = useState(true);
+  const [showDate, setShowDate] = useState(false);
   const [letter, setLetter] = useState('');
   const [paragraphStyles, setParagraphStyles] = useState<ParagraphStyles>({});
   const [signature, setSignature] = useState<MarkPlacement>('off');
@@ -106,13 +107,13 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [downloadNotice, setDownloadNotice] = useState('');
   const company = companies.find(item => item.id === companyId) ?? companies[0];
   const currentPreview = preview && preview.options.company === company && preview.options.header === header &&
-    preview.options.showAddressFooter === showAddressFooter &&
+    preview.options.showAddressFooter === showAddressFooter && preview.options.showDate === showDate &&
     preview.options.text === letter && preview.options.paragraphStyles === paragraphStyles && preview.options.signature === signature &&
     preview.options.stamp === stamp && preview.options.fitToOnePage === fitToOnePage ? preview.result : null;
 
   useEffect(() => {
     setDownloadNotice('');
-  }, [company, header, letter, signature, stamp, fitToOnePage, showAddressFooter]);
+  }, [company, header, letter, signature, stamp, fitToOnePage, showAddressFooter, showDate]);
 
   useEffect(() => {
     let mounted = true;
@@ -163,7 +164,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     setDownloadNotice('');
     try {
       const styles = edit ? { ...paragraphStyles, [edit.index]: edit.style } : paragraphStyles;
-      const options = { company, header, showAddressFooter, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
+      const options = { company, header, showAddressFooter, showDate, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
       const result = (!edit && currentPreview) || await renderLetterHeadPages(options);
       if (action === 'preview') {
         if (edit) {
@@ -218,6 +219,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           <PlacementField label="Signature" value={signature} onChange={setSignature} />
           <PlacementField label="Company seal" value={stamp} onChange={setStamp} />
         </div>
+        <AddTodayDateField checked={showDate} onChange={setShowDate} />
         <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
           <input type="checkbox" className="h-5 w-5 shrink-0 accent-slate-900"
             checked={showAddressFooter} onChange={event => setShowAddressFooter(event.target.checked)} />
@@ -322,7 +324,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           {currentPreview.marks.some(mark => mark.src) && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p id="letter-mark-instructions" className="text-sm text-slate-700">
-                Drag the signature or seal, or focus it and use the arrow keys.
+                Drag the date, signature or seal, or focus it and use the arrow keys.
                 {currentPreview.pageImages.length > 1 && ' Each page has its own positions.'}
               </p>
               <button type="button" disabled={busy !== null} className="btn-secondary min-h-11 px-4"
@@ -341,7 +343,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
                   markShowsOnPage(mark.placement, index, currentPreview.pageImages.length) && (
                     <Fragment key={mark.kind}><DraggableMark kind={mark.kind} pageNumber={index + 1}
                       src={mark.src} disabled={busy !== null}
-                      position={getMarkPosition(markPositions, index, mark.kind)}
+                      position={getMarkPosition(markPositions, index, mark.kind, currentPreview.dateTop)}
                       onMove={position => setMarkPositions(previous => ({
                         ...previous,
                         [index]: { ...previous[index], [mark.kind]: clampMarkPosition(mark.kind, position) }
