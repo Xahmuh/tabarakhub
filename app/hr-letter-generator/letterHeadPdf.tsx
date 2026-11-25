@@ -59,37 +59,22 @@ function directionOf(text: string): CanvasDirection {
   return firstLetter && /[\p{Script=Arabic}\p{Script=Hebrew}]/u.test(firstLetter) ? 'rtl' : 'ltr';
 }
 
-const groupFooterAddresses: Record<string, { ar: string; en: string }> = {
-  '127506': {
-    ar: 'شقة/محل 0، مبنى 775، طريق 77، مجمع 729، جرداب، مملكة البحرين',
-    en: 'Flat/Shop 0, Building 775, Road 77, Block 729, Jerdab, Kingdom of Bahrain'
-  },
-  '106723': {
-    ar: 'شقة/محل 0، مبنى 109ج، طريق 11، مجمع 711، توبلي، مملكة البحرين',
-    en: 'Flat/Shop 0, Building 109J, Road 11, Block 711, Tubli, Kingdom of Bahrain'
-  },
-  '145842': {
-    ar: 'شقة/محل 0، مبنى 69أ، طريق 45، مجمع 743، سند، مملكة البحرين',
-    en: 'Flat/Shop 0, Building 69A, Road 45, Block 743, Sanad, Kingdom of Bahrain'
-  },
-  '172593': {
-    ar: 'شقة/محل 4، مبنى 1255، طريق 1725، مجمع 1017، دمستان، مملكة البحرين',
-    en: 'Flat/Shop 4, Building 1255, Road 1725, Block 1017, Damistan, Kingdom of Bahrain'
-  }
+const groupFooterAddresses: Record<string, string> = {
+  '127506': 'Flat/Shop 0, Building 775, Road 77, Block 729, Jerdab, Kingdom of Bahrain',
+  '106723': 'Flat/Shop 0, Building 109J, Road 11, Block 711, Tubli, Kingdom of Bahrain',
+  '145842': 'Flat/Shop 0, Building 69A, Road 45, Block 743, Sanad, Kingdom of Bahrain',
+  '172593': 'Flat/Shop 4, Building 1255, Road 1725, Block 1017, Damistan, Kingdom of Bahrain'
 };
 
-function companyFooterAddress(company: RegisteredCr, direction: CanvasDirection) {
+function companyFooterAddress(company: RegisteredCr) {
   for (const cr of [company.cr_number, company.parent_cr_number]) {
     const group = cr?.trim().match(/^(\d+)(?:\s*[-–]\s*\d+)?$/)?.[1];
     const address = group && groupFooterAddresses[group];
-    if (address) return direction === 'rtl' ? address.ar : address.en;
+    if (address) return address;
   }
-  const addresses = direction === 'rtl'
-    ? [company.address_ar, company.address_en]
-    : [company.address_en, company.address_ar];
-  return addresses.map(address => address?.trim()).find(address =>
-    address && !/^(?:(?:kingdom of )?bahrain|(?:مملكة )?البحرين)[.،,]*$/i.test(address)
-  ) || '';
+  const address = company.address_en?.trim() || '';
+  if (!address || /^(?:kingdom of )?bahrain[.,]*$/i.test(address) || /\p{Script=Arabic}/u.test(address)) return '';
+  return address;
 }
 
 function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
@@ -99,17 +84,15 @@ function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
   ctx.lineWidth = 0.9;
   ctx.font = '9px Arial, sans-serif';
   ctx.textBaseline = 'middle';
-  const direction = directionOf(address);
-  const rtl = direction === 'rtl';
-  ctx.direction = direction;
-  ctx.textAlign = rtl ? 'right' : 'left';
+  ctx.direction = 'ltr';
+  ctx.textAlign = 'left';
   const iconWidth = 9;
   const gap = 6;
   const textMax = bodyWidth - iconWidth - gap;
   const textWidth = Math.min(ctx.measureText(address).width, textMax);
   const left = (width - textWidth - iconWidth - gap) / 2;
-  const pinX = rtl ? left + textWidth + gap + iconWidth / 2 : left + iconWidth / 2;
-  const textX = rtl ? left + textWidth : left + iconWidth + gap;
+  const pinX = left + iconWidth / 2;
+  const textX = left + iconWidth + gap;
   const y = height - 31;
   ctx.beginPath();
   ctx.moveTo(pinX, y + 5);
@@ -209,7 +192,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
   const paragraphs = splitLetterParagraphs(text);
   const first = paragraphs.findIndex(paragraph => paragraph.trim());
   if (first < 0) throw new Error('Enter some letter text before generating a PDF.');
-  const footerAddress = showAddressFooter ? companyFooterAddress(company, directionOf(text)) : '';
+  const footerAddress = showAddressFooter ? companyFooterAddress(company) : '';
   let end = paragraphs.length;
   while (end > first && !paragraphs[end - 1].trim()) end--;
   const normalLimit = height - margin - bodyTop - (hasEveryPageMark ? footerHeight : 0);
