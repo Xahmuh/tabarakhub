@@ -89,6 +89,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'letter' | 'pdf'>('letter');
   const [companyId, setCompanyId] = useState('');
   const [header, setHeader] = useState<HeaderStyle>('company');
+  const [showAddressFooter, setShowAddressFooter] = useState(true);
   const [letter, setLetter] = useState('');
   const [paragraphStyles, setParagraphStyles] = useState<ParagraphStyles>({});
   const [signature, setSignature] = useState<MarkPlacement>('off');
@@ -105,12 +106,13 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
   const [downloadNotice, setDownloadNotice] = useState('');
   const company = companies.find(item => item.id === companyId) ?? companies[0];
   const currentPreview = preview && preview.options.company === company && preview.options.header === header &&
+    preview.options.showAddressFooter === showAddressFooter &&
     preview.options.text === letter && preview.options.paragraphStyles === paragraphStyles && preview.options.signature === signature &&
     preview.options.stamp === stamp && preview.options.fitToOnePage === fitToOnePage ? preview.result : null;
 
   useEffect(() => {
     setDownloadNotice('');
-  }, [company, header, letter, signature, stamp, fitToOnePage]);
+  }, [company, header, letter, signature, stamp, fitToOnePage, showAddressFooter]);
 
   useEffect(() => {
     let mounted = true;
@@ -161,7 +163,7 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
     setDownloadNotice('');
     try {
       const styles = edit ? { ...paragraphStyles, [edit.index]: edit.style } : paragraphStyles;
-      const options = { company, header, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
+      const options = { company, header, showAddressFooter, text, signature, stamp, fitToOnePage, paragraphStyles: styles };
       const result = (!edit && currentPreview) || await renderLetterHeadPages(options);
       if (action === 'preview') {
         if (edit) {
@@ -216,6 +218,11 @@ export function LetterHeadGenerator({ onBack }: { onBack: () => void }) {
           <PlacementField label="Signature" value={signature} onChange={setSignature} />
           <PlacementField label="Company seal" value={stamp} onChange={setStamp} />
         </div>
+        <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
+          <input type="checkbox" className="h-5 w-5 shrink-0 accent-slate-900"
+            checked={showAddressFooter} onChange={event => setShowAddressFooter(event.target.checked)} />
+          Show company address in footer
+        </label>
         <label className="flex min-h-11 items-start gap-3 rounded-lg bg-slate-50 p-3">
           <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-slate-900"
             checked={fitToOnePage} onChange={event => setFitToOnePage(event.target.checked)} />

@@ -10,6 +10,7 @@ export type ParagraphStyles = Partial<Record<number, ParagraphStyle>>;
 type LetterOptions = {
   company: RegisteredCr;
   header: HeaderStyle;
+  showAddressFooter: boolean;
   text: string;
   signature: MarkPlacement;
   stamp: MarkPlacement;
@@ -56,6 +57,68 @@ export function markShowsOnPage(placement: MarkPlacement, index: number, pageCou
 function directionOf(text: string): CanvasDirection {
   const firstLetter = text.match(/\p{L}/u)?.[0];
   return firstLetter && /[\p{Script=Arabic}\p{Script=Hebrew}]/u.test(firstLetter) ? 'rtl' : 'ltr';
+}
+
+const groupFooterAddresses: Record<string, { ar: string; en: string }> = {
+  '127506': {
+    ar: 'شقة/محل 0، مبنى 775، طريق 77، مجمع 729، جرداب، مملكة البحرين',
+    en: 'Flat/Shop 0, Building 775, Road 77, Block 729, Jerdab, Kingdom of Bahrain'
+  },
+  '106723': {
+    ar: 'شقة/محل 0، مبنى 109ج، طريق 11، مجمع 711، توبلي، مملكة البحرين',
+    en: 'Flat/Shop 0, Building 109J, Road 11, Block 711, Tubli, Kingdom of Bahrain'
+  },
+  '145842': {
+    ar: 'شقة/محل 0، مبنى 69أ، طريق 45، مجمع 743، سند، مملكة البحرين',
+    en: 'Flat/Shop 0, Building 69A, Road 45, Block 743, Sanad, Kingdom of Bahrain'
+  }
+};
+
+function companyFooterAddress(company: RegisteredCr, direction: CanvasDirection) {
+  for (const cr of [company.cr_number, company.parent_cr_number]) {
+    const group = cr?.trim().match(/^(\d+)(?:\s*[-–]\s*\d+)?$/)?.[1];
+    const address = group && groupFooterAddresses[group];
+    if (address) return direction === 'rtl' ? address.ar : address.en;
+  }
+  const addresses = direction === 'rtl'
+    ? [company.address_ar, company.address_en]
+    : [company.address_en, company.address_ar];
+  return addresses.map(address => address?.trim()).find(address =>
+    address && !/^(?:(?:kingdom of )?bahrain|(?:مملكة )?البحرين)[.،,]*$/i.test(address)
+  ) || '';
+}
+
+function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
+  ctx.save();
+  ctx.fillStyle = '#334155';
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 0.9;
+  ctx.font = '9px Arial, sans-serif';
+  ctx.textBaseline = 'middle';
+  const direction = directionOf(address);
+  const rtl = direction === 'rtl';
+  ctx.direction = direction;
+  ctx.textAlign = rtl ? 'right' : 'left';
+  const iconWidth = 9;
+  const gap = 6;
+  const textMax = bodyWidth - iconWidth - gap;
+  const textWidth = Math.min(ctx.measureText(address).width, textMax);
+  const left = (width - textWidth - iconWidth - gap) / 2;
+  const pinX = rtl ? left + textWidth + gap + iconWidth / 2 : left + iconWidth / 2;
+  const textX = rtl ? left + textWidth : left + iconWidth + gap;
+  const y = height - 31;
+  ctx.beginPath();
+  ctx.moveTo(pinX, y + 5);
+  ctx.bezierCurveTo(pinX - 2, y + 2, pinX - 4, y, pinX - 4, y - 2);
+  ctx.arc(pinX, y - 2, 4, Math.PI, 0);
+  ctx.bezierCurveTo(pinX + 4, y, pinX + 2, y + 2, pinX, y + 5);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(pinX, y - 2, 1.15, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillText(address, textX, y, textMax);
+  ctx.restore();
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
@@ -123,7 +186,7 @@ export async function loadLetterMarks(company: RegisteredCr, signature: MarkPlac
   ];
 }
 
-export async function renderLetterHeadPages({ company, header, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
+export async function renderLetterHeadPages({ company, header, showAddressFooter, text, signature, stamp, fitToOnePage, paragraphStyles }: LetterOptions) {
   const showHeader = header === 'company';
   const bodyTop = showHeader ? 132 : margin;
   const [logo, marks] = await Promise.all([
@@ -142,6 +205,7 @@ export async function renderLetterHeadPages({ company, header, text, signature, 
   const paragraphs = splitLetterParagraphs(text);
   const first = paragraphs.findIndex(paragraph => paragraph.trim());
   if (first < 0) throw new Error('Enter some letter text before generating a PDF.');
+  const footerAddress = showAddressFooter ? companyFooterAddress(company, directionOf(text)) : '';
   let end = paragraphs.length;
   while (end > first && !paragraphs[end - 1].trim()) end--;
   const normalLimit = height - margin - bodyTop - (hasEveryPageMark ? footerHeight : 0);
@@ -222,6 +286,7 @@ export async function renderLetterHeadPages({ company, header, text, signature, 
       ctx.fillText(value, x, y);
       y += lineHeight;
     });
+    if (footerAddress) drawAddressFooter(ctx, footerAddress);
 
     return canvas.toDataURL('image/png');
   });
