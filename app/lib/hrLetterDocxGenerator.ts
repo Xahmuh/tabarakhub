@@ -26,6 +26,7 @@ export interface HrLetterData {
   nhraLicense?: string;
   joinDate: string;
   endDate?: string;
+  serviceToDate?: boolean;
   basicSalary: number;
   housingAllowance: number;
   transportationAllowance: number;
@@ -170,6 +171,11 @@ export const cleanBilingualString = (text?: string, lang: 'ar' | 'en' = 'ar'): s
   }
 };
 
+export function formatServiceEnd(lang: 'ar' | 'en', endDate?: string, serviceToDate = false) {
+  if (lang === 'ar') return serviceToDate ? 'حتى تاريخه' : `حتى ${endDate || '[تاريخ انتهاء الخدمة]'}`;
+  return serviceToDate ? 'to date' : `to ${endDate || '[End Date]'}`;
+}
+
 export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob> => {
   const isAr = data.lang === 'ar';
   const gender = data.gender || 'male';
@@ -293,13 +299,20 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
     new Paragraph({ text: '' })
   );
 
+  const serviceToDate = data.serviceToDate ?? (data.letterType === 'active_employment' && !data.endDate);
+  const endedEmployment = data.letterType === 'active_employment' && !serviceToDate;
+  const arServiceEnd = formatServiceEnd('ar', data.endDate, serviceToDate);
+  const enServiceEnd = formatServiceEnd('en', data.endDate, serviceToDate);
+
   // Preamble logic
   const holderWordAr = isFemale ? 'حاملة' : 'حامل';
-  const workWordAr = isFemale ? 'تعمل لدينا' : 'يعمل لدينا';
+  const workWordAr = endedEmployment
+    ? (isFemale ? 'عملت لدينا' : 'عمل لدينا')
+    : (isFemale ? 'تعمل لدينا' : 'يعمل لدينا');
 
-  const arPreamble = `تشهد شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، ${holderWordAr} بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})، ${workWordAr} بوظيفة (${resolvedJobTitle})${data.nhraLicense ? `، وترخيص مزاولة المهنة من الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA) رقم: (${data.nhraLicense})` : ''} اعتباراً من تاريخ ${data.joinDate}`;
+  const arPreamble = `تشهد شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، ${holderWordAr} بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})، ${workWordAr} بوظيفة (${resolvedJobTitle})${data.nhraLicense ? `، وترخيص مزاولة المهنة من الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA) رقم: (${data.nhraLicense})` : ''} ${endedEmployment ? "من تاريخ" : "اعتباراً من تاريخ"} ${data.joinDate}`;
 
-  const enPreamble = `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}, is employed with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) as ${resolvedJobTitle}${data.nhraLicense ? `, licensed by NHRA under License No: (${data.nhraLicense})` : ''} since ${data.joinDate}`;
+  const enPreamble = `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}, ${endedEmployment ? "was" : "is"} employed with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) as ${resolvedJobTitle}${data.nhraLicense ? `, licensed by NHRA under License No: (${data.nhraLicense})` : ''} ${endedEmployment ? "from" : "since"} ${data.joinDate}`;
 
   // Body content
   let bodyText = '';
@@ -313,11 +326,11 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
     bodyText = isAr ? nocAr : nocEn;
   } else if (data.letterType === 'experience_certificate') {
     const expAr = isFemale
-      ? `تشهد إدارة شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، حاملة بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})${data.nhraLicense ? `، ترخيص نهرا رقم (${data.nhraLicense})` : ''}، قد اكتسبت خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${data.joinDate} حتى ${data.endDate || '[تاريخ انتهاء الخدمة]'}. وخلال فترة عملها أظهرت كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إليها، وكانَت حسنة السيرة والسلوك. قُدمت لها هذه الشهادة بناءً على طلبها مع تمنياتنا لها بمزيد من التوفيق والنجاح المهني.`
-      : `تشهد إدارة شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، حامل بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})${data.nhraLicense ? `، ترخيص نهرا رقم (${data.nhraLicense})` : ''}، قد اكتسب خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${data.joinDate} حتى ${data.endDate || '[تاريخ انتهاء الخدمة]'}. وخلال فترة عمله أظهر كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إليه، وكان حسن السيرة والسلوك. قُدمت له هذه الشهادة بناءً على طلبه مع تمنياتنا له بمزيد من التوفيق والنجاح المهني.`;
+      ? `تشهد إدارة شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، حاملة بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})${data.nhraLicense ? `، ترخيص نهرا رقم (${data.nhraLicense})` : ''}، قد اكتسبت خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${data.joinDate} ${arServiceEnd}. وخلال فترة عملها أظهرت كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إليها، وكانَت حسنة السيرة والسلوك. قُدمت لها هذه الشهادة بناءً على طلبها مع تمنياتنا لها بمزيد من التوفيق والنجاح المهني.`
+      : `تشهد إدارة شركة ${data.cr.cr_name_ar} (سجل تجاري رقم: ${data.cr.cr_number}) بأن ${data.employeeName}، ${resolvedNationality} الجنسية، حامل بطاقة هوية رقم (${data.cpr}) وجواز سفر رقم (${data.passport})${data.nhraLicense ? `، ترخيص نهرا رقم (${data.nhraLicense})` : ''}، قد اكتسب خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${data.joinDate} ${arServiceEnd}. وخلال فترة عمله أظهر كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إليه، وكان حسن السيرة والسلوك. قُدمت له هذه الشهادة بناءً على طلبه مع تمنياتنا له بمزيد من التوفيق والنجاح المهني.`;
     const expEn = isFemale
-      ? `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}${data.nhraLicense ? `, NHRA License No: ${data.nhraLicense}` : ''}, has acquired professional work experience with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) serving as ${resolvedJobTitle} from ${data.joinDate} to ${data.endDate || '[End Date]'}. Throughout her tenure, she demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon her request, wishing her continued career success.`
-      : `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}${data.nhraLicense ? `, NHRA License No: ${data.nhraLicense}` : ''}, has acquired professional work experience with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) serving as ${resolvedJobTitle} from ${data.joinDate} to ${data.endDate || '[End Date]'}. Throughout his tenure, he demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon his request, wishing him continued career success.`;
+      ? `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}${data.nhraLicense ? `, NHRA License No: ${data.nhraLicense}` : ''}, has acquired professional work experience with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) serving as ${resolvedJobTitle} from ${data.joinDate} ${enServiceEnd}. Throughout her tenure, she demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon her request, wishing her continued career success.`
+      : `This is to certify that ${data.employeeName},  ${resolvedNationality} national holding CPR No. ${data.cpr} and Passport No. ${data.passport}${data.nhraLicense ? `, NHRA License No: ${data.nhraLicense}` : ''}, has acquired professional work experience with ${data.cr.cr_name} (CR No: ${data.cr.cr_number}) serving as ${resolvedJobTitle} from ${data.joinDate} ${enServiceEnd}. Throughout his tenure, he demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon his request, wishing him continued career success.`;
     bodyText = isAr ? expAr : expEn;
   } else if (data.letterType === 'active_employment') {
     const actAr = isFemale
@@ -326,7 +339,11 @@ export const generateHrLetterDocxBlob = async (data: HrLetterData): Promise<Blob
     const actEn = isFemale
       ? `${enPreamble} under an active, valid employment contract and continues to be in active service to date. This letter is issued upon her request for official purposes without liability on the company.`
       : `${enPreamble} under an active, valid employment contract and continues to be in active service to date. This letter is issued upon his request for official purposes without liability on the company.`;
-    bodyText = isAr ? actAr : actEn;
+    bodyText = endedEmployment
+      ? (isAr
+        ? `${arPreamble} ${arServiceEnd}. صدرت هذه الشهادة بناءً على طلب${isFemale ? 'ها' : 'ه'}.`
+        : `${enPreamble} ${enServiceEnd}. This certificate is issued upon ${isFemale ? 'her' : 'his'} request.`)
+      : (isAr ? actAr : actEn);
   } else if (data.letterType === 'embassy_salary') {
     const embAr = isFemale
       ? `${arPreamble} بدوام كامل ومستمرة بالعمل.\nنوضح أدناه جدول مفردات الراتب الشهري المعتمد للموظفة:`

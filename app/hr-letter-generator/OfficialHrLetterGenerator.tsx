@@ -38,6 +38,7 @@ import {
   HrLetterType,
   HrLetterData,
   generateHrLetterDocxBlob,
+  formatServiceEnd,
   resolveNationality,
   resolveJobTitle,
   cleanBilingualString
@@ -475,6 +476,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
   // Dates
   const [joinDate, setJoinDate] = useState<string>(initialEmployee?.created_at?.split('T')[0] || '');
   const [endDate, setEndDate] = useState<string>('');
+  const [experienceToDate, setExperienceToDate] = useState(false);
+  const [employmentToDate, setEmploymentToDate] = useState(true);
 
   // Financial Matrix Breakdown (BHD - 3 Decimal Places)
   const [basicSalary, setBasicSalary] = useState<number>(initialEmployee?.salary_matrix?.basicSalary ?? 0);
@@ -982,13 +985,20 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
     return customAddressee.trim() ? customAddressee.trim() : defaultAddresseeHeader;
   }, [customAddressee, defaultAddresseeHeader]);
 
+  const hasServiceEnd = letterType === 'experience_certificate' || letterType === 'active_employment';
+  const serviceToDate = letterType === 'active_employment' ? employmentToDate : experienceToDate;
+  const endedEmployment = letterType === 'active_employment' && !employmentToDate;
+  const serviceEnd = formatServiceEnd(lang, endDate, serviceToDate);
+
   // Preamble logic
   const holderWordAr = isFemale ? 'حاملة' : 'حامل';
-  const workWordAr = isFemale ? 'تعمل لدينا' : 'يعمل لدينا';
+  const workWordAr = endedEmployment
+    ? (isFemale ? 'عملت لدينا' : 'عمل لدينا')
+    : (isFemale ? 'تعمل لدينا' : 'يعمل لدينا');
 
-  const arPreamble = `تشهد شركة ${selectedCr.cr_name_ar} (سجل تجاري رقم: ${selectedCr.cr_number}) بأن ${employeeName}، ${resolvedNationality} الجنسية، ${holderWordAr} بطاقة هوية رقم (${cpr}) وجواز سفر رقم (${passport})، ${workWordAr} بوظيفة (${resolvedJobTitle})${nhraLicense ? `، وترخيص مزاولة المهنة من الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA) رقم: (${nhraLicense})` : ''} اعتباراً من تاريخ ${joinDate}`;
+  const arPreamble = `تشهد شركة ${selectedCr.cr_name_ar} (سجل تجاري رقم: ${selectedCr.cr_number}) بأن ${employeeName}، ${resolvedNationality} الجنسية، ${holderWordAr} بطاقة هوية رقم (${cpr}) وجواز سفر رقم (${passport})، ${workWordAr} بوظيفة (${resolvedJobTitle})${nhraLicense ? `، وترخيص مزاولة المهنة من الهيئة الوطنية لتنظيم المهن والخدمات الصحية (NHRA) رقم: (${nhraLicense})` : ''} ${endedEmployment ? "من تاريخ" : "اعتباراً من تاريخ"} ${joinDate}`;
 
-  const enPreamble = `This is to certify that ${employeeName},  ${resolvedNationality} national holding CPR No. ${cpr} and Passport No. ${passport}, is employed with ${selectedCr.cr_name} (CR No: ${selectedCr.cr_number}) as ${resolvedJobTitle}${nhraLicense ? `, licensed by NHRA under License No: (${nhraLicense})` : ''} since ${joinDate}`;
+  const enPreamble = `This is to certify that ${employeeName},  ${resolvedNationality} national holding CPR No. ${cpr} and Passport No. ${passport}, ${endedEmployment ? "was" : "is"} employed with ${selectedCr.cr_name} (CR No: ${selectedCr.cr_number}) as ${resolvedJobTitle}${nhraLicense ? `, licensed by NHRA under License No: (${nhraLicense})` : ''} ${endedEmployment ? "from" : "since"} ${joinDate}`;
 
   // Generated Body Clauses
   const letterBodyContent = useMemo(() => {
@@ -1002,10 +1012,15 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
 
       case 'experience_certificate':
         return isAr
-          ? `تشهد إدارة شركة ${selectedCr.cr_name_ar} (سجل تجاري رقم: ${selectedCr.cr_number}) بأن ${employeeName}، ${resolvedNationality} الجنسية، ${isFemale ? 'حاملة' : 'حامل'} بطاقة هوية رقم (${cpr}) وجواز سفر رقم (${passport})${nhraLicense ? `، ترخيص نهرا رقم (${nhraLicense})` : ''}، قد اكتسب${isFemale ? 'ت' : ''} خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${joinDate} حتى ${endDate || '[تاريخ انتهاء الخدمة]'}. وخلال فترة عمل${isFemale ? 'ها أظهرت' : 'ه أظهر'} كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إلي${isFemale ? 'ها، وكانت حسنة' : 'ه، وكان حسن'} السيرة والسلوك. قُدمت له${isFemale ? 'ا' : ''} هذه الشهادة بناءً على طلب${isFemale ? 'ها' : 'ه'} مع تمنياتنا له${isFemale ? 'ا' : ''} بمزيد من التوفيق والنجاح المهني.`
-          : `This is to certify that ${employeeName},  ${resolvedNationality} national holding CPR No. ${cpr} and Passport No. ${passport}${nhraLicense ? `, NHRA License No: ${nhraLicense}` : ''}, has acquired professional work experience with ${selectedCr.cr_name} (CR No: ${selectedCr.cr_number}) serving as ${resolvedJobTitle} from ${joinDate} to ${endDate || '[End Date]'}. Throughout ${isFemale ? 'her' : 'his'} tenure, ${isFemale ? 'she' : 'he'} demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon ${isFemale ? 'her' : 'his'} request, wishing ${isFemale ? 'her' : 'him'} continued career success.`;
+          ? `تشهد إدارة شركة ${selectedCr.cr_name_ar} (سجل تجاري رقم: ${selectedCr.cr_number}) بأن ${employeeName}، ${resolvedNationality} الجنسية، ${isFemale ? 'حاملة' : 'حامل'} بطاقة هوية رقم (${cpr}) وجواز سفر رقم (${passport})${nhraLicense ? `، ترخيص نهرا رقم (${nhraLicense})` : ''}، قد اكتسب${isFemale ? 'ت' : ''} خبرة وظيفية لدينا بالعمل بمسمى (${resolvedJobTitle}) وذلك خلال الفترة من ${joinDate} ${serviceEnd}. وخلال فترة عمل${isFemale ? 'ها أظهرت' : 'ه أظهر'} كفاءة مهنية عالية والتزاماً تاماً بالمسؤوليات والمهام الموكلة إلي${isFemale ? 'ها، وكانت حسنة' : 'ه، وكان حسن'} السيرة والسلوك. قُدمت له${isFemale ? 'ا' : ''} هذه الشهادة بناءً على طلب${isFemale ? 'ها' : 'ه'} مع تمنياتنا له${isFemale ? 'ا' : ''} بمزيد من التوفيق والنجاح المهني.`
+          : `This is to certify that ${employeeName},  ${resolvedNationality} national holding CPR No. ${cpr} and Passport No. ${passport}${nhraLicense ? `, NHRA License No: ${nhraLicense}` : ''}, has acquired professional work experience with ${selectedCr.cr_name} (CR No: ${selectedCr.cr_number}) serving as ${resolvedJobTitle} from ${joinDate} ${serviceEnd}. Throughout ${isFemale ? 'her' : 'his'} tenure, ${isFemale ? 'she' : 'he'} demonstrated high professional competence, integrity, and dedication to all assigned responsibilities. This certificate is issued upon ${isFemale ? 'her' : 'his'} request, wishing ${isFemale ? 'her' : 'him'} continued career success.`;
 
       case 'active_employment':
+        if (endedEmployment) {
+          return isAr
+            ? `${arPreamble} ${serviceEnd}. صدرت هذه الشهادة بناءً على طلب${isFemale ? 'ها' : 'ه'}.`
+            : `${enPreamble} ${serviceEnd}. This certificate is issued upon ${isFemale ? 'her' : 'his'} request.`;
+        }
         return isAr
           ? `${arPreamble} بموجب عقد عمل ساري المفعول وحتى تاريخه، وما زال${isFemale ? 'ت على رأس عملها' : ' على رأس عمله'}. أعطيت له${isFemale ? 'ا' : ''} هذه الشهادة بناءً على طلب${isFemale ? 'ها' : 'ه'} لتقديمها للجهات المعنية دون أدنى مسؤولية على الشركة.`
           : `${enPreamble} under an active, valid employment contract and continues to be in active service to date. This letter is issued upon ${isFemale ? 'her' : 'his'} request for official purposes without liability on the company.`;
@@ -1025,7 +1040,7 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
           ? `بناءً على طلب الموظف${isFemale ? 'ة' : ''}، ${arPreamble}.\nنوضح أدناه مفردات راتبه${isFemale ? 'ا' : ''} الشهري:`
           : `Upon the request of the employee, ${enPreamble}.\nPlease find below the monthly salary matrix breakdown:`;
     }
-  }, [letterType, isAr, isFemale, arPreamble, enPreamble, selectedCr, employeeName, resolvedNationality, cpr, passport, resolvedJobTitle, nhraLicense, joinDate, endDate, resolvedNewCompany]);
+  }, [letterType, isAr, isFemale, arPreamble, enPreamble, selectedCr, employeeName, resolvedNationality, cpr, passport, resolvedJobTitle, nhraLicense, joinDate, endedEmployment, serviceEnd, resolvedNewCompany]);
 
   // Post-table paragraph text
   const postTableClause = useMemo(() => {
@@ -1302,7 +1317,8 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
         jobTitle: resolvedJobTitle,
         nhraLicense: nhraLicense.trim() ? nhraLicense.trim() : undefined,
         joinDate,
-        endDate: letterType === 'experience_certificate' ? endDate : undefined,
+        endDate: hasServiceEnd && !serviceToDate ? endDate : undefined,
+        serviceToDate: hasServiceEnd ? serviceToDate : undefined,
         basicSalary,
         housingAllowance,
         transportationAllowance,
@@ -2053,17 +2069,32 @@ export const OfficialHrLetterGenerator: React.FC<OfficialHrLetterGeneratorProps>
                 </div>
               </div>
 
-              {letterType === 'experience_certificate' && (
+              {hasServiceEnd && (
                 <div className="space-y-1.5 pt-1">
-                  <label className="text-xs font-semibold text-amber-800 block">
-                    Service End Date (For Experience Certificate)
+                  <label htmlFor="hr-letter-service-end" className="text-xs font-semibold text-amber-800 block">
+                    {isAr ? 'تاريخ انتهاء الخدمة' : 'Service End Date'}
                   </label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-amber-50/40 hover:bg-amber-50/70 focus:bg-white text-slate-900 border border-amber-300/80 rounded-xl text-xs font-semibold outline-none focus:border-amber-500 transition-all"
-                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      id="hr-letter-service-end"
+                      type="date"
+                      value={serviceToDate ? '' : endDate}
+                      disabled={serviceToDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="min-w-36 flex-1 px-3.5 py-2 bg-amber-50/40 hover:bg-amber-50/70 focus:bg-white text-slate-900 border border-amber-300/80 rounded-xl text-xs font-semibold outline-none focus:border-amber-500 transition-all disabled:opacity-50"
+                    />
+                    <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={serviceToDate}
+                        onChange={event => {
+                          if (letterType === 'active_employment') setEmploymentToDate(event.target.checked);
+                          else setExperienceToDate(event.target.checked);
+                        }}
+                      />
+                      {isAr ? 'حتى تاريخه' : 'To date'}
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
