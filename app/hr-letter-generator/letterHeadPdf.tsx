@@ -71,6 +71,10 @@ const groupFooterAddresses: Record<string, { ar: string; en: string }> = {
   '145842': {
     ar: 'شقة/محل 0، مبنى 69أ، طريق 45، مجمع 743، سند، مملكة البحرين',
     en: 'Flat/Shop 0, Building 69A, Road 45, Block 743, Sanad, Kingdom of Bahrain'
+  },
+  '172593': {
+    ar: 'شقة/محل 4، مبنى 1255، طريق 1725، مجمع 1017، دمستان، مملكة البحرين',
+    en: 'Flat/Shop 4, Building 1255, Road 1725, Block 1017, Damistan, Kingdom of Bahrain'
   }
 };
 
