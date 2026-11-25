@@ -94,6 +94,14 @@ function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
   const pinX = left + iconWidth / 2;
   const textX = left + iconWidth + gap;
   const y = height - 31;
+  ctx.save();
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 0.65;
+  ctx.beginPath();
+  ctx.moveTo(margin, y - 11);
+  ctx.lineTo(width - margin, y - 11);
+  ctx.stroke();
+  ctx.restore();
   ctx.beginPath();
   ctx.moveTo(pinX, y + 5);
   ctx.bezierCurveTo(pinX - 2, y + 2, pinX - 4, y, pinX - 4, y - 2);
