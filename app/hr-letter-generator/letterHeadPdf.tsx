@@ -77,6 +77,17 @@ function companyFooterAddress(company: RegisteredCr) {
   return address;
 }
 
+function drawFooterDivider(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 0.65;
+  ctx.beginPath();
+  ctx.moveTo(margin, height - 42);
+  ctx.lineTo(width - margin, height - 42);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
   ctx.save();
   ctx.fillStyle = '#334155';
@@ -94,14 +105,6 @@ function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
   const pinX = left + iconWidth / 2;
   const textX = left + iconWidth + gap;
   const y = height - 31;
-  ctx.save();
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 0.65;
-  ctx.beginPath();
-  ctx.moveTo(margin, y - 11);
-  ctx.lineTo(width - margin, y - 11);
-  ctx.stroke();
-  ctx.restore();
   ctx.beginPath();
   ctx.moveTo(pinX, y + 5);
   ctx.bezierCurveTo(pinX - 2, y + 2, pinX - 4, y, pinX - 4, y - 2);
@@ -113,6 +116,17 @@ function drawAddressFooter(ctx: CanvasRenderingContext2D, address: string) {
   ctx.arc(pinX, y - 2, 1.15, 0, 2 * Math.PI);
   ctx.fill();
   ctx.fillText(address, textX, y, textMax);
+  ctx.restore();
+}
+
+function drawPageNumber(ctx: CanvasRenderingContext2D, page: number, total: number, hasAddress: boolean) {
+  ctx.save();
+  ctx.fillStyle = '#334155';
+  ctx.font = '8px Arial, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.direction = 'ltr';
+  ctx.fillText(`Page ${page} of ${total}`, width / 2, height - (hasAddress ? 18 : 31));
   ctx.restore();
 }
 
@@ -247,7 +261,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
   }
   pages.push(lines.slice(cursor));
 
-  const pageImages = pages.map(page => {
+  const pageImages = pages.map((page, index) => {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#000';
@@ -281,7 +295,9 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
       ctx.fillText(value, x, y);
       y += lineHeight;
     });
+    if (footerAddress || pages.length > 1) drawFooterDivider(ctx);
     if (footerAddress) drawAddressFooter(ctx, footerAddress);
+    if (pages.length > 1) drawPageNumber(ctx, index + 1, pages.length, Boolean(footerAddress));
 
     return canvas.toDataURL('image/png');
   });
