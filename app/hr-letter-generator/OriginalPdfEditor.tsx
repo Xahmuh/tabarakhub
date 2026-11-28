@@ -40,19 +40,44 @@ function overlayTransform(viewport: PdfViewport, x: number, top: number, width: 
   };
 }
 
+async function removeImportedStampAnnotations(file: File) {
+  const [{ PDFDict, PDFDocument, PDFName }, bytes] = await Promise.all([import('pdf-lib'), file.arrayBuffer()]);
+  const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+  const subtype = PDFName.of('Subtype');
+  const stamp = PDFName.of('Stamp');
+  let count = 0;
+  for (const page of pdf.getPages()) {
+    const annotations = page.node.Annots();
+    if (!annotations) continue;
+    for (let i = annotations.size() - 1; i >= 0; i--) {
+      const annotation = annotations.lookup(i);
+      if (annotation instanceof PDFDict && annotation.lookup(subtype) === stamp) {
+        annotations.remove(i);
+        count++;
+      }
+    }
+  }
+  if (count === 0) return { file, count };
+  const result = await pdf.save({ updateFieldAppearances: false });
+  return { file: new File([new Uint8Array(result)], file.name, { type: 'application/pdf' }), count };
+}
+
 export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
   company: RegisteredCr | undefined;
   companies: RegisteredCr[];
   onCompanyChange: (id: string) => void;
 }) {
   const [file, setFile] = useState<File>();
-  const [source, setSource] = useState<{ pdf: PDFDocumentProxy; file: File }>();
+  const [source, setSource] = useState<{
+    pdf: PDFDocumentProxy; file: File; workingFile: File; removeStamps: boolean; removed: number;
+  }>();
   const [index, setIndex] = useState(0);
   const [preview, setPreview] = useState<PagePreview>();
   const [signature, setSignature] = useState<MarkPlacement>('off');
   const [stamp, setStamp] = useState<MarkPlacement>('off');
   const [headerPlacement, setHeaderPlacement] = useState<HeaderPlacement>('first');
   const [showDate, setShowDate] = useState(false);
+  const [removeStamps, setRemoveStamps] = useState(false);
   const [positions, setPositions] = useState<PageMarkPositions>({});
   const [scales, setScales] = useState<MarkScales>({});
   const [markState, setMarkState] = useState<{
@@ -63,7 +88,7 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
   const [error, setError] = useState('');
   const [markError, setMarkError] = useState('');
   const [saving, setSaving] = useState(false);
-  const current = source?.file === file ? source : undefined;
+  const current = source?.file === file && source?.removeStamps === removeStamps ? source : undefined;
   const assets = markState?.company === company && markState?.signature === signature &&
     markState?.stamp === stamp && markState?.showDate === showDate && markState?.headerPlacement === headerPlacement
     ? markState : undefined;
@@ -74,17 +99,21 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
     let task: Awaited<ReturnType<typeof openBrowserPdf>> | undefined;
     async function load(input: File) {
       try {
-        task = await openBrowserPdf(input);
+        const cleaned = removeStamps ? await removeImportedStampAnnotations(input) : { file: input, count: 0 };
+        if (cancelled) return;
+        task = await openBrowserPdf(cleaned.file);
         if (cancelled) { await task.destroy(); return; }
         const pdf = await task.promise;
-        if (!cancelled) setSource({ pdf, file: input });
+        if (!cancelled) setSource({ pdf, file: input, workingFile: cleaned.file, removed: cleaned.count, removeStamps });
       } catch {
-        if (!cancelled) setError('Could not open this PDF. Use a valid PDF without password protection.');
+        if (!cancelled) setError(removeStamps
+          ? 'Could not prepare this PDF without its stamp annotations. Try turning off stamp removal.'
+          : 'Could not open this PDF. Use a valid PDF without password protection.');
       }
     }
     void load(file);
     return () => { cancelled = true; if (task) void task.destroy().catch(() => {}); };
-  }, [file]);
+  }, [file, removeStamps]);
 
   useEffect(() => {
     if (!current) return;
@@ -120,11 +149,11 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
   };
 
   async function save() {
-    if (!current || !assets || (!assets.letterhead && !assets.marks.some(mark => mark.src))) return;
+    if (!current || !assets || (!current.removed && !assets.letterhead && !assets.marks.some(mark => mark.src))) return;
     setSaving(true);
     setError('');
     try {
-      const [{ PDFDocument, degrees }, bytes] = await Promise.all([import('pdf-lib'), current.file.arrayBuffer()]);
+      const [{ PDFDocument, degrees }, bytes] = await Promise.all([import('pdf-lib'), current.workingFile.arrayBuffer()]);
       const output = await PDFDocument.load(bytes, { updateMetadata: false });
       const letterhead = assets.letterhead ? await output.embedPng(assets.letterhead) : null;
       const overlays = await Promise.all(assets.marks.map(async mark => ({
@@ -169,7 +198,7 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
   }
 
   const displayed = current && preview?.index === index ? preview : undefined;
-  const canSave = !!displayed && !!assets && (!!assets.letterhead || assets.marks.some(mark => mark.src)) && !saving;
+  const canSave = !!displayed && !!assets && (!!current?.removed || !!assets.letterhead || assets.marks.some(mark => mark.src)) && !saving;
   const activeHeader = !!current && !!assets?.letterhead && markShowsOnPage(headerPlacement, index, current.pdf.numPages);
   const layout = displayed ? getPageLayout(displayed.size, activeHeader) : null;
   const activeMarks = current ? assets?.marks.filter(mark =>
@@ -193,6 +222,7 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
               setIndex(0);
               setPositions({});
               setScales({});
+              setRemoveStamps(false);
             }} />
           {file && <span className="block break-words font-normal">{file.name}</span>}
         </label>
@@ -215,7 +245,23 @@ export function OriginalPdfEditor({ company, companies, onCompanyChange }: {
         <PlacementField label="Signature" value={signature} onChange={setSignature} />
         <PlacementField label="Company seal" value={stamp} onChange={setStamp} />
         <AddTodayDateField checked={showDate} onChange={setShowDate} />
+        {file && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={removeStamps} onChange={event => {
+            setError('');
+            setPreview(undefined);
+            setSource(undefined);
+            setRemoveStamps(event.target.checked);
+          }} />
+          Remove stamp annotations from the uploaded PDF
+        </label>}
       </fieldset>
+      {current?.removeStamps && (
+        <p role="status" className="text-sm text-slate-600">
+          {current.removed
+            ? `Removed ${current.removed} original PDF stamp annotation${current.removed === 1 ? '' : 's'} from this copy.`
+            : 'No removable stamp annotations found. Stamps drawn into the page remain part of the document.'}
+        </p>
+      )}
       {(error || markError) && <p role="alert" className="text-sm text-red-700">{error || markError}</p>}
       {file && !displayed && !error && <p role="status" className="text-sm text-slate-600">Rendering PDF preview…</p>}
       {current && (
