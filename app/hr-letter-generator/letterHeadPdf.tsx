@@ -177,6 +177,47 @@ function drawImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
+export const letterheadBandHeight = 122;
+
+function drawCompanyLetterhead(ctx: CanvasRenderingContext2D, company: RegisteredCr, logo: HTMLImageElement | null) {
+  ctx.save();
+  ctx.fillStyle = '#000';
+  ctx.textBaseline = 'top';
+  if (logo) drawImage(ctx, logo, margin, margin, 68, 49);
+  const headingX = logo ? margin + 80 : margin;
+  const headingWidth = width - margin - headingX;
+  ctx.direction = 'ltr';
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 14px Arial, sans-serif';
+  ctx.fillText(company.cr_name, headingX, margin, headingWidth);
+  ctx.direction = 'rtl';
+  ctx.font = 'bold 12px Arial, sans-serif';
+  ctx.fillText(company.cr_name_ar || '', headingX, margin + 23, headingWidth);
+  ctx.direction = 'ltr';
+  ctx.font = '8px Arial, sans-serif';
+  const details = [company.cr_number && `CR ${company.cr_number}`, company.phone, company.email].filter(Boolean);
+  ctx.fillText(details.join('  ·  '), headingX, margin + 46, headingWidth);
+  ctx.beginPath();
+  ctx.moveTo(margin, 111);
+  ctx.lineTo(width - margin, 111);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export async function renderCompanyLetterhead(company: RegisteredCr) {
+  const logo = company.logo_url ? await loadImage(company.logo_url, 'logo') : null;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * 3);
+  canvas.height = letterheadBandHeight * 3;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) throw new Error('This browser cannot render the letterhead.');
+  ctx.scale(canvas.width / width, 3);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, letterheadBandHeight);
+  drawCompanyLetterhead(ctx, company, logo);
+  return canvas.toDataURL('image/png');
+}
+
 function renderMark(kind: MarkKind, image: HTMLImageElement | null) {
   if (!image) return null;
   const size = markSizes[kind];
@@ -294,26 +335,7 @@ export async function renderLetterHeadPages({ company, header, showAddressFooter
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#000';
-    if (showHeader) {
-      if (logo) drawImage(ctx, logo, margin, margin, 68, 49);
-      const headingX = logo ? margin + 80 : margin;
-      const headingWidth = width - margin - headingX;
-      ctx.direction = 'ltr';
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 14px Arial, sans-serif';
-      ctx.fillText(company.cr_name, headingX, margin, headingWidth);
-      ctx.direction = 'rtl';
-      ctx.font = 'bold 12px Arial, sans-serif';
-      ctx.fillText(company.cr_name_ar || '', headingX, margin + 23, headingWidth);
-      ctx.direction = 'ltr';
-      ctx.font = '8px Arial, sans-serif';
-      const details = [company.cr_number && `CR ${company.cr_number}`, company.phone, company.email].filter(Boolean);
-      ctx.fillText(details.join('  ·  '), headingX, margin + 46, headingWidth);
-      ctx.beginPath();
-      ctx.moveTo(margin, 111);
-      ctx.lineTo(width - margin, 111);
-      ctx.stroke();
-    }
+    if (showHeader) drawCompanyLetterhead(ctx, company, logo);
 
     let y = bodyTop + (index === 0 ? dateSpace : 0);
     page.forEach(({ value, direction, alignment, font, lineHeight }) => {

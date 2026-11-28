@@ -11,7 +11,7 @@ const arrowMovement: Record<string, MarkPosition> = {
   ArrowRight: { x: 1, y: 0 }
 };
 
-export function DraggableMark({ kind, pageNumber, src, position, disabled, onMove, pageSize = letterPageSize, size = markSizes[kind], instructionsId = 'letter-mark-instructions' }: {
+export function DraggableMark({ kind, pageNumber, src, position, disabled, onMove, pageSize = letterPageSize, size = markSizes[kind], instructionsId = 'letter-mark-instructions', resize }: {
   kind: MarkKind;
   pageNumber: number;
   pageSize?: { width: number; height: number };
@@ -21,6 +21,7 @@ export function DraggableMark({ kind, pageNumber, src, position, disabled, onMov
   position: MarkPosition;
   disabled: boolean;
   onMove: (position: MarkPosition) => void;
+  resize?: { scale: number; onChange: (scale: number) => void };
 }) {
   const drag = useRef<{
     id: number;
@@ -30,6 +31,8 @@ export function DraggableMark({ kind, pageNumber, src, position, disabled, onMov
     scaleY: number;
     position: MarkPosition;
   } | null>(null);
+  const touches = useRef(new Map<number, MarkPosition>());
+  const pinch = useRef<{ distance: number; scale: number } | null>(null);
   const { width, height } = pageSize;
 
   const label = { signature: 'signature', stamp: 'company seal', date: 'date' }[kind];
@@ -39,22 +42,40 @@ export function DraggableMark({ kind, pageNumber, src, position, disabled, onMov
       disabled={disabled}
       className="absolute touch-none select-none cursor-grab rounded-sm hover:outline hover:outline-2 hover:outline-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600 active:cursor-grabbing"
       style={{
+        WebkitTouchCallout: 'none',
         left: `${position.x / width * 100}%`,
         top: `${position.y / height * 100}%`,
         width: `${size.width / width * 100}%`,
         height: `${size.height / height * 100}%`
       }}
+      onDragStart={event => event.preventDefault()}
+      onContextMenu={event => event.preventDefault()}
       onPointerDown={event => {
-        if (event.button !== 0 || drag.current) return;
+        if (event.button !== 0 || touches.current.size >= 2 || (drag.current && (!resize || event.pointerType !== 'touch'))) return;
         const page = event.currentTarget.parentElement?.getBoundingClientRect();
         if (!page?.width || !page.height) return;
+        event.preventDefault();
+        if (event.pointerType !== 'touch') event.currentTarget.focus({ preventScroll: true });
         event.currentTarget.setPointerCapture(event.pointerId);
+        touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (drag.current && resize) {
+          const [first, second] = [...touches.current.values()];
+          pinch.current = { distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)), scale: resize.scale };
+          return;
+        }
         drag.current = {
           id: event.pointerId, clientX: event.clientX, clientY: event.clientY,
           scaleX: width / page.width, scaleY: height / page.height, position
         };
       }}
       onPointerMove={event => {
+        if (!touches.current.has(event.pointerId)) return;
+        touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pinch.current && resize) {
+          const [first, second] = [...touches.current.values()];
+          resize.onChange(pinch.current.scale * Math.hypot(second.x - first.x, second.y - first.y) / pinch.current.distance);
+          return;
+        }
         const start = drag.current;
         if (!start || start.id !== event.pointerId) return;
         onMove({
@@ -63,7 +84,15 @@ export function DraggableMark({ kind, pageNumber, src, position, disabled, onMov
         });
       }}
       onLostPointerCapture={event => {
-        if (drag.current?.id === event.pointerId) drag.current = null;
+        if (!touches.current.delete(event.pointerId)) return;
+        pinch.current = null;
+        const [remaining] = touches.current.entries();
+        if (!remaining || !drag.current) {
+          drag.current = null;
+          return;
+        }
+        const [id, point] = remaining;
+        drag.current = { ...drag.current, id, clientX: point.x, clientY: point.y, position };
       }}
       onKeyDown={event => {
         const direction = arrowMovement[event.key];
